@@ -1,7 +1,7 @@
 /* ── Assen Platform Landing — tokens.md 기반 (라이트 레트로 큐트, 솔리드) ── */
 /* Design-token custom properties (color.ref.* + radius.full) are GENERATED from
    docs/design/tokens.json via Style Dictionary (ASS-128). Do not hand-edit the
-   generated values here; run . See ADR-0004. */
+   generated values here; run `dart run melos run codegen`. See ADR-0004. */
 @import './tokens.generated.css';
 
 @font-face {
