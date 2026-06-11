@@ -1,0 +1,43 @@
+# AGENTS.md — Assen Platform
+
+Assen Platform: 메이드카페 '하츠코이'의 오프라인 경험을 온라인으로 잇는 크로스플랫폼 서비스.
+Flutter(web+iOS+Android) + Django 5.2 LTS + Django Ninja. P0는 Fan CRM이다 — 팬덤 수익화 기능(P1/P2)은 feature flag off로 시작한다.
+
+## 필수 선행 문서
+
+작업 전 반드시 읽는다 (상위 `/mnt/c/Users/daisy/Assen/AGENTS.md`의 Company-OS 참조 의무 포함):
+
+1. `docs/CONSTRAINTS.md` — 이 repo의 제약사항 41개 (사업/IAP, 컴플라이언스, 아키텍처, 하네스)
+2. `Company-OS/03_Engineering/Development_Constraints.md` — 권한 경계와 blocker 기준
+3. `Company-OS/07_LLM/LLM_Harness_Index.md` — LLM 사용 gate
+4. 아키텍처 배경: `Company-OS/03_Engineering/Assen_Passport_Technical_Architecture.md` + `docs/adr/`
+
+## 권한 경계 (요약)
+
+- 에이전트가 결정 가능: 코드 구조, 테스트 전략, 검증 명령, 모듈 경계.
+- 인간 승인 필수: 결제·과금 로직, 인증/권한 코드, migrations 적용, 골든 파일 갱신, 테스트 수정, 프로덕션 관련 일체.
+- 단독 확정 불가 (Company-OS): 가격, 정산, 개인정보 문구, 캐스트 동의, 오픈일, 외부 공개 수치.
+
+## 검증 계약
+
+> scaffold 전 상태. 구현 repo scaffold 완료 시 실제 명령으로 갱신할 것.
+
+- Flutter: `dart format --set-exit-if-changed .` → `flutter analyze` → `flutter test <개별 파일>` → 전체 `flutter test`
+- Django: `ruff check` → `mypy` → `pytest -x <개별 경로>` → `python manage.py makemigrations --check`
+- 완료 주장에는 증거(테스트 출력/빌드 로그/스크린샷)를 첨부한다. 작성 세션이 자체 승인하지 않는다.
+
+## 하지 말 것 (사고 다발 영역)
+
+- `*.g.dart` / `*.freezed.dart` 직접 편집 (build_runner 재실행)
+- `flutter test --update-goldens` 자율 실행
+- migrations 파일 수정·적용, 테스트 약화·삭제
+- 한국 iOS 앱 코드/카피에 웹 결제 유도 삽입 (anti-steering 위반)
+- Riverpod 2.x 문법 사용 (이 repo는 3.x)
+- `.env`·크레덴셜 읽기/커밋
+
+## 작업 방식
+
+- 계획 → 작은 diff → 검증, 루프를 빠르게. 같은 문제 2회 교정 실패 시 컨텍스트 버리고 재시작.
+- 태스크는 Linear 프로젝트 "Assen Platform"(팀 ASS)에서 추적한다. 작업 시작 시 이슈 상태 갱신, PR에 이슈 ID 연결.
+- AI 실수 발견 시 `Company-OS/07_LLM/LLM_Mistake_Ledger.md`에 기록 후 이 파일 또는 hook 강화로 환류.
+- 규칙 추가는 실제 사건 기반으로만 — 이 파일은 200줄 이하 유지.
