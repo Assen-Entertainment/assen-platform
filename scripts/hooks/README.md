@@ -36,13 +36,24 @@ sh scripts/install-hooks.sh
 | 마이그레이션 생성·수정 | `server/**/migrations/**/*.py` | #25 | 없음 (인간만) |
 | 생성 파일 손편집 | `*.g.dart`, `*.freezed.dart` | #32 | 없음 |
 | 골든 베이스라인 수정 | `**/goldens/**`, `*.golden.*` | #31 | 없음 |
-| 시크릿 접근 | `.env`, `**/.env`, `*.env` | #27 | 없음 (`.env.example`은 허용) |
-| 기존 테스트 파일 수정 | `**/test/**`, `*_test.dart`, `test_*.py` | #31 | `ALLOW_TEST_EDIT=1` |
+| 시크릿 접근 | `.env`, `.env.*` | #27 | 없음 (`.env.example`/`.env.sample`/`.env.template`은 허용) |
+| 기존 테스트 파일 수정 | `test_*.py`, `*_test.py`, `*_test.dart` | #31 | `ALLOW_TEST_EDIT=1` |
 | `--update-goldens` Bash | 명령에 포함 시 | #31 | 없음 |
-| `manage.py migrate` | 명령에 포함 시 | #25 | `--check`, `--dry-run`은 허용 |
-| `git push origin main` | 명령에 포함 시 | GitOps | 없음 |
+| `manage.py migrate` / `django-admin migrate` | 토큰 기반 | #25 | `--check`, `--dry-run`은 허용 |
+| `git push origin main` | ref 타깃 기반 (best-effort) | GitOps | 없음 |
+| `rm -rf` | 경로 무관 | #28 | 없음 |
+| `git push --force` / `-f` / `--force-with-lease` | | #28 | 없음 |
+| `DROP TABLE` / `TRUNCATE` | SQL, 대소문자 무시 | #28 | 없음 |
+| `manage.py flush` | | #28 | 없음 |
 
 **신규 테스트 파일 생성(Write + 미존재 경로)은 항상 허용.**
+**conftest.py, factories.py 등 헬퍼 모듈은 basename 기반으로 차단하지 않음.**
+
+#### #28 파괴적 명령 오버라이드 없음
+
+`rm -rf`, `git push --force`, `DROP TABLE`, `TRUNCATE`, `manage.py flush`는
+오버라이드 환경변수가 없다. 인간이 직접 셸에서 실행하는 것은 이 hook 밖이므로
+Claude Code를 통하지 않으면 차단되지 않는다 — 이것이 의도된 설계다.
 
 ### `pre-commit` — git hook (심층 방어)
 
@@ -57,7 +68,6 @@ sh scripts/install-hooks.sh
 ## 오버라이드 환경변수 (인간 전용)
 
 오버라이드는 팀 리드/인간이 직접 검토 후에만 사용한다.
-Claude Code에서 환경변수를 설정하는 것도 guard.py가 차단하지 않으므로 운영 규칙으로 제한한다.
 
 ```sh
 # 기존 테스트 수정이 불가피할 때 (guard.py)
@@ -69,6 +79,16 @@ ALLOW_MIGRATIONS=1 git commit -m "..."
 # 생성 파일 커밋이 불가피할 때 (pre-commit)
 ALLOW_GENERATED=1 git commit -m "..."
 ```
+
+---
+
+## Failure Modes
+
+| 상황 | 동작 | 이유 |
+|------|------|------|
+| JSON 파싱 실패 | fail-open (exit 0) | 가용성 트레이드오프 — Claude Code는 well-formed JSON을 보장하므로 정상 운영에서는 발생하지 않음 |
+| guard.py 스크립트 미존재 | Claude Code가 hook 실패로 처리 | settings.json 절대경로(`${CLAUDE_PROJECT_DIR}`) 사용으로 CWD 우회 방지 |
+| gitleaks 미설치 | 경고만 출력, 커밋 허용 | CI gitleaks가 최종 게이트 |
 
 ---
 
@@ -85,6 +105,8 @@ python3 scripts/hooks/test_hooks.py
 
 - **#25**: migrations는 makemigrations 명령으로만 생성. 적용은 인간이 검토·승인.
 - **#27**: AI는 .env 시크릿에 접근하지 않는다. .env.example로 스키마만 공유.
+- **#28**: 파괴적 명령(rm -rf, force push, DROP/TRUNCATE, flush)은 인간 전용. 오버라이드 없음.
 - **#31**: 골든 베이스라인·기존 테스트는 인간 승인 없이 변경 불가.
 - **#32**: *.g.dart / *.freezed.dart는 build_runner 전용. 손편집 시 build_runner가 덮어씀.
 - **GitOps**: main=prod 게이트. dev→main 릴리즈 PR로만 머지.
+  브랜치 가드는 best-effort — 권위 게이트는 GitHub 브랜치 보호(현재 무료 플랜이라 미적용 — Pro 시 적용 권장).

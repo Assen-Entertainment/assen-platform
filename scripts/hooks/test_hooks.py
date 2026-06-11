@@ -101,6 +101,19 @@ def test_blocked_cases():
         },
     )
 
+    # #25 마이그레이션 절대경로 우회 시도
+    assert_blocked(
+        "#25 마이그레이션 절대경로",
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "/home/user/project/server/core/migrations/0001_initial.py",
+                "old_string": "x",
+                "new_string": "y",
+            },
+        },
+    )
+
     # #32 *.g.dart 수정
     assert_blocked(
         "#32 *.g.dart Edit",
@@ -178,18 +191,21 @@ def test_blocked_cases():
         },
     )
 
-    # #31 기존 테스트 파일 Edit (파일 존재 시뮬레이션 — 실제 존재 파일 불필요,
-    #     guard.py는 os.path.isfile 사용 → 존재하지 않으면 신규 Write로 판단.
-    #     Edit 도구는 항상 기존 파일 수정이므로 차단되어야 함)
+    # #27 .env.production Read (프리픽스 구멍 수정 검증)
     assert_blocked(
-        "#31 기존 테스트 Edit (test/ 경로)",
+        "#27 .env.production Read",
         {
-            "tool_name": "Edit",
-            "tool_input": {
-                "file_path": "apps/mobile/test/auth/login_test.dart",
-                "old_string": "expect(a, b)",
-                "new_string": "expect(a, anything)",
-            },
+            "tool_name": "Read",
+            "tool_input": {"file_path": ".env.production"},
+        },
+    )
+
+    # #27 .env.local Write
+    assert_blocked(
+        "#27 .env.local Write",
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "server/.env.local", "content": "DB_PASS=x"},
         },
     )
 
@@ -199,7 +215,7 @@ def test_blocked_cases():
         {
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": "apps/mobile/lib/widget_test.dart",  # _test.dart
+                "file_path": "apps/mobile/lib/widget_test.dart",
                 "old_string": "x",
                 "new_string": "y",
             },
@@ -213,6 +229,19 @@ def test_blocked_cases():
             "tool_name": "Edit",
             "tool_input": {
                 "file_path": "server/tests/test_auth.py",
+                "old_string": "assert True",
+                "new_string": "pass",
+            },
+        },
+    )
+
+    # #31 기존 테스트 Edit (*_test.py)
+    assert_blocked(
+        "#31 기존 테스트 Edit (*_test.py)",
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "server/tests/auth_test.py",
                 "old_string": "assert True",
                 "new_string": "pass",
             },
@@ -237,12 +266,102 @@ def test_blocked_cases():
         },
     )
 
+    # #25 django-admin migrate 차단 (NEW)
+    assert_blocked(
+        "#25 django-admin migrate Bash",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "django-admin migrate --settings=config.settings.prod"},
+        },
+    )
+
     # GitOps main push 차단
     assert_blocked(
         "GitOps git push origin main",
         {
             "tool_name": "Bash",
             "tool_input": {"command": "git push origin main"},
+        },
+    )
+
+    # GitOps HEAD:main push 차단
+    assert_blocked(
+        "GitOps git push origin HEAD:main",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push origin HEAD:main"},
+        },
+    )
+
+    # #28 rm -rf 차단 (NEW)
+    assert_blocked(
+        "#28 rm -rf 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -rf /tmp/build"},
+        },
+    )
+
+    # #28 rm -fr 차단 (NEW)
+    assert_blocked(
+        "#28 rm -fr 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -fr node_modules"},
+        },
+    )
+
+    # #28 git push --force 차단 (NEW)
+    assert_blocked(
+        "#28 git push --force 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push --force origin feature/x"},
+        },
+    )
+
+    # #28 git push -f 차단 (NEW)
+    assert_blocked(
+        "#28 git push -f 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push -f origin feature/x"},
+        },
+    )
+
+    # #28 git push --force-with-lease 차단 (NEW)
+    assert_blocked(
+        "#28 git push --force-with-lease 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push --force-with-lease origin feature/x"},
+        },
+    )
+
+    # #28 DROP TABLE 차단 (NEW)
+    assert_blocked(
+        "#28 DROP TABLE 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "psql -c 'DROP TABLE users;'"},
+        },
+    )
+
+    # #28 TRUNCATE 차단 (NEW)
+    assert_blocked(
+        "#28 TRUNCATE 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "psql -c 'TRUNCATE orders;'"},
+        },
+    )
+
+    # #28 manage.py flush 차단 (NEW)
+    assert_blocked(
+        "#28 manage.py flush 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "python manage.py flush --no-input"},
         },
     )
 
@@ -278,15 +397,61 @@ def test_allowed_cases():
         },
     )
 
-    # 신규 테스트 파일 생성 (Write + 존재하지 않는 경로 → 허용)
-    # 임시 경로를 사용해 실제로 존재하지 않음을 보장
+    # .env.sample 허용 (NEW)
     assert_allowed(
-        "신규 테스트 파일 Write (test/ 경로, 미존재)",
+        ".env.sample Write",
         {
             "tool_name": "Write",
             "tool_input": {
-                "file_path": "/tmp/assen_test_nonexistent_12345/test/new_feature_test.dart",
-                "content": "void main() {}",
+                "file_path": ".env.sample",
+                "content": "DB_URL=postgres://localhost/db",
+            },
+        },
+    )
+
+    # .env.template 허용 (NEW)
+    assert_allowed(
+        ".env.template Read",
+        {
+            "tool_name": "Read",
+            "tool_input": {"file_path": ".env.template"},
+        },
+    )
+
+    # 신규 테스트 파일 생성 (Write + 존재하지 않는 경로 → 허용)
+    assert_allowed(
+        "신규 테스트 파일 Write (미존재)",
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "/tmp/assen_test_nonexistent_12345/test_new_feature.py",
+                "content": "def test_ok(): pass",
+            },
+        },
+    )
+
+    # conftest.py 수정 허용 (NEW — basename 기반 차단 이후 헬퍼는 자유)
+    assert_allowed(
+        "conftest.py Edit 허용",
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "server/tests/conftest.py",
+                "old_string": "fixture",
+                "new_string": "fixture_v2",
+            },
+        },
+    )
+
+    # factories.py 수정 허용 (NEW)
+    assert_allowed(
+        "factories.py Edit 허용",
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "server/tests/factories.py",
+                "old_string": "x",
+                "new_string": "y",
             },
         },
     )
@@ -341,12 +506,30 @@ def test_allowed_cases():
         },
     )
 
+    # git push main dev — 원격 이름이 main, 브랜치가 dev (오탐 방지, NEW)
+    assert_allowed(
+        "git push main dev (remote=main, branch=dev)",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push main dev"},
+        },
+    )
+
     # 일반 flutter test (--update-goldens 없음)
     assert_allowed(
         "flutter test (goldens 없음)",
         {
             "tool_name": "Bash",
             "tool_input": {"command": "flutter test --coverage"},
+        },
+    )
+
+    # git push --force 없는 일반 push
+    assert_allowed(
+        "git push origin feature/x (force 없음)",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push origin feature/x"},
         },
     )
 

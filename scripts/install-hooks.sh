@@ -17,10 +17,12 @@ if [ ! -d "${HOOKS_DIR}" ]; then
     exit 1
 fi
 
-# 실행 권한 보장
-chmod +x "${HOOKS_DIR}/pre-commit"
+# 실행 권한 보장 (scripts/hooks/ 아래 모든 실행 파일)
+# 워크트리에서 체크아웃해도 권한이 유지되도록 전체 적용
+chmod +x "${HOOKS_DIR}"/*
 
-# git hook 경로 설정
+# git hook 경로 설정 (로컬 레포 설정 — 워크트리 공유됨)
+# NOTE: git worktree는 core.hooksPath를 공유하므로 각 워크트리에서 재실행 불필요
 git config core.hooksPath scripts/hooks
 
 echo "[OK] git hook 설치 완료: core.hooksPath = scripts/hooks"

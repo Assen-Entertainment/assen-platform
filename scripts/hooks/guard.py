@@ -2,7 +2,7 @@
 """
 guard.py — Claude Code PreToolUse hook for Assen Platform.
 
-목적: 비가역 영역(마이그레이션, 생성 파일, 골든, 시크릿, 기존 테스트)에 대한
+목적: 비가역 영역(마이그레이션, 생성 파일, 골든, 시크릿, 기존 테스트, 파괴적 명령)에 대한
      Claude Code 도구 호출을 기계 강제로 차단한다.
      자연어 지시는 보안 경계가 아니다 (CONSTRAINTS #25~#32).
 
@@ -12,10 +12,16 @@ guard.py — Claude Code PreToolUse hook for Assen Platform.
   - 허용: exit 0
 
 설치: .claude/settings.json hooks 섹션에서 PreToolUse 으로 등록.
+
+Failure modes:
+  - JSON 파싱 실패 시 fail-open (exit 0) — 가용성 트레이드오프.
+    악의적 입력이 JSON 파싱을 깨뜨려 hook을 우회할 수 없도록
+    Claude Code 자체가 well-formed JSON을 보장한다.
 """
 
 import json
 import os
+import re
 import sys
 
 
@@ -34,25 +40,30 @@ def _is_existing_file(path: str) -> bool:
     return os.path.isfile(path)
 
 
+def _normalize(path: str) -> str:
+    """경로를 정규화: 백슬래시 → 슬래시."""
+    return path.replace("\\", "/")
+
+
+def _collapse_whitespace(s: str) -> str:
+    """연속 공백을 단일 공백으로 축약 (명령어 토큰 비교용)."""
+    return re.sub(r"\s+", " ", s)
+
+
 # ---------------------------------------------------------------------------
 # 경로 분류 함수
 # ---------------------------------------------------------------------------
 
 def _is_migration_path(path: str) -> bool:
     """
-    server/**/migrations/**/*.py 패턴.
-    fnmatch는 ** 미지원이므로 세그먼트 직접 분석.
+    server 세그먼트 + migrations 세그먼트 + .py 확장자.
     WHY (#25): migrations는 인간 게이트 — makemigrations 명령으로만 생성,
     적용·수정은 인간 승인.
+
+    절대경로·../ 우회 방지: 소문자 변환 후 세그먼트 포함 여부만 검사.
     """
-    parts = path.replace("\\", "/").split("/")
-    if not parts[0].startswith("server"):
-        return False
-    if "migrations" not in parts:
-        return False
-    if not path.endswith(".py"):
-        return False
-    return True
+    parts = [p.lower() for p in _normalize(path).split("/")]
+    return "server" in parts and "migrations" in parts and path.endswith(".py")
 
 
 def _is_generated_file(path: str) -> bool:
@@ -69,7 +80,7 @@ def _is_golden_path(path: str) -> bool:
     **/goldens/** 또는 *.golden.* 패턴.
     WHY (#31): 골든 베이스라인은 인간 승인.
     """
-    norm = path.replace("\\", "/")
+    norm = _normalize(path)
     base = os.path.basename(norm)
     if "/goldens/" in norm:
         return True
@@ -78,32 +89,37 @@ def _is_golden_path(path: str) -> bool:
     return False
 
 
+# 허용 템플릿 파일 (예시·스키마 공유 목적 — 실 시크릿 없음)
+_ENV_ALLOWED_SUFFIXES = (".env.example", ".env.sample", ".env.template")
+
 def _is_env_secret(path: str) -> bool:
     """
-    .env / **/.env / *.env 차단 — 단 .env.example 허용.
+    .env / **/.env / .env.* 차단.
+    허용: .env.example / .env.sample / .env.template
     WHY (#27): 시크릿 접근 금지.
     """
     base = os.path.basename(path)
-    if base == ".env.example":
+    if any(base == suf or base.endswith(suf) for suf in _ENV_ALLOWED_SUFFIXES):
         return False
-    if base == ".env" or base.endswith(".env"):
+    # .env 정확히 또는 .env. 프리픽스 (예: .env.production, .env.local)
+    if base == ".env" or base.startswith(".env."):
         return True
     return False
 
 
 def _is_test_file(path: str) -> bool:
     """
-    **/test/** / **/tests/** / *_test.dart / test_*.py 패턴.
+    basename이 test_*.py / *_test.py / *_test.dart 인 파일만 차단.
+    conftest.py, factories.py, 헬퍼 모듈은 자유.
     WHY (#31): 테스트 약화 방지 — 신규 테스트 추가는 자유,
     기존 테스트 변경은 인간 승인(ALLOW_TEST_EDIT=1).
     """
-    norm = path.replace("\\", "/")
-    base = os.path.basename(norm)
-    if "/test/" in norm or "/tests/" in norm:
+    base = os.path.basename(_normalize(path))
+    if base.startswith("test_") and base.endswith(".py"):
+        return True
+    if base.endswith("_test.py"):
         return True
     if base.endswith("_test.dart"):
-        return True
-    if base.startswith("test_") and base.endswith(".py"):
         return True
     return False
 
@@ -120,11 +136,11 @@ def check_file_path(tool_name: str, file_path: str) -> None:
     # Write + 파일 미존재 = 신규 생성
     is_new_write = (tool_name == "Write") and (not _is_existing_file(file_path))
 
-    # --- #27 시크릿 (.env) — Read 포함 모든 접근 차단
+    # --- #27 시크릿 (.env.*) — Read 포함 모든 접근 차단
     if _is_env_secret(file_path):
         _block(
             f"#27 시크릿 접근 금지: '{file_path}' — .env 파일은 Claude Code가 읽거나 쓸 수 없습니다. "
-            "시크릿이 필요하면 .env.example을 사용하세요."
+            "시크릿이 필요하면 .env.example / .env.sample / .env.template을 사용하세요."
         )
 
     # --- #25 마이그레이션 파일 생성·수정 차단
@@ -168,8 +184,48 @@ def check_file_path(tool_name: str, file_path: str) -> None:
 # Bash 명령 기반 규칙
 # ---------------------------------------------------------------------------
 
+def _has_migrate_token(cmd_normalized: str) -> bool:
+    """
+    (manage.py|django-admin) 뒤에 migrate 토큰이 오는 패턴 감지.
+    다중 공백 우회 방지를 위해 공백 collapse 후 토큰 검사.
+    """
+    # "manage.py migrate" 또는 "django-admin migrate"
+    return bool(
+        re.search(r"(?:manage\.py|django-admin)\s+migrate(?:\s|$)", cmd_normalized)
+    )
+
+
+def _is_main_push(command: str) -> bool:
+    """
+    ref 타깃 기반 main push 감지 — 원격 이름이 main인 오탐 방지.
+    감지 패턴: `:main`, ` main`(끝), `HEAD:main`, `refs/heads/main`
+    WHY: best-effort 가드. 권위 게이트는 GitHub 브랜치 보호
+    (현재 무료 플랜이라 미적용 — Pro 시 적용 권장).
+    """
+    if "git push" not in command:
+        return False
+    # 명확한 main ref 타깃 패턴
+    if re.search(r"(?:HEAD:main|refs/heads/main|:main(?:\s|$))", command):
+        return True
+    # 토큰 분리: push 뒤 마지막 positional 인자가 main 인지
+    # "git push <remote> main" 형태 — 끝 토큰이 main
+    tokens = command.split()
+    try:
+        push_idx = tokens.index("push")
+    except ValueError:
+        return False
+    push_args = [t for t in tokens[push_idx + 1:] if not t.startswith("-")]
+    # push_args: [remote, refspec] 또는 [remote] 또는 [refspec...]
+    # 마지막 인자가 "main" 이고 그 앞이 remote 이름(main이 아닌 것) 일 때만 차단
+    if len(push_args) >= 2 and push_args[-1] == "main" and push_args[-2] != "main":
+        return True
+    return False
+
+
 def check_bash_command(command: str) -> None:
     """Bash 명령 내용을 검사해 차단 여부 결정."""
+
+    cmd_collapsed = _collapse_whitespace(command)
 
     # --- #31 --update-goldens 차단
     if "--update-goldens" in command:
@@ -178,23 +234,58 @@ def check_bash_command(command: str) -> None:
             "골든 베이스라인 변경은 인간 승인 필요."
         )
 
-    # --- #25 manage.py migrate 차단 (makemigrations / --check / --dry-run 은 허용)
-    if "manage.py migrate" in command:
-        if "makemigrations" in command:
-            return  # makemigrations는 manage.py migrate 문자열을 포함하지 않으나 안전망
+    # --- #25 manage.py / django-admin migrate 차단
+    #     (makemigrations / --check / --dry-run 은 허용)
+    if _has_migrate_token(cmd_collapsed):
         if "--check" in command or "--dry-run" in command:
-            return
+            pass  # 허용
+        else:
+            _block(
+                "#25 마이그레이션 적용 차단: `manage.py migrate` / `django-admin migrate`는 "
+                "스테이징/프로덕션 적용 명령입니다. 인간이 직접 실행해야 합니다. "
+                "`--check` 또는 `--dry-run`은 허용."
+            )
+
+    # --- #28 파괴적 명령 차단 (오버라이드 없음 — 인간이 직접 셸에서 실행)
+    # rm -rf (경로 무관)
+    if re.search(r"\brm\s+-[^\s]*r[^\s]*f|\brm\s+-[^\s]*f[^\s]*r", command) or \
+       re.search(r"\brm\s+--force\b.*\s+-r\b|\brm\s+-r\b.*\s+--force\b", command) or \
+       re.search(r"\brm\s+-rf\b|\brm\s+-fr\b", command):
         _block(
-            "#25 마이그레이션 적용 차단: `manage.py migrate`는 스테이징/프로덕션 적용 명령입니다. "
-            "인간이 직접 실행해야 합니다. "
-            "`manage.py migrate --check` 또는 `manage.py migrate --dry-run`은 허용."
+            "#28 파괴적 명령 차단: `rm -rf` — 재귀 강제 삭제는 인간이 직접 셸에서 실행해야 합니다."
         )
 
-    # --- GitOps: main 직접 push 차단
-    if "git push" in command and "origin" in command and "main" in command:
+    # git push --force / -f / --force-with-lease
+    if "git push" in command and re.search(
+        r"\s(?:--force|-f|--force-with-lease)(?:\s|$)", command
+    ):
         _block(
-            "GitOps 위반: `git push ... origin ... main` — main 브랜치 직접 push 금지. "
-            "dev → main 릴리즈 게이트(PR)를 통해서만 머지하세요."
+            "#28 파괴적 명령 차단: `git push --force` / `-f` / `--force-with-lease` — "
+            "강제 push는 git history를 파괴할 수 있습니다. 인간이 직접 셸에서 실행하세요."
+        )
+
+    # SQL DROP TABLE / TRUNCATE (대소문자 무시)
+    if re.search(r"\bdrop\s+table\b", command, re.IGNORECASE):
+        _block(
+            "#28 파괴적 명령 차단: `DROP TABLE` — 테이블 삭제는 인간이 직접 실행해야 합니다."
+        )
+    if re.search(r"\btruncate\b", command, re.IGNORECASE):
+        _block(
+            "#28 파괴적 명령 차단: `TRUNCATE` — 테이블 전체 삭제는 인간이 직접 실행해야 합니다."
+        )
+
+    # manage.py flush
+    if re.search(r"manage\.py\s+flush\b", cmd_collapsed):
+        _block(
+            "#28 파괴적 명령 차단: `manage.py flush` — DB 전체 초기화는 인간이 직접 실행해야 합니다."
+        )
+
+    # --- GitOps: main 직접 push 차단 (best-effort ref 타깃 기반)
+    if _is_main_push(command):
+        _block(
+            "GitOps 위반: main 브랜치 직접 push 금지. "
+            "dev → main 릴리즈 게이트(PR)를 통해서만 머지하세요. "
+            "브랜치 가드는 best-effort — 권위 게이트는 GitHub 브랜치 보호 규칙."
         )
 
 
@@ -207,8 +298,9 @@ def main() -> None:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        # JSON 파싱 실패 시 통과 — 오탐 방지
-        print(f"[GUARD WARNING] JSON 파싱 실패: {e}", file=sys.stderr)
+        # JSON 파싱 실패 시 fail-open — 가용성 트레이드오프.
+        # Claude Code는 well-formed JSON을 보장하므로 정상 운영 중에는 발생하지 않는다.
+        print(f"[GUARD WARNING] JSON 파싱 실패 (fail-open): {e}", file=sys.stderr)
         sys.exit(0)
 
     tool_name: str = data.get("tool_name", "")
@@ -224,6 +316,11 @@ def main() -> None:
             fp = edit.get("file_path", "")
             if fp:
                 check_file_path(tool_name, fp)
+        # NotebookEdit: notebook_path fallback
+        if tool_name == "NotebookEdit" and not file_path:
+            nb_path = tool_input.get("notebook_path", "")
+            if nb_path:
+                check_file_path(tool_name, nb_path)
 
     # --- Bash 명령 기반
     elif tool_name == "Bash":
