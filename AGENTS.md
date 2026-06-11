@@ -35,6 +35,15 @@ Flutter(web+iOS+Android) + Django 5.2 LTS + Django Ninja. P0는 Fan CRM이다 �
 - Riverpod 2.x 문법 사용 (이 repo는 3.x)
 - `.env`·크레덴셜 읽기/커밋
 
+## GitOps (브랜치·배포 계약 — 2026-06-12 대표 지시)
+
+- 원격: `github.com/Assen-Entertainment/assen-platform` (private)
+- **main = prod.** 직접 push 금지(부트스트랩 제외). `dev → main` 머지는 릴리즈 게이트 — 인간 승인 필수(프로덕션 #30).
+- **dev = 통합 브랜치** (dev 서버 배포 대상). feature 브랜치만 머지 가능.
+- **feature/ass-<이슈번호>-<slug>** = 작업 단위, Linear 이슈와 1:1. PR 제목·본문에 이슈 ID.
+- 머지 조건(feature→dev): CI 게이트(lint+typecheck+test+build) green · 검증 계약 증거 첨부 · 작성자≠검토자 리뷰 통과.
+- **코드 주석·타입 계약:** Dart public API는 `///` doc comment 의무, Python은 타입 힌트 + docstring 의무. 주석은 *why*를 설명한다(Clean Code) — 코드가 말하는 *what*의 중복 금지. 의미 있는 이름·작은 함수·단일 책임.
+
 ## 작업 방식
 
 - 계획 → 작은 diff → 검증, 루프를 빠르게. 같은 문제 2회 교정 실패 시 컨텍스트 버리고 재시작.
