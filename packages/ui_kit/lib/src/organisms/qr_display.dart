@@ -97,7 +97,7 @@ class AssenQrDisplay extends StatelessWidget {
                       strokeWidth: SpacingTokens.s1,
                     ),
                   ),
-                // QR placeholder — a token-coloured stand-in for the real matrix.
+                // QR placeholder — token stand-in for the real matrix.
                 Container(
                   width: size - SpacingTokens.s8,
                   height: size - SpacingTokens.s8,
