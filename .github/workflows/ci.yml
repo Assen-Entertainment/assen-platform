@@ -1,0 +1,125 @@
+name: CI
+
+# CONSTRAINTS #24: lint + typecheck + test + 3-target build smoke gate every PR.
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  # ios-smoke is also reachable on demand / on a weekly schedule (see below).
+  workflow_dispatch:
+  schedule:
+    # Weekly, Mondays 03:00 UTC — drives the macOS ios-smoke job only.
+    - cron: "0 3 * * 1"
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server (ruff + mypy + pytest + migrations)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy .
+      - name: Pytest
+        run: uv run pytest
+      - name: Migrations are committed (sqlite test settings, no DB server)
+        run: uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test
+
+  flutter:
+    name: Flutter (format + analyze + test + web/android build smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Cache pub-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-cache-${{ runner.os }}-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: pub-cache-${{ runner.os }}-
+      - name: Bootstrap workspace
+        run: dart pub get
+      - name: Format check
+        run: dart run melos run format --no-select
+      - name: Analyze
+        run: dart run melos run analyze --no-select
+      - name: Test
+        run: dart run melos run test --no-select
+      - name: Web build smoke (fan_app)
+        working-directory: apps/fan_app
+        run: flutter build web --no-pub
+      - name: Android build smoke (fan_app, debug)
+        working-directory: apps/fan_app
+        run: flutter build apk --debug --no-pub
+
+  ios-smoke:
+    name: iOS build smoke (fan_app)
+    # macOS minutes bill at ~10x, so this is intentionally NOT run per-PR.
+    # It runs only on manual dispatch or the weekly schedule above.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap workspace
+        run: dart pub get
+      - name: iOS build smoke (fan_app, no codesign)
+        working-directory: apps/fan_app
+        run: flutter build ios --debug --no-codesign --no-pub
+
+  compose:
+    name: docker compose validate + boot smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose config -q
+      - name: Boot core services
+        run: docker compose up -d postgres redis celery-worker
+      - name: Assert services are running
+        run: |
+          sleep 15
+          docker compose ps
+          docker compose ps --status running postgres | grep postgres
+          docker compose ps --status running redis | grep redis
+          docker compose ps --status running celery-worker | grep celery-worker
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # gitleaks-action@v2는 org 저장소에 GITLEAKS_LICENSE를 요구한다.
+      # CLI 자체는 MIT라 바이너리 직접 실행으로 동일 검사를 수행한다.
+      - name: Run gitleaks CLI
+        run: |
+          curl -sL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks detect --source . --no-banner --redact --exit-code 1

@@ -1,0 +1,54 @@
+# Assen Platform — Dart pub workspace root (CONSTRAINTS #17).
+#
+# This is NOT a publishable package; it only declares the workspace member list
+# so a single `pub get` resolves every app and package against one lockfile.
+# Per-member pubspecs opt in with `resolution: workspace`.
+#
+# Melos 7 is the task runner layered on top of pub workspaces. In Melos 7 the
+# configuration (including scripts) lives here under the `melos:` key, not in a
+# standalone melos.yaml. Run scripts with `dart run melos run <name>`.
+name: assen_platform_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+
+# Workspace members. Order is irrelevant; pub builds the dependency graph.
+workspace:
+  - apps/fan_app
+  - apps/operator_app
+  - packages/core_tokens
+  - packages/ui_kit
+  - packages/api_client
+  - packages/features
+  - packages/operator_features
+  - packages/test_fixtures
+
+# Shared dev tooling resolved once for the whole workspace.
+dev_dependencies:
+  melos: ^7.0.0
+  # Lint set + strict analysis, included relatively by every member package
+  # (see ./analysis_options.yaml). Declared here so it resolves workspace-wide.
+  very_good_analysis: ^9.0.0
+
+# Melos 7 task runner. CI invokes these same scripts, so local and CI behaviour
+# stay identical (see .github/workflows/ci.yml and AGENTS.md validation block).
+melos:
+  scripts:
+    # Resolve the whole workspace against one lockfile.
+    bootstrap:
+      description: Resolve all workspace dependencies (pub get at the root).
+      run: dart pub get
+
+    analyze:
+      description: Static analysis across every package with zero tolerance.
+      run: dart analyze --fatal-infos --fatal-warnings .
+
+    format:
+      description: Verify formatting; fails (non-zero) if any file would change.
+      run: dart format --set-exit-if-changed .
+
+    test:
+      description: Run the test suite in every package that defines tests.
+      # `dart run melos` keeps the nested call working without a global install.
+      run: dart run melos exec --dir-exists=test -- flutter test

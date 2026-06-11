@@ -18,12 +18,16 @@ Flutter(web+iOS+Android) + Django 5.2 LTS + Django Ninja. P0는 Fan CRM이다 �
 - 인간 승인 필수: 결제·과금 로직, 인증/권한 코드, migrations 적용, 골든 파일 갱신, 테스트 수정, 프로덕션 관련 일체.
 - 단독 확정 불가 (Company-OS): 가격, 정산, 개인정보 문구, 캐스트 동의, 오픈일, 외부 공개 수치.
 
-## 검증 계약
+## 검증 계약 (ASS-81 scaffold 완료 — 실제 명령)
 
-> scaffold 전 상태. 구현 repo scaffold 완료 시 실제 명령으로 갱신할 것.
+Flutter는 pub workspace + Melos 7. 스크립트는 루트 `pubspec.yaml`의 `melos:` 블록에 있고 CI도 동일 명령을 쓴다. 스택별 상세·개별 테스트 명령은 `apps/AGENTS.md`, `server/AGENTS.md` 참조.
 
-- Flutter: `dart format --set-exit-if-changed .` → `flutter analyze` → `flutter test <개별 파일>` → 전체 `flutter test`
-- Django: `ruff check` → `mypy` → `pytest -x <개별 경로>` → `python manage.py makemigrations --check`
+- Flutter (repo 루트): `dart pub get` → `dart run melos run format` → `dart run melos run analyze` → `dart run melos run test`
+  - 개별 파일: `flutter test packages/<pkg>/test/<file>_test.dart`
+  - 빌드 스모크(CI): `flutter build web` · `flutter build apk --debug` (fan_app). iOS는 macOS 비용 10x라 주간 cron/수동 dispatch만.
+- Django (`server/`): `uv sync` → `uv run ruff check .` → `uv run mypy .` → `uv run pytest` → `uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test`
+  - 개별 테스트: `uv run pytest apps/<domain>/tests/test_smoke.py::<name>`
+- docker compose는 로컬 부재 → CI에서 `docker compose config -q` + postgres/redis/celery-worker 기동 스모크로 검증.
 - 완료 주장에는 증거(테스트 출력/빌드 로그/스크린샷)를 첨부한다. 작성 세션이 자체 승인하지 않는다.
 
 ## 하지 말 것 (사고 다발 영역)

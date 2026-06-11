@@ -1,0 +1,30 @@
+name: fan_app
+description: "Assen Platform fan app (web + iOS + Android)."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+dependencies:
+  cupertino_icons: ^1.0.8
+  features:
+    path: ../../packages/features
+  flutter:
+    sdk: flutter
+  # Riverpod 3.x ONLY — 2.x syntax is forbidden (CONSTRAINTS #40).
+  flutter_riverpod: ^3.0.0
+  # Routing dependency only; actual routes are implemented in P3.
+  go_router: ^16.0.0
+  ui_kit:
+    path: ../../packages/ui_kit
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

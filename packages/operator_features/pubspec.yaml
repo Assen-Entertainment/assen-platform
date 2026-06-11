@@ -1,0 +1,35 @@
+name: operator_features
+description: >-
+  Operator-only feature modules for Assen Platform, consumed exclusively by
+  operator_app. fan_app must never depend on this package (operator surfaces are
+  staff-only). P0 ships a placeholder dashboard screen.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+  flutter: ">=3.44.0"
+
+dependencies:
+  api_client:
+    path: ../api_client
+  core_tokens:
+    path: ../core_tokens
+  flutter:
+    sdk: flutter
+  # Riverpod 3.x ONLY — 2.x syntax is forbidden in this repo (CONSTRAINTS #40).
+  flutter_riverpod: ^3.0.0
+  ui_kit:
+    path: ../ui_kit
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test_fixtures:
+    path: ../test_fixtures
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+flutter:
+  uses-material-design: true
