@@ -16,3 +16,10 @@ analyzer:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.gr.dart"
+    # Style Dictionary token output (ASS-128) is generated from tokens.json and
+    # carries a DO-NOT-EDIT header; lint it at the source, not here (same policy
+    # as build_runner output above).
+    - "**/*.gen.dart"
+    # The token codegen tool is an npm project (Node), not Dart workspace code;
+    # its node_modules can contain third-party Dart examples. Out of scope here.
+    - "tools/**"

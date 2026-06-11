@@ -6,3 +6,4 @@
 library;
 
 export 'src/theme.dart';
+export 'src/token_swatch.dart';
