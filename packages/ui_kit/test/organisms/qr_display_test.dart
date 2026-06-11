@@ -62,6 +62,27 @@ void main() {
       );
       expect(find.text('0000 1234 5678'), findsOneWidget);
     });
+
+    testWidgets('labels the QR container for screen readers', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const AssenQrDisplay(
+            memberNumber: '0000 1234 5678',
+            remainingLabel: '10초',
+          ),
+        ),
+      );
+      final semantics = tester.widget<Semantics>(
+        find
+            .descendant(
+              of: find.byType(AssenQrDisplay),
+              matching: find.byType(Semantics),
+            )
+            .first,
+      );
+      expect(semantics.properties.label, contains('회원증 QR'));
+      expect(semantics.container, isTrue);
+    });
   });
 
   goldenTest(

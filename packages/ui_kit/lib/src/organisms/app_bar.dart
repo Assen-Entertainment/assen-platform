@@ -6,6 +6,7 @@ import 'package:ui_kit/src/atoms/icon_button.dart';
 // Typography sizes are literals until TypographyTokens lands.
 // TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.l).
 const double _titleSize = 17; // tokens.md §3 title.l — centred screen title
+const double _tabLabelSize = 11; // bottom-tab caption (tokens.md §3 micro)
 
 /// The top app bar (`기본형 — 센터 타이틀`).
 ///
@@ -155,8 +156,8 @@ class AssenTabBar extends StatelessWidget {
         elevation: 0,
         selectedItemColor: colors.roseMain,
         unselectedItemColor: colors.ink500,
-        selectedFontSize: 11,
-        unselectedFontSize: 11,
+        selectedFontSize: _tabLabelSize,
+        unselectedFontSize: _tabLabelSize,
         items: [
           for (var i = 0; i < items.length; i++)
             BottomNavigationBarItem(

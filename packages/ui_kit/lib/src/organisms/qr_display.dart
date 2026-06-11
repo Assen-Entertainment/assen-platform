@@ -68,84 +68,96 @@ class AssenQrDisplay extends StatelessWidget {
     final colors = Theme.of(context).extension<AssenColors>()!;
     final isExpired = status == AssenQrStatus.expired;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Auto-brightness affordance — the standard membership-QR behaviour
-        // (references §3 채택 #7). Copy only; the real brighten is host-side.
-        const AssenNoticeBar(
-          message: '스캔을 위해 화면 밝기를 자동으로 높입니다.',
-          icon: Icons.brightness_high_outlined,
-        ),
-        const SizedBox(height: SpacingTokens.s5),
-        SizedBox(
-          width: size,
-          height: size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Rotation timer ring — remaining sweep of the active window.
-              if (!isExpired)
-                Positioned.fill(
-                  child: AssenProgressDonut(
-                    value: progress,
-                    size: size,
-                    strokeWidth: SpacingTokens.s1,
+    // 컨테이너 시맨틱스 — 스크린리더가 회원증 QR임을 한 번에 읽도록.
+    return Semantics(
+      container: true,
+      label: '$memberNumber 회원증 QR',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Auto-brightness affordance — the standard membership-QR behaviour
+          // (references §3 채택 #7). Copy only; the real brighten is host-side.
+          const AssenNoticeBar(
+            message: '스캔을 위해 화면 밝기를 자동으로 높입니다.',
+            icon: Icons.brightness_high_outlined,
+          ),
+          const SizedBox(height: SpacingTokens.s5),
+          SizedBox(
+            width: size,
+            height: size,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Rotation timer ring — remaining sweep of the active window.
+                if (!isExpired)
+                  Positioned.fill(
+                    child: AssenProgressDonut(
+                      value: progress,
+                      size: size,
+                      strokeWidth: SpacingTokens.s1,
+                    ),
+                  ),
+                // QR placeholder — a token-coloured stand-in for the real matrix.
+                Container(
+                  width: size - SpacingTokens.s8,
+                  height: size - SpacingTokens.s8,
+                  decoration: BoxDecoration(
+                    color: colors.white,
+                    borderRadius: const BorderRadius.all(
+                      Radius.circular(RadiusTokens.md),
+                    ),
+                    border: Border.all(color: colors.ink100),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.qr_code_2,
+                    size: size - SpacingTokens.s16,
+                    color: isExpired ? colors.ink200 : colors.ink900,
                   ),
                 ),
-              // QR placeholder — a token-coloured stand-in for the real matrix.
-              Container(
-                width: size - SpacingTokens.s8,
-                height: size - SpacingTokens.s8,
-                decoration: BoxDecoration(
-                  color: colors.white,
-                  borderRadius: const BorderRadius.all(
-                    Radius.circular(RadiusTokens.md),
-                  ),
-                  border: Border.all(color: colors.ink100),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.qr_code_2,
-                  size: size - SpacingTokens.s16,
-                  color: isExpired ? colors.ink200 : colors.ink900,
+                if (isExpired)
+                  _ExpiredOverlay(colors: colors, onRefresh: onRefresh),
+              ],
+            ),
+          ),
+          const SizedBox(height: SpacingTokens.s4),
+          Text(
+            memberNumber,
+            style: TextStyle(
+              fontSize: _qrTitleSize,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1,
+              color: colors.ink700,
+            ),
+          ),
+          const SizedBox(height: SpacingTokens.s2),
+          // liveRegion — 만료/갱신 전이가 스크린리더에 자동 안내되도록.
+          if (isExpired)
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                '코드가 만료되었습니다.',
+                style: TextStyle(
+                  fontSize: _qrExpiredSize,
+                  fontWeight: FontWeight.w600,
+                  color: colors.redInk,
                 ),
               ),
-              if (isExpired)
-                _ExpiredOverlay(colors: colors, onRefresh: onRefresh),
-            ],
-          ),
-        ),
-        const SizedBox(height: SpacingTokens.s4),
-        Text(
-          memberNumber,
-          style: TextStyle(
-            fontSize: _qrTitleSize,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1,
-            color: colors.ink700,
-          ),
-        ),
-        const SizedBox(height: SpacingTokens.s2),
-        if (isExpired)
-          Text(
-            '코드가 만료되었습니다.',
-            style: TextStyle(
-              fontSize: _qrExpiredSize,
-              fontWeight: FontWeight.w600,
-              color: colors.redInk,
+            )
+          else if (remainingLabel != null)
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                '$remainingLabel 후 코드가 갱신됩니다',
+                style: TextStyle(
+                  fontSize: _qrTimerSize,
+                  fontWeight: FontWeight.w600,
+                  color: colors.ink500,
+                ),
+              ),
             ),
-          )
-        else if (remainingLabel != null)
-          Text(
-            '$remainingLabel 후 코드가 갱신됩니다',
-            style: TextStyle(
-              fontSize: _qrTimerSize,
-              fontWeight: FontWeight.w600,
-              color: colors.ink500,
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
