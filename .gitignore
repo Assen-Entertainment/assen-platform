@@ -1,3 +1,50 @@
+# OMC / tooling
 .omc/
+
+# Node (landing)
 node_modules/
 dist/
+
+# Secrets — only .env.example is tracked (CONSTRAINTS #27)
+.env
+*.env
+!.env.example
+
+# === Dart / Flutter ===
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+# Per-package lockfiles are noise in a workspace; the root lock is the source.
+**/pubspec.lock
+# IDE / Flutter scaffolding
+.idea/
+*.iml
+.metadata
+# iOS / Android local artefacts
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Pods/
+**/.symlinks/
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+*.keystore
+*.jks
+
+# === Python / Django ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+# SQLite dev databases (the real DB is Postgres)
+*.sqlite3
+db.sqlite3
+# Django collected static
+server/staticfiles/
