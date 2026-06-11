@@ -1,0 +1,13 @@
+{
+  "name": "@assen/token-codegen",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Style Dictionary codegen: docs/design/tokens.json (DTCG 2025.10) -> Dart (packages/core_tokens) + Vite CSS (landing/src). Single source of truth, ASS-128.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "style-dictionary": "5.4.4"
+  }
+}
