@@ -1,4 +1,9 @@
 /* ── Assen Platform Landing — tokens.md 기반 (라이트 레트로 큐트, 솔리드) ── */
+/* Design-token custom properties (color.ref.* + radius.full) are GENERATED from
+   docs/design/tokens.json via Style Dictionary (ASS-128). Do not hand-edit the
+   generated values here; run . See ADR-0004. */
+@import './tokens.generated.css';
+
 @font-face {
   font-family: 'Cafe24Ssurround';
   src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/Cafe24Ssurround.woff') format('woff');
@@ -6,25 +11,19 @@
   font-display: swap;
 }
 
+/* Landing-LOCAL custom properties — NOT design tokens, so intentionally not
+   generated. The spike surfaced these as the gap between style.css and
+   tokens.json (ADR-0004 findings): --gutter is a layout constant; the fonts use
+   the @font-face family name 'Cafe24Ssurround' (vs the token's "Cafe24 Ssurround");
+   --shadow-* are authored as rgba(...,0.08/0.12) while the elevation tokens are
+   hex8 #2B272414/#2B27241F (alpha ≈ 0.078/0.122). Kept verbatim for zero visual
+   regression; reconciling them is follow-up, not this spike's scope. */
 :root {
-  /* color.ref */
-  --cream-50: #fffdf7; --cream-100: #fff8e7; --cream-200: #f8efdb; --cream-300: #efe3c9;
-  --white: #ffffff;
-  --ink-900: #2b2724; --ink-700: #57534e; --ink-500: #8a8178; --ink-300: #c9c0b4; --ink-200: #e3daca; --ink-100: #f0eadd;
-  --strawberry-bgs: #fff0f4; --strawberry-bg: #ffd9e2; --strawberry-bd: #f0a8bc; --strawberry-ink: #8e2f4a;
-  --peach-bg: #ffdcc7; --peach-bd: #ebaf85; --peach-ink: #8a4a1f;
-  --lemon-bgs: #fff9df; --lemon-bg: #ffefb3; --lemon-bd: #ddc25e; --lemon-ink: #6e5a14;
-  --matcha-bgs: #eff6ea; --matcha-bg: #d8ebcb; --matcha-bd: #a0cc89; --matcha-ink: #3e6132;
-  --sky-bgs: #eaf5f9; --sky-bg: #cfe9f2; --sky-bd: #92c6d9; --sky-ink: #1f566b;
-  --lavender-bgs: #f4f0fa; --lavender-bg: #e2daf4; --lavender-bd: #bca9e3; --lavender-ink: #54408a;
-  --brass-bg: #f6ecd9; --brass: #d4a24f; --brass-ink: #6e5224;
-  --rose: #c2486b; --red: #b64650;
   --font-display: 'Cafe24Ssurround', Pretendard, sans-serif;
   --font-body: Pretendard, 'Apple SD Gothic Neo', sans-serif;
   --shadow-1: 0 2px 8px rgba(43, 39, 36, 0.08);
   --shadow-2: 0 8px 24px rgba(43, 39, 36, 0.12);
   --gutter: 6vw;
-  --radius-pill: 999px;
 }
 
 * { box-sizing: border-box; }

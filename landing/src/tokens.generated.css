@@ -1,0 +1,47 @@
+/*
+ * GENERATED — DO NOT EDIT BY HAND (#32).
+ * Source: docs/design/tokens.json (W3C DTCG 2025.10).
+ * Regenerate: dart run melos run codegen   (verify: melos run codegen:verify).
+ */
+:root {
+  --cream-50: #fffdf7;
+  --cream-100: #fff8e7;
+  --cream-200: #f8efdb;
+  --cream-300: #efe3c9;
+  --white: #ffffff;
+  --ink-900: #2b2724;
+  --ink-700: #57534e;
+  --ink-500: #8a8178;
+  --ink-300: #c9c0b4;
+  --ink-200: #e3daca;
+  --ink-100: #f0eadd;
+  --strawberry-bgs: #fff0f4;
+  --strawberry-bg: #ffd9e2;
+  --strawberry-bd: #f0a8bc;
+  --strawberry-ink: #8e2f4a;
+  --peach-bg: #ffdcc7;
+  --peach-bd: #ebaf85;
+  --peach-ink: #8a4a1f;
+  --lemon-bgs: #fff9df;
+  --lemon-bg: #ffefb3;
+  --lemon-bd: #ddc25e;
+  --lemon-ink: #6e5a14;
+  --matcha-bgs: #eff6ea;
+  --matcha-bg: #d8ebcb;
+  --matcha-bd: #a0cc89;
+  --matcha-ink: #3e6132;
+  --sky-bgs: #eaf5f9;
+  --sky-bg: #cfe9f2;
+  --sky-bd: #92c6d9;
+  --sky-ink: #1f566b;
+  --lavender-bgs: #f4f0fa;
+  --lavender-bg: #e2daf4;
+  --lavender-bd: #bca9e3;
+  --lavender-ink: #54408a;
+  --brass-bg: #f6ecd9;
+  --brass: #d4a24f;
+  --brass-ink: #6e5224;
+  --rose: #c2486b;
+  --red: #b64650;
+  --radius-pill: 999px;
+}
