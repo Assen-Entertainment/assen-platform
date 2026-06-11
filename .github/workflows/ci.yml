@@ -117,6 +117,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # gitleaks-action@v2는 org 저장소에 GITLEAKS_LICENSE를 요구한다.
+      # CLI 자체는 MIT라 바이너리 직접 실행으로 동일 검사를 수행한다.
+      - name: Run gitleaks CLI
+        run: |
+          curl -sL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks detect --source . --no-banner --redact --exit-code 1
