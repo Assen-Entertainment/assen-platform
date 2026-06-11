@@ -6,7 +6,7 @@
 
 ## 맥락
 
-Company-OS의 `Assen_Passport_Technical_Architecture.md`(2026-06-10)는 백엔드를 "TypeScript modular monolith API를 기본 후보"로 두되 "최종 framework는 구현 repo scaffold 시 ADR로 고정"하도록 위임했다. 본 ADR이 그 결정이다.
+Company-OS의 `Assen_Platform_Technical_Architecture.md`(2026-06-10 작성, 당시 명칭 Assen_Passport_Technical_Architecture — ASS-89로 개명)는 백엔드를 "TypeScript modular monolith API를 기본 후보"로 두되 "최종 framework는 구현 repo scaffold 시 ADR로 고정"하도록 위임했다. 본 ADR이 그 결정이다.
 
 ## 결정
 
@@ -24,6 +24,6 @@ Company-OS의 `Assen_Passport_Technical_Architecture.md`(2026-06-10)는 백엔�
 ## 결과
 
 - 기존 아키텍처 문서의 나머지 결정(PostgreSQL + append-only event_log, REST/OpenAPI 우선, staged identity, feature flag 등)은 그대로 유효하다.
-- Company-OS `Assen_Passport_Technical_Architecture.md`의 Backend 행을 본 ADR 참조로 갱신해야 한다 (Linear 이슈로 추적).
+- Company-OS `Assen_Platform_Technical_Architecture.md`의 Backend 행을 본 ADR 참조로 갱신했다 (2026-06-11, ASS-80 완료. 문서 개명은 ASS-89).
 - 리스크: Django Ninja는 단일 메인테이너 중심 — 심각한 정체 시 DRF+drf-spectacular로 회귀 가능하도록 뷰 로직과 스키마를 분리해 둔다.
 - 근거 상세: `docs/research/stack-and-domain-constraints.md` 2장.

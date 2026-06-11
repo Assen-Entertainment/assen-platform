@@ -6,7 +6,7 @@ owner: Assen Entertainment
 tags: [Research, Flutter, Django, IAP, Payments, FanPlatform]
 related:
   - "[[CONSTRAINTS]]"
-  - "[[Assen_Passport_Technical_Architecture]]"
+  - "[[Assen_Platform_Technical_Architecture]]"
 ---
 
 # Flutter + Django 팬 플랫폼 기술 조사

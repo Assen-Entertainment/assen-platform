@@ -7,7 +7,7 @@ tags: [Engineering, Constraints, Harness, Flutter, Django, IAP]
 related:
   - "[[Development_Constraints]]"
   - "[[LLM_Harness_Index]]"
-  - "[[Assen_Passport_Technical_Architecture]]"
+  - "[[Assen_Platform_Technical_Architecture]]"
   - "[[agent-harness-discourse]]"
   - "[[stack-and-domain-constraints]]"
 ---

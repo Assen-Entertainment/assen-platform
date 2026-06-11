@@ -10,7 +10,7 @@ Flutter(web+iOS+Android) + Django 5.2 LTS + Django Ninja. P0는 Fan CRM이다 �
 1. `docs/CONSTRAINTS.md` — 이 repo의 제약사항 41개 (사업/IAP, 컴플라이언스, 아키텍처, 하네스)
 2. `Company-OS/03_Engineering/Development_Constraints.md` — 권한 경계와 blocker 기준
 3. `Company-OS/07_LLM/LLM_Harness_Index.md` — LLM 사용 gate
-4. 아키텍처 배경: `Company-OS/03_Engineering/Assen_Passport_Technical_Architecture.md` + `docs/adr/`
+4. 아키텍처 배경: `Company-OS/03_Engineering/Assen_Platform_Technical_Architecture.md` + `docs/adr/`
 
 ## 권한 경계 (요약)
 
