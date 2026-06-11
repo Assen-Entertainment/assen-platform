@@ -1,4 +1,3 @@
-.omc/state/
-.omc/logs/
+.omc/
 node_modules/
 dist/

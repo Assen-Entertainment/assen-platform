@@ -6,6 +6,10 @@
   <meta name="robots" content="noindex" />
   <title>Assen Platform — 하츠코이를 주머니 속에</title>
   <meta name="description" content="메이드카페 하츠코이의 방문, 체키, 출근표, 예약을 하나로 잇는 팬 멤버십 앱." />
+  <meta property="og:title" content="Assen Platform — 하츠코이를 주머니 속에" />
+  <meta property="og:description" content="방문 기록 · 체키 앨범 · 출근표 · 예약까지, 하츠코이의 모든 순간을 한 곳에." />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://fastly.jsdelivr.net" crossorigin />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -19,10 +23,23 @@
     <nav class="header-nav">
       <a href="#features">기능</a>
       <a href="#stamps">스탬프</a>
-      <a href="#coupon">쿠폰</a>
+      <a href="#casts">캐스트</a>
+      <a href="#faq">FAQ</a>
     </nav>
     <a class="header-cta" href="#cta">사전 등록</a>
   </header>
+
+  <!-- ░ 도트 내비 (데스크톱) ░ -->
+  <nav class="dot-nav" aria-label="섹션 바로가기">
+    <a href="#hero" aria-label="처음으로"></a>
+    <a href="#features" aria-label="기능"></a>
+    <a href="#how" aria-label="시작 방법"></a>
+    <a href="#stamps" aria-label="스탬프"></a>
+    <a href="#casts" aria-label="캐스트"></a>
+    <a href="#coupon" aria-label="쿠폰"></a>
+    <a href="#faq" aria-label="FAQ"></a>
+    <a href="#cta" aria-label="사전 등록"></a>
+  </nav>
 
   <!-- ░ HERO ░ -->
   <section class="hero" id="hero">
@@ -58,7 +75,7 @@
 
       <div class="hero-stage">
         <div class="phone float-phone">
-          <img src="/assets/app-home.png" alt="앱 홈 화면 — 디지털 회원증과 방문 스탬프" />
+          <img src="./assets/app-home.png" width="383" height="1068" alt="앱 홈 화면 — 디지털 회원증과 방문 스탬프" />
         </div>
         <figure class="cheki float-cheki ch1">
           <div class="cheki-photo strawberry-photo"></div>
@@ -79,6 +96,7 @@
   </section>
 
   <!-- ░ 티켓 마퀴 ░ -->
+  <!-- marquee-track은 반드시 동일한 절반 2개로 구성 — main.js가 xPercent:-50으로 무한 루프 -->
   <div class="marquee" aria-hidden="true">
     <div class="marquee-track">
       <span>체키 앨범</span><i>♥</i><span>방문 스탬프</span><i>★</i><span>출근표</span><i>♥</i><span>간편 예약</span><i>★</i><span>웰컴 쿠폰</span><i>♥</i>
@@ -90,10 +108,11 @@
   <section class="features" id="features">
     <h2 class="section-title"><span class="title-sticker">세 가지</span>만 기억하세요</h2>
 
-    <article class="feature-row" data-reveal>
+    <article class="feature-row f1" data-reveal>
       <div class="feature-stage">
-        <div class="phone phone-md"><img src="/assets/app-album.png" alt="체키 앨범 화면" /></div>
+        <div class="phone phone-md"><img src="./assets/app-album.png" width="383" height="1032" loading="lazy" alt="체키 앨범 화면" /></div>
         <figure class="cheki deco-cheki"><div class="cheki-photo lemon-photo"></div><figcaption>+ NEW</figcaption></figure>
+        <span class="mini-chip chip-tl strawberry-chip">시즌 컬렉션 12 / 30</span>
       </div>
       <div class="feature-copy">
         <span class="badge-chip strawberry">01 · 체키 앨범</span>
@@ -102,17 +121,18 @@
         <ul class="check-list">
           <li>인스탁스 비율 그대로의 앨범 그리드</li>
           <li>NEW · 한정 배지로 보는 수집 현황</li>
-          <li>컬렉션 진행률 12 / 30</li>
+          <li>시즌 컬렉션 진행률 12 / 30</li>
         </ul>
       </div>
     </article>
 
-    <article class="feature-row reverse" data-reveal>
+    <article class="feature-row f2 reverse" data-reveal>
       <div class="feature-stage">
-        <div class="phone phone-md"><img src="/assets/app-schedule.png" alt="출근표 화면" /></div>
+        <div class="phone phone-md"><img src="./assets/app-schedule.png" width="383" height="1032" loading="lazy" alt="출근표 화면" /></div>
         <div class="deco-card schedule-deco">
           <span class="dot matcha"></span><strong>유키</strong><em>오늘 15:00–21:00</em>
         </div>
+        <span class="mini-chip chip-br matcha-chip">6.14 (토) 15:00 · 2명 예약 확정</span>
       </div>
       <div class="feature-copy">
         <span class="badge-chip lemon">02 · 출근표 &amp; 예약</span>
@@ -126,10 +146,11 @@
       </div>
     </article>
 
-    <article class="feature-row" data-reveal>
+    <article class="feature-row f3" data-reveal>
       <div class="feature-stage">
-        <div class="phone phone-md"><img src="/assets/app-qr.png" alt="QR 체크인 화면" /></div>
+        <div class="phone phone-md"><img src="./assets/app-qr.png" width="375" height="1024" loading="lazy" alt="QR 체크인 화면" /></div>
         <span class="sticker sticker-stamp" aria-hidden="true">CHECK!</span>
+        <span class="mini-chip chip-tr sky-chip">+1 스탬프 적립!</span>
       </div>
       <div class="feature-copy">
         <span class="badge-chip sky">03 · QR 체크인</span>
@@ -144,15 +165,54 @@
     </article>
   </section>
 
-  <!-- ░ 스탬프 ░ -->
-  <section class="stamps" id="stamps">
+  <!-- ░ 시작 방법 ░ -->
+  <section class="how" id="how">
+    <h2 class="section-title">시작은 <span class="title-sticker lemon-sticker">네 단계</span>면 충분해요</h2>
+    <ol class="how-steps">
+      <li class="how-step">
+        <span class="how-num strawberry-num">1</span>
+        <span class="how-icon" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40"><rect x="5" y="10" width="30" height="22" rx="4" fill="var(--strawberry-bg)" stroke="var(--strawberry-ink)" stroke-width="2"/><path d="M6 12l14 11 14-11" fill="none" stroke="var(--strawberry-ink)" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+        <h3>사전 등록</h3>
+        <p>이메일 하나면 끝.<br />오픈 소식을 가장 먼저 받아요.</p>
+      </li>
+      <li class="how-step">
+        <span class="how-num lemon-num">2</span>
+        <span class="how-icon" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40"><path d="M20 6c-6 0-9 4.5-9 10v6l-3 6h24l-3-6v-6c0-5.5-3-10-9-10z" fill="var(--lemon-bg)" stroke="var(--lemon-ink)" stroke-width="2" stroke-linejoin="round"/><path d="M16 31a4 4 0 008 0" fill="none" stroke="var(--lemon-ink)" stroke-width="2" stroke-linecap="round"/></svg>
+        </span>
+        <h3>오픈 알림</h3>
+        <p>앱이 준비되면<br />다운로드 안내가 도착해요.</p>
+      </li>
+      <li class="how-step">
+        <span class="how-num sky-num">3</span>
+        <span class="how-icon" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40"><rect x="6" y="6" width="12" height="12" rx="2" fill="var(--sky-bg)" stroke="var(--sky-ink)" stroke-width="2"/><rect x="22" y="6" width="12" height="12" rx="2" fill="var(--sky-bg)" stroke="var(--sky-ink)" stroke-width="2"/><rect x="6" y="22" width="12" height="12" rx="2" fill="var(--sky-bg)" stroke="var(--sky-ink)" stroke-width="2"/><rect x="24" y="24" width="4" height="4" fill="var(--sky-ink)"/><rect x="30" y="24" width="4" height="4" fill="var(--sky-ink)"/><rect x="24" y="30" width="4" height="4" fill="var(--sky-ink)"/><rect x="30" y="30" width="4" height="4" fill="var(--sky-ink)"/></svg>
+        </span>
+        <h3>매장에서 QR</h3>
+        <p>카운터에서 QR 한 번으로<br />방문 인증 완료.</p>
+      </li>
+      <li class="how-step">
+        <span class="how-num matcha-num">4</span>
+        <span class="how-icon" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40"><circle cx="20" cy="20" r="14" fill="var(--matcha-bg)" stroke="var(--matcha-ink)" stroke-width="2"/><circle cx="20" cy="20" r="7" fill="var(--matcha-ink)"/></svg>
+        </span>
+        <h3>스탬프 · 체키 적립</h3>
+        <p>방문할수록 보드와 앨범이<br />차곡차곡 차올라요.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ░ 스탬프 (파스텔 밴드 + 스캘럽) ░ -->
+  <section class="stamps band" id="stamps">
     <div class="stamps-card" data-reveal>
-      <h2 class="section-title light">방문이 <span class="title-sticker lemon-sticker">보상</span>이 되는 구조</h2>
+      <h2 class="section-title">방문이 <span class="title-sticker lemon-sticker">보상</span>이 되는 구조</h2>
       <p class="stamps-sub">하츠코이에 다녀갈 때마다 스탬프가 쾅. 여덟 칸을 채우면 체키 한 장이 따라와요.</p>
-      <div class="stamp-board" aria-label="방문 스탬프 보드">
+      <div class="stamp-board" aria-label="방문 스탬프 보드 — 8칸 중 5칸 적립">
         <span class="board-slot" data-stamp></span><span class="board-slot" data-stamp></span>
         <span class="board-slot" data-stamp></span><span class="board-slot" data-stamp></span>
-        <span class="board-slot" data-stamp></span><span class="board-slot" data-stamp></span>
+        <span class="board-slot" data-stamp></span><span class="board-slot empty"></span>
         <span class="board-slot empty"></span><span class="board-slot reward">★</span>
       </div>
       <div class="counters">
@@ -161,6 +221,39 @@
         <div class="counter"><strong data-count="4">0</strong><span>명의 캐스트</span></div>
       </div>
     </div>
+  </section>
+
+  <!-- ░ 캐스트 프리뷰 ░ -->
+  <section class="casts" id="casts">
+    <h2 class="section-title">오늘은 <span class="title-sticker lavender-sticker">누구</span>를 만나러 갈까요</h2>
+    <p class="casts-sub">출근표에서 캐스트의 오늘을 확인하고, 좋아하는 컬러를 따라가 보세요.</p>
+    <ul class="cast-grid" data-reveal>
+      <li class="cast-card cast-strawberry">
+        <div class="cast-photo"><span class="cast-initial">미오</span><span class="cast-heart" aria-hidden="true">♥</span></div>
+        <strong>미오</strong>
+        <em>딸기 담당 · 분위기 메이커</em>
+        <span class="cast-chip">오늘 14:00 출근</span>
+      </li>
+      <li class="cast-card cast-lemon">
+        <div class="cast-photo"><span class="cast-initial">유키</span><span class="cast-heart" aria-hidden="true">♥</span></div>
+        <strong>유키</strong>
+        <em>레몬 담당 · 차분한 미소</em>
+        <span class="cast-chip">오늘 15:00 출근</span>
+      </li>
+      <li class="cast-card cast-matcha">
+        <div class="cast-photo"><span class="cast-initial">모카</span><span class="cast-heart" aria-hidden="true">♥</span></div>
+        <strong>모카</strong>
+        <em>말차 담당 · 라떼아트 장인</em>
+        <span class="cast-chip">6.14 (토) 출근</span>
+      </li>
+      <li class="cast-card cast-lavender">
+        <div class="cast-photo"><span class="cast-initial">베리</span><span class="cast-heart" aria-hidden="true">♥</span></div>
+        <strong>베리</strong>
+        <em>라벤더 담당 · 다정한 경청가</em>
+        <span class="cast-chip">오늘 17:00 출근</span>
+      </li>
+    </ul>
+    <small class="casts-note">* 화면 속 캐스트는 내부 시안용 가상 인물이에요.</small>
   </section>
 
   <!-- ░ 쿠폰 ░ -->
@@ -191,16 +284,46 @@
     </div>
   </section>
 
+  <!-- ░ FAQ (파스텔 밴드 + 스캘럽) ░ -->
+  <section class="faq band band-sky" id="faq">
+    <h2 class="section-title">자주 묻는 <span class="title-sticker sky-sticker">질문</span></h2>
+    <div class="faq-list" data-reveal>
+      <details>
+        <summary>사전 등록하면 무엇을 받게 되나요?</summary>
+        <p>오픈 알림과 웰컴 체키 쿠폰을 가장 먼저 보내드려요. 등록 정보는 오픈 안내 용도로만 사용해요.</p>
+      </details>
+      <details>
+        <summary>스탬프는 어떻게 쌓이나요?</summary>
+        <p>매장 카운터에서 QR 체크인을 하면 방문 1회당 1개가 자동으로 적립돼요. 여덟 칸을 채우면 체키 쿠폰이 발급돼요.</p>
+      </details>
+      <details>
+        <summary>체키 앨범에는 무엇이 저장되나요?</summary>
+        <p>매장에서 촬영한 체키가 날짜와 함께 기록돼요. 시즌 한정 체키는 별도의 컬렉션 칸을 채워요.</p>
+      </details>
+      <details>
+        <summary>예약은 꼭 해야 하나요?</summary>
+        <p>아니요, 바로 방문도 환영이에요. 다만 주말과 이벤트 기간에는 예약이 안전해요. 출근표에서 바로 예약할 수 있어요.</p>
+      </details>
+      <details>
+        <summary>이용 요금은 어떻게 되나요?</summary>
+        <p>멤버십과 요금 안내는 오픈 시 공지될 예정이에요. 사전 등록하시면 가장 먼저 알려드릴게요.</p>
+      </details>
+    </div>
+  </section>
+
   <!-- ░ CTA ░ -->
   <section class="cta" id="cta">
     <div class="cta-panel" data-reveal>
       <span class="cta-stamp" aria-hidden="true">HATSUKOI<br />MEMBER</span>
       <h2>첫 페이지를<br />함께 열어요</h2>
       <p>오픈 알림과 웰컴 체키 쿠폰을 가장 먼저 받아보세요.</p>
-      <div class="hero-actions center">
-        <a class="btn btn-primary big" href="#">사전 등록하기</a>
-      </div>
-      <small class="cta-note">사전 등록 오픈 일정은 추후 안내됩니다.</small>
+      <form class="cta-form" novalidate>
+        <label class="sr-only" for="reg-email">이메일 주소</label>
+        <input id="reg-email" type="email" name="email" placeholder="이메일을 입력해 주세요" required autocomplete="email" />
+        <button class="btn btn-primary big" type="submit">사전 등록하기</button>
+      </form>
+      <p class="cta-success" hidden>도장은 오픈 날 쾅 — 지금은 내부 미리보기라 입력이 저장되지 않아요.</p>
+      <small class="cta-note">사전 등록 오픈 일정은 추후 안내됩니다 · 내부 미리보기에서는 입력이 저장되지 않아요.</small>
     </div>
   </section>
 
