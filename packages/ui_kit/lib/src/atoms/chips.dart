@@ -1,6 +1,11 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
+// Typography sizes are literals until TypographyTokens lands.
+// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 label=13/body=14).
+const double _chipLabelSize = 13; // tokens.md §3 label
+const double _slotLabelSize = 14; // tokens.md §3 body.m
+
 /// A selectable filter chip (`selected / unselected`, optional count).
 ///
 /// Covers the Inputs/FilterChip row of `components.md` — collection filters and
@@ -42,51 +47,60 @@ class AssenFilterChip extends StatelessWidget {
         ? colors.ink500
         : (selected ? colors.strawberryInk : colors.ink700);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? () => onSelected!(!selected) : null,
-        borderRadius: const BorderRadius.all(
-          Radius.circular(RadiusTokens.full),
-        ),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 36),
-          padding: const EdgeInsets.symmetric(
-            horizontal: SpacingTokens.s4,
-            vertical: SpacingTokens.s2,
+    // 라벨은 내부 Text가 제공하므로 래퍼엔 selected/button 상태만 더한다
+    // (래퍼에 label을 또 주면 "게임\n게임"으로 중복됨).
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: enabled,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? () => onSelected!(!selected) : null,
+          borderRadius: const BorderRadius.all(
+            Radius.circular(RadiusTokens.full),
           ),
-          decoration: BoxDecoration(
-            color: selected ? colors.strawberryBg : colors.cream50,
-            borderRadius: const BorderRadius.all(
-              Radius.circular(RadiusTokens.full),
+          // 44pt 터치 타깃(한국 B2C / HIG floor) — 칠해지는 칩 높이와 무관하게
+          // 탭 영역을 다른 인터랙티브 아톰과 동일하게 맞춘다.
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(
+              horizontal: SpacingTokens.s4,
+              vertical: SpacingTokens.s2,
             ),
-            border: Border.all(
-              color: selected ? colors.strawberryBorder : colors.ink200,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                ),
+            decoration: BoxDecoration(
+              color: selected ? colors.strawberryBg : colors.cream50,
+              borderRadius: const BorderRadius.all(
+                Radius.circular(RadiusTokens.full),
               ),
-              if (count != null) ...[
-                const SizedBox(width: SpacingTokens.s1),
+              border: Border.all(
+                color: selected ? colors.strawberryBorder : colors.ink200,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  '$count',
+                  label,
                   style: TextStyle(
                     color: fg,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontSize: _chipLabelSize,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
+                if (count != null) ...[
+                  const SizedBox(width: SpacingTokens.s1),
+                  Text(
+                    '$count',
+                    style: const TextStyle(
+                      fontSize: _chipLabelSize,
+                      fontWeight: FontWeight.w700,
+                    ).copyWith(color: fg),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -157,33 +171,44 @@ class AssenTimeSlotChip extends StatelessWidget {
       text = colors.ink900;
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: isAvailable ? onTap : null,
-        borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.sm)),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44, minWidth: 64),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(
-            horizontal: SpacingTokens.s3,
-            vertical: SpacingTokens.s2,
+    // 마감 슬롯은 취소선 대신 "마감"을 읽어주도록 라벨을 대체한다.
+    // excludeSemantics로 내부 Text 라벨을 숨겨 중복을 막는다.
+    return Semantics(
+      button: true,
+      enabled: isAvailable,
+      selected: isSelected,
+      label: isFull ? '$label 마감' : label,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isAvailable ? onTap : null,
+          borderRadius: const BorderRadius.all(
+            Radius.circular(RadiusTokens.sm),
           ),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: const BorderRadius.all(
-              Radius.circular(RadiusTokens.sm),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44, minWidth: 64),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(
+              horizontal: SpacingTokens.s3,
+              vertical: SpacingTokens.s2,
             ),
-            border: Border.all(color: border),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: text,
-              fontSize: 14,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              decoration: isFull ? TextDecoration.lineThrough : null,
-              decorationColor: colors.ink500,
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: const BorderRadius.all(
+                Radius.circular(RadiusTokens.sm),
+              ),
+              border: Border.all(color: border),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: text,
+                fontSize: _slotLabelSize,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                decoration: isFull ? TextDecoration.lineThrough : null,
+                decorationColor: colors.ink500,
+              ),
             ),
           ),
         ),

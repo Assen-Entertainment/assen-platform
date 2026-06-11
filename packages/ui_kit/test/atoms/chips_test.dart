@@ -61,6 +61,36 @@ void main() {
       await tester.tap(find.byType(AssenFilterChip));
       expect(next, isTrue);
     });
+
+    testWidgets('hit area meets the 44pt touch floor', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          AssenFilterChip(label: '게임', selected: false, onSelected: (_) {}),
+        ),
+      );
+      expect(
+        tester.getSize(find.byType(AssenFilterChip)).height,
+        greaterThanOrEqualTo(44),
+      );
+    });
+
+    testWidgets('marks itself a selected button for a11y', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          AssenFilterChip(label: '게임', selected: true, onSelected: (_) {}),
+        ),
+      );
+      final semantics = tester.widget<Semantics>(
+        find
+            .descendant(
+              of: find.byType(AssenFilterChip),
+              matching: find.byType(Semantics),
+            )
+            .first,
+      );
+      expect(semantics.properties.selected, isTrue);
+      expect(semantics.properties.button, isTrue);
+    });
   });
 
   group('AssenTimeSlotChip', () {
