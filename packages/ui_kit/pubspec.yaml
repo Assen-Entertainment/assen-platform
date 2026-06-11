@@ -1,0 +1,32 @@
+name: ui_kit
+description: >-
+  Assen Platform design system in Flutter: ThemeData and the shared widget
+  catalogue. This is the same artefact the Technical Architecture calls
+  "design_system". P0 ships a placeholder theme builder; ASS-88 fills in the
+  full ThemeData and core widgets from docs/design.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+  flutter: ">=3.44.0"
+
+dependencies:
+  # Token primitives (placeholder in P0, code-generated in P1).
+  core_tokens:
+    path: ../core_tokens
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  # Golden testing for the widget catalogue. `--update-goldens` is human-gated
+  # (CONSTRAINTS #31); agents never regenerate goldens autonomously.
+  alchemist: ^0.12.0
+  flutter_test:
+    sdk: flutter
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+flutter:
+  uses-material-design: true

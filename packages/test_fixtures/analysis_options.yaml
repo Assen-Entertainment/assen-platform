@@ -1,0 +1,2 @@
+# Inherits the workspace ruleset (very_good_analysis + strict typing).
+include: ../../analysis_options.yaml

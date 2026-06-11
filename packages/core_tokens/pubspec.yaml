@@ -1,0 +1,16 @@
+name: core_tokens
+description: >-
+  Design token primitives for Assen Platform. Placeholder scaffold; the real
+  values are generated from docs/design/tokens.json in P1 (Style Dictionary to
+  Dart), so nothing here should be hand-authored long-term.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+dev_dependencies:
+  test: ^1.25.0
