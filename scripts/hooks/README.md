@@ -89,6 +89,7 @@ ALLOW_GENERATED=1 git commit -m "..."
 | JSON 파싱 실패 | fail-open (exit 0) | 가용성 트레이드오프 — Claude Code는 well-formed JSON을 보장하므로 정상 운영에서는 발생하지 않음 |
 | guard.py 스크립트 미존재 | Claude Code가 hook 실패로 처리 | settings.json 절대경로(`${CLAUDE_PROJECT_DIR}`) 사용으로 CWD 우회 방지 |
 | gitleaks 미설치 | 경고만 출력, 커밋 허용 | CI gitleaks가 최종 게이트 |
+| `echo "DROP TABLE"` 등 문자열 내 SQL 키워드 | fail-safe 과차단(block) | 명령 실행과 문자열을 구별하지 않는다. 파괴적 명령 누락보다 드문 과차단이 안전 — 필요 시 인간이 직접 실행 |
 
 ---
 

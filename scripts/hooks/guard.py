@@ -247,17 +247,20 @@ def check_bash_command(command: str) -> None:
             )
 
     # --- #28 파괴적 명령 차단 (오버라이드 없음 — 인간이 직접 셸에서 실행)
-    # rm -rf (경로 무관)
-    if re.search(r"\brm\s+-[^\s]*r[^\s]*f|\brm\s+-[^\s]*f[^\s]*r", command) or \
-       re.search(r"\brm\s+--force\b.*\s+-r\b|\brm\s+-r\b.*\s+--force\b", command) or \
-       re.search(r"\brm\s+-rf\b|\brm\s+-fr\b", command):
-        _block(
-            "#28 파괴적 명령 차단: `rm -rf` — 재귀 강제 삭제는 인간이 직접 셸에서 실행해야 합니다."
-        )
+    # rm: 재귀 플래그와 강제 플래그가 함께 있으면 차단. 결합(-rf/-fr)이든
+    # 분리(-r -f)든, 단/장(--recursive/--force)이든 순서·간격 무관하게 잡는다.
+    if re.search(r"\brm\b", command):
+        has_recursive = re.search(r"(?:^|\s)-[a-zA-Z]*r|\s--recursive\b", command)
+        has_force = re.search(r"(?:^|\s)-[a-zA-Z]*f|\s--force\b", command)
+        if has_recursive and has_force:
+            _block(
+                "#28 파괴적 명령 차단: `rm -rf` — 재귀 강제 삭제는 인간이 직접 셸에서 실행해야 합니다."
+            )
 
-    # git push --force / -f / --force-with-lease
-    if "git push" in command and re.search(
-        r"\s(?:--force|-f|--force-with-lease)(?:\s|$)", command
+    # git push --force / -f / --force-with-lease[=ref] — =value 형태까지 잡는다
+    if "git push" in command and (
+        re.search(r"(?:^|\s)(?:--force|-f)(?:\s|$)", command)
+        or re.search(r"(?:^|\s)--force-with-lease(?:=\S+)?(?:\s|$)", command)
     ):
         _block(
             "#28 파괴적 명령 차단: `git push --force` / `-f` / `--force-with-lease` — "

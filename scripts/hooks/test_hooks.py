@@ -338,6 +338,33 @@ def test_blocked_cases():
         },
     )
 
+    # #28 rm -r -f 분리 플래그 차단 (2차 리뷰 발견)
+    assert_blocked(
+        "#28 rm -r -f 분리 플래그 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -r -f /tmp/build"},
+        },
+    )
+
+    # #28 rm --recursive --force 장flag 차단 (2차 리뷰 발견)
+    assert_blocked(
+        "#28 rm --recursive --force 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm --recursive --force build/"},
+        },
+    )
+
+    # #28 --force-with-lease=ref (=value 형태) 차단 (2차 리뷰 발견)
+    assert_blocked(
+        "#28 git push --force-with-lease=ref 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push --force-with-lease=main origin feature/x"},
+        },
+    )
+
     # #28 DROP TABLE 차단 (NEW)
     assert_blocked(
         "#28 DROP TABLE 차단",
