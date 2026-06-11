@@ -1,11 +1,12 @@
 /// Assen Platform design system: ThemeData and shared widgets.
 ///
 /// Apps must theme through this package rather than hard-coding colours. The
-/// Atoms layer (ASS-88) lives under `src/atoms/` and the Molecules layer (the
-/// `04 Molecules` Figma page) under `src/molecules/`; every public widget reads
+/// Atoms layer (ASS-88) lives under `src/atoms/`, the Molecules layer (the
+/// `04 Molecules` Figma page) under `src/molecules/`, and the Organisms layer
+/// (the `05 Organisms` page) under `src/organisms/`; every public widget reads
 /// its colour/spacing/radius from `core_tokens` (never a hard-coded value). The
-/// `AtomCatalog` and `MoleculeCatalog` galleries (src/catalog.dart) render every
-/// component for visual review.
+/// `AtomCatalog`, `MoleculeCatalog` and `OrganismCatalog` galleries render
+/// every component for visual review.
 library;
 
 export 'src/atoms/avatar.dart';
@@ -41,5 +42,20 @@ export 'src/molecules/text_field.dart';
 export 'src/molecules/timeline_item.dart';
 export 'src/molecules/toast.dart';
 export 'src/molecules/underline_tabs.dart';
+export 'src/organism_catalog.dart';
+export 'src/organisms/app_bar.dart';
+export 'src/organisms/bottom_cta.dart';
+export 'src/organisms/bottom_sheet.dart';
+export 'src/organisms/cast_profile_card.dart';
+export 'src/organisms/dialog.dart';
+export 'src/organisms/empty_state.dart';
+export 'src/organisms/error_state.dart';
+export 'src/organisms/event_card.dart';
+export 'src/organisms/membership_card.dart';
+export 'src/organisms/qr_display.dart';
+export 'src/organisms/reservation_card.dart';
+export 'src/organisms/safety_report_entry.dart';
+export 'src/organisms/schedule_calendar.dart';
+export 'src/organisms/stamp_card.dart';
 export 'src/theme.dart';
 export 'src/token_swatch.dart';
