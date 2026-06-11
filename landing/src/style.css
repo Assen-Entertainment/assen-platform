@@ -178,6 +178,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   background: var(--cream-50);
   position: relative; z-index: 1;
 }
+/* 스크린샷 원본(1:2.69~2.79)이 실기기보다 길어 1:2.45로 통일 크롭(세로 약 10% 축소) */
+.phone img { width: 100%; aspect-ratio: 1 / 2.45; object-fit: cover; object-position: top; }
 .float-phone { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3; }
 .cheki {
   margin: 0; background: var(--white); padding: 8px 8px 0;
