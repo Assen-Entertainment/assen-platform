@@ -12,9 +12,21 @@ linear: ASS-87
 
 근거: ①실제 플랫폼 분해(위버스·버블·@home cafe·maidreamin·스타벅스·캐치테이블·토스/배민, 83종) ②M3 전체 36종 + TDS 핵심 11종 ③P0 PRD(F01~F13) 화면 분해. 상세 조사는 `research/` 및 Linear ASS-87 코멘트 참조.
 
-## 분류 체계 (M3 6분류 변형 + Domain)
+## 분류 체계 — Atomic Design (2026-06-11 적용)
 
-Foundation(토큰) / Actions / Inputs / Navigation / Containment / Feedback / Content / **Domain**(메이드카페 특화). Figma 페이지도 이 구조를 따른다 (publish 전 카테고리당 1페이지로 분리).
+구조는 **Atomic Design**(Brad Frost)을 따르고, 아래 인벤토리 표의 기능 분류(Actions/Inputs/…)는 검색·매핑용 보조 축으로 유지한다.
+
+| 레벨 | Figma 페이지 | 정의 | 현재 구성 |
+|---|---|---|---|
+| Foundations | `01 Tokens` | Variables(color/spacing/radius) + 텍스트 스타일 — 아원자 | 토큰 시트 |
+| Atoms | `03 Atoms` | 더 쪼갤 수 없는 요소 | 18종: Button, IconButton, Checkbox, Radio, Switch, FilterChip, TimeSlotChip, Badge, CountBadge, StatusBadge, Avatar, Divider, ProgressBar, ProgressDonut, PageIndicator, FavoriteButton, Skeleton, Card |
+| Molecules | `04 Molecules` | 원자 2개 이상의 단순 결합 (행·필드·셀) | 20종: TextField, SearchField, OTPField, Stepper, AgreementCell, ListItem, KeyValueRow, SectionHeader, NoticeBar, Toast, SegmentedTabs, UnderlineTabs, StepIndicator, TimelineItem, ChekiFrame, CollectionCell, CouponTicketSet, BannerCard, StatCard, EntryTicket |
+| Organisms | `05 Organisms` | 화면의 독립 섹션 (구조·문맥 보유) | 15종: AppBar, TabBar, BottomCTA, BottomSheet, Dialog, EmptyState, ErrorState, MembershipCard, StampCard, ScheduleCalendar, QRDisplay, ReservationCard, EventCard, CastProfileCard, SafetyReportEntry |
+| Templates | `06 Templates` | 화면 골격 — 인스턴스 조립 + placeholder 콘텐츠 | 5종: T1 홈(회원증), T2 출근표, T3 캐스트 프로필, T4 체키 앨범, T5 운영자 대시보드 |
+| Pages | (P0 후반) | Templates + 실데이터 시나리오 | 콘텐츠·카피 확정 후 |
+| Deprecated | `99 Deprecated` | 대체된 구버전 | InputField(→TextField), CouponTicket(→CouponTicketSet) |
+
+레벨 판정 기준: "이 컴포넌트를 다른 화면에 그대로 옮겨도 의미가 성립하면 Organism, 부모 문맥이 있어야 의미가 생기면 Molecule, 콘텐츠 슬롯 없이 스타일만 남으면 Atom."
 
 ## 상태(variants) 규칙
 
@@ -132,11 +144,13 @@ Foundation(토큰) / Actions / Inputs / Navigation / Containment / Feedback / Co
 | TierCard(등급 안내) | P1 | P0는 등급제 제외 | P1 |
 | MissionCard / TrophyGrid 확장 | P1 | 게이미피케이션 확장 | P1 |
 
-## 집계
+## 집계 (2026-06-11 기준)
 
-- P0 합계 **48종**: 완료 8 + 이번 배치 🔨 36 + P0 후반 4 (LoadingSpinner·SuccessScreen 등 화면 목업 단계에서)
+- Figma 제작 완료: Atoms 18 + Molecules 20 + Organisms 15 = **53종 (variants 118개)** + Templates 5종
+- P0 후반 잔여 4종: LoadingSpinner, SuccessScreen 등 — Pages 단계에서
 - P1 9종 / P2 2종 / 보류 1종 — 에픽 진행 시 제작
-- 기존 11종 중 InputField·CouponTicket은 세트로 대체/확장
+- Deprecated 2종: InputField·CouponTicket (세트로 대체)
+- Templates 한계: 인스턴스 placeholder 콘텐츠 공유(StatCard 동일 수치 등) — Pages 단계에서 텍스트 오버라이드
 
 ## 미해결
 
