@@ -25,8 +25,20 @@ echo "local smoke: compose services"
 local_compose ps
 
 echo "local smoke: API /healthz"
-curl -fsS "${API_URL}/healthz"
-printf '\n'
+_api_attempt=1
+while [ "$_api_attempt" -le 12 ]; do
+  if curl -fsS "${API_URL}/healthz"; then
+    printf '\n'
+    break
+  fi
+  echo "local smoke: API not ready yet; retry ${_api_attempt}/12"
+  _api_attempt=$((_api_attempt + 1))
+  sleep 5
+done
+if [ "$_api_attempt" -gt 12 ]; then
+  echo "error: API did not answer /healthz" >&2
+  exit 1
+fi
 
 echo "local smoke: API /api/health"
 curl -fsS "${API_URL}/api/health"
