@@ -13,6 +13,7 @@ import 'package:fan_app/screens/schedule_screen.dart';
 import 'package:fan_app/screens/signup_screen.dart';
 import 'package:fan_app/shell/fan_shell.dart';
 import 'package:features/features.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -41,7 +42,10 @@ const Set<String> _publicLocations = {
 /// (CONSTRAINTS #40, no exotic structure).
 GoRouter buildFanRouter(Ref ref) {
   return GoRouter(
-    initialLocation: FanRoutes.login,
+    // §4.3: the Flutter web entry is /login (the landing handles `/`); the
+    // mobile first entry is the onboarding screen. A seen-once flag (skip
+    // onboarding on later launches) needs persistence and lands post-P3a.
+    initialLocation: kIsWeb ? FanRoutes.login : FanRoutes.onboarding,
     refreshListenable: ref.watch(authListenableProvider),
     redirect: (context, state) {
       // Read the session from the repository (the source of truth), which is
@@ -64,8 +68,10 @@ GoRouter buildFanRouter(Ref ref) {
         ).toString();
       }
 
-      if (signedIn &&
-          (location == FanRoutes.login || location == FanRoutes.signup)) {
+      // A signed-in user has no business on any pre-auth surface (login,
+      // signup, onboarding) — bounce to /home so e.g. sign-in from the
+      // onboarding CTA lands in the shell.
+      if (signedIn && isPublic) {
         return FanRoutes.home;
       }
 

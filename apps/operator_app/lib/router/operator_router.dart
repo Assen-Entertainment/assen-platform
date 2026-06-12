@@ -13,6 +13,12 @@ import 'package:operator_app/screens/operator_placeholder_screen.dart';
 /// is a named seam so P3b swaps the body to inspect the real token's claims
 /// without touching the router wiring or the routing tests (CONSTRAINTS #31).
 /// An expired session fails the gate, so expiry redirects to /login.
+///
+/// SECURITY (P3b 필수): the auth providers are shared with fan_app, so until
+/// real role-claim validation lands here, a session issued for a *fan* would
+/// pass this gate — a privilege-escalation surface. Acceptable in P3a only
+/// because the apps ship as separate binaries against a mock repo; P3b MUST
+/// replace this body before any real token reaches the operator console.
 bool operatorRoleAllows(AuthSession? session) =>
     session != null && !session.isExpired();
 

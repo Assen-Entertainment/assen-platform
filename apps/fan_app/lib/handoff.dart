@@ -30,16 +30,28 @@ abstract final class LandingHandoff {
 
   /// Validates a raw `return_to` value, returning a safe in-app path.
   ///
-  /// Returns [defaultReturnTo] unless [raw] is a non-empty, single-slash-rooted
-  /// relative path. Scheme-relative (`//host`) and absolute-URL values are
-  /// rejected to prevent open redirects (handoff.md §3).
+  /// Allowlist parse (handoff.md §3): the value must parse as a relative
+  /// reference with no scheme and no authority whose path is rooted (`/...`)
+  /// but not scheme-relative (`//host`). Backslash and TAB/LF/CR are rejected
+  /// outright because WHATWG URL parsing strips control characters and treats
+  /// `\` as `/` — so `/\evil.com` or a TAB-split `//evil.com` would otherwise
+  /// re-normalise into an off-origin redirect in the browser. A colon in the
+  /// query or fragment (e.g. `?t=12:30`) is legitimate and allowed.
   static String safeReturnTo(String? raw) {
     if (raw == null || raw.isEmpty) return defaultReturnTo;
-    // Must be a root-relative path. Reject scheme-relative `//...` and anything
-    // carrying a scheme (e.g. `https:`), which would escape the app origin.
-    if (!raw.startsWith('/')) return defaultReturnTo;
-    if (raw.startsWith('//')) return defaultReturnTo;
-    if (raw.contains(':')) return defaultReturnTo;
-    return raw;
+    if (raw.contains(r'\') ||
+        raw.contains('\t') ||
+        raw.contains('\n') ||
+        raw.contains('\r')) {
+      return defaultReturnTo;
+    }
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return defaultReturnTo;
+    final isRootedInAppPath =
+        !uri.hasScheme &&
+        !uri.hasAuthority &&
+        uri.path.startsWith('/') &&
+        !uri.path.startsWith('//');
+    return isRootedInAppPath ? raw : defaultReturnTo;
   }
 }

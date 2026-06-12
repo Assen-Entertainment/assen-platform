@@ -59,6 +59,8 @@ class LoginScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: SpacingTokens.s8),
+              // P3a stub: the fields are decorative (no controllers) — input
+              // is ignored and sign-in uses fixed mock credentials.
               const AssenTextField(
                 label: '아이디',
                 hintText: '아이디 또는 이메일',
