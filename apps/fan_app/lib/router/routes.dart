@@ -31,6 +31,9 @@ abstract final class FanRoutes {
   /// My-page hub tab (F1) — placeholder.
   static const String my = '/my';
 
+  /// Visit history nested under the My tab (E2).
+  static const String visitHistory = '/my/visits';
+
   /// Cast profile detail (C3). Deep-linkable: `/cast/:id`.
   static const String castName = 'cast';
 

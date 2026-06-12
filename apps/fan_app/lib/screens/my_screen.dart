@@ -75,6 +75,11 @@ class MyScreen extends ConsumerWidget {
             onTap: () => context.push(FanRoutes.qr),
           ),
           AssenListItem(
+            title: '나의 하츠코이 기록',
+            leading: Icon(Icons.history, color: colors.ink700),
+            onTap: () => context.push(FanRoutes.visitHistory),
+          ),
+          AssenListItem(
             title: '쿠폰함',
             leading: Icon(
               Icons.confirmation_number_outlined,
