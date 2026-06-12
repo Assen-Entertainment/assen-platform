@@ -34,6 +34,7 @@ class AssenCastProfileTemplate extends StatefulWidget {
     this.schedule = _defaultSchedule,
     this.onBack,
     this.onReserve,
+    this.onFavoriteChanged,
     super.key,
   });
 
@@ -57,6 +58,9 @@ class AssenCastProfileTemplate extends StatefulWidget {
 
   /// Optional reservation handler (the bottom CTA).
   final VoidCallback? onReserve;
+
+  /// Optional handler for favorite registration changes.
+  final ValueChanged<bool>? onFavoriteChanged;
 
   /// The unified placeholder 출근 strip for this cast.
   static const List<AssenScheduleDay> _defaultSchedule = [
@@ -100,6 +104,19 @@ class _AssenCastProfileTemplateState extends State<AssenCastProfileTemplate> {
   int _scheduleDay = 2;
 
   @override
+  void didUpdateWidget(covariant AssenCastProfileTemplate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isFavorite != widget.isFavorite) {
+      _favorite = widget.isFavorite;
+    }
+  }
+
+  void _setFavorite(bool value) {
+    setState(() => _favorite = value);
+    widget.onFavoriteChanged?.call(value);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
@@ -129,7 +146,7 @@ class _AssenCastProfileTemplateState extends State<AssenCastProfileTemplate> {
                   hue: widget.castHue,
                   tagline: widget.tagline,
                   isFavorite: _favorite,
-                  onFavoriteChanged: (v) => setState(() => _favorite = v),
+                  onFavoriteChanged: _setFavorite,
                 ),
                 const SizedBox(height: SpacingTokens.s6),
                 const AssenSectionHeader(title: '출근 일정'),

@@ -1,6 +1,7 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:fan_app/mock/fan_mock_data.dart';
 import 'package:fan_app/router/routes.dart';
+import 'package:fan_app/state/favorite_cast_store.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     const member = FanMockData.member;
+    final favorites = FanFavoriteStore.instance;
 
     return Scaffold(
       backgroundColor: colors.cream50,
@@ -91,14 +93,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   onAction: () => context.go(FanRoutes.schedule),
                 ),
                 const SizedBox(height: SpacingTokens.s3),
-                AssenCastProfileCard(
-                  name: '미오',
-                  hue: AssenBadgeHue.strawberry,
-                  tagline: '오늘도 잘 부탁해요',
-                  isOnShift: true,
-                  isFavorite: true,
-                  onFavoriteChanged: (_) {},
-                  onTap: () => context.push(FanRoutes.castPath('mio')),
+                ListenableBuilder(
+                  listenable: favorites,
+                  builder: (context, _) => _FavoriteCastPreview(
+                    favorites: favorites,
+                    onOpenSchedule: () => context.go(FanRoutes.schedule),
+                    onOpenCast: (castId) =>
+                        context.push(FanRoutes.castPath(castId)),
+                  ),
                 ),
                 const SizedBox(height: SpacingTokens.s6),
                 const AssenSectionHeader(title: '이벤트'),
@@ -116,4 +118,79 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _FavoriteCastPreview extends StatelessWidget {
+  const _FavoriteCastPreview({
+    required this.favorites,
+    required this.onOpenSchedule,
+    required this.onOpenCast,
+  });
+
+  final FanFavoriteStore favorites;
+  final VoidCallback onOpenSchedule;
+  final ValueChanged<String> onOpenCast;
+
+  @override
+  Widget build(BuildContext context) {
+    final favoriteCasts = FanMockData.casts
+        .where((cast) => favorites.isFavorite(cast.id))
+        .toList();
+
+    if (favoriteCasts.isEmpty) {
+      return AssenEmptyState(
+        title: '아직 등록한 최애가 없어요',
+        message: '캐스트 프로필에서 하트를 눌러\n출근표와 이벤트를 먼저 확인해요.',
+        actionLabel: '출근표 보기',
+        onAction: onOpenSchedule,
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < favoriteCasts.length; i++) ...[
+          _FavoriteCastCard(
+            cast: favoriteCasts[i],
+            favorites: favorites,
+            onTap: () => onOpenCast(favoriteCasts[i].id),
+          ),
+          if (i != favoriteCasts.length - 1)
+            const SizedBox(height: SpacingTokens.s3),
+        ],
+      ],
+    );
+  }
+}
+
+class _FavoriteCastCard extends StatelessWidget {
+  const _FavoriteCastCard({
+    required this.cast,
+    required this.favorites,
+    required this.onTap,
+  });
+
+  final FanMockCast cast;
+  final FanFavoriteStore favorites;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AssenCastProfileCard(
+      name: cast.name,
+      hue: cast.hue,
+      tagline: cast.tagline,
+      isOnShift: _isOnShiftToday(cast.name),
+      isFavorite: favorites.isFavorite(cast.id),
+      onFavoriteChanged: (isFavorite) => favorites.setFavorite(
+        cast.id,
+        isFavorite: isFavorite,
+      ),
+      onTap: onTap,
+    );
+  }
+
+  bool _isOnShiftToday(String castName) =>
+      FanMockData.homeWeek[FanMockData.todayIndexHome].casts.any(
+        (cast) => cast.name == castName,
+      );
 }
