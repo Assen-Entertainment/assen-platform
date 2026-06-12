@@ -2,11 +2,12 @@
 ///
 /// Apps must theme through this package rather than hard-coding colours. The
 /// Atoms layer (ASS-88) lives under `src/atoms/`, the Molecules layer (the
-/// `04 Molecules` Figma page) under `src/molecules/`, and the Organisms layer
-/// (the `05 Organisms` page) under `src/organisms/`; every public widget reads
-/// its colour/spacing/radius from `core_tokens` (never a hard-coded value). The
-/// `AtomCatalog`, `MoleculeCatalog` and `OrganismCatalog` galleries render
-/// every component for visual review.
+/// `04 Molecules` Figma page) under `src/molecules/`, the Organisms layer (the
+/// `05 Organisms` page) under `src/organisms/`, and the Templates layer (the
+/// `06 Templates` page) under `src/templates/`; every public widget reads its
+/// colour/spacing/radius from `core_tokens` (never a hard-coded value). The
+/// `AtomCatalog`, `MoleculeCatalog`, `OrganismCatalog` and `TemplateCatalog`
+/// galleries render every component for visual review.
 library;
 
 export 'src/atoms/avatar.dart';
@@ -57,5 +58,11 @@ export 'src/organisms/reservation_card.dart';
 export 'src/organisms/safety_report_entry.dart';
 export 'src/organisms/schedule_calendar.dart';
 export 'src/organisms/stamp_card.dart';
+export 'src/template_catalog.dart';
+export 'src/templates/cast_profile_template.dart';
+export 'src/templates/cheki_album_template.dart';
+export 'src/templates/home_template.dart';
+export 'src/templates/operator_dashboard_template.dart';
+export 'src/templates/schedule_template.dart';
 export 'src/theme.dart';
 export 'src/token_swatch.dart';
