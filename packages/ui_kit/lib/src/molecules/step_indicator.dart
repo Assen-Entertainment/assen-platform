@@ -1,10 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.s=12).
-const double _stepLabelSize = 12; // tokens.md §3 body.s — step caption
-
 /// A linear step-progress indicator for multi-step flows.
 ///
 /// Covers the Navigation/StepIndicator row of `components.md` — the signup and
@@ -116,7 +112,7 @@ class _Node extends StatelessWidget {
           child: Text(
             '${index + 1}',
             style: TextStyle(
-              fontSize: _stepLabelSize,
+              fontSize: TypographyTokens.bodySSize,
               fontWeight: FontWeight.w700,
               color: colors.roseMain,
             ),
@@ -134,7 +130,7 @@ class _Node extends StatelessWidget {
           child: Text(
             '${index + 1}',
             style: TextStyle(
-              fontSize: _stepLabelSize,
+              fontSize: TypographyTokens.bodySSize,
               fontWeight: FontWeight.w600,
               color: colors.ink500,
             ),
@@ -154,7 +150,7 @@ class _Node extends StatelessWidget {
             label!,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: _stepLabelSize,
+              fontSize: TypographyTokens.bodySSize,
               color: state == _StepState.upcoming
                   ? colors.ink500
                   : colors.ink900,

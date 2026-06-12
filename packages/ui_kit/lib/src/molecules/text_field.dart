@@ -1,12 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.m=14/s=12).
-const double _fieldTextSize = 16; // tokens.md §3 body.l — input value
-const double _fieldLabelSize = 13; // tokens.md §3 label — floating label
-const double _fieldHelperSize = 12; // tokens.md §3 body.s — helper/error
-
 /// The single-line text input (`default / focused / error / disabled`).
 ///
 /// Covers the Inputs/TextField row of `components.md` and replaces the
@@ -88,7 +82,7 @@ class AssenTextField extends StatelessWidget {
       keyboardType: keyboardType,
       obscureText: obscureText,
       style: TextStyle(
-        fontSize: _fieldTextSize,
+        fontSize: TypographyTokens.bodyLSize,
         color: enabled ? colors.ink900 : colors.ink500,
       ),
       cursorColor: colors.roseMain,
@@ -105,19 +99,22 @@ class AssenTextField extends StatelessWidget {
           vertical: SpacingTokens.s3,
         ),
         labelStyle: TextStyle(
-          fontSize: _fieldLabelSize,
+          fontSize: TypographyTokens.labelSize,
           color: hasError ? colors.redInk : colors.ink700,
         ),
         floatingLabelStyle: TextStyle(
           color: hasError ? colors.redMain : colors.roseMain,
         ),
-        hintStyle: TextStyle(fontSize: _fieldTextSize, color: colors.ink500),
+        hintStyle: TextStyle(
+          fontSize: TypographyTokens.bodyLSize,
+          color: colors.ink500,
+        ),
         helperStyle: TextStyle(
-          fontSize: _fieldHelperSize,
+          fontSize: TypographyTokens.bodySSize,
           color: colors.ink500,
         ),
         errorStyle: TextStyle(
-          fontSize: _fieldHelperSize,
+          fontSize: TypographyTokens.bodySSize,
           color: colors.redMain,
         ),
         enabledBorder: border(hasError ? colors.redMain : colors.ink200),

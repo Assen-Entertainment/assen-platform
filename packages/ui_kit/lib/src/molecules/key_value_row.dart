@@ -1,12 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.m/title.m).
-const double _kvLabelSize = 14; // tokens.md §3 body.m — the label
-const double _kvValueSize = 14; // tokens.md §3 body.m — default value
-const double _kvEmphasisSize = 16; // tokens.md §3 title.m — emphasised value
-
 /// A label–value row (`기본 / 강조`).
 ///
 /// Covers the Containment/KeyValueRow row of `components.md` — reservation
@@ -47,7 +41,7 @@ class AssenKeyValueRow extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: _kvLabelSize,
+              fontSize: TypographyTokens.bodyMSize,
               color: colors.ink700,
             ),
           ),
@@ -57,7 +51,9 @@ class AssenKeyValueRow extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: TextStyle(
-                fontSize: emphasis ? _kvEmphasisSize : _kvValueSize,
+                fontSize: emphasis
+                    ? TypographyTokens.titleMSize
+                    : TypographyTokens.bodyMSize,
                 fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
                 color: emphasis ? colors.roseMain : colors.ink900,
               ),

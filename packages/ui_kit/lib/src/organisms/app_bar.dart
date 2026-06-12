@@ -3,11 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/icon_button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.l).
-const double _titleSize = 17; // tokens.md §3 title.l — centred screen title
-const double _tabLabelSize = 11; // bottom-tab caption (tokens.md §3 micro)
-
 /// The top app bar (`기본형 — 센터 타이틀`).
 ///
 /// Covers the Navigation/AppBar row of `components.md`. A centre-titled bar that
@@ -67,7 +62,7 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Text(
         title,
         style: TextStyle(
-          fontSize: _titleSize,
+          fontSize: TypographyTokens.titleLSize,
           fontWeight: FontWeight.w700,
           color: colors.ink900,
         ),
@@ -156,8 +151,8 @@ class AssenTabBar extends StatelessWidget {
         elevation: 0,
         selectedItemColor: colors.roseMain,
         unselectedItemColor: colors.ink500,
-        selectedFontSize: _tabLabelSize,
-        unselectedFontSize: _tabLabelSize,
+        selectedFontSize: TypographyTokens.pixelSize,
+        unselectedFontSize: TypographyTokens.pixelSize,
         items: [
           for (var i = 0; i < items.length; i++)
             BottomNavigationBarItem(

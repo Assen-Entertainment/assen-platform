@@ -9,11 +9,6 @@ import 'package:ui_kit/src/organisms/app_bar.dart';
 import 'package:ui_kit/src/organisms/bottom_cta.dart';
 import 'package:ui_kit/src/organisms/schedule_calendar.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _profileNameSize = 22; // tokens.md §3 display.s — cast name
-const double _profileTagSize = 13; // tokens.md §3 body.m — catchphrase
-
 /// The cast profile screen skeleton (`T3 캐스트 프로필`).
 ///
 /// Covers the Templates/T3 row of `components.md` and the cast profile screen
@@ -200,7 +195,7 @@ class _ProfileHeader extends StatelessWidget {
               Text(
                 name,
                 style: TextStyle(
-                  fontSize: _profileNameSize,
+                  fontSize: TypographyTokens.headlineSize,
                   fontWeight: FontWeight.w800,
                   color: colors.ink900,
                 ),
@@ -209,7 +204,7 @@ class _ProfileHeader extends StatelessWidget {
               Text(
                 tagline,
                 style: TextStyle(
-                  fontSize: _profileTagSize,
+                  fontSize: TypographyTokens.labelSize,
                   color: colors.ink700,
                 ),
               ),

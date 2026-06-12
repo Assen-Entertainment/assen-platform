@@ -1,10 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.m=16).
-const double _tabLabelSize = 16; // tokens.md §3 title.m
-
 /// A horizontally scrollable underline tab strip (`selected / unselected`).
 ///
 /// Covers the Navigation/UnderlineTabs row of `components.md` — the cast and
@@ -92,7 +88,7 @@ class _Tab extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: _tabLabelSize,
+              fontSize: TypographyTokens.titleMSize,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               color: selected ? colors.ink900 : colors.ink500,
             ),

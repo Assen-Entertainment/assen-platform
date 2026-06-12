@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 label=13/body=14).
-const double _chipLabelSize = 13; // tokens.md §3 label
-const double _slotLabelSize = 14; // tokens.md §3 body.m
-
 /// A selectable filter chip (`selected / unselected`, optional count).
 ///
 /// Covers the Inputs/FilterChip row of `components.md` — collection filters and
@@ -85,7 +80,7 @@ class AssenFilterChip extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: fg,
-                    fontSize: _chipLabelSize,
+                    fontSize: TypographyTokens.labelSize,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
@@ -94,7 +89,7 @@ class AssenFilterChip extends StatelessWidget {
                   Text(
                     '$count',
                     style: const TextStyle(
-                      fontSize: _chipLabelSize,
+                      fontSize: TypographyTokens.labelSize,
                       fontWeight: FontWeight.w700,
                     ).copyWith(color: fg),
                   ),
@@ -204,7 +199,7 @@ class AssenTimeSlotChip extends StatelessWidget {
               label,
               style: TextStyle(
                 color: text,
-                fontSize: _slotLabelSize,
+                fontSize: TypographyTokens.bodyMSize,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 decoration: isFull ? TextDecoration.lineThrough : null,
                 decorationColor: colors.ink500,

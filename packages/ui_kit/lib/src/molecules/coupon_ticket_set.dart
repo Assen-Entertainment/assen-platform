@@ -2,12 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/molecules/ticket_decoration.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.l/body.s).
-const double _couponTitleSize = 19; // tokens.md §3 title.l — coupon headline
-const double _couponMetaSize = 12; // tokens.md §3 body.s — validity / terms
-const double _couponStubSize = 13; // tokens.md §3 label — tear-off stub
-
 /// Redemption state of an [AssenCouponTicketSet].
 enum AssenCouponState {
   /// 사용가능 — redeemable; full-colour strawberry face with a live stub.
@@ -104,7 +98,7 @@ class AssenCouponTicketSet extends StatelessWidget {
                         Text(
                           title,
                           style: TextStyle(
-                            fontSize: _couponTitleSize,
+                            fontSize: TypographyTokens.titleLSize,
                             fontWeight: FontWeight.w700,
                             color: ink,
                             decoration: _used
@@ -117,7 +111,7 @@ class AssenCouponTicketSet extends StatelessWidget {
                           Text(
                             subtitle!,
                             style: TextStyle(
-                              fontSize: _couponMetaSize,
+                              fontSize: TypographyTokens.bodySSize,
                               color: ink,
                             ),
                           ),
@@ -126,7 +120,7 @@ class AssenCouponTicketSet extends StatelessWidget {
                         Text(
                           validity,
                           style: TextStyle(
-                            fontSize: _couponMetaSize,
+                            fontSize: TypographyTokens.bodySSize,
                             color: colors.ink500,
                           ),
                         ),
@@ -173,7 +167,7 @@ class _Stub extends StatelessWidget {
         label,
         textAlign: TextAlign.center,
         style: TextStyle(
-          fontSize: _couponStubSize,
+          fontSize: TypographyTokens.labelSize,
           fontWeight: FontWeight.w700,
           color: ink,
         ),

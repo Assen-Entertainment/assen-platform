@@ -1,10 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.l=16).
-const double _searchTextSize = 16; // tokens.md §3 body.l — query text
-
 /// A pill-shaped search input (`default / focused`).
 ///
 /// Covers the Inputs/SearchField row of `components.md`. Unlike the multi-line
@@ -67,12 +63,15 @@ class AssenSearchField extends StatelessWidget {
           onChanged: onChanged,
           onSubmitted: onSubmitted,
           textInputAction: TextInputAction.search,
-          style: TextStyle(fontSize: _searchTextSize, color: colors.ink900),
+          style: TextStyle(
+            fontSize: TypographyTokens.bodyLSize,
+            color: colors.ink900,
+          ),
           cursorColor: colors.roseMain,
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(
-              fontSize: _searchTextSize,
+              fontSize: TypographyTokens.bodyLSize,
               color: colors.ink500,
             ),
             prefixIcon: Icon(Icons.search, color: colors.ink500),

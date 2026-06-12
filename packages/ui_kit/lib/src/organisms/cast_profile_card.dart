@@ -5,11 +5,6 @@ import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 import 'package:ui_kit/src/atoms/favorite_button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _castNameSize = 15; // tokens.md §3 title.m — cast name
-const double _castTagSize = 12; // tokens.md §3 body.s — catchphrase/role
-
 /// A cast member profile card (`기본/최애♥/출근중`).
 ///
 /// Covers the Domain/CastProfileCard row of `components.md` and the cast list
@@ -91,7 +86,7 @@ class AssenCastProfileCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: _castNameSize,
+                          fontSize: TypographyTokens.titleMSize,
                           fontWeight: FontWeight.w700,
                           color: colors.ink900,
                         ),
@@ -113,7 +108,7 @@ class AssenCastProfileCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: _castTagSize,
+                      fontSize: TypographyTokens.bodySSize,
                       color: colors.ink700,
                     ),
                   ),

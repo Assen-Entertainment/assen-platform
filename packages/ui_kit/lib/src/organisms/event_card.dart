@@ -5,11 +5,6 @@ import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/button.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _eventTitleSize = 16; // tokens.md §3 title.m — event title
-const double _eventPeriodSize = 12; // tokens.md §3 body.s — run period
-
 /// Lifecycle of an [AssenEventCard] (`예정/진행중/종료`).
 enum AssenEventStatus {
   /// 예정 — upcoming (shows a visit-centric D-day and the booking CTA).
@@ -106,7 +101,7 @@ class AssenEventCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: _eventTitleSize,
+                          fontSize: TypographyTokens.titleMSize,
                           fontWeight: FontWeight.w700,
                           color: colors.ink900,
                         ),
@@ -128,7 +123,7 @@ class AssenEventCard extends StatelessWidget {
                     Text(
                       period,
                       style: TextStyle(
-                        fontSize: _eventPeriodSize,
+                        fontSize: TypographyTokens.bodySSize,
                         fontWeight: FontWeight.w600,
                         color: colors.ink700,
                       ),

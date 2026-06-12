@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 headline/label).
-const double _sectionTitleSize = 19; // tokens.md §3 title.l — section title
-const double _sectionActionSize = 13; // tokens.md §3 label — "전체보기 ›"
-
 /// A section heading with an optional trailing action (`액션 유/무`).
 ///
 /// Covers the Navigation/SectionHeader row of `components.md`. It introduces a
@@ -47,7 +42,7 @@ class AssenSectionHeader extends StatelessWidget {
             child: Text(
               title,
               style: TextStyle(
-                fontSize: _sectionTitleSize,
+                fontSize: TypographyTokens.titleLSize,
                 fontWeight: FontWeight.w700,
                 color: colors.ink900,
               ),
@@ -70,7 +65,7 @@ class AssenSectionHeader extends StatelessWidget {
                     Text(
                       actionLabel!,
                       style: TextStyle(
-                        fontSize: _sectionActionSize,
+                        fontSize: TypographyTokens.labelSize,
                         fontWeight: FontWeight.w600,
                         color: colors.ink700,
                       ),

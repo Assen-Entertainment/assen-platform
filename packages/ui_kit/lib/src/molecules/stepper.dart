@@ -2,10 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/icon_button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.m=16).
-const double _stepperValueSize = 16; // tokens.md §3 title.m — the count
-
 /// A numeric stepper (`default / min / max`).
 ///
 /// Covers the Inputs/Stepper row of `components.md` — reservation party size.
@@ -66,7 +62,7 @@ class AssenStepper extends StatelessWidget {
             child: Text(
               '$value',
               style: TextStyle(
-                fontSize: _stepperValueSize,
+                fontSize: TypographyTokens.titleMSize,
                 fontWeight: FontWeight.w700,
                 color: enabled ? colors.ink900 : colors.ink500,
               ),

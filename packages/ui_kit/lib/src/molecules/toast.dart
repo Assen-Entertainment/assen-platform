@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.m/label).
-const double _toastTextSize = 14; // tokens.md §3 body.m
-const double _toastActionSize = 13; // tokens.md §3 label — action
-
 /// Semantic kind of an [AssenToast].
 enum AssenToastKind {
   /// 성공 — confirmation (matcha success hue).
@@ -118,7 +113,10 @@ class AssenToast extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontSize: _toastTextSize, color: foreground),
+              style: TextStyle(
+                fontSize: TypographyTokens.bodyMSize,
+                color: foreground,
+              ),
             ),
           ),
           if (hasAction) ...[
@@ -128,7 +126,7 @@ class AssenToast extends StatelessWidget {
               child: Text(
                 actionLabel!,
                 style: TextStyle(
-                  fontSize: _toastActionSize,
+                  fontSize: TypographyTokens.labelSize,
                   fontWeight: FontWeight.w700,
                   color: foreground,
                 ),

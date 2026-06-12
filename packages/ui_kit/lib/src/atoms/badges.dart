@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Badge label sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 caption/label).
-const double _badgeLabelSize = 12; // tokens.md §3 caption
-const double _countBadgeSize = 11; // count pill is one step tighter
-
 /// The six pastel hues a [AssenBadge] can take.
 ///
 /// Each hue is a `bg + ink` pair from the token ramp; the badge fills with the
@@ -71,7 +66,7 @@ class AssenBadge extends StatelessWidget {
         label,
         style: TextStyle(
           color: foreground,
-          fontSize: _badgeLabelSize,
+          fontSize: TypographyTokens.bodySSize,
           fontWeight: FontWeight.w600,
           height: 1.2,
         ),
@@ -147,7 +142,7 @@ class AssenCountBadge extends StatelessWidget {
         text,
         style: TextStyle(
           color: colors.white,
-          fontSize: _countBadgeSize,
+          fontSize: TypographyTokens.pixelSize,
           fontWeight: FontWeight.w700,
           height: 1,
         ),
@@ -209,7 +204,7 @@ class AssenStatusBadge extends StatelessWidget {
         label,
         style: TextStyle(
           color: foreground,
-          fontSize: _badgeLabelSize,
+          fontSize: TypographyTokens.bodySSize,
           fontWeight: FontWeight.w700,
           height: 1.2,
         ),

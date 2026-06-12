@@ -8,10 +8,6 @@ import 'package:ui_kit/src/molecules/collection_cell.dart';
 import 'package:ui_kit/src/organisms/app_bar.dart';
 import 'package:ui_kit/src/organisms/empty_state.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _albumCountSize = 13; // tokens.md §3 label — 도감 count
-
 /// Which state the [AssenChekiAlbumTemplate] renders.
 enum AssenChekiAlbumVariant {
   /// 채움 — the collected grid with a progress count.
@@ -166,7 +162,7 @@ class _ProgressHeader extends StatelessWidget {
             Text(
               '도감',
               style: TextStyle(
-                fontSize: _albumCountSize,
+                fontSize: TypographyTokens.labelSize,
                 fontWeight: FontWeight.w700,
                 color: colors.ink900,
               ),
@@ -174,7 +170,7 @@ class _ProgressHeader extends StatelessWidget {
             Text(
               '$collected / $total',
               style: TextStyle(
-                fontSize: _albumCountSize,
+                fontSize: TypographyTokens.labelSize,
                 fontWeight: FontWeight.w700,
                 color: colors.strawberryInk,
               ),

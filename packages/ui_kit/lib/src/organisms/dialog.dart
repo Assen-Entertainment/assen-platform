@@ -2,11 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.l/body.m).
-const double _dialogTitleSize = 18; // tokens.md §3 title.l — dialog title
-const double _dialogBodySize = 14; // tokens.md §3 body.m — dialog message
-
 /// A centred confirm/cancel dialog (`1버튼/2버튼(파괴적=red)`).
 ///
 /// Covers the Containment/Dialog row of `components.md`. Used sparingly — Korean
@@ -114,7 +109,7 @@ class AssenDialog extends StatelessWidget {
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: _dialogTitleSize,
+                fontSize: TypographyTokens.titleLSize,
                 fontWeight: FontWeight.w700,
                 color: colors.ink900,
               ),
@@ -125,7 +120,7 @@ class AssenDialog extends StatelessWidget {
                 message!,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: _dialogBodySize,
+                  fontSize: TypographyTokens.bodyMSize,
                   height: 1.5,
                   color: colors.ink700,
                 ),

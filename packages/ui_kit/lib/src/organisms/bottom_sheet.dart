@@ -2,10 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/organisms/bottom_cta.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 headline).
-const double _sheetTitleSize = 18; // tokens.md §3 headline — sheet title
-
 /// A modal bottom sheet shell (`핸들+타이틀+콘텐츠+CTA — 한국 관례 #2`).
 ///
 /// Covers the Containment/BottomSheet row of `components.md` and enforces Korean
@@ -106,7 +102,7 @@ class AssenBottomSheet extends StatelessWidget {
               child: Text(
                 title!,
                 style: TextStyle(
-                  fontSize: _sheetTitleSize,
+                  fontSize: TypographyTokens.headlineSize,
                   fontWeight: FontWeight.w700,
                   color: colors.ink900,
                 ),

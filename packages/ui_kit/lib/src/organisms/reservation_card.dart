@@ -5,11 +5,6 @@ import 'package:ui_kit/src/atoms/button.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 import 'package:ui_kit/src/molecules/key_value_row.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _resTitleSize = 16; // tokens.md §3 title.m — venue title
-const double _resDdaySize = 12; // tokens.md §3 body.s — D-day chip
-
 /// State of an [AssenReservationCard] (`다가옴/방문완료/취소`).
 enum AssenReservationStatus {
   /// 다가옴 — an upcoming, confirmed booking (shows the D-day + actions).
@@ -97,7 +92,7 @@ class AssenReservationCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: _resTitleSize,
+                    fontSize: TypographyTokens.titleMSize,
                     fontWeight: FontWeight.w700,
                     color: colors.ink900,
                   ),
@@ -188,7 +183,7 @@ class _DdayChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: _resDdaySize,
+              fontSize: TypographyTokens.bodySSize,
               fontWeight: FontWeight.w700,
               color: colors.strawberryInk,
             ),

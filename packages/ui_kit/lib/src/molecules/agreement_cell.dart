@@ -2,12 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/selection_controls.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.l/title.m).
-const double _agreeAllSize = 16; // tokens.md §3 title.m — "전체 동의" master
-const double _agreeRowSize = 14; // tokens.md §3 body.m — individual rows
-const double _agreeTagSize = 12; // tokens.md §3 body.s — [필수]/[선택] tag
-
 /// A consent row variant — master "agree to all" vs. a single required/optional
 /// item (Korean B2C convention #3: 전체동의 셀 + [필수]/[선택] 개별행).
 enum AssenAgreementKind {
@@ -88,7 +82,9 @@ class AssenAgreementCell extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: _isAll ? _agreeAllSize : _agreeRowSize,
+                  fontSize: _isAll
+                      ? TypographyTokens.titleMSize
+                      : TypographyTokens.bodyMSize,
                   fontWeight: _isAll ? FontWeight.w700 : FontWeight.w500,
                   color: colors.ink900,
                 ),
@@ -120,7 +116,7 @@ class _Tag extends StatelessWidget {
     return Text(
       required ? '[필수]' : '[선택]',
       style: TextStyle(
-        fontSize: _agreeTagSize,
+        fontSize: TypographyTokens.bodySSize,
         fontWeight: FontWeight.w700,
         color: required ? colors.roseMain : colors.ink500,
       ),
