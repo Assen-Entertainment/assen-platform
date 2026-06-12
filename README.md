@@ -17,6 +17,7 @@
 | `landing/` | 공개 랜딩 (Vite + GSAP — SEO 표면, Flutter 아님) |
 | `docker-compose.yml` | 로컬/CI 개발 스택 (postgres · redis · api · celery worker/beat) |
 | `.github/workflows/ci.yml` | CI 게이트 — lint/typecheck/test/빌드 스모크/compose/gitleaks |
+| `scripts/` | 로컬 빌드, Compose smoke, production ECS deploy 준비 스크립트 |
 
 ## 문서
 
@@ -26,6 +27,17 @@
 | `apps/AGENTS.md` · `server/AGENTS.md` | 스택별 중첩 하네스 |
 | `docs/CONSTRAINTS.md` | 개발 제약사항 41개 (기준 문서) |
 | `docs/adr/` | 아키텍처 결정 기록 |
+| `docs/deployment.md` | 현재 배포 상태, local/dev build, production ECS deploy 절차 |
 | `docs/research/` | 제약의 근거 리서치 (하네스 담론, 스택·IAP·컴플라이언스) |
 
 작업 전 `AGENTS.md`(검증 계약·GitOps)와 `docs/CONSTRAINTS.md`를 읽을 것.
+
+## 로컬 실행 / 빌드
+
+```sh
+scripts/build-local.sh   # Flutter web/APK + backend image build
+scripts/up-local.sh      # postgres/redis/api/celery worker/beat 기동 + smoke
+scripts/smoke-local.sh   # 이미 떠 있는 로컬 스택 smoke
+```
+
+Production 배포 준비와 현재 배포 상태는 `docs/deployment.md`를 기준으로 본다.

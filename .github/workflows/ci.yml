@@ -95,17 +95,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate compose file
-        run: docker compose config -q
-      - name: Boot core services
-        run: docker compose up -d postgres redis celery-worker
-      - name: Assert services are running
-        run: |
-          sleep 15
-          docker compose ps
-          docker compose ps --status running postgres | grep postgres
-          docker compose ps --status running redis | grep redis
-          docker compose ps --status running celery-worker | grep celery-worker
+      - name: Boot and smoke local backend stack
+        run: scripts/up-local.sh
       - name: Tear down
         if: always()
         run: docker compose down -v
