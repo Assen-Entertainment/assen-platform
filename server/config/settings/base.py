@@ -64,8 +64,19 @@ LOCAL_APPS = [
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
+# Ordering follows Technical Architecture §3.5 #1. Only the outer cross-cutting
+# concerns are Django middleware: request_id -> security headers -> rate limit.
+# The next concerns in that pipeline — auth/session, consent gate, RBAC — are
+# enforced at the Ninja layer (custom HttpBearer auth classes + the consent gate
+# decorator), because they need the resolved route and authenticated account, not
+# just the raw request. Idempotency sits further in, at the command layer (§3.5
+# #3). The in-memory rate limiter is a skeleton; the production limiter shares
+# state in Redis and is deployment-bound, so only the position is fixed here.
 MIDDLEWARE = [
+    "config.middleware.RequestIDMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "config.middleware.SecurityHeadersMiddleware",
+    "config.middleware.InMemoryRateLimitMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

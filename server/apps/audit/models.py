@@ -1,7 +1,59 @@
-"""Domain models for audit.
+"""Audit trail for privileged actions (ASS-91, CONSTRAINTS HITL #26).
 
-Intentionally empty in P0: this app is a narrow boundary placeholder
-(CONSTRAINTS #38). Models and their migrations land in P4/P5.
+Every permission change, block, invalidation, and data export must leave an
+``AuditEntry`` (architecture: admin owns audit). The trail is the accountability
+record reviewers and operators rely on, so it captures *who* did *what* to
+*which* target and *why*. Like the event log it is meant to be append-only in
+spirit; mutation helpers are deliberately not provided.
 """
 
 from __future__ import annotations
+
+from django.db import models
+
+
+class AuditAction(models.TextChoices):
+    """Privileged action categories that must be audited.
+
+    Kept as an enum so callers cannot record free-form action strings that would
+    fragment the trail and defeat later querying.
+    """
+
+    ROLE_CHANGED = "role_changed", "role_changed"
+    USER_BLOCKED = "user_blocked", "user_blocked"
+    USER_UNBLOCKED = "user_unblocked", "user_unblocked"
+    RECORD_INVALIDATED = "record_invalidated", "record_invalidated"
+    DATA_EXPORTED = "data_exported", "data_exported"
+    SAFETY_DETAIL_VIEWED = "safety_detail_viewed", "safety_detail_viewed"
+
+
+class AuditEntry(models.Model):
+    """One recorded privileged action.
+
+    ``actor`` is the staff account that acted; ``target`` is a free-form
+    identifier of the affected subject (account id, record id, export name) since
+    targets span many models. ``reason`` is mandatory for exports and safety
+    access per compliance, so it is captured here rather than inferred.
+    """
+
+    actor = models.ForeignKey(
+        "identity.Account",
+        on_delete=models.PROTECT,
+        related_name="audit_entries",
+    )
+    action = models.CharField(max_length=32, choices=AuditAction.choices)
+    target = models.CharField(max_length=255)
+    reason = models.CharField(max_length=512, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["action", "created_at"]),
+            models.Index(fields=["actor", "created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        """Summarise the audited action for log/admin display."""
+        return f"{self.action} by {self.actor_id} -> {self.target}"

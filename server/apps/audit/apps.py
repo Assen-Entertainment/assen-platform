@@ -6,7 +6,7 @@ from django.apps import AppConfig
 
 
 class AuditConfig(AppConfig):
-    """Configures the audit app. Models arrive in P4/P5 (empty in P0)."""
+    """Configures the audit app (P4 foundation: privileged-action AuditEntry)."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.audit"
