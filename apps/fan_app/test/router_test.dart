@@ -76,6 +76,11 @@ void main() {
 
   group('fan router guard', () {
     testWidgets('non-web cold start lands on /onboarding', (tester) async {
+      // ASS-141 적응형 셸: 기본 테스트 서피스(논리폭 800)는 M3 medium이므로 compact 뷰포트를 명시한다.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await _pumpApp(tester);
       // kIsWeb is false under `flutter test`, so the first entry is the
       // onboarding screen (§4.3 모바일 첫 진입); web enters at /login.
@@ -86,6 +91,11 @@ void main() {
     testWidgets('unauthenticated protected route redirects to /login', (
       tester,
     ) async {
+      // ASS-141 적응형 셸: 기본 테스트 서피스(논리폭 800)는 M3 medium이므로 compact 뷰포트를 명시한다.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await _pumpApp(tester);
       _router(tester).go(FanRoutes.home);
       await tester.pumpAndSettle();
@@ -98,6 +108,11 @@ void main() {
     testWidgets('after sign-in the shell shows /home with the 5-tab bar', (
       tester,
     ) async {
+      // ASS-141 적응형 셸: 기본 테스트 서피스(논리폭 800)는 M3 medium이므로 compact 뷰포트를 명시한다.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final repo = await _pumpApp(tester);
       await repo.signIn(identifier: 'fan@x', password: 'pw');
       await tester.pumpAndSettle();
@@ -110,6 +125,11 @@ void main() {
     testWidgets('signing out from an authed session redirects to /login', (
       tester,
     ) async {
+      // ASS-141 적응형 셸: 기본 테스트 서피스(논리폭 800)는 M3 medium이므로 compact 뷰포트를 명시한다.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final repo = await _pumpApp(tester);
       await repo.signIn(identifier: 'fan@x', password: 'pw');
       await tester.pumpAndSettle();

@@ -25,7 +25,8 @@ Future<void> _pumpSignedInApp(WidgetTester tester) async {
 
 /// Gives the visit timeline enough room to build grouped lazy content.
 void _useTallSurface(WidgetTester tester) {
-  tester.view.physicalSize = const Size(1080, 3000);
+  // ASS-141: 폭은 compact(390), 높이는 긴 목록 잘림 방지용으로 유지.
+  tester.view.physicalSize = const Size(390, 3000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
