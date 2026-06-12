@@ -9,6 +9,9 @@
   <meta name="description" content="메이드카페 하츠코이의 방문, 체키, 출근표, 예약을 하나로 잇는 팬 멤버십 앱." />
   <meta property="og:title" content="Assen Platform — 하츠코이를 주머니 속에" />
   <meta property="og:description" content="방문 기록 · 체키 앨범 · 출근표 · 예약까지, 하츠코이의 모든 순간을 한 곳에." />
+  <meta property="og:image" content="/assets/og-platform.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fastly.jsdelivr.net" crossorigin />
   <link rel="stylesheet"
@@ -31,6 +34,14 @@
     </nav>
     <a class="header-cta" href="#cta">사전 등록</a>
   </header>
+
+  <nav class="mobile-section-nav" aria-label="섹션 바로가기">
+    <a href="#features">기능</a>
+    <a href="#how">시작</a>
+    <a href="#stamps">스탬프</a>
+    <a href="#casts">캐스트</a>
+    <a href="#faq">FAQ</a>
+  </nav>
 
   <!-- ░ 도트 내비 (데스크톱) ░ -->
   <nav class="dot-nav" aria-label="섹션 바로가기">
@@ -100,12 +111,10 @@
   </section>
 
   <!-- ░ 티켓 마퀴 ░ -->
-  <!-- marquee-track은 반드시 동일한 절반 2개로 구성 — main.js가 xPercent:-50으로 무한 루프 -->
+  <!-- marquee-track은 소스 1세트만 둔다. main.js가 모션 실행 시 복제해 xPercent:-50 루프를 만든다. -->
   <div class="marquee" aria-hidden="true">
     <div class="marquee-track">
       <span>체키 앨범</span><i>♥</i><span>방문 스탬프</span><i>★</i><span>출근표</span><i>♥</i><span>간편 예약</span><i>★</i><span>웰컴
-        쿠폰</span><i>♥</i>
-      <span>체키 앨범</span><i>★</i><span>방문 스탬프</span><i>♥</i><span>출근표</span><i>★</i><span>간편 예약</span><i>♥</i><span>웰컴
         쿠폰</span><i>★</i>
     </div>
   </div>
@@ -265,28 +274,28 @@
     <p class="casts-sub">출근표에서 캐스트의 오늘을 확인하고, 좋아하는 컬러를 따라가 보세요.</p>
     <ul class="cast-grid" data-reveal>
       <li class="cast-card cast-strawberry">
-        <div class="cast-photo"><span class="cast-initial">미오</span><span class="cast-heart" aria-hidden="true">♥</span>
+        <div class="cast-photo"><span class="cast-mark" aria-hidden="true"></span><span class="cast-heart" aria-hidden="true">♥</span>
         </div>
         <strong>미오</strong>
         <em>딸기 담당 · 분위기 메이커</em>
         <span class="cast-chip">오늘 14:00 출근</span>
       </li>
       <li class="cast-card cast-lemon">
-        <div class="cast-photo"><span class="cast-initial">유키</span><span class="cast-heart" aria-hidden="true">♥</span>
+        <div class="cast-photo"><span class="cast-mark" aria-hidden="true"></span><span class="cast-heart" aria-hidden="true">♥</span>
         </div>
         <strong>유키</strong>
         <em>레몬 담당 · 차분한 미소</em>
         <span class="cast-chip">오늘 15:00 출근</span>
       </li>
       <li class="cast-card cast-matcha">
-        <div class="cast-photo"><span class="cast-initial">모카</span><span class="cast-heart" aria-hidden="true">♥</span>
+        <div class="cast-photo"><span class="cast-mark" aria-hidden="true"></span><span class="cast-heart" aria-hidden="true">♥</span>
         </div>
         <strong>모카</strong>
         <em>말차 담당 · 라떼아트 장인</em>
         <span class="cast-chip">6.14 (토) 출근</span>
       </li>
       <li class="cast-card cast-lavender">
-        <div class="cast-photo"><span class="cast-initial">베리</span><span class="cast-heart" aria-hidden="true">♥</span>
+        <div class="cast-photo"><span class="cast-mark" aria-hidden="true"></span><span class="cast-heart" aria-hidden="true">♥</span>
         </div>
         <strong>베리</strong>
         <em>라벤더 담당 · 다정한 경청가</em>
