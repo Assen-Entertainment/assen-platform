@@ -5,6 +5,8 @@ status: 기준
 owner: Assen Entertainment
 tags: [Design, Routing, Handoff]
 linear: ASS-131
+implemented_by: ASS-140
+implementation_status: local web shell enforced
 related: ["[[screens]]"]
 ---
 
@@ -14,9 +16,24 @@ related: ["[[screens]]"]
 랜딩의 `/`는 Flutter 라우트가 아니며, Flutter web의 진입점은 `/login`이다(plan §4.3).
 이 문서는 랜딩 CTA가 Flutter 앱으로 사용자를 넘길 때의 **URL 파라미터 계약**만 고정한다.
 
-> landing/ 디렉토리는 이 트랙에서 **수정하지 않는다**. 현재 랜딩 CTA는 사전 등록
-> 폼(`#cta` 앵커)이며 앱 출시 전까지 외부 리다이렉트를 켜지 않는다. 아래 계약은
-> 출시 시 랜딩이 채택할 **목표 계약**이고, Flutter 측 수신 상수는 이미 정의해 둔다.
+> ASS-131 시점에는 랜딩을 **수정하지 않는 목표 계약**이었으나, ASS-140에서 랜딩 헤더
+> 로그인 다이얼로그 + 같은 오리진 `/app/` 핸드오프로 **시행**되었다(아래 "ASS-140 시행
+> 형태" 절). 외부(원격) 배포 리다이렉트는 여전히 출시 전 **비활성**이다.
+
+## ASS-140 시행 형태
+
+같은 오리진에서 `/`는 Vite 랜딩(`landing/`), `/app/`는 Flutter fan_app
+(`--base-href /app/`, hash URL 전략)으로 제공한다. mock 미리보기 한정
+localStorage 키는 `assen.session.v1`이고 JSON 형식은 다음과 같다.
+
+```json
+{"accessToken":"...","expiresAt":"<ISO8601 UTC>"}
+```
+
+Flutter `MockAuthRepository`가 같은 키를 동기 hydrate해서 `/app/` 진입 후
+기존 guard가 `/home`으로 보낸다. ASS-90/91 실 인증 전환 시 이 브리지는
+opaque token 세션 수립으로 대체하며, 기존 `return_to` 안전 규칙은
+유지한다.
 
 ## 1. 리다이렉트 대상
 

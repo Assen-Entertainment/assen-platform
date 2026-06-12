@@ -32,6 +32,7 @@
       <a href="#casts">캐스트</a>
       <a href="#faq">FAQ</a>
     </nav>
+    <button type="button" class="header-login" data-login-open>로그인</button>
     <a class="header-cta" href="#cta">사전 등록</a>
   </header>
 
@@ -383,6 +384,26 @@
     <span class="footer-divider">·</span>
     <span class="internal-tag">INTERNAL PREVIEW — 공개 배포 전 승인 필요</span>
   </footer>
+
+  <dialog class="login-dialog" aria-labelledby="login-title">
+    <div class="login-panel">
+      <button type="button" class="login-close" data-login-close aria-label="닫기">×</button>
+      <div class="login-brand" aria-hidden="true">
+        <span class="logo-heart"></span>
+      </div>
+      <h2 id="login-title">다시 만나서 반가워요</h2>
+      <p class="login-sub">하츠코이 미리보기 대시보드로 이어집니다.</p>
+      <form class="login-form" data-login-form>
+        <label for="login-identifier">아이디 또는 이메일</label>
+        <input id="login-identifier" name="identifier" type="text" autocomplete="username" required />
+        <label for="login-password">비밀번호</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+        <p class="login-error" data-login-error aria-live="polite"></p>
+        <button class="btn btn-primary" type="submit">로그인</button>
+      </form>
+      <small class="cta-note">지금은 내부 미리보기 — 입력한 정보는 어디에도 저장되지 않아요.</small>
+    </div>
+  </dialog>
 
   <script type="module" src="/src/main.js"></script>
 </body>

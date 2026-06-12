@@ -21,6 +21,7 @@ dependencies:
   flutter_riverpod: ^3.0.0
   ui_kit:
     path: ../ui_kit
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
