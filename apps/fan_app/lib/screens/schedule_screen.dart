@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-// Typography size literal until TypographyTokens lands (ASS-130).
-const double _noCastNoticeSize = 14; // body.m — empty-day notice
-
 /// The schedule tab body (C1 출근표) — re-hosts the [AssenScheduleTemplate]
 /// body in the router shell so cast taps deep-link to `/cast/:id`.
 ///
@@ -97,6 +94,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     final casts = _week[_selectedDay].casts;
+    final selectedFilter = _filters[_filter];
+    final visibleCasts = _filter == 0
+        ? casts
+        : casts.where((cast) => cast.name == selectedFilter).toList();
+    final emptyMessage = casts.isEmpty
+        ? '이 날은 예정된 출근이 없어요'
+        : '$selectedFilter 출근 예정이 없어요';
 
     return Scaffold(
       backgroundColor: colors.cream50,
@@ -127,10 +131,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 const SizedBox(height: SpacingTokens.s6),
                 const AssenSectionHeader(title: '출근 캐스트'),
                 const SizedBox(height: SpacingTokens.s3),
-                if (casts.isEmpty)
-                  _NoCastNotice(colors: colors)
+                if (visibleCasts.isEmpty)
+                  _NoCastNotice(message: emptyMessage, colors: colors)
                 else
-                  for (final cast in casts) ...[
+                  for (final cast in visibleCasts) ...[
                     AssenCastProfileCard(
                       name: cast.name,
                       hue: _castHues[cast.name] ?? AssenBadgeHue.strawberry,
@@ -187,8 +191,9 @@ class _FavoriteFilters extends StatelessWidget {
 
 /// The muted notice shown when the selected day has no scheduled cast.
 class _NoCastNotice extends StatelessWidget {
-  const _NoCastNotice({required this.colors});
+  const _NoCastNotice({required this.message, required this.colors});
 
+  final String message;
   final AssenColors colors;
 
   @override
@@ -197,9 +202,9 @@ class _NoCastNotice extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s8),
       alignment: Alignment.center,
       child: Text(
-        '이 날은 예정된 출근이 없어요',
+        message,
         style: TextStyle(
-          fontSize: _noCastNoticeSize,
+          fontSize: TypographyTokens.bodyMSize,
           fontWeight: FontWeight.w600,
           color: colors.ink500,
         ),
