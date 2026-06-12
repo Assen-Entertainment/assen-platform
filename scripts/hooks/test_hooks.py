@@ -30,8 +30,15 @@ FAIL_COUNT = 0
 # ---------------------------------------------------------------------------
 
 def run_guard(payload: dict, env: dict | None = None) -> subprocess.CompletedProcess:
-    """guard.py에 JSON payload를 stdin으로 주입해 실행."""
+    """guard.py에 JSON payload를 stdin으로 주입해 실행.
+
+    ALLOW_TEST_EDIT 등 오버라이드 변수는 테스트가 명시적으로 env= 로 전달할 때만
+    설정된다. 호출 셸의 환경변수가 차단/허용 판정에 영향을 주지 않도록 기본 제거.
+    """
     merged_env = os.environ.copy()
+    # 테스트 격리: 외부 셸 오버라이드가 guard 판정에 영향을 주지 않도록 제거 후
+    # 테스트가 명시한 값만 적용.
+    merged_env.pop("ALLOW_TEST_EDIT", None)
     if env:
         merged_env.update(env)
     return subprocess.run(
@@ -392,6 +399,44 @@ def test_blocked_cases():
         },
     )
 
+    # --- ASS-129: 테스트 파일 삭제 차단 (git rm / rm) ---
+
+    # git rm *_test.dart 차단
+    assert_blocked(
+        "#31 git rm *_test.dart 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git rm a_test.dart"},
+        },
+    )
+
+    # rm 디렉토리 경로 포함 *_test.dart 차단
+    assert_blocked(
+        "#31 rm 디렉토리 경로 *_test.dart 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm packages/x/test/b_test.dart"},
+        },
+    )
+
+    # rm test_*.py 차단
+    assert_blocked(
+        "#31 rm test_*.py 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm test_c.py"},
+        },
+    )
+
+    # git rm --cached *_test.dart — cached 플래그도 차단이 안전
+    assert_blocked(
+        "#31 git rm --cached *_test.dart 차단",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git rm --cached widget_test.dart"},
+        },
+    )
+
 
 # ---------------------------------------------------------------------------
 # guard.py 허용 케이스
@@ -557,6 +602,36 @@ def test_allowed_cases():
         {
             "tool_name": "Bash",
             "tool_input": {"command": "git push origin feature/x"},
+        },
+    )
+
+    # --- ASS-129: 테스트 파일 삭제 허용 케이스 ---
+
+    # ALLOW_TEST_EDIT=1 + git rm *_test.dart 허용
+    assert_allowed(
+        "ALLOW_TEST_EDIT=1 git rm *_test.dart 허용",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git rm a_test.dart"},
+        },
+        env={"ALLOW_TEST_EDIT": "1"},
+    )
+
+    # 비테스트 파일 rm foo.dart 허용
+    assert_allowed(
+        "rm 비테스트 파일 허용 (foo.dart)",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm foo.dart"},
+        },
+    )
+
+    # 비테스트 파일 git rm src/main.py 허용
+    assert_allowed(
+        "git rm 비테스트 파일 허용 (src/main.py)",
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git rm src/main.py"},
         },
     )
 

@@ -38,6 +38,7 @@ sh scripts/install-hooks.sh
 | 골든 베이스라인 수정 | `**/goldens/**`, `*.golden.*` | #31 | 없음 |
 | 시크릿 접근 | `.env`, `.env.*` | #27 | 없음 (`.env.example`/`.env.sample`/`.env.template`은 허용) |
 | 기존 테스트 파일 수정 | `test_*.py`, `*_test.py`, `*_test.dart` | #31 | `ALLOW_TEST_EDIT=1` |
+| 테스트 파일 삭제 (`rm`/`git rm`) | basename이 `test_*.py`, `*_test.py`, `*_test.dart` | #31 | `ALLOW_TEST_EDIT=1` |
 | `--update-goldens` Bash | 명령에 포함 시 | #31 | 없음 |
 | `manage.py migrate` / `django-admin migrate` | 토큰 기반 | #25 | `--check`, `--dry-run`은 허용 |
 | `git push origin main` | ref 타깃 기반 (best-effort) | GitOps | 없음 |
@@ -90,6 +91,7 @@ ALLOW_GENERATED=1 git commit -m "..."
 | guard.py 스크립트 미존재 | Claude Code가 hook 실패로 처리 | settings.json 절대경로(`${CLAUDE_PROJECT_DIR}`) 사용으로 CWD 우회 방지 |
 | gitleaks 미설치 | 경고만 출력, 커밋 허용 | CI gitleaks가 최종 게이트 |
 | `echo "DROP TABLE"` 등 문자열 내 SQL 키워드 | fail-safe 과차단(block) | 명령 실행과 문자열을 구별하지 않는다. 파괴적 명령 누락보다 드문 과차단이 안전 — 필요 시 인간이 직접 실행 |
+| `rm "$FILE"` / `rm *.dart` 셸 변수·글로브 인자 | 미감지(under-block) | 정적 분석으로 변수·글로브 확장 전 패턴을 확인할 수 없다. 실행 시점 파일명은 hook에 전달되지 않는다 |
 
 ---
 
