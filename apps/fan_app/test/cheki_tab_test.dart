@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:fan_app/app.dart';
 import 'package:features/features.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
