@@ -1,5 +1,6 @@
 # OMC / tooling
 .omc/
+**/.omc/
 
 # Node (landing)
 node_modules/
