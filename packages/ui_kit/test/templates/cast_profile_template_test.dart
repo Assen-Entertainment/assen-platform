@@ -21,7 +21,13 @@ void main() {
       // The header shows the cast name and the 최애 toggle.
       expect(find.text('미오'), findsWidgets);
       expect(find.byType(AssenFavoriteButton), findsOneWidget);
+      expect(find.text('공식 프로필'), findsOneWidget);
+      expect(find.text('체키 촬영 가능'), findsOneWidget);
       expect(find.byType(AssenScheduleCalendar), findsOneWidget);
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+      await tester.pumpAndSettle();
+
       // The 체키 컬렉션 grid renders its collection cells.
       expect(find.byType(AssenCollectionCell), findsNWidgets(3));
       // The pinned bottom action (Korean B2C convention #1).
