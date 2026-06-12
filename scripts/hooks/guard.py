@@ -284,9 +284,9 @@ def check_bash_command(command: str) -> None:
     # --- #31 테스트 파일 삭제 차단 (git rm / rm — 비재귀 포함)
     # WHY: _is_test_file은 Write/Edit/MultiEdit만 차단 — rm/git rm 삭제 경로가 열려 있었음.
     # ALLOW_TEST_EDIT=1 오버라이드 동일 (케이스 추가 같은 정당 사유).
+    # `git rm`도 `\brm\b`에 매치되므로 단일 패턴으로 충분하다.
     is_rm_cmd = bool(re.search(r"\brm\b", command))
-    is_git_rm_cmd = bool(re.search(r"\bgit\s+rm\b", command))
-    if (is_rm_cmd or is_git_rm_cmd) and _command_targets_test_file(command):
+    if is_rm_cmd and _command_targets_test_file(command):
         if os.environ.get("ALLOW_TEST_EDIT") != "1":
             _block(
                 "#31 테스트 파일 삭제 차단: 테스트 파일(test_*.py / *_test.py / *_test.dart)을 "
