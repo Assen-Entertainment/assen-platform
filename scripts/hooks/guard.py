@@ -222,6 +222,30 @@ def _is_main_push(command: str) -> bool:
     return False
 
 
+def _command_targets_test_file(command: str) -> bool:
+    """
+    rm 또는 git rm 명령의 인자 중 basename이 테스트 파일 패턴인 것이 있으면 True.
+
+    대상 패턴: test_*.py / *_test.py / *_test.dart  (_is_test_file 규칙 미러)
+    디렉토리 경로 포함 인자(packages/ui_kit/test/foo_test.dart)도 basename으로 판정.
+
+    한계: 셸 변수 확장($FILE), 글로브 패턴(*.dart), 따옴표 안 문자열은 정적 분석
+    불가 — 기존 Failure Modes 항목("echo/grep 안 문자열 과차단") 동일 트레이드오프.
+    """
+    tokens = _collapse_whitespace(command).split()
+    for token in tokens:
+        # 플래그는 건너뜀
+        if token.startswith("-"):
+            continue
+        # "git", "rm" 명령 토큰 자체는 건너뜀
+        if token in ("git", "rm"):
+            continue
+        base = os.path.basename(token)
+        if _is_test_file(base):
+            return True
+    return False
+
+
 def check_bash_command(command: str) -> None:
     """Bash 명령 내용을 검사해 차단 여부 결정."""
 
@@ -255,6 +279,19 @@ def check_bash_command(command: str) -> None:
         if has_recursive and has_force:
             _block(
                 "#28 파괴적 명령 차단: `rm -rf` — 재귀 강제 삭제는 인간이 직접 셸에서 실행해야 합니다."
+            )
+
+    # --- #31 테스트 파일 삭제 차단 (git rm / rm — 비재귀 포함)
+    # WHY: _is_test_file은 Write/Edit/MultiEdit만 차단 — rm/git rm 삭제 경로가 열려 있었음.
+    # ALLOW_TEST_EDIT=1 오버라이드 동일 (케이스 추가 같은 정당 사유).
+    # `git rm`도 `\brm\b`에 매치되므로 단일 패턴으로 충분하다.
+    is_rm_cmd = bool(re.search(r"\brm\b", command))
+    if is_rm_cmd and _command_targets_test_file(command):
+        if os.environ.get("ALLOW_TEST_EDIT") != "1":
+            _block(
+                "#31 테스트 파일 삭제 차단: 테스트 파일(test_*.py / *_test.py / *_test.dart)을 "
+                "rm / git rm 으로 삭제하려면 인간 승인 필요. "
+                "인간이 검토 후 `ALLOW_TEST_EDIT=1` 환경변수를 설정하면 통과."
             )
 
     # git push --force / -f / --force-with-lease[=ref] — =value 형태까지 잡는다
