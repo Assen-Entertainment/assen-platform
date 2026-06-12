@@ -1,8 +1,10 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
+import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 import 'package:ui_kit/src/templates/cast_profile_template.dart';
 import 'package:ui_kit/src/templates/cheki_album_template.dart';
+import 'package:ui_kit/src/templates/event_template.dart';
 import 'package:ui_kit/src/templates/home_template.dart';
 import 'package:ui_kit/src/templates/operator_dashboard_template.dart';
 import 'package:ui_kit/src/templates/schedule_template.dart';
@@ -10,8 +12,8 @@ import 'package:ui_kit/src/templates/schedule_template.dart';
 /// A single-screen index of every Template for visual review.
 ///
 /// The human-facing review surface for the ASS-88 Templates layer: it lists all
-/// five templates (T1–T5, including T4's filled/empty variants and T5's tab
-/// states) as cards that open the full-screen template — the same review
+/// templates (T1–T5 plus fan event C4/C5 additions) as cards that open the
+/// full-screen template — the same review
 /// pattern as `AtomCatalog`/`MoleculeCatalog`/`OrganismCatalog`, adapted because
 /// templates are whole screens (own Scaffold/AppBar) rather than inline widgets.
 /// Opening each entry exercises that template's real chrome and scroll.
@@ -61,6 +63,22 @@ class TemplateCatalog extends StatelessWidget {
             ),
           ),
           _TemplateEntry(
+            title: 'C4 이벤트 목록',
+            summary: '필터 탭 + 시즌 배너 + 이벤트 상태 카드',
+            builder: (_) => const AssenEventListTemplate(
+              events: _catalogEvents,
+              onEventTap: _noopEventTap,
+            ),
+          ),
+          _TemplateEntry(
+            title: 'C5 이벤트 상세',
+            summary: '히어로 + 배지 + 상세 정보 + 예약 CTA',
+            builder: (_) => const AssenEventDetailTemplate(
+              event: _catalogMioBirthdayEvent,
+              onBack: _noopBack,
+            ),
+          ),
+          _TemplateEntry(
             title: 'T5 운영자 대시보드',
             summary: '신고 알림 + 세그먼트 탭 + 지표 그리드 + 예약/대기 보드',
             builder: (_) => const AssenOperatorDashboardTemplate(),
@@ -70,6 +88,57 @@ class TemplateCatalog extends StatelessWidget {
     );
   }
 }
+
+void _noopBack() {}
+
+void _noopEventTap(String id) {}
+
+const AssenFanEvent _catalogMioBirthdayEvent = AssenFanEvent(
+  id: 'mio-birthday-week',
+  title: '미오 생탄제',
+  meta: '6.14 (토) · 한정 메뉴 · 특별 체키',
+  status: AssenFanEventStatus.upcoming,
+  category: AssenFanEventCategory.cast,
+  statusLabel: 'D-3',
+  actionLabel: '예약 가능',
+  hue: AssenBadgeHue.lemon,
+  relatedCast: '미오',
+  schedule: '6월 14일 (토) 13:00–21:00',
+  participation: '예약 후 매장 방문',
+  benefit: '생탄제 한정 체키 + 포토카드',
+);
+
+const List<AssenFanEvent> _catalogEvents = [
+  _catalogMioBirthdayEvent,
+  AssenFanEvent(
+    id: 'strawberry-season',
+    title: '딸기 시즌 — 신메뉴 위크',
+    meta: '6.1–6.30 · 시즌 한정 메뉴 3종',
+    status: AssenFanEventStatus.ongoing,
+    category: AssenFanEventCategory.event,
+    statusLabel: '진행중',
+    actionLabel: '오늘 참여',
+    hue: AssenBadgeHue.matcha,
+    relatedCast: '유키',
+    schedule: '6월 1일 (월) 13:00–21:00',
+    participation: '매장 방문 후 직원 안내',
+    benefit: '시즌 한정 체키 + 스탬프',
+  ),
+  AssenFanEvent(
+    id: 'parents-day-tea-party',
+    title: '5월 어버이날 티 파티',
+    meta: '5월 · 사진 공개',
+    status: AssenFanEventStatus.ended,
+    category: AssenFanEventCategory.notice,
+    statusLabel: '종료',
+    actionLabel: '종료됨',
+    hue: AssenBadgeHue.sky,
+    relatedCast: '미오',
+    schedule: '5월 8일 (금) 13:00–21:00',
+    participation: '현장 참여',
+    benefit: '기념 포토카드',
+  ),
+];
 
 /// A tappable catalogue row that opens a full-screen template.
 class _TemplateEntry extends StatelessWidget {

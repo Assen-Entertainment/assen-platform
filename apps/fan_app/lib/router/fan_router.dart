@@ -3,6 +3,7 @@ import 'package:fan_app/router/routes.dart';
 import 'package:fan_app/screens/cast_profile_screen.dart';
 import 'package:fan_app/screens/checkin_complete_screen.dart';
 import 'package:fan_app/screens/cheki_screen.dart';
+import 'package:fan_app/screens/event_screen.dart';
 import 'package:fan_app/screens/home_screen.dart';
 import 'package:fan_app/screens/login_screen.dart';
 import 'package:fan_app/screens/my_screen.dart';
@@ -107,6 +108,19 @@ GoRouter buildFanRouter(Ref ref) {
         name: FanRoutes.castName,
         builder: (context, state) =>
             CastProfileScreen(castId: state.pathParameters['id'] ?? 'mio'),
+      ),
+      GoRoute(
+        path: FanRoutes.events,
+        builder: (context, state) => const EventListScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            name: FanRoutes.eventName,
+            builder: (context, state) => EventDetailScreen(
+              eventId: state.pathParameters['id'] ?? 'mio-birthday-week',
+            ),
+          ),
+        ],
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>

@@ -34,6 +34,15 @@ abstract final class FanRoutes {
   /// Visit history nested under the My tab (E2).
   static const String visitHistory = '/my/visits';
 
+  /// Event list (C4).
+  static const String events = '/events';
+
+  /// Event detail (C5). Deep-linkable: `/events/:id`.
+  static const String eventName = 'event';
+
+  /// Builds the event detail path for [id] (e.g. `/events/mio-birthday-week`).
+  static String eventPath(String id) => '/events/$id';
+
   /// Cast profile detail (C3). Deep-linkable: `/cast/:id`.
   static const String castName = 'cast';
 

@@ -109,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: '6월 콜라보 이벤트',
                   subtitle: '6.10 – 6.30 · 한정 체키 증정',
                   background: ColoredBox(color: colors.lavenderBg),
-                  onTap: () {},
+                  onTap: () => context.push(FanRoutes.events),
                 ),
               ],
             ),
