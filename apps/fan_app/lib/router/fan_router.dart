@@ -11,6 +11,7 @@ import 'package:fan_app/screens/qr_screen.dart';
 import 'package:fan_app/screens/reservation_screen.dart';
 import 'package:fan_app/screens/schedule_screen.dart';
 import 'package:fan_app/screens/signup_screen.dart';
+import 'package:fan_app/screens/visit_history_screen.dart';
 import 'package:fan_app/shell/fan_shell.dart';
 import 'package:features/features.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -148,6 +149,12 @@ GoRouter buildFanRouter(Ref ref) {
               GoRoute(
                 path: FanRoutes.my,
                 builder: (context, state) => const MyScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'visits',
+                    builder: (context, state) => const VisitHistoryScreen(),
+                  ),
+                ],
               ),
             ],
           ),
