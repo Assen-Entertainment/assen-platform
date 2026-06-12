@@ -5,6 +5,26 @@ Claude Code PreToolUse hook + git pre-commit hook으로 비가역 영역을 기�
 
 ---
 
+## 계층 적용 범위 매트릭스 (ASS-133)
+
+세션 형태에 따라 각 계층이 실제로 작동하는지 여부를 정리한다.
+
+| 세션 형태 | guard.py (Claude Code PreToolUse) | git pre-commit | CI 최종 게이트 |
+|-----------|-----------------------------------|----------------|----------------|
+| assen-platform을 프로젝트 루트로 직접 연 Claude Code 세션 | **유효** — `.claude/settings.json` 로드됨 | **유효** — core.hooksPath=scripts/hooks 설정 시 | **유효** — 항상 |
+| 부모 디렉터리(예: Assen/)를 루트로 연 세션 및 그 서브에이전트 | **inert** — settings.json 로드 안 됨, `${CLAUDE_PROJECT_DIR}` 불일치 | **유효** — worktree는 공유 core.hooksPath 상속, install-hooks.sh 1회 실행 시 | **유효** — 항상 |
+| 에이전트 worktree (`.claude/worktrees/`) | **inert** — 위와 동일 | **유효** — git worktree는 core.hooksPath 공유 | **유효** — 항상 |
+| IDE 플러그인 / 직접 git 조작 | 해당 없음 | **유효** — core.hooksPath 설정 시 | **유효** — 항상 |
+
+### 한계로 남은 것
+
+- **guard.py는 "assen-platform 직접 세션"에서만 유효하다.** `${CLAUDE_PROJECT_DIR}` 절대경로 폴백을 시도해도, 부모 디렉터리 세션에서는 settings.json 자체가 로드되지 않으므로 구조적으로 불가. 해결책: git pre-commit이 유일한 worktree/에이전트 방어 계층.
+- **git pre-commit은 `install-hooks.sh` 1회 실행이 전제**다. 미실행 시 hook 미작동. CI에서 install+검증 스텝을 추가해 부트스트랩 누락을 잡는다 (ASS-133).
+- **pre-commit 우회**: `git commit --no-verify`로 인간/에이전트가 강제 우회 가능. CI가 최종 게이트.
+- **셸 변수·글로브 인자** (`rm "$FILE"`, `rm *_test.dart`)는 정적 분석 불가 — guard.py Failure Modes와 동일 한계.
+
+---
+
 ## 구성 파일
 
 | 파일 | 역할 |
@@ -12,22 +32,39 @@ Claude Code PreToolUse hook + git pre-commit hook으로 비가역 영역을 기�
 | `guard.py` | Claude Code PreToolUse hook — 도구 호출 차단 |
 | `pre-commit` | git pre-commit hook — 커밋 레벨 심층 방어 |
 | `install-hooks.sh` | git core.hooksPath 설정 설치 스크립트 |
-| `test_hooks.py` | 동작 검증 테스트 (python3 실행) |
+| `test_hooks.py` | guard.py 동작 검증 테스트 (python3 실행) |
+| `test_pre_commit.sh` | pre-commit 행위 검증 테스트 (bash, 샌드박스 git repo) |
 
 ---
 
-## 설치
+## 설치 (클론 후 1회 필수)
 
 ```sh
-# 1. Claude Code hook — .claude/settings.json에 이미 등록됨 (자동)
-
-# 2. git pre-commit hook 설치
+# git pre-commit hook 설치 — 클론 직후 반드시 1회 실행
 sh scripts/install-hooks.sh
 ```
+
+Claude Code hook(guard.py)은 `.claude/settings.json`에 이미 등록되어 있으므로
+**assen-platform을 프로젝트 루트로 직접 연 세션**에서는 자동 활성화된다.
+부모 디렉터리 세션·에이전트 worktree에서는 git pre-commit이 유일 방어 계층이므로
+install-hooks.sh 실행이 더욱 중요하다.
 
 ---
 
 ## 차단 가드 상세
+
+### `pre-commit` — git hook (심층 방어, ASS-133 확장)
+
+| 가드 | 대상 | CONSTRAINTS | 오버라이드 |
+|------|------|-------------|------------|
+| 기존 테스트 파일 수정(M)/삭제(D)/이름 변경(R) | `test_*.py`, `*_test.py`, `*_test.dart` (basename) | #31 | `ALLOW_TEST_EDIT=1` |
+| 마이그레이션 staged | `**/migrations/*.py` | #25 | `ALLOW_MIGRATIONS=1` |
+| 골든 파일 staged | `**/goldens/**`, `*.golden.*` | #31 | `ALLOW_GOLDEN=1` |
+| .env 시크릿 staged | `.env`, `.env.*` (example/sample/template 제외) | #27 | 없음 — 절대 커밋 금지 |
+| 생성 파일 staged | `*.g.dart`, `*.freezed.dart` | #32 | `ALLOW_GENERATED=1` |
+| gitleaks 시크릿 스캔 | staged 전체 | #27 | 없음 (CI 최종 게이트) |
+
+**신규 테스트 파일 추가(A)는 항상 허용. 기존 테스트 rename은 삭제/재추가와 동일하게 인간 승인 대상.**
 
 ### `guard.py` — Claude Code PreToolUse
 
@@ -38,7 +75,7 @@ sh scripts/install-hooks.sh
 | 골든 베이스라인 수정 | `**/goldens/**`, `*.golden.*` | #31 | 없음 |
 | 시크릿 접근 | `.env`, `.env.*` | #27 | 없음 (`.env.example`/`.env.sample`/`.env.template`은 허용) |
 | 기존 테스트 파일 수정 | `test_*.py`, `*_test.py`, `*_test.dart` | #31 | `ALLOW_TEST_EDIT=1` |
-| 테스트 파일 삭제 (`rm`/`git rm`) | basename이 `test_*.py`, `*_test.py`, `*_test.dart` | #31 | `ALLOW_TEST_EDIT=1` |
+| 테스트 파일 삭제 (`rm`/`git rm`) | basename이 위 패턴 | #31 | `ALLOW_TEST_EDIT=1` |
 | `--update-goldens` Bash | 명령에 포함 시 | #31 | 없음 |
 | `manage.py migrate` / `django-admin migrate` | 토큰 기반 | #25 | `--check`, `--dry-run`은 허용 |
 | `git push origin main` | ref 타깃 기반 (best-effort) | GitOps | 없음 |
@@ -50,20 +87,6 @@ sh scripts/install-hooks.sh
 **신규 테스트 파일 생성(Write + 미존재 경로)은 항상 허용.**
 **conftest.py, factories.py 등 헬퍼 모듈은 basename 기반으로 차단하지 않음.**
 
-#### #28 파괴적 명령 오버라이드 없음
-
-`rm -rf`, `git push --force`, `DROP TABLE`, `TRUNCATE`, `manage.py flush`는
-오버라이드 환경변수가 없다. 인간이 직접 셸에서 실행하는 것은 이 hook 밖이므로
-Claude Code를 통하지 않으면 차단되지 않는다 — 이것이 의도된 설계다.
-
-### `pre-commit` — git hook (심층 방어)
-
-| 가드 | 대상 | CONSTRAINTS | 오버라이드 |
-|------|------|-------------|------------|
-| 마이그레이션 staged | `server/.../migrations/*.py` | #25 | `ALLOW_MIGRATIONS=1` |
-| 생성 파일 staged | `*.g.dart`, `*.freezed.dart` | #32 | `ALLOW_GENERATED=1` |
-| gitleaks 시크릿 스캔 | staged 전체 | #27 | 없음 (CI 최종 게이트) |
-
 ---
 
 ## 오버라이드 환경변수 (인간 전용)
@@ -71,14 +94,30 @@ Claude Code를 통하지 않으면 차단되지 않는다 — 이것이 의도�
 오버라이드는 팀 리드/인간이 직접 검토 후에만 사용한다.
 
 ```sh
-# 기존 테스트 수정이 불가피할 때 (guard.py)
+# 기존 테스트 수정이 불가피할 때 (guard.py + pre-commit)
+ALLOW_TEST_EDIT=1 git commit -m "..."
 ALLOW_TEST_EDIT=1 claude ...
 
 # 마이그레이션 커밋이 불가피할 때 (pre-commit)
 ALLOW_MIGRATIONS=1 git commit -m "..."
 
+# 골든 파일 갱신 시 (pre-commit)
+ALLOW_GOLDEN=1 git commit -m "..."
+
 # 생성 파일 커밋이 불가피할 때 (pre-commit)
 ALLOW_GENERATED=1 git commit -m "..."
+```
+
+---
+
+## 동작 검증
+
+```sh
+# guard.py 55케이스 검증
+python3 scripts/hooks/test_hooks.py
+
+# pre-commit 15케이스 행위 검증 (샌드박스 git repo)
+bash scripts/hooks/test_pre_commit.sh
 ```
 
 ---
@@ -89,19 +128,12 @@ ALLOW_GENERATED=1 git commit -m "..."
 |------|------|------|
 | JSON 파싱 실패 | fail-open (exit 0) | 가용성 트레이드오프 — Claude Code는 well-formed JSON을 보장하므로 정상 운영에서는 발생하지 않음 |
 | guard.py 스크립트 미존재 | Claude Code가 hook 실패로 처리 | settings.json 절대경로(`${CLAUDE_PROJECT_DIR}`) 사용으로 CWD 우회 방지 |
+| install-hooks.sh 미실행 | pre-commit inert | CI에서 install+검증 스텝으로 누락 감지 (ASS-133) |
+| `git commit --no-verify` | pre-commit 우회됨 | CI가 최종 게이트 — 로컬 hook은 best-effort |
 | gitleaks 미설치 | 경고만 출력, 커밋 허용 | CI gitleaks가 최종 게이트 |
-| `echo "DROP TABLE"` 등 문자열 내 SQL 키워드 | fail-safe 과차단(block) | 명령 실행과 문자열을 구별하지 않는다. 파괴적 명령 누락보다 드문 과차단이 안전 — 필요 시 인간이 직접 실행 |
-| `rm`로 시작하지 않는 삭제 경로 — `find -delete`, `python -c "os.remove(...)"`, `git rm -r <디렉토리>/`(파일명 토큰 없음), 셸 변수·글로브 인자(`rm "$FILE"` / `rm *_test.dart`) | 미감지(under-block) | 정적 토큰 분석의 구조적 한계 — 확장·간접 실행 시점의 파일명은 hook에 전달되지 않는다 |
-| `git commit -m 'rm a_test.dart 정리'` 등 문자열 내 `rm`+테스트 파일명 | fail-safe 과차단(block) | DROP TABLE 행과 동일 트레이드오프 — 명령과 문자열을 구별하지 않는다. 필요 시 인간이 검토 후 `ALLOW_TEST_EDIT=1`로 통과 |
-
----
-
-## 동작 검증
-
-```sh
-python3 scripts/hooks/test_hooks.py
-# → ALL PASS
-```
+| 부모 디렉터리 세션 / 에이전트 worktree | guard.py inert | 구조적 한계 — pre-commit + CI로 보완 (계층 매트릭스 참조) |
+| `echo "DROP TABLE"` 등 문자열 내 SQL 키워드 | fail-safe 과차단(block) | 명령 실행과 문자열을 구별하지 않는다. 파괴적 명령 누락보다 드문 과차단이 안전 |
+| `rm "$FILE"` / `rm *_test.dart` 셸 변수·글로브 인자 | 미감지(under-block) | 정적 토큰 분석의 구조적 한계 |
 
 ---
 

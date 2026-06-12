@@ -3,13 +3,19 @@
 #
 # 목적: Claude Code hook 밖에서의 우회를 차단한다.
 #       (직접 git 조작, IDE 플러그인, 자동화 스크립트 등)
-#       CONSTRAINTS #25, #31, #32, #27
+#       CONSTRAINTS #25, #27, #31, #32
 #
 # 설치: scripts/install-hooks.sh 실행 (git config core.hooksPath scripts/hooks)
 #
 # 오버라이드 (인간 전용):
+#   ALLOW_TEST_EDIT=1   — 기존 테스트 파일 수정/삭제/이름 변경 커밋 허용 (guard.py 미러)
 #   ALLOW_MIGRATIONS=1  — 마이그레이션 파일 커밋 허용
+#   ALLOW_GOLDEN=1      — 골든 파일 커밋 허용
 #   ALLOW_GENERATED=1   — *.g.dart / *.freezed.dart 커밋 허용
+#
+# 참고: guard.py(Claude Code PreToolUse)와 규칙 미러.
+#       Claude Code 세션 형태에 따른 계층별 적용 범위는
+#       scripts/hooks/README.md 의 "계층 적용 범위 매트릭스" 참조.
 
 set -e
 
@@ -19,20 +25,80 @@ NC='\033[0m'
 
 FAIL=0
 
+print_paths() {
+    printf '%s\n' "$1" | sed 's/^/  /' >&2
+}
+
+# ---------------------------------------------------------------------------
+# #31 기존 테스트 파일 수정/삭제/이름 변경 차단
+# WHY: 테스트 약화 방지 — 신규 추가(A)는 자유, 기존 수정(M)/삭제(D)/이름 변경(R)은 인간 승인.
+#      대상: test_*.py / *_test.py / *_test.dart (basename 기준)
+#      guard.py _is_test_file() 과 동일 규칙.
+# ---------------------------------------------------------------------------
+if [ "${ALLOW_TEST_EDIT}" != "1" ]; then
+    TEST_CHANGED=$(git diff --cached --name-status | awk '
+        $1 == "M" || $1 == "D" {print $2}
+        $1 ~ /^R/ {print $2; print $3}
+    ' \
+        | grep -E '(^|/)test_[^/]+\.py$|(^|/)[^/]+_test\.py$|(^|/)[^/]+_test\.dart$' || true)
+    if [ -n "${TEST_CHANGED}" ]; then
+        printf "${RED}[PRE-COMMIT BLOCKED]${NC} #31 기존 테스트 파일 수정/삭제/이름 변경\n" >&2
+        printf "  다음 테스트 파일이 수정(M), 삭제(D), 또는 이름 변경(R) staged 되어 있습니다:\n" >&2
+        print_paths "${TEST_CHANGED}"
+        printf "  신규 테스트 추가(A)는 자유입니다. 기존 테스트 변경은 인간 승인 필요.\n" >&2
+        printf "  인간이 검토 후 ALLOW_TEST_EDIT=1 으로 오버라이드하세요.\n" >&2
+        FAIL=1
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # #25 마이그레이션 파일 커밋 차단
 # WHY: migrations는 makemigrations로만 생성, 적용은 인간 승인 필요.
 # ---------------------------------------------------------------------------
 if [ "${ALLOW_MIGRATIONS}" != "1" ]; then
-    MIGRATION_FILES=$(git diff --cached --name-only | grep -E '^server/.*/migrations/.*\.py$' || true)
+    MIGRATION_FILES=$(git diff --cached --name-only | grep -E '^.*/migrations/.*\.py$' || true)
     if [ -n "${MIGRATION_FILES}" ]; then
         printf "${RED}[PRE-COMMIT BLOCKED]${NC} #25 마이그레이션 인간 게이트\n" >&2
         printf "  다음 마이그레이션 파일이 staged 되어 있습니다:\n" >&2
-        printf "  %s\n" ${MIGRATION_FILES} >&2
+        print_paths "${MIGRATION_FILES}"
         printf "  migrations는 makemigrations로만 생성하고, 적용·수정은 인간 승인 필요.\n" >&2
         printf "  인간이 검토 후 ALLOW_MIGRATIONS=1 으로 오버라이드하세요.\n" >&2
         FAIL=1
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# #31 골든 파일 커밋 차단
+# WHY: 골든 베이스라인 변경은 인간 승인 필요 — guard.py _is_golden_path() 미러.
+#      대상: **/goldens/** 경로 또는 *.golden.* 파일명
+# ---------------------------------------------------------------------------
+if [ "${ALLOW_GOLDEN}" != "1" ]; then
+    GOLDEN_FILES=$(git diff --cached --name-only \
+        | grep -E '(^|/)?goldens/|\.golden\.' || true)
+    if [ -n "${GOLDEN_FILES}" ]; then
+        printf "${RED}[PRE-COMMIT BLOCKED]${NC} #31 골든 베이스라인 인간 승인 필요\n" >&2
+        printf "  다음 골든 파일이 staged 되어 있습니다:\n" >&2
+        print_paths "${GOLDEN_FILES}"
+        printf "  골든 파일 변경은 인간 승인 필요 (--update-goldens도 인간이 직접 실행).\n" >&2
+        printf "  인간이 검토 후 ALLOW_GOLDEN=1 으로 오버라이드하세요.\n" >&2
+        FAIL=1
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# #27 .env 시크릿 파일 커밋 차단
+# WHY: 시크릿 파일을 git history에 포함하면 영구 노출.
+#      허용: .env.example / .env.sample / .env.template (스키마 공유 목적)
+# ---------------------------------------------------------------------------
+ENV_FILES=$(git diff --cached --name-only \
+    | grep -E '(^|/)\.env(\.[^/]+)?$' \
+    | grep -Ev '\.env\.(example|sample|template)$' || true)
+if [ -n "${ENV_FILES}" ]; then
+    printf "${RED}[PRE-COMMIT BLOCKED]${NC} #27 .env 시크릿 파일 커밋 차단\n" >&2
+    printf "  다음 .env 파일이 staged 되어 있습니다:\n" >&2
+    print_paths "${ENV_FILES}"
+    printf "  .env 파일은 커밋할 수 없습니다. .env.example / .env.sample / .env.template은 허용.\n" >&2
+    FAIL=1
 fi
 
 # ---------------------------------------------------------------------------
@@ -44,7 +110,7 @@ if [ "${ALLOW_GENERATED}" != "1" ]; then
     if [ -n "${GENERATED_FILES}" ]; then
         printf "${RED}[PRE-COMMIT BLOCKED]${NC} #32 생성 파일 손편집 감지\n" >&2
         printf "  다음 생성 파일이 staged 되어 있습니다:\n" >&2
-        printf "  %s\n" ${GENERATED_FILES} >&2
+        print_paths "${GENERATED_FILES}"
         printf "  *.g.dart / *.freezed.dart 는 build_runner가 관리합니다.\n" >&2
         printf "  소스를 수정 후 'flutter pub run build_runner build'를 실행하고 재커밋하세요.\n" >&2
         printf "  인간이 검토 후 ALLOW_GENERATED=1 으로 오버라이드하세요.\n" >&2

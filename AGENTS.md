@@ -30,6 +30,15 @@ Flutter는 pub workspace + Melos 7. 스크립트는 루트 `pubspec.yaml`의 `me
 - docker compose는 로컬 부재 → CI에서 `docker compose config -q` + postgres/redis/celery-worker 기동 스모크로 검증.
 - 완료 주장에는 증거(테스트 출력/빌드 로그/스크린샷)를 첨부한다. 작성 세션이 자체 승인하지 않는다.
 
+## 클론 후 필수 1회 실행
+
+```sh
+sh scripts/install-hooks.sh   # git pre-commit hook 활성화 (core.hooksPath=scripts/hooks)
+```
+
+부모 디렉터리 세션·에이전트 worktree에서는 guard.py(Claude Code hook)가 inert하므로
+git pre-commit이 유일 방어 계층이다. 계층별 적용 범위는 `scripts/hooks/README.md` 참조.
+
 ## 하지 말 것 (사고 다발 영역)
 
 - `*.g.dart` / `*.freezed.dart` 직접 편집 (build_runner 재실행)

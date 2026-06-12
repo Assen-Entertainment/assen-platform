@@ -125,10 +125,20 @@ jobs:
           ./gitleaks detect --source . --no-banner --redact --exit-code 1
 
   hooks:
-    name: Harness hooks (guard.py behavioral tests)
+    name: Harness hooks (guard.py + pre-commit behavioral tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       # 순수 stdlib — 의존성 설치 불요. guard.py 회귀를 CI에서 게이트한다 (ASS-132).
-      - name: Run hook guard tests
+      - name: Run hook guard tests (guard.py)
         run: python3 scripts/hooks/test_hooks.py
+      # install-hooks.sh 가 core.hooksPath 를 올바르게 설정하는지 검증 (ASS-133).
+      - name: Install hooks and verify core.hooksPath
+        run: |
+          bash scripts/install-hooks.sh
+          HOOKS_PATH="$(git config core.hooksPath)"
+          echo "core.hooksPath = ${HOOKS_PATH}"
+          test "${HOOKS_PATH}" = "scripts/hooks"
+      # pre-commit 행위 테스트: 차단·허용 시나리오를 샌드박스 repo에서 실증 (ASS-133).
+      - name: Run pre-commit behavioral tests
+        run: bash scripts/hooks/test_pre_commit.sh
