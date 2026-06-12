@@ -58,9 +58,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   position: fixed; inset: 0 0 auto 0; z-index: 50;
   display: flex; align-items: center; gap: 28px;
   padding: 14px 28px;
-  background: rgba(255, 253, 247, 0.97);
-  backdrop-filter: blur(4px);
-  border-bottom: 1px solid var(--ink-100);
+  background: rgba(255, 253, 247, 0.9);
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.site-header.is-solid {
+  background: var(--cream-50);
+  border-bottom-color: var(--ink-100);
+  box-shadow: 0 4px 18px rgba(43, 39, 36, 0.07);
 }
 .logo { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 18px; }
 .logo-heart { width: 14px; height: 14px; background: var(--rose); border-radius: var(--radius-pill); display: inline-block; }
@@ -70,6 +75,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   padding: 9px 18px; border-radius: var(--radius-pill);
   background: var(--rose); color: #fff; font-size: 13px; font-weight: 600;
 }
+.mobile-section-nav { display: none; }
 
 /* ── 도트 내비 ── */
 .dot-nav {
@@ -83,6 +89,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
 }
 .dot-nav a:hover { border-color: var(--rose); }
 .dot-nav a.active { background: var(--rose); border-color: var(--rose); transform: scale(1.35); }
+.mobile-section-nav a.active {
+  background: var(--strawberry-bg);
+  border-color: var(--strawberry-bd);
+  color: var(--strawberry-ink);
+}
 
 /* ── 공용 ── */
 .btn {
@@ -226,7 +237,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   border-bottom: 2px dashed var(--strawberry-bd);
   overflow: hidden; padding: 16px 0; white-space: nowrap;
 }
-/* 트랙은 동일한 절반 2개 구성을 전제로 main.js가 xPercent:-50 루프를 돈다 */
+/* 트랙은 소스 1세트만 유지하고 main.js가 모션 실행 시 두 번째 세트를 복제한다. */
 .marquee-track { display: inline-flex; align-items: center; gap: 34px; }
 .marquee-track span {
   font-family: var(--font-display); font-size: 22px; color: var(--strawberry-ink);
@@ -386,6 +397,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px;
 }
 .cast-card {
+  --cast-accent: var(--strawberry-bd);
+  --cast-ink: var(--strawberry-ink);
   background: var(--white); border: 1px solid var(--ink-100);
   border-radius: 6px; padding: 12px 12px 18px;
   box-shadow: var(--shadow-1); text-align: center;
@@ -396,17 +409,38 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   position: relative; height: 170px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 14px;
+  overflow: hidden;
 }
+.cast-photo::before, .cast-photo::after {
+  content: ''; position: absolute; border-radius: var(--radius-pill);
+  background: var(--white); opacity: 0.55;
+}
+.cast-photo::before { width: 96px; height: 96px; left: -34px; top: -28px; }
+.cast-photo::after { width: 72px; height: 72px; right: -22px; bottom: -24px; }
+.cast-strawberry { --cast-accent: var(--strawberry-bd); --cast-ink: var(--strawberry-ink); }
+.cast-lemon { --cast-accent: var(--lemon-bd); --cast-ink: var(--lemon-ink); }
+.cast-matcha { --cast-accent: var(--matcha-bd); --cast-ink: var(--matcha-ink); }
+.cast-lavender { --cast-accent: var(--lavender-bd); --cast-ink: var(--lavender-ink); }
 .cast-strawberry .cast-photo { background: var(--strawberry-bg); }
 .cast-lemon .cast-photo { background: var(--lemon-bg); }
 .cast-matcha .cast-photo { background: var(--matcha-bg); }
 .cast-lavender .cast-photo { background: var(--lavender-bg); }
-.cast-initial { font-family: var(--font-display); font-size: 34px; }
-.cast-strawberry .cast-initial { color: var(--strawberry-ink); }
-.cast-lemon .cast-initial { color: var(--lemon-ink); }
-.cast-matcha .cast-initial { color: var(--matcha-ink); }
-.cast-lavender .cast-initial { color: var(--lavender-ink); }
-.cast-heart { position: absolute; right: 10px; bottom: 8px; font-size: 14px; opacity: 0.45; }
+.cast-mark {
+  position: relative; z-index: 1;
+  width: 74px; height: 74px; border-radius: var(--radius-pill);
+  background:
+    linear-gradient(135deg, var(--white) 0 46%, transparent 46% 54%, var(--white) 54%),
+    var(--cast-accent);
+  border: 2px solid var(--cast-ink);
+  box-shadow: 0 8px 18px rgba(43, 39, 36, 0.1);
+}
+.cast-mark::before, .cast-mark::after {
+  content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+  background: var(--cast-ink);
+}
+.cast-mark::before { top: 19px; width: 28px; height: 28px; border-radius: var(--radius-pill); opacity: 0.22; }
+.cast-mark::after { bottom: 16px; width: 42px; height: 6px; border-radius: var(--radius-pill); opacity: 0.32; }
+.cast-heart { position: absolute; right: 10px; bottom: 8px; z-index: 2; font-size: 14px; opacity: 0.45; }
 .cast-card strong { font-family: var(--font-display); font-size: 17px; display: block; }
 .cast-card em { font-style: normal; font-size: 12.5px; color: var(--ink-500); display: block; margin: 4px 0 12px; }
 .cast-chip {
@@ -525,6 +559,28 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   .dot-nav { display: none; }
 }
 @media (max-width: 900px) {
+  .mobile-section-nav {
+    position: fixed; left: 0; right: 0; top: 58px; z-index: 49;
+    display: flex; gap: 8px; overflow-x: auto;
+    padding: 8px 5vw 10px;
+    background: var(--cream-50);
+    border-bottom: 1px solid var(--ink-100);
+    box-shadow: 0 4px 14px rgba(43, 39, 36, 0.06);
+    scrollbar-width: none;
+  }
+  .mobile-section-nav::-webkit-scrollbar { display: none; }
+  .mobile-section-nav a {
+    flex: 0 0 auto;
+    padding: 7px 13px;
+    border-radius: var(--radius-pill);
+    background: var(--white);
+    border: 1px solid var(--ink-200);
+    color: var(--ink-700);
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .hero { padding-top: 148px; }
   .hero-inner { grid-template-columns: 1fr; }
   /* 폰을 정적 흐름으로 — 절대배치 콜라주의 겹침/잘림 방지 */
   .hero-stage { height: auto; margin-top: 28px; padding: 30px 0 12px; display: flex; justify-content: center; }
@@ -535,12 +591,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   .feature-row.reverse .feature-stage { order: 0; }
   .feature-copy { max-width: none; }
   .header-nav { display: none; }
+  .header-cta { margin-left: auto; }
   .how-steps { grid-template-columns: repeat(2, 1fr); gap: 28px 18px; }
   .how-step:not(:last-child)::after { display: none; }
   .cast-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
 }
 @media (max-width: 640px) {
-  .hero { min-height: auto; padding: 104px 5vw 56px; }
+  .site-header { padding: 12px 5vw; gap: 14px; }
+  .header-cta { margin-left: auto; padding: 8px 14px; }
+  .mobile-section-nav { top: 54px; }
+  .hero { min-height: auto; padding: 138px 5vw 56px; }
   .hero-stage { padding: 26px 0 10px; }
   .phone { width: 228px; border-width: 6px; }
   .cheki { width: 104px; padding: 6px 6px 0; }

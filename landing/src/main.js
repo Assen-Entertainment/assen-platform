@@ -63,8 +63,15 @@ if (reduced) {
   safe(() => {
     const track = document.querySelector('.marquee-track');
     if (track) {
-      /* 트랙 = 동일한 절반 2개(index.html 참고) → 자기 폭 기준 -50%면 이음새 없는 루프.
-         픽셀 측정과 달리 폰트 로드 후 폭이 바뀌어도 어긋나지 않는다 */
+      /* index.html에는 소스 1세트만 두고, 모션 실행 시 복제해 DOM 정적 폭을 줄인다. */
+      if (!track.dataset.cloned) {
+        Array.from(track.children).forEach((node) => {
+          const clone = node.cloneNode(true);
+          clone.setAttribute('aria-hidden', 'true');
+          track.appendChild(clone);
+        });
+        track.dataset.cloned = 'true';
+      }
       gsap.to(track, { xPercent: -50, duration: 22, ease: 'none', repeat: -1 });
     }
   });
@@ -160,17 +167,35 @@ if (reduced) {
 
 /* ── 모션 여부와 무관한 동작 ── */
 
-/* 도트 내비 활성 표시 — IntersectionObserver (모션 설정과 무관) */
+/* 헤더는 스크롤 후 블러 없이 솔리드 배경으로 고정한다. */
 safe(() => {
-  const dots = Array.from(document.querySelectorAll('.dot-nav a'));
-  if (!dots.length || !('IntersectionObserver' in window)) return;
-  const byId = new Map(dots.map((d) => [d.getAttribute('href').slice(1), d]));
+  const header = document.querySelector('.site-header');
+  if (!header) return;
+  const setHeaderState = () => {
+    header.classList.toggle('is-solid', window.scrollY > 8);
+  };
+  setHeaderState();
+  window.addEventListener('scroll', setHeaderState, { passive: true });
+});
+
+/* 섹션 내비 활성 표시 — IntersectionObserver (모션 설정과 무관) */
+safe(() => {
+  const links = Array.from(document.querySelectorAll('.dot-nav a, .mobile-section-nav a'));
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map();
+  links.forEach((link) => {
+    const targetId = link.getAttribute('href')?.slice(1);
+    if (!targetId) return;
+    const group = byId.get(targetId) || [];
+    group.push(link);
+    byId.set(targetId, group);
+  });
   const io = new IntersectionObserver(
     (entries) => {
       entries.forEach((en) => {
         if (!en.isIntersecting) return;
-        dots.forEach((d) => d.classList.remove('active'));
-        byId.get(en.target.id)?.classList.add('active');
+        links.forEach((link) => link.classList.remove('active'));
+        byId.get(en.target.id)?.forEach((link) => link.classList.add('active'));
       });
     },
     { rootMargin: '-45% 0px -45% 0px' }
