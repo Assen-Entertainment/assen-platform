@@ -123,3 +123,12 @@ jobs:
         run: |
           curl -sL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
           ./gitleaks detect --source . --no-banner --redact --exit-code 1
+
+  hooks:
+    name: Harness hooks (guard.py behavioral tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 순수 stdlib — 의존성 설치 불요. guard.py 회귀를 CI에서 게이트한다 (ASS-132).
+      - name: Run hook guard tests
+        run: python3 scripts/hooks/test_hooks.py
