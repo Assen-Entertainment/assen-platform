@@ -147,7 +147,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         for (final cast in visibleCasts) ...[
                           AssenCastProfileCard(
                             name: cast.name,
-                            hue: _castHues[cast.name] ??
+                            hue:
+                                _castHues[cast.name] ??
                                 AssenBadgeHue.strawberry,
                             tagline: '출근 ${cast.shift}',
                             isOnShift: true,
