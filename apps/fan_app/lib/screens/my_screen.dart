@@ -89,8 +89,8 @@ class MyScreen extends ConsumerWidget {
           ),
           AssenListItem(
             title: '포인트 내역',
-            leading: Icon(Icons.toll_outlined, color: colors.ink700),
-            onTap: () {},
+            leading: Icon(Icons.stars_outlined, color: colors.ink700),
+            onTap: () => context.push(FanRoutes.pointsHistory),
           ),
           AssenListItem(
             title: '알림 설정',

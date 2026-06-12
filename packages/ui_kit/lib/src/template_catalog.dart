@@ -7,6 +7,7 @@ import 'package:ui_kit/src/templates/cheki_album_template.dart';
 import 'package:ui_kit/src/templates/event_template.dart';
 import 'package:ui_kit/src/templates/home_template.dart';
 import 'package:ui_kit/src/templates/operator_dashboard_template.dart';
+import 'package:ui_kit/src/templates/points_history_template.dart';
 import 'package:ui_kit/src/templates/schedule_template.dart';
 
 /// A single-screen index of every Template for visual review.
@@ -79,6 +80,18 @@ class TemplateCatalog extends StatelessWidget {
             ),
           ),
           _TemplateEntry(
+            title: 'F3 포인트 내역',
+            summary: '보유 포인트 요약 + 월별 적립/사용 타임라인',
+            builder: (_) => const AssenPointsHistoryTemplate(
+              summary: AssenPointsSummary(
+                balance: 1250,
+                expiryNote: '이번 달 소멸 예정 없음',
+              ),
+              monthGroups: _catalogPointGroups,
+              onBack: _noopBack,
+            ),
+          ),
+          _TemplateEntry(
             title: 'T5 운영자 대시보드',
             summary: '신고 알림 + 세그먼트 탭 + 지표 그리드 + 예약/대기 보드',
             builder: (_) => const AssenOperatorDashboardTemplate(),
@@ -137,6 +150,39 @@ const List<AssenFanEvent> _catalogEvents = [
     schedule: '5월 8일 (금) 13:00–21:00',
     participation: '현장 참여',
     benefit: '기념 포토카드',
+  ),
+];
+
+const List<AssenPointsMonthGroup> _catalogPointGroups = [
+  AssenPointsMonthGroup(
+    monthLabel: '6월',
+    entries: [
+      AssenPointEntry(
+        title: '12번째 방문 적립',
+        dateLabel: '6월 11일 (수)',
+        delta: 50,
+      ),
+      AssenPointEntry(
+        title: '생탄제 이벤트 보너스',
+        dateLabel: '6월 8일 (일)',
+        delta: 200,
+      ),
+      AssenPointEntry(
+        title: '포인트로 결제',
+        dateLabel: '6월 4일 (수)',
+        delta: -500,
+      ),
+    ],
+  ),
+  AssenPointsMonthGroup(
+    monthLabel: '5월',
+    entries: [
+      AssenPointEntry(
+        title: '11번째 방문 적립',
+        dateLabel: '5월 28일 (수)',
+        delta: 50,
+      ),
+    ],
   ),
 ];
 
