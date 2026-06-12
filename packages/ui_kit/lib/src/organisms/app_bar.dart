@@ -151,8 +151,8 @@ class AssenTabBar extends StatelessWidget {
         elevation: 0,
         selectedItemColor: colors.roseMain,
         unselectedItemColor: colors.ink500,
-        selectedFontSize: TypographyTokens.pixelSize,
-        unselectedFontSize: TypographyTokens.pixelSize,
+        selectedFontSize: TypographyTokens.captionMicroSize,
+        unselectedFontSize: TypographyTokens.captionMicroSize,
         items: [
           for (var i = 0; i < items.length; i++)
             BottomNavigationBarItem(

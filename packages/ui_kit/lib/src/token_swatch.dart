@@ -32,7 +32,7 @@ class TokenSwatch extends StatelessWidget {
           ),
         ),
         const SizedBox(height: SpacingTokens.s2),
-        Text(label, style: const TextStyle(fontSize: 11)),
+        Text(label, style: TypographyTokens.captionMicro),
       ],
     );
   }

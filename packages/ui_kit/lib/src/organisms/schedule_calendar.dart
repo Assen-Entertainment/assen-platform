@@ -180,7 +180,7 @@ class _DayPill extends StatelessWidget {
               Text(
                 day.weekday,
                 style: TextStyle(
-                  fontSize: TypographyTokens.pixelSize,
+                  fontSize: TypographyTokens.captionMicroSize,
                   fontWeight: FontWeight.w700,
                   color: isSelected ? colors.white : colors.ink500,
                 ),

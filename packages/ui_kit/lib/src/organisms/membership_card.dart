@@ -213,7 +213,7 @@ class _Field extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: TypographyTokens.pixelSize,
+            fontSize: TypographyTokens.captionMicroSize,
             fontWeight: FontWeight.w700,
             letterSpacing: 1,
             color: ink,

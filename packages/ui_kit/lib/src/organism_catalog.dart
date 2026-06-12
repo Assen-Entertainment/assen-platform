@@ -369,9 +369,8 @@ class _Section extends StatelessWidget {
         children: [
           Text(
             title,
-            style: TextStyle(
+            style: TypographyTokens.label.copyWith(
               color: colors.ink700,
-              fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
           ),
