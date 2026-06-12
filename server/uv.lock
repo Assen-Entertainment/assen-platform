@@ -40,6 +40,7 @@ dependencies = [
     { name = "celery", extra = ["redis"] },
     { name = "django" },
     { name = "django-environ" },
+    { name = "django-linear-migrations" },
     { name = "django-ninja" },
     { name = "gunicorn" },
     { name = "psycopg", extra = ["binary"] },
@@ -48,7 +49,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "django-linear-migrations" },
     { name = "django-stubs", extra = ["compatible-mypy"] },
     { name = "factory-boy" },
     { name = "mypy" },
@@ -62,6 +62,7 @@ requires-dist = [
     { name = "celery", extras = ["redis"], specifier = ">=5.4,<6.0" },
     { name = "django", specifier = "==5.2.*" },
     { name = "django-environ", specifier = ">=0.11,<1.0" },
+    { name = "django-linear-migrations", specifier = ">=2.3,<3.0" },
     { name = "django-ninja", specifier = ">=1.3,<2.0" },
     { name = "gunicorn", specifier = ">=23.0,<24.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4.0" },
@@ -70,7 +71,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "django-linear-migrations", specifier = ">=2.3,<3.0" },
     { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=5.1,<6.0" },
     { name = "factory-boy", specifier = ">=3.3,<4.0" },
     { name = "mypy", specifier = ">=1.13,<2.0" },
