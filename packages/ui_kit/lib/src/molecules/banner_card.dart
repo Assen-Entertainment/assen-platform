@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.l/body.m).
-const double _bannerTitleSize = 19; // tokens.md §3 title.l — banner headline
-const double _bannerSubtitleSize = 14; // tokens.md §3 body.m — banner detail
-
 /// A home banner card for the carousel (`홈 배너`).
 ///
 /// Covers the Content/BannerCard row of `components.md` — the home banner
@@ -71,7 +66,7 @@ class AssenBannerCard extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: _bannerTitleSize,
+                      fontSize: TypographyTokens.titleLSize,
                       fontWeight: FontWeight.w700,
                       color: colors.white,
                     ),
@@ -81,7 +76,7 @@ class AssenBannerCard extends StatelessWidget {
                     Text(
                       subtitle!,
                       style: TextStyle(
-                        fontSize: _bannerSubtitleSize,
+                        fontSize: TypographyTokens.bodyMSize,
                         color: colors.white,
                       ),
                     ),

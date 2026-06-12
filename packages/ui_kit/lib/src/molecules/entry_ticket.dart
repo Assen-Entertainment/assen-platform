@@ -2,12 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/molecules/ticket_decoration.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 display/body).
-const double _entryNumberSize = 28; // tokens.md §3 display.m — waiting number
-const double _entryTitleSize = 16; // tokens.md §3 title.m — venue / queue name
-const double _entryStateSize = 13; // tokens.md §3 label — state caption
-
 /// Queue state of an [AssenEntryTicket].
 enum AssenEntryState {
   /// 대기중 — waiting; neutral cream face, number shown.
@@ -106,7 +100,7 @@ class AssenEntryTicket extends StatelessWidget {
                     Text(
                       title,
                       style: TextStyle(
-                        fontSize: _entryTitleSize,
+                        fontSize: TypographyTokens.titleMSize,
                         fontWeight: FontWeight.w600,
                         color: ink,
                       ),
@@ -115,7 +109,7 @@ class AssenEntryTicket extends StatelessWidget {
                     Text(
                       number,
                       style: TextStyle(
-                        fontSize: _entryNumberSize,
+                        fontSize: TypographyTokens.displayMSize,
                         fontWeight: FontWeight.w800,
                         color: ink,
                         decoration: entered ? TextDecoration.lineThrough : null,
@@ -130,7 +124,7 @@ class AssenEntryTicket extends StatelessWidget {
                 child: Text(
                   _stateLabel,
                   style: TextStyle(
-                    fontSize: _entryStateSize,
+                    fontSize: TypographyTokens.labelSize,
                     fontWeight: FontWeight.w700,
                     color: emphasised ? colors.roseMain : colors.ink500,
                   ),

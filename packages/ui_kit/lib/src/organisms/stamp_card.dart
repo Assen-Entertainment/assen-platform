@@ -4,11 +4,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _stampCounterSize = 13; // tokens.md §3 label — progress counter
-const double _stampNumberSize = 11; // tokens.md §3 pixel — slot number
-
 /// A stamp board (`8칸 (채움/빈칸/리워드)` — a signature motif).
 ///
 /// Covers the Domain/StampCard row of `components.md` and the home hero
@@ -59,7 +54,7 @@ class AssenStampCard extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: _stampCounterSize,
+                  fontSize: TypographyTokens.labelSize,
                   fontWeight: FontWeight.w700,
                   color: colors.ink900,
                 ),
@@ -67,7 +62,7 @@ class AssenStampCard extends StatelessWidget {
               Text(
                 '$stamped / $slots',
                 style: TextStyle(
-                  fontSize: _stampCounterSize,
+                  fontSize: TypographyTokens.labelSize,
                   fontWeight: FontWeight.w700,
                   color: colors.strawberryInk,
                 ),
@@ -155,7 +150,7 @@ class _StampSlot extends StatelessWidget {
           child: Text(
             isReward ? rewardLabel : '$number',
             style: TextStyle(
-              fontSize: _stampNumberSize,
+              fontSize: TypographyTokens.pixelSize,
               fontWeight: FontWeight.w700,
               color: isReward ? colors.strawberryInk : colors.ink300,
             ),

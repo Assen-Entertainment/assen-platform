@@ -7,10 +7,6 @@ import 'package:ui_kit/src/organisms/app_bar.dart';
 import 'package:ui_kit/src/organisms/cast_profile_card.dart';
 import 'package:ui_kit/src/organisms/schedule_calendar.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _noCastNoticeSize = 14; // tokens.md §3 body.m — empty-day notice
-
 /// The weekly schedule screen skeleton (`T2 출근표`).
 ///
 /// Covers the Templates/T2 row of `components.md` and the 출근표 screen
@@ -240,7 +236,7 @@ class _NoCastNotice extends StatelessWidget {
       child: Text(
         '이 날은 예정된 출근이 없어요',
         style: TextStyle(
-          fontSize: _noCastNoticeSize,
+          fontSize: TypographyTokens.bodyMSize,
           fontWeight: FontWeight.w600,
           color: colors.ink500,
         ),

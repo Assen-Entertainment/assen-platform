@@ -280,6 +280,125 @@ ${fields}
 `;
 }
 
+// ---------------------------------------------------------------------------
+// Typography (ASS-130). The `typography.*` block is the SSOT mirror of
+// docs/design/tokens.md §3. We emit THREE primitive groups so ui_kit can drop
+// its placeholder `_*Size` literals onto a generated source:
+//   (1) fontSize doubles  (logical px) — the value ui_kit was hard-coding,
+//   (2) fontFamily primary + fallback lists (Flutter wants a primary String
+//       plus a fontFamilyFallback list),
+//   (3) a composed TextStyle per scale slot (family + size + height + weight),
+//       offered for new code; existing widgets that only need the size keep
+//       their own weight/height by reading the `*Size` const.
+// Values are read from `original.$value` (pristine DTCG) so SD reference
+// resolution / unit transforms never perturb the generated numbers.
+// ---------------------------------------------------------------------------
+
+// camelCase a fontFamily reference `{typography.fontFamily.display}` -> `display`.
+function familyKeyFromRef(ref) {
+  const m = /^\{typography\.fontFamily\.([^}]+)\}$/.exec(String(ref));
+  if (!m) throw new Error(`typography: unexpected fontFamily ref ${ref}`);
+  return m[1];
+}
+
+// Dart `FontWeight.wNNN` from a numeric DTCG fontWeight (100..900).
+function dartFontWeight(w) {
+  return `FontWeight.w${w}`;
+}
+
+// A Dart `const List<String>` field, emitted the way `dart format` would: the
+// inline form `[ 'a', 'b' ]` when the whole declaration fits in 80 columns, else
+// one element per line with a trailing comma. Keeping the generator output
+// format-stable is required — `melos run format` and `codegen:verify` both run
+// over the *.gen.dart, so an unformatted emit would fail CI / drift the diff.
+function dartStringListField(indent, decl, items) {
+  const inlineItems = items.map((s) => `'${s}'`).join(', ');
+  const inline = `${indent}${decl} = [${inlineItems}];`;
+  if (inline.length <= 80) return inline;
+  const lines = items.map((s) => `${indent}  '${s}',`).join('\n');
+  return `${indent}${decl} = [\n${lines}\n${indent}];`;
+}
+
+function buildTypographyDart(dictionary) {
+  const families = dictionary.allTokens.filter(
+    (t) => t.path[0] === 'typography' && t.path[1] === 'fontFamily',
+  );
+  const scales = dictionary.allTokens.filter(
+    (t) => t.path[0] === 'typography' && t.path[1] === 'scale',
+  );
+
+  const familyFields = families
+    .map((t) => {
+      const key = t.path[2];
+      const stack = rawValue(t);
+      if (!Array.isArray(stack) || stack.length === 0) {
+        throw new Error(`typography: fontFamily.${key} is not a non-empty list`);
+      }
+      const primary = stack[0];
+      const fallback = stack.slice(1);
+      const fallbackField = dartStringListField(
+        '  ',
+        `static const List<String> ${key}FontFamilyFallback`,
+        fallback,
+      );
+      return (
+        `  /// typography.fontFamily.${key} — primary face.\n` +
+        `  static const String ${key}FontFamily = '${primary}';\n\n` +
+        `  /// typography.fontFamily.${key} — fallback stack (after the primary).\n` +
+        `${fallbackField}`
+      );
+    })
+    .join('\n\n');
+
+  const sizeFields = scales
+    .map((t) => {
+      const key = t.path[2];
+      const v = rawValue(t);
+      const size = v.fontSize.value;
+      return `  /// typography.scale.${key} — ${size}px.\n` +
+        `  static const double ${key}Size = ${size};`;
+    })
+    .join('\n\n');
+
+  const styleFields = scales
+    .map((t) => {
+      const key = t.path[2];
+      const v = rawValue(t);
+      const famKey = familyKeyFromRef(v.fontFamily);
+      const size = v.fontSize.value;
+      const height = v.lineHeight;
+      const weight = dartFontWeight(v.fontWeight);
+      return (
+        `  /// typography.scale.${key} — composed ${famKey} ${size}px style.\n` +
+        `  static const TextStyle ${key} = TextStyle(\n` +
+        `    fontFamily: ${famKey}FontFamily,\n` +
+        `    fontFamilyFallback: ${famKey}FontFamilyFallback,\n` +
+        `    fontSize: ${size},\n` +
+        `    height: ${height},\n` +
+        `    fontWeight: ${weight},\n` +
+        `  );`
+      );
+    })
+    .join('\n\n');
+
+  return `${dartDocHeader()}
+
+import 'package:flutter/painting.dart';
+
+/// Typography primitives (typography.*) — SSOT mirror of docs/design/tokens.md
+/// §3. Font sizes are in logical pixels; [TextStyle] composites pair each scale
+/// slot with its family stack, line height and weight. Widgets that only need a
+/// size read \`*Size\`; new code can take the whole composed style.
+abstract final class TypographyTokens {
+${familyFields}
+
+${sizeFields}
+
+${styleFields}
+}
+`;
+}
+
 // ThemeExtensions: thin, generated wrappers exposing the raw const groups to the
 // Flutter theme. These are PRIMITIVES surfaced for `Theme.of(context).extension`,
 // not the semantic ColorScheme (which stays hand-written in ui_kit).
@@ -385,6 +504,7 @@ const dartFormats = {
   'assen/dart-radius': buildRadiusDart,
   'assen/dart-elevation': buildElevationDart,
   'assen/dart-motion': buildMotionDart,
+  'assen/dart-typography': buildTypographyDart,
   'assen/dart-theme-extensions': buildThemeExtensionsDart,
 };
 for (const [name, fn] of Object.entries(dartFormats)) {
@@ -413,6 +533,7 @@ const sd = new StyleDictionary({
         { destination: 'radius.gen.dart', format: 'assen/dart-radius' },
         { destination: 'elevation.gen.dart', format: 'assen/dart-elevation' },
         { destination: 'motion.gen.dart', format: 'assen/dart-motion' },
+        { destination: 'typography.gen.dart', format: 'assen/dart-typography' },
         { destination: 'theme_extensions.gen.dart', format: 'assen/dart-theme-extensions' },
       ],
     },

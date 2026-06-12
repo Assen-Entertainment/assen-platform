@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.m/body.s).
-const double _listTitleSize = 16; // tokens.md §3 title.m
-const double _listSubtitleSize = 12; // tokens.md §3 body.s
-
 /// A general-purpose list row with `leading / title / subtitle / trailing`
 /// slots.
 ///
@@ -81,7 +76,7 @@ class AssenListItem extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: _listTitleSize,
+                    fontSize: TypographyTokens.titleMSize,
                     fontWeight: FontWeight.w600,
                     color: colors.ink900,
                   ),
@@ -91,7 +86,7 @@ class AssenListItem extends StatelessWidget {
                   Text(
                     subtitle!,
                     style: TextStyle(
-                      fontSize: _listSubtitleSize,
+                      fontSize: TypographyTokens.bodySSize,
                       color: colors.ink700,
                     ),
                   ),

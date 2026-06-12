@@ -1,11 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.m/body.s).
-const double _timelineTitleSize = 16; // tokens.md §3 title.m — entry title
-const double _timelineMetaSize = 12; // tokens.md §3 body.s — date / meta
-
 /// A single timeline entry with a connecting rail (`방문 / 포인트 내역`).
 ///
 /// Covers the Content/TimelineItem row of `components.md` and is the base for
@@ -81,7 +76,7 @@ class AssenTimelineItem extends StatelessWidget {
                   Text(
                     date,
                     style: TextStyle(
-                      fontSize: _timelineMetaSize,
+                      fontSize: TypographyTokens.bodySSize,
                       color: colors.ink500,
                     ),
                   ),
@@ -93,7 +88,7 @@ class AssenTimelineItem extends StatelessWidget {
                         child: Text(
                           title,
                           style: TextStyle(
-                            fontSize: _timelineTitleSize,
+                            fontSize: TypographyTokens.titleMSize,
                             fontWeight: FontWeight.w600,
                             color: colors.ink900,
                           ),
@@ -110,7 +105,7 @@ class AssenTimelineItem extends StatelessWidget {
                     Text(
                       subtitle!,
                       style: TextStyle(
-                        fontSize: _timelineMetaSize,
+                        fontSize: TypographyTokens.bodySSize,
                         color: colors.ink700,
                       ),
                     ),

@@ -151,12 +151,9 @@ class AssenButton extends StatelessWidget {
     );
   }
 
-  // TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.l).
-  // CTA 버튼은 본문보다 또렷해야 하므로 body.l(16)을 쓴다(기존 15는 spec 미앵커).
-  static const double _buttonLabelSize = 16;
-
+  // CTA 버튼은 본문보다 또렷해야 하므로 body.l(16)을 쓴다.
   static const TextStyle _textStyle = TextStyle(
-    fontSize: _buttonLabelSize,
+    fontSize: TypographyTokens.bodyLSize,
     fontWeight: FontWeight.w600,
     height: 1.2,
   );

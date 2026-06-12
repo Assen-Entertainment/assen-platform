@@ -3,12 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/avatar.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _calWeekdaySize = 11; // tokens.md §3 pixel — weekday label
-const double _calDaySize = 15; // tokens.md §3 title.m — day number
-const double _calCastNameSize = 12; // tokens.md §3 body.s — cast name
-
 /// A single day in the [AssenScheduleCalendar] weekly strip.
 ///
 /// [hasEvent] adds the event dot; [isClosed] marks a 휴무 (rest) day; [casts] are
@@ -186,7 +180,7 @@ class _DayPill extends StatelessWidget {
               Text(
                 day.weekday,
                 style: TextStyle(
-                  fontSize: _calWeekdaySize,
+                  fontSize: TypographyTokens.pixelSize,
                   fontWeight: FontWeight.w700,
                   color: isSelected ? colors.white : colors.ink500,
                 ),
@@ -195,7 +189,7 @@ class _DayPill extends StatelessWidget {
               Text(
                 '${day.day}',
                 style: TextStyle(
-                  fontSize: _calDaySize,
+                  fontSize: TypographyTokens.titleMSize,
                   fontWeight: FontWeight.w700,
                   color: dayInk,
                 ),
@@ -238,7 +232,7 @@ class _CastRow extends StatelessWidget {
           child: Text(
             cast.name,
             style: TextStyle(
-              fontSize: _calCastNameSize,
+              fontSize: TypographyTokens.bodySSize,
               fontWeight: FontWeight.w700,
               color: colors.ink900,
             ),
@@ -247,7 +241,7 @@ class _CastRow extends StatelessWidget {
         Text(
           cast.shift,
           style: TextStyle(
-            fontSize: _calCastNameSize,
+            fontSize: TypographyTokens.bodySSize,
             fontWeight: FontWeight.w600,
             color: colors.ink700,
           ),
@@ -272,7 +266,7 @@ class _ClosedRow extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: _calCastNameSize,
+          fontSize: TypographyTokens.bodySSize,
           fontWeight: FontWeight.w600,
           color: colors.ink500,
         ),

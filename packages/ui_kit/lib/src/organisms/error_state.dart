@@ -2,11 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.m/body.m).
-const double _errorTitleSize = 16; // tokens.md §3 title.m — error headline
-const double _errorBodySize = 14; // tokens.md §3 body.m — error description
-
 /// A load-failure placeholder with a retry (`재시도 포함`).
 ///
 /// Covers the Feedback/ErrorState row of `components.md` — the surface shown when
@@ -71,7 +66,7 @@ class AssenErrorState extends StatelessWidget {
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: _errorTitleSize,
+                fontSize: TypographyTokens.titleMSize,
                 fontWeight: FontWeight.w700,
                 color: colors.ink900,
               ),
@@ -81,7 +76,7 @@ class AssenErrorState extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: _errorBodySize,
+                fontSize: TypographyTokens.bodyMSize,
                 height: 1.5,
                 color: colors.ink700,
               ),

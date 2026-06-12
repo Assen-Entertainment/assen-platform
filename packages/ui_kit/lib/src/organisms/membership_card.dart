@@ -3,13 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/avatar.dart';
 import 'package:ui_kit/src/atoms/icon_button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _cardNameSize = 18; // tokens.md §3 title.l — member name
-const double _cardLabelSize = 11; // tokens.md §3 pixel — field labels
-const double _cardNumberSize = 15; // tokens.md §3 body.l — membership number
-const double _cardPointSize = 22; // tokens.md §3 display.m — point balance
-
 /// The pastel skin of an [AssenMembershipCard] (`skin 3종`).
 ///
 /// Tier is expressed by hue, never by going dark — the hierarchy "never
@@ -103,7 +96,7 @@ class AssenMembershipCard extends StatelessWidget {
                 Text(
                   tierLabel,
                   style: TextStyle(
-                    fontSize: _cardLabelSize,
+                    fontSize: TypographyTokens.pixelSize,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.5,
                     color: ink,
@@ -131,7 +124,7 @@ class AssenMembershipCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: _cardNameSize,
+                      fontSize: TypographyTokens.titleLSize,
                       fontWeight: FontWeight.w700,
                       color: colors.ink900,
                     ),
@@ -151,7 +144,7 @@ class AssenMembershipCard extends StatelessWidget {
                     child: Text(
                       memberNumber,
                       style: TextStyle(
-                        fontSize: _cardNumberSize,
+                        fontSize: TypographyTokens.bodyLSize,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1,
                         color: colors.ink900,
@@ -166,7 +159,7 @@ class AssenMembershipCard extends StatelessWidget {
                   child: Text(
                     points,
                     style: TextStyle(
-                      fontSize: _cardPointSize,
+                      fontSize: TypographyTokens.headlineSize,
                       fontWeight: FontWeight.w800,
                       color: colors.ink900,
                     ),
@@ -220,7 +213,7 @@ class _Field extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: _cardLabelSize,
+            fontSize: TypographyTokens.pixelSize,
             fontWeight: FontWeight.w700,
             letterSpacing: 1,
             color: ink,

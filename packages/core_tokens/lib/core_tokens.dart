@@ -18,3 +18,4 @@ export 'src/motion.gen.dart';
 export 'src/radius.gen.dart';
 export 'src/spacing.gen.dart';
 export 'src/theme_extensions.gen.dart';
+export 'src/typography.gen.dart';

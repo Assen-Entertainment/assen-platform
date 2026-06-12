@@ -2,11 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/button.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 title.m/body.m).
-const double _emptyTitleSize = 16; // tokens.md §3 title.m — empty headline
-const double _emptyBodySize = 14; // tokens.md §3 body.m — empty description
-
 /// An empty-collection placeholder (`문구만 / +CTA`).
 ///
 /// Covers the Feedback/EmptyState row of `components.md` — the "빈 앨범 / 예약 없음 /
@@ -63,7 +58,7 @@ class AssenEmptyState extends StatelessWidget {
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: _emptyTitleSize,
+                fontSize: TypographyTokens.titleMSize,
                 fontWeight: FontWeight.w700,
                 color: colors.ink900,
               ),
@@ -73,7 +68,7 @@ class AssenEmptyState extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: _emptyBodySize,
+                fontSize: TypographyTokens.bodyMSize,
                 height: 1.5,
                 color: colors.ink700,
               ),

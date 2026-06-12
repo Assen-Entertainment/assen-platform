@@ -4,12 +4,6 @@ import 'package:ui_kit/src/atoms/button.dart';
 import 'package:ui_kit/src/atoms/progress.dart';
 import 'package:ui_kit/src/molecules/notice_bar.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _qrTitleSize = 16; // tokens.md §3 title.m — sheet title
-const double _qrTimerSize = 13; // tokens.md §3 label — countdown caption
-const double _qrExpiredSize = 14; // tokens.md §3 body.m — expired notice
-
 /// Lifecycle of an [AssenQrDisplay] (active vs. expired).
 enum AssenQrStatus {
   /// The QR is current — within its rotation window.
@@ -124,7 +118,7 @@ class AssenQrDisplay extends StatelessWidget {
           Text(
             memberNumber,
             style: TextStyle(
-              fontSize: _qrTitleSize,
+              fontSize: TypographyTokens.titleMSize,
               fontWeight: FontWeight.w600,
               letterSpacing: 1,
               color: colors.ink700,
@@ -138,7 +132,7 @@ class AssenQrDisplay extends StatelessWidget {
               child: Text(
                 '코드가 만료되었습니다.',
                 style: TextStyle(
-                  fontSize: _qrExpiredSize,
+                  fontSize: TypographyTokens.bodyMSize,
                   fontWeight: FontWeight.w600,
                   color: colors.redInk,
                 ),
@@ -150,7 +144,7 @@ class AssenQrDisplay extends StatelessWidget {
               child: Text(
                 '$remainingLabel 후 코드가 갱신됩니다',
                 style: TextStyle(
-                  fontSize: _qrTimerSize,
+                  fontSize: TypographyTokens.labelSize,
                   fontWeight: FontWeight.w600,
                   color: colors.ink500,
                 ),

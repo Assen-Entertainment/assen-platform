@@ -2,12 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 display/label).
-const double _statValueSize = 28; // tokens.md §3 display.m — the metric
-const double _statLabelSize = 13; // tokens.md §3 label — metric name
-const double _statDeltaSize = 12; // tokens.md §3 body.s — delta caption
-
 /// Direction of a [AssenStatCard] delta (drives the trend colour/arrow).
 enum AssenStatTrend {
   /// No change shown.
@@ -76,7 +70,7 @@ class AssenStatCard extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: _statLabelSize,
+                    fontSize: TypographyTokens.labelSize,
                     fontWeight: FontWeight.w600,
                     color: colors.ink700,
                   ),
@@ -88,7 +82,7 @@ class AssenStatCard extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: _statValueSize,
+              fontSize: TypographyTokens.displayMSize,
               fontWeight: FontWeight.w800,
               color: colors.ink900,
             ),
@@ -133,7 +127,7 @@ class _Delta extends StatelessWidget {
         Text(
           delta,
           style: TextStyle(
-            fontSize: _statDeltaSize,
+            fontSize: TypographyTokens.bodySSize,
             fontWeight: FontWeight.w700,
             color: color,
           ),

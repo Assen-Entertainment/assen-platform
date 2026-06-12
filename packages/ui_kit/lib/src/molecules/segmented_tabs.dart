@@ -1,10 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 label=13).
-const double _segmentLabelSize = 13; // tokens.md §3 label
-
 /// A segmented control for switching between a small set of views
 /// (`selected / unselected`).
 ///
@@ -110,7 +106,7 @@ class _Segment extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: _segmentLabelSize,
+              fontSize: TypographyTokens.labelSize,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               color: selected ? colors.ink900 : colors.ink700,
             ),

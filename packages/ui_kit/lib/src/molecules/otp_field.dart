@@ -2,11 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 headline=22).
-const double _otpDigitSize = 22; // a digit cell reads at headline weight
-const double _otpErrorSize = 12; // tokens.md §3 body.s — error message
-
 /// Completion/validation status of an [AssenOtpField].
 enum AssenOtpStatus {
   /// 입력중 — the user is still entering digits (resting/active styling).
@@ -148,7 +143,7 @@ class _AssenOtpFieldState extends State<AssenOtpField> {
               widget.errorText!,
               style: TextStyle(
                 color: colors.redMain,
-                fontSize: _otpErrorSize,
+                fontSize: TypographyTokens.bodySSize,
               ),
             ),
           ),
@@ -195,7 +190,7 @@ class _Cell extends StatelessWidget {
       child: Text(
         digit,
         style: TextStyle(
-          fontSize: _otpDigitSize,
+          fontSize: TypographyTokens.headlineSize,
           fontWeight: FontWeight.w700,
           color: colors.ink900,
         ),

@@ -1,10 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 pixel=11).
-const double _chekiCaptionSize = 11; // tokens.md §3 pixel — handwritten caption
-
 /// The instax-mini cheki frame motif (image slot + caption).
 ///
 /// Covers the Domain/ChekiFrame row of `components.md` and the cheki motif in
@@ -112,7 +108,7 @@ class AssenChekiFrame extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: _chekiCaptionSize,
+                                  fontSize: TypographyTokens.pixelSize,
                                   color: colors.ink700,
                                 ),
                               ),

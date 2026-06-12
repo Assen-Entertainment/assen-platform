@@ -2,10 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.s=12).
-const double _collectionLabelSize = 12; // tokens.md §3 body.s — item label
-
 /// Acquisition state of an [AssenCollectionCell].
 enum AssenCollectionState {
   /// 획득 — owned; the artwork shows in full colour.
@@ -103,7 +99,7 @@ class AssenCollectionCell extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: _collectionLabelSize,
+            fontSize: TypographyTokens.bodySSize,
             fontWeight: FontWeight.w600,
             color: _locked ? colors.ink500 : colors.ink900,
           ),

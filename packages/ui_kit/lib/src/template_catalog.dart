@@ -7,11 +7,6 @@ import 'package:ui_kit/src/templates/home_template.dart';
 import 'package:ui_kit/src/templates/operator_dashboard_template.dart';
 import 'package:ui_kit/src/templates/schedule_template.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _entryTitleSize = 16; // tokens.md §3 title.m — template name
-const double _entrySubSize = 13; // tokens.md §3 body.m — template summary
-
 /// A single-screen index of every Template for visual review.
 ///
 /// The human-facing review surface for the ASS-88 Templates layer: it lists all
@@ -108,7 +103,7 @@ class _TemplateEntry extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: _entryTitleSize,
+                      fontSize: TypographyTokens.titleMSize,
                       fontWeight: FontWeight.w700,
                       color: colors.ink900,
                     ),
@@ -117,7 +112,7 @@ class _TemplateEntry extends StatelessWidget {
                   Text(
                     summary,
                     style: TextStyle(
-                      fontSize: _entrySubSize,
+                      fontSize: TypographyTokens.labelSize,
                       height: 1.4,
                       color: colors.ink700,
                     ),

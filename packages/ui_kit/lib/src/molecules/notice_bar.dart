@@ -1,10 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3 body.m=14).
-const double _noticeTextSize = 14; // tokens.md §3 body.m
-
 /// Severity of an [AssenNoticeBar].
 enum AssenNoticeKind {
   /// info — neutral notice (sky pastel face).
@@ -67,7 +63,7 @@ class AssenNoticeBar extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(
-                fontSize: _noticeTextSize,
+                fontSize: TypographyTokens.bodyMSize,
                 color: foreground,
                 height: 1.4,
               ),

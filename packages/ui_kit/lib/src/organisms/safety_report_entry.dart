@@ -2,12 +2,6 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 
-// Typography sizes are literals until TypographyTokens lands.
-// TODO(ASS-130): replace with TypographyTokens (tokens.md §3).
-const double _reportTitleSize = 14; // tokens.md §3 body.m — entry title
-const double _reportSubSize = 12; // tokens.md §3 body.s — entry description
-const double _reportTypeSize = 14; // tokens.md §3 body.m — type row label
-
 /// The nine safety report types (`유형 9종`).
 ///
 /// The fixed taxonomy a reporter chooses from (components.md Domain/
@@ -130,7 +124,7 @@ class AssenSafetyReportEntry extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: _reportTitleSize,
+                    fontSize: TypographyTokens.bodyMSize,
                     fontWeight: FontWeight.w700,
                     color: colors.ink900,
                   ),
@@ -139,7 +133,7 @@ class AssenSafetyReportEntry extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    fontSize: _reportSubSize,
+                    fontSize: TypographyTokens.bodySSize,
                     height: 1.4,
                     color: colors.ink700,
                   ),
@@ -244,7 +238,7 @@ class _TypeRow extends StatelessWidget {
                 child: Text(
                   type.label,
                   style: TextStyle(
-                    fontSize: _reportTypeSize,
+                    fontSize: TypographyTokens.bodyMSize,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                     color: colors.ink900,
                   ),
