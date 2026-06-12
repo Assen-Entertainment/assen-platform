@@ -10,12 +10,21 @@ environment:
 resolution: workspace
 
 dependencies:
+  # Spacing/radius tokens read directly by the operator screens (no hard-coded
+  # values — CONSTRAINTS #34).
+  core_tokens:
+    path: ../../packages/core_tokens
   cupertino_icons: ^1.0.8
+  # Shared auth abstraction (AuthRepository/session + providers). This is cross-
+  # cutting infrastructure, not a fan-only surface; the operator app guards
+  # against the same contract the fan app does (CONSTRAINTS #31).
+  features:
+    path: ../../packages/features
   flutter:
     sdk: flutter
   # Riverpod 3.x ONLY — 2.x syntax is forbidden (CONSTRAINTS #40).
   flutter_riverpod: ^3.0.0
-  # Routing dependency only; actual routes are implemented in P3.
+  # go_router drives the P3a route table (router/operator_router.dart).
   go_router: ^16.0.0
   # Operator-only features; fan_app must never depend on this package.
   operator_features:
@@ -25,6 +34,9 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  # Routing integration tests (login redirect, role gate, expiry).
+  integration_test:
     sdk: flutter
 
 flutter:
