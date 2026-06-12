@@ -57,14 +57,14 @@ install-hooks.sh 실행이 더욱 중요하다.
 
 | 가드 | 대상 | CONSTRAINTS | 오버라이드 |
 |------|------|-------------|------------|
-| 기존 테스트 파일 수정(M)/삭제(D) | `test_*.py`, `*_test.py`, `*_test.dart` (basename) | #31 | `ALLOW_TEST_EDIT=1` |
+| 기존 테스트 파일 수정(M)/삭제(D)/이름 변경(R) | `test_*.py`, `*_test.py`, `*_test.dart` (basename) | #31 | `ALLOW_TEST_EDIT=1` |
 | 마이그레이션 staged | `**/migrations/*.py` | #25 | `ALLOW_MIGRATIONS=1` |
 | 골든 파일 staged | `**/goldens/**`, `*.golden.*` | #31 | `ALLOW_GOLDEN=1` |
 | .env 시크릿 staged | `.env`, `.env.*` (example/sample/template 제외) | #27 | 없음 — 절대 커밋 금지 |
 | 생성 파일 staged | `*.g.dart`, `*.freezed.dart` | #32 | `ALLOW_GENERATED=1` |
 | gitleaks 시크릿 스캔 | staged 전체 | #27 | 없음 (CI 최종 게이트) |
 
-**신규 테스트 파일 추가(A)는 항상 허용.**
+**신규 테스트 파일 추가(A)는 항상 허용. 기존 테스트 rename은 삭제/재추가와 동일하게 인간 승인 대상.**
 
 ### `guard.py` — Claude Code PreToolUse
 
