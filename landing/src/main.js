@@ -225,3 +225,94 @@ safe(() => {
     }
   });
 });
+
+/* ASS-140 mock login bridge: same-origin `/` -> `/app/` via localStorage. */
+safe(() => {
+  const SESSION_KEY = 'assen.session.v1';
+  const APP_PATH = '/app/';
+  const openButton = document.querySelector('[data-login-open]');
+  const dialog = document.querySelector('.login-dialog');
+  const closeButton = document.querySelector('[data-login-close]');
+  const form = document.querySelector('[data-login-form]');
+  const error = document.querySelector('[data-login-error]');
+  if (!openButton || !dialog || !form) return;
+
+  let opener = null;
+
+  const readSession = () => {
+    try {
+      const raw = window.localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed.accessToken !== 'string' || typeof parsed.expiresAt !== 'string') return null;
+      const expiresAt = Date.parse(parsed.expiresAt);
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const writeSession = () => {
+    const session = {
+      accessToken: `mock-landing-${Date.now()}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    try {
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch (_) {
+      /* Safari private mode can reject storage; never persist credentials as fallback. */
+    }
+  };
+
+  const closeDialog = () => {
+    if (dialog.open) dialog.close();
+  };
+
+  if (readSession()) {
+    openButton.textContent = '앱으로 가기';
+    openButton.addEventListener('click', () => {
+      window.location.assign(APP_PATH);
+    });
+    return;
+  }
+
+  openButton.addEventListener('click', () => {
+    opener = openButton;
+    dialog.showModal();
+    const firstInput = form.querySelector('input');
+    if (firstInput) firstInput.focus();
+    if (!reduced) {
+      gsap.fromTo('.login-panel', { scale: 0.92, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: 'back.out(1.7)' });
+    }
+  });
+
+  closeButton?.addEventListener('click', closeDialog);
+
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeDialog();
+  });
+
+  dialog.addEventListener('close', () => {
+    if (error) error.textContent = '';
+    if (opener) opener.focus();
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const identifier = form.elements.identifier;
+    const password = form.elements.password;
+    if (!identifier || !password) return;
+    identifier.value = identifier.value.trim();
+    const passwordValue = password.value.trim();
+    if (!identifier.value || !passwordValue) {
+      if (error) error.textContent = '아이디와 비밀번호를 모두 입력해 주세요.';
+      form.reportValidity();
+      return;
+    }
+    if (!form.reportValidity()) return;
+    /* Password is checked only for non-empty mock parity; it is never stored, logged, or put in the URL. */
+    writeSession();
+    window.location.assign(APP_PATH);
+  });
+});

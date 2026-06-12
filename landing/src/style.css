@@ -51,7 +51,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   outline-offset: 3px;
   border-radius: 6px;
 }
-.btn:focus-visible, .header-cta:focus-visible { border-radius: var(--radius-pill); }
+.btn:focus-visible, .header-cta:focus-visible, .header-login:focus-visible { border-radius: var(--radius-pill); }
 
 /* ── 헤더 ── */
 .site-header {
@@ -71,6 +71,19 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
 .logo-heart { width: 14px; height: 14px; background: var(--rose); border-radius: var(--radius-pill); display: inline-block; }
 .header-nav { display: flex; gap: 20px; margin-left: auto; font-size: 14px; color: var(--ink-700); }
 .header-nav a:hover { color: var(--strawberry-ink); }
+.header-login {
+  padding: 9px 18px; border-radius: var(--radius-pill);
+  background: var(--white); color: var(--ink-900);
+  border: 1px solid var(--ink-200);
+  font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), border-color 0.18s ease, color 0.18s ease;
+}
+.header-login:hover {
+  color: var(--strawberry-ink);
+  border-color: var(--strawberry-bd);
+  transform: translateY(-2px);
+}
 .header-cta {
   padding: 9px 18px; border-radius: var(--radius-pill);
   background: var(--rose); color: #fff; font-size: 13px; font-weight: 600;
@@ -546,6 +559,78 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
 .cta-note { display: block; margin-top: 18px; font-size: 12px; color: var(--strawberry-ink); opacity: 0.75; }
 
 /* ── 푸터 ── */
+/* ASS-140 login dialog: native HTML input keeps Korean IME handling outside Flutter web. */
+.login-dialog {
+  width: min(420px, calc(100% - 32px));
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.login-dialog::backdrop {
+  background: color-mix(in srgb, var(--ink-900) 58%, transparent);
+}
+.login-panel {
+  position: relative;
+  background: var(--cream-50);
+  border: 2px solid var(--strawberry-bd);
+  border-radius: 24px;
+  box-shadow: var(--shadow-2);
+  padding: 38px 30px 30px;
+}
+.login-close {
+  position: absolute; right: 16px; top: 14px;
+  width: 34px; height: 34px; border-radius: var(--radius-pill);
+  border: 1px solid var(--ink-200);
+  background: var(--white); color: var(--ink-700);
+  font-family: var(--font-body); font-size: 20px; line-height: 1;
+  cursor: pointer;
+}
+.login-brand {
+  display: flex; justify-content: center; margin-bottom: 12px;
+}
+.login-brand .logo-heart {
+  width: 22px; height: 22px;
+}
+.login-panel h2 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.3;
+  text-align: center;
+  margin: 0 0 8px;
+  color: var(--strawberry-ink);
+}
+.login-sub {
+  text-align: center;
+  margin: 0 0 24px;
+  color: var(--ink-700);
+  font-size: 14px;
+}
+.login-form {
+  display: grid;
+  gap: 10px;
+}
+.login-form label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-700);
+}
+.login-form input {
+  width: 100%; padding: 15px 20px;
+  border-radius: var(--radius-pill); border: 2px solid var(--strawberry-bd);
+  background: var(--white); font-family: var(--font-body); font-size: 15px;
+  color: var(--ink-900);
+}
+.login-form .btn {
+  width: 100%;
+  margin-top: 4px;
+}
+.login-error {
+  min-height: 20px;
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
+}
+
 .site-footer {
   padding: 28px var(--gutter) 40px; text-align: center;
   font-size: 12.5px; color: var(--ink-500);
@@ -591,14 +676,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   .feature-row.reverse .feature-stage { order: 0; }
   .feature-copy { max-width: none; }
   .header-nav { display: none; }
-  .header-cta { margin-left: auto; }
+  .header-login { margin-left: auto; }
   .how-steps { grid-template-columns: repeat(2, 1fr); gap: 28px 18px; }
   .how-step:not(:last-child)::after { display: none; }
   .cast-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
 }
 @media (max-width: 640px) {
   .site-header { padding: 12px 5vw; gap: 14px; }
-  .header-cta { margin-left: auto; padding: 8px 14px; }
+  .header-login, .header-cta { padding: 8px 14px; }
+  .header-cta { margin-left: 0; }
   .mobile-section-nav { top: 54px; }
   .hero { min-height: auto; padding: 138px 5vw 56px; }
   .hero-stage { padding: 26px 0 10px; }
@@ -629,6 +715,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visibl
   .cta-stamp { right: 4%; top: -22px; }
   .cta-form { flex-direction: column; align-items: center; }
   .cta-form .btn { width: min(320px, 100%); }
+  .login-dialog { width: min(100% - 24px, 420px); }
+  .login-panel { padding: 36px 22px 26px; }
   .site-footer span { display: block; margin: 3px 0; }
   .footer-divider { display: none; }
 }

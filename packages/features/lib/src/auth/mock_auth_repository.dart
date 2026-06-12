@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:features/src/auth/auth_repository.dart';
 import 'package:features/src/auth/auth_session.dart';
+import 'package:features/src/auth/session_store.dart';
 
 /// An in-memory [AuthRepository] for P3a (no backend).
 ///
@@ -17,10 +18,15 @@ class MockAuthRepository implements AuthRepository {
   /// that callers must handle [refresh]).
   MockAuthRepository({
     this.sessionLifetime = const Duration(minutes: 30),
-  });
+    SessionStore? store,
+  }) : _store = store ?? InMemorySessionStore() {
+    _session = _store.read();
+  }
 
   /// How long a freshly minted session stays valid.
   final Duration sessionLifetime;
+
+  final SessionStore _store;
 
   final StreamController<AuthSession?> _controller =
       StreamController<AuthSession?>.broadcast();
@@ -58,6 +64,7 @@ class MockAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     _session = null;
+    _store.clear();
     _controller.add(null);
   }
 
@@ -72,6 +79,7 @@ class MockAuthRepository implements AuthRepository {
       accessToken: _session!.accessToken,
       expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
     );
+    _store.write(_session!);
     _controller.add(_session);
   }
 
@@ -91,6 +99,7 @@ class MockAuthRepository implements AuthRepository {
 
   AuthSession _emit(AuthSession session) {
     _session = session;
+    _store.write(session);
     _controller.add(session);
     return session;
   }

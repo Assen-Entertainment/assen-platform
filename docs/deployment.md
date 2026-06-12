@@ -58,6 +58,24 @@ scripts/smoke-local.sh
 These scripts set `COMMIT_SHA` from the current git commit unless the caller
 already provided it, so `/api/health` can report which image is running.
 
+## Local Web Shell
+
+Build the composed local web shell:
+
+```sh
+scripts/build-web-local.sh
+```
+
+Serve it on localhost:
+
+```sh
+scripts/serve-web-local.sh
+```
+
+Then open `http://127.0.0.1:8080`. The landing page is served at `/`, and the
+Flutter fan app is served at `/app/`. Use `WEB_PORT=8081` to serve on another
+port.
+
 ## Production Image Build
 
 Build the backend container image without deploying:

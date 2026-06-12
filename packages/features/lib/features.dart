@@ -11,4 +11,5 @@ export 'src/auth/auth_providers.dart';
 export 'src/auth/auth_repository.dart';
 export 'src/auth/auth_session.dart';
 export 'src/auth/mock_auth_repository.dart';
+export 'src/auth/session_store.dart';
 export 'src/placeholder_feature.dart';

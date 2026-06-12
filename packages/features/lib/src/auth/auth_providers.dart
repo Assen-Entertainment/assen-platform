@@ -1,6 +1,7 @@
 import 'package:features/src/auth/auth_repository.dart';
 import 'package:features/src/auth/auth_session.dart';
 import 'package:features/src/auth/mock_auth_repository.dart';
+import 'package:features/src/auth/session_store_platform.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,7 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// Declared with the Riverpod 3.x top-level [Provider] API; 2.x syntax is
 /// forbidden (CONSTRAINTS #40).
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  final repo = MockAuthRepository();
+  // ASS-140: on web, share the mock session key with the landing login dialog.
+  final repo = MockAuthRepository(store: createPlatformSessionStore());
   ref.onDispose(repo.dispose);
   return repo;
 });

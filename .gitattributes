@@ -1,0 +1,5 @@
+# Shell scripts must check out with LF everywhere: Windows-side worktree
+# checkouts (core.autocrlf=true) otherwise write CRLF, which breaks
+# `sh`/`bash` under WSL and Linux CI even though Git Bash tolerates it
+# (discovered in ASS-140 — build-web-local.sh failed sourcing lib/common.sh).
+*.sh text eol=lf
