@@ -34,6 +34,9 @@ abstract final class FanRoutes {
   /// Visit history nested under the My tab (E2).
   static const String visitHistory = '/my/visits';
 
+  /// Points history nested under the My tab (F3).
+  static const String pointsHistory = '/my/points';
+
   /// Event list (C4).
   static const String events = '/events';
 

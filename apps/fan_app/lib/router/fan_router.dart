@@ -8,6 +8,7 @@ import 'package:fan_app/screens/home_screen.dart';
 import 'package:fan_app/screens/login_screen.dart';
 import 'package:fan_app/screens/my_screen.dart';
 import 'package:fan_app/screens/onboarding_screen.dart';
+import 'package:fan_app/screens/points_history_screen.dart';
 import 'package:fan_app/screens/qr_screen.dart';
 import 'package:fan_app/screens/reservation_screen.dart';
 import 'package:fan_app/screens/schedule_screen.dart';
@@ -167,6 +168,10 @@ GoRouter buildFanRouter(Ref ref) {
                   GoRoute(
                     path: 'visits',
                     builder: (context, state) => const VisitHistoryScreen(),
+                  ),
+                  GoRoute(
+                    path: 'points',
+                    builder: (context, state) => const PointsHistoryScreen(),
                   ),
                 ],
               ),
