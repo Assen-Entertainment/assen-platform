@@ -39,6 +39,9 @@ abstract final class TypographyTokens {
   /// typography.scale.displayM — 28px.
   static const double displayMSize = 28;
 
+  /// typography.scale.displayS — 24px.
+  static const double displaySSize = 24;
+
   /// typography.scale.headline — 22px.
   static const double headlineSize = 22;
 
@@ -60,6 +63,9 @@ abstract final class TypographyTokens {
   /// typography.scale.label — 13px.
   static const double labelSize = 13;
 
+  /// typography.scale.captionMicro — 11px.
+  static const double captionMicroSize = 11;
+
   /// typography.scale.pixel — 11px.
   static const double pixelSize = 11;
 
@@ -78,6 +84,15 @@ abstract final class TypographyTokens {
     fontFamilyFallback: displayFontFamilyFallback,
     fontSize: 28,
     height: 1.36,
+    fontWeight: FontWeight.w700,
+  );
+
+  /// typography.scale.displayS — composed display 24px style.
+  static const TextStyle displayS = TextStyle(
+    fontFamily: displayFontFamily,
+    fontFamilyFallback: displayFontFamilyFallback,
+    fontSize: 24,
+    height: 1.33,
     fontWeight: FontWeight.w700,
   );
 
@@ -141,6 +156,15 @@ abstract final class TypographyTokens {
     fontFamilyFallback: bodyFontFamilyFallback,
     fontSize: 13,
     height: 1.38,
+    fontWeight: FontWeight.w500,
+  );
+
+  /// typography.scale.captionMicro — composed body 11px style.
+  static const TextStyle captionMicro = TextStyle(
+    fontFamily: bodyFontFamily,
+    fontFamilyFallback: bodyFontFamilyFallback,
+    fontSize: 11,
+    height: 1.45,
     fontWeight: FontWeight.w500,
   );
 

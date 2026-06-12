@@ -4,11 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-// Typography sizes are literals until TypographyTokens lands (ASS-130),
-// matching the convention used across ui_kit templates.
-const double _titleSize = 24; // display.s — slide headline
-const double _bodySize = 15; // body.l — slide description
-
 /// One onboarding slide's copy + pastel motif hue.
 class _Slide {
   const _Slide({
@@ -192,8 +187,7 @@ class _OnboardingSlide extends StatelessWidget {
           Text(
             slide.title,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: _titleSize,
+            style: TypographyTokens.displayS.copyWith(
               fontWeight: FontWeight.w800,
               color: colors.ink900,
             ),
@@ -202,8 +196,7 @@ class _OnboardingSlide extends StatelessWidget {
           Text(
             slide.body,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: _bodySize,
+            style: TypographyTokens.bodyL.copyWith(
               height: 1.5,
               color: colors.ink700,
             ),

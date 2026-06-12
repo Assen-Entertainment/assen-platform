@@ -51,8 +51,7 @@ class MyScreen extends ConsumerWidget {
                     children: [
                       Text(
                         member.name,
-                        style: TextStyle(
-                          fontSize: 18,
+                        style: TypographyTokens.titleL.copyWith(
                           fontWeight: FontWeight.w800,
                           color: colors.ink900,
                         ),
@@ -60,7 +59,9 @@ class MyScreen extends ConsumerWidget {
                       const SizedBox(height: SpacingTokens.s1),
                       Text(
                         '${member.tierLabel} · ${member.memberNumber}',
-                        style: TextStyle(fontSize: 13, color: colors.ink700),
+                        style: TypographyTokens.label.copyWith(
+                          color: colors.ink700,
+                        ),
                       ),
                     ],
                   ),
