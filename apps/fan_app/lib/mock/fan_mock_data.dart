@@ -43,6 +43,9 @@ class FanMockCast {
     required this.name,
     required this.hue,
     required this.tagline,
+    required this.introduction,
+    required this.eventSummary,
+    required this.chekiAvailability,
   });
 
   /// Stable id used in the `/cast/:id` deep link.
@@ -56,6 +59,15 @@ class FanMockCast {
 
   /// Catchphrase/role line.
   final String tagline;
+
+  /// Public profile introduction approved for the mock shell.
+  final String introduction;
+
+  /// Upcoming event summary shown on the cast profile.
+  final String eventSummary;
+
+  /// Whether cheki shooting is available, as display copy.
+  final String chekiAvailability;
 }
 
 /// The single source of fan-app mock data (체리체리 HK-0042 scenario).
@@ -81,24 +93,44 @@ abstract final class FanMockData {
       name: '미오',
       hue: AssenBadgeHue.strawberry,
       tagline: '딸기 담당 · 게임 마스터',
+      introduction:
+          '밝은 게임 진행과 딸기 디저트 추천으로 '
+          '첫 방문 팬도 편하게 맞이해요.',
+      eventSummary: '6월 콜라보 이벤트 참여',
+      chekiAvailability: '체키 촬영 가능',
     ),
     FanMockCast(
       id: 'yuki',
       name: '유키',
       hue: AssenBadgeHue.sky,
       tagline: '하늘빛 미소 · 노래 담당',
+      introduction:
+          '차분한 노래와 포토 포즈 안내로 '
+          '기념일 방문을 도와요.',
+      eventSummary: '게스트데이 보컬 타임',
+      chekiAvailability: '체키 촬영 가능',
     ),
     FanMockCast(
       id: 'moka',
       name: '모카',
       hue: AssenBadgeHue.peach,
       tagline: '디저트 소믈리에',
+      introduction:
+          '디저트 메뉴 설명과 계절 추천으로 '
+          '테이블 경험을 풍성하게 만들어요.',
+      eventSummary: '디저트 테마데이 예정',
+      chekiAvailability: '체키 촬영 가능',
     ),
     FanMockCast(
       id: 'berry',
       name: '베리',
       hue: AssenBadgeHue.lavender,
       tagline: '보드게임 길잡이',
+      introduction:
+          '보드게임 룰 안내와 팀 플레이 진행을 맡는 '
+          '활기찬 진행 담당이에요.',
+      eventSummary: '보드게임 챌린지 예정',
+      chekiAvailability: '체키 촬영 가능',
     ),
   ];
 

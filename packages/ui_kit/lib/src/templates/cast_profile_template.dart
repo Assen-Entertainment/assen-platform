@@ -2,6 +2,7 @@ import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/avatar.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
+import 'package:ui_kit/src/atoms/card.dart';
 import 'package:ui_kit/src/atoms/favorite_button.dart';
 import 'package:ui_kit/src/molecules/collection_cell.dart';
 import 'package:ui_kit/src/molecules/section_header.dart';
@@ -14,9 +15,10 @@ import 'package:ui_kit/src/organisms/schedule_calendar.dart';
 /// Covers the Templates/T3 row of `components.md` and the cast profile screen
 /// (screens.md C3). It assembles an [AssenAppBar] with a back affordance, a
 /// profile header ([AssenAvatar] + name + 최애 [AssenFavoriteButton]), the cast's
-/// 출근 일정 ([AssenScheduleCalendar]), a 체키 컬렉션 grid ([AssenCollectionCell]s
-/// over pastel motifs), and a pinned [AssenBottomCta] (예약/최애 — Korean B2C
-/// convention #1: one bottom action). The content scrolls under the bar.
+/// approved intro/event/cheki status, 출근 일정 ([AssenScheduleCalendar]), a 체키
+/// 컬렉션 grid ([AssenCollectionCell]s over pastel motifs), and a pinned
+/// [AssenBottomCta] (예약/최애 — Korean B2C convention #1: one bottom action).
+/// The content scrolls under the bar.
 ///
 /// Content is placeholder data (fictional cast 미오), surfaced as constructor
 /// parameters so a real screen overrides it (screens.md mock rule).
@@ -30,6 +32,9 @@ class AssenCastProfileTemplate extends StatefulWidget {
     this.castName = '미오',
     this.castHue = AssenBadgeHue.strawberry,
     this.tagline = '딸기 담당 · 게임 마스터',
+    this.introduction = '공식 동의된 소개만 표시하는 캐스트 프로필입니다.',
+    this.eventSummary = '6월 콜라보 이벤트 참여',
+    this.chekiAvailability = '체키 촬영 가능',
     this.isFavorite = false,
     this.schedule = _defaultSchedule,
     this.onBack,
@@ -46,6 +51,15 @@ class AssenCastProfileTemplate extends StatefulWidget {
 
   /// The cast catchphrase/role line.
   final String tagline;
+
+  /// The approved public introduction shown on the profile.
+  final String introduction;
+
+  /// The upcoming event summary for this cast.
+  final String eventSummary;
+
+  /// Cheki availability display copy.
+  final String chekiAvailability;
 
   /// Whether this cast starts as the viewer's 최애.
   final bool isFavorite;
@@ -148,6 +162,12 @@ class _AssenCastProfileTemplateState extends State<AssenCastProfileTemplate> {
                   isFavorite: _favorite,
                   onFavoriteChanged: _setFavorite,
                 ),
+                const SizedBox(height: SpacingTokens.s4),
+                _ProfileSummary(
+                  introduction: widget.introduction,
+                  eventSummary: widget.eventSummary,
+                  chekiAvailability: widget.chekiAvailability,
+                ),
                 const SizedBox(height: SpacingTokens.s6),
                 const AssenSectionHeader(title: '출근 일정'),
                 const SizedBox(height: SpacingTokens.s3),
@@ -233,6 +253,61 @@ class _ProfileHeader extends StatelessWidget {
           onChanged: onFavoriteChanged,
         ),
       ],
+    );
+  }
+}
+
+/// Approved public profile copy and capability badges.
+class _ProfileSummary extends StatelessWidget {
+  const _ProfileSummary({
+    required this.introduction,
+    required this.eventSummary,
+    required this.chekiAvailability,
+  });
+
+  final String introduction;
+  final String eventSummary;
+  final String chekiAvailability;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+
+    return AssenCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: SpacingTokens.s2,
+            runSpacing: SpacingTokens.s2,
+            children: [
+              const AssenBadge(label: '공식 프로필', hue: AssenBadgeHue.sky),
+              AssenBadge(
+                label: chekiAvailability,
+                hue: AssenBadgeHue.strawberry,
+              ),
+              AssenBadge(label: eventSummary, hue: AssenBadgeHue.lavender),
+            ],
+          ),
+          const SizedBox(height: SpacingTokens.s3),
+          Text(
+            introduction,
+            style: TextStyle(
+              fontSize: TypographyTokens.bodyMSize,
+              height: 1.45,
+              color: colors.ink800,
+            ),
+          ),
+          const SizedBox(height: SpacingTokens.s2),
+          Text(
+            '동의된 프로필 정보만 공개 중',
+            style: TextStyle(
+              fontSize: TypographyTokens.bodySSize,
+              color: colors.ink600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

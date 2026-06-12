@@ -30,6 +30,9 @@ class CastProfileScreen extends StatelessWidget {
         castName: cast.name,
         castHue: cast.hue,
         tagline: cast.tagline,
+        introduction: cast.introduction,
+        eventSummary: cast.eventSummary,
+        chekiAvailability: cast.chekiAvailability,
         isFavorite: favorites.isFavorite(cast.id),
         onFavoriteChanged: (isFavorite) => favorites.setFavorite(
           cast.id,
