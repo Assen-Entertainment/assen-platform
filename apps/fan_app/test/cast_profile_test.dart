@@ -1,5 +1,3 @@
-import 'dart:ui' show Size;
-
 import 'package:fan_app/screens/cast_profile_screen.dart';
 import 'package:fan_app/state/favorite_cast_store.dart';
 import 'package:flutter/material.dart';

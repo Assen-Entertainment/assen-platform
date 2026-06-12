@@ -284,7 +284,6 @@ class _ProfileSummary extends StatelessWidget {
               const AssenBadge(label: '공식 프로필', hue: AssenBadgeHue.sky),
               AssenBadge(
                 label: chekiAvailability,
-                hue: AssenBadgeHue.strawberry,
               ),
               AssenBadge(label: eventSummary, hue: AssenBadgeHue.lavender),
             ],
@@ -295,7 +294,7 @@ class _ProfileSummary extends StatelessWidget {
             style: TextStyle(
               fontSize: TypographyTokens.bodyMSize,
               height: 1.45,
-              color: colors.ink800,
+              color: colors.ink700,
             ),
           ),
           const SizedBox(height: SpacingTokens.s2),
@@ -303,7 +302,7 @@ class _ProfileSummary extends StatelessWidget {
             '동의된 프로필 정보만 공개 중',
             style: TextStyle(
               fontSize: TypographyTokens.bodySSize,
-              color: colors.ink600,
+              color: colors.ink500,
             ),
           ),
         ],
