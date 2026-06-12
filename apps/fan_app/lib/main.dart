@@ -1,29 +1,16 @@
-import 'package:features/features.dart';
+import 'package:fan_app/app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ui_kit/ui_kit.dart';
+
+// Re-export so `package:fan_app/main.dart` keeps exposing [FanApp] (the root
+// moved to app.dart in the P3a router migration).
+export 'package:fan_app/app.dart' show FanApp;
 
 /// Entry point for the Assen Platform fan app.
 ///
-/// Wraps the tree in a [ProviderScope] (Riverpod 3.x) so feature providers
-/// resolve. Routing is intentionally absent in P0: go_router is declared as a
-/// dependency, but the route table is implemented in P3. Until then the app
-/// shows a single placeholder feature screen.
+/// Wraps the tree in a [ProviderScope] (Riverpod 3.x) so the router and auth
+/// providers resolve. P3a wires the go_router route table (see
+/// `router/fan_router.dart`); the root widget is [FanApp].
 void main() {
   runApp(const ProviderScope(child: FanApp()));
-}
-
-/// Root widget of the fan app.
-class FanApp extends StatelessWidget {
-  /// Creates the fan app root.
-  const FanApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Assen',
-      theme: AssenTheme.light(),
-      home: const PlaceholderFeatureScreen(),
-    );
-  }
 }
