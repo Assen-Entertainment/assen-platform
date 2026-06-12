@@ -1,5 +1,6 @@
 import 'package:fan_app/mock/fan_mock_data.dart';
 import 'package:fan_app/router/routes.dart';
+import 'package:fan_app/state/favorite_cast_store.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -21,14 +22,22 @@ class CastProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cast = FanMockData.castById(castId);
+    final favorites = FanFavoriteStore.instance;
 
-    return AssenCastProfileTemplate(
-      castName: cast.name,
-      castHue: cast.hue,
-      tagline: cast.tagline,
-      isFavorite: cast.id == 'mio',
-      onBack: () => _pop(context),
-      onReserve: () => context.go(FanRoutes.reservation),
+    return ListenableBuilder(
+      listenable: favorites,
+      builder: (context, _) => AssenCastProfileTemplate(
+        castName: cast.name,
+        castHue: cast.hue,
+        tagline: cast.tagline,
+        isFavorite: favorites.isFavorite(cast.id),
+        onFavoriteChanged: (isFavorite) => favorites.setFavorite(
+          cast.id,
+          isFavorite: isFavorite,
+        ),
+        onBack: () => _pop(context),
+        onReserve: () => context.go(FanRoutes.reservation),
+      ),
     );
   }
 

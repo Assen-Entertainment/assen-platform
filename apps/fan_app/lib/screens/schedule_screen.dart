@@ -1,5 +1,6 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:fan_app/router/routes.dart';
+import 'package:fan_app/state/favorite_cast_store.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -93,11 +94,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
+    final favorites = FanFavoriteStore.instance;
     final casts = _week[_selectedDay].casts;
     final selectedFilter = _filters[_filter];
-    final visibleCasts = _filter == 0
-        ? casts
-        : casts.where((cast) => cast.name == selectedFilter).toList();
     final emptyMessage = casts.isEmpty
         ? '이 날은 예정된 출근이 없어요'
         : '$selectedFilter 출근 예정이 없어요';
@@ -131,23 +130,46 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 const SizedBox(height: SpacingTokens.s6),
                 const AssenSectionHeader(title: '출근 캐스트'),
                 const SizedBox(height: SpacingTokens.s3),
-                if (visibleCasts.isEmpty)
-                  _NoCastNotice(message: emptyMessage, colors: colors)
-                else
-                  for (final cast in visibleCasts) ...[
-                    AssenCastProfileCard(
-                      name: cast.name,
-                      hue: _castHues[cast.name] ?? AssenBadgeHue.strawberry,
-                      tagline: '출근 ${cast.shift}',
-                      isOnShift: true,
-                      isFavorite: cast.name == '미오',
-                      onFavoriteChanged: (_) {},
-                      onTap: () => context.push(
-                        FanRoutes.castPath(_castIds[cast.name] ?? 'mio'),
-                      ),
-                    ),
-                    const SizedBox(height: SpacingTokens.s3),
-                  ],
+                ListenableBuilder(
+                  listenable: favorites,
+                  builder: (context, _) {
+                    final visibleCasts = _visibleCasts(casts, favorites);
+
+                    if (visibleCasts.isEmpty) {
+                      return _NoCastNotice(
+                        message: emptyMessage,
+                        colors: colors,
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        for (final cast in visibleCasts) ...[
+                          AssenCastProfileCard(
+                            name: cast.name,
+                            hue: _castHues[cast.name] ??
+                                AssenBadgeHue.strawberry,
+                            tagline: '출근 ${cast.shift}',
+                            isOnShift: true,
+                            isFavorite: favorites.isFavorite(
+                              _castIdFor(cast.name),
+                            ),
+                            onFavoriteChanged: (isFavorite) {
+                              favorites.setFavorite(
+                                _castIdFor(cast.name),
+                                isFavorite: isFavorite,
+                              );
+                            },
+                            onTap: () => context.push(
+                              FanRoutes.castPath(_castIdFor(cast.name)),
+                            ),
+                          ),
+                          const SizedBox(height: SpacingTokens.s3),
+                        ],
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -155,6 +177,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ),
     );
   }
+
+  List<AssenScheduleCast> _visibleCasts(
+    List<AssenScheduleCast> casts,
+    FanFavoriteStore favorites,
+  ) {
+    final selectedFilter = _filters[_filter];
+    final filtered = _filter == 0
+        ? [...casts]
+        : casts.where((cast) => cast.name == selectedFilter).toList();
+
+    if (_filter != 0) return filtered;
+
+    filtered.sort((a, b) {
+      final aFavorite = favorites.isFavorite(_castIdFor(a.name));
+      final bFavorite = favorites.isFavorite(_castIdFor(b.name));
+      if (aFavorite == bFavorite) return 0;
+      return aFavorite ? -1 : 1;
+    });
+    return filtered;
+  }
+
+  String _castIdFor(String castName) => _castIds[castName] ?? 'mio';
 }
 
 /// The horizontally scrolling 최애 filter chip row.
