@@ -38,6 +38,22 @@ class AuditAction(models.TextChoices):
     )
     SAFETY_REPORT_RESOLVED = "safety_report_resolved", "safety_report_resolved"
     USER_RISK_FLAGGED = "user_risk_flagged", "user_risk_flagged"
+    SCHEDULE_CREATED = "schedule_created", "schedule_created"
+    SCHEDULE_EDITED = "schedule_edited", "schedule_edited"
+    SCHEDULE_PUBLISHED = "schedule_published", "schedule_published"
+    SCHEDULE_UNPUBLISHED = "schedule_unpublished", "schedule_unpublished"
+    SCHEDULE_CHANGE_REQUESTED = (
+        "schedule_change_requested",
+        "schedule_change_requested",
+    )
+    SCHEDULE_CHANGE_APPROVED = (
+        "schedule_change_approved",
+        "schedule_change_approved",
+    )
+    SCHEDULE_CHANGE_REJECTED = (
+        "schedule_change_rejected",
+        "schedule_change_rejected",
+    )
 
 
 class AuditEntry(models.Model):
