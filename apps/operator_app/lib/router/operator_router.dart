@@ -8,6 +8,7 @@ import 'package:operator_app/screens/operator_cheki_screen.dart';
 import 'package:operator_app/screens/operator_dashboard_screen.dart';
 import 'package:operator_app/screens/operator_login_screen.dart';
 import 'package:operator_app/screens/operator_placeholder_screen.dart';
+import 'package:operator_app/shell/operator_shell.dart';
 
 /// Whether [session] satisfies the operator role gate.
 ///
@@ -24,6 +25,39 @@ import 'package:operator_app/screens/operator_placeholder_screen.dart';
 bool operatorRoleAllows(AuthSession? session) =>
     session != null && !session.isExpired();
 
+/// Console shell branch locations, ordered to match
+/// [OperatorShell.destinations].
+///
+/// The index order is the contract the shell relies on: a tapped rail/tab
+/// destination at index `i` navigates to `shellLocations[i]`, and the active
+/// location maps back to the selected index. `/login` and `/admin` are absent
+/// because they live outside the shell. Exposed for tests that pin this
+/// index↔location round-trip (the highest-value invariant of the shell).
+@visibleForTesting
+const List<String> shellLocations = <String>[
+  OperatorRoutes.dashboard,
+  OperatorRoutes.checkin,
+  OperatorRoutes.cheki,
+  OperatorRoutes.reports,
+  OperatorRoutes.pos,
+];
+
+/// The console destination index for [location] (0 when it is not a shell
+/// route).
+///
+/// Matching is exact-or-sub-path: `location == path` resolves a destination's
+/// own route (e.g. `/checkin`), and `startsWith('$path/')` resolves a true
+/// sub-path (e.g. a future `/cheki/detail`) to its parent. A bare
+/// `startsWith(path)` is deliberately avoided so a shorter route can never
+/// capture a longer sibling that merely shares a leading string.
+@visibleForTesting
+int shellIndexForLocation(String location) {
+  final index = shellLocations.indexWhere(
+    (path) => location == path || location.startsWith('$path/'),
+  );
+  return index < 0 ? 0 : index;
+}
+
 /// Builds the operator-app [GoRouter] reading auth from [ref].
 ///
 /// Guard contract (plan §4.3): an operator without a session (or one failing
@@ -32,9 +66,11 @@ bool operatorRoleAllows(AuthSession? session) =>
 /// session->null transition handled by the same unauth branch.
 /// `refreshListenable` re-runs the guard on every session change.
 ///
-/// The console is a flat set of routes (no tab shell): /dashboard is the hub
-/// and /checkin·/cheki·/reports·/pos plus the /admin role slot are placeholder
-/// pages reachable directly (deep link) until their tools land.
+/// The post-auth destinations (/dashboard·/checkin·/cheki·/reports·/pos) share
+/// one adaptive [OperatorShell] (navigation rail on web/tablet, bottom bar on
+/// mobile) via a plain [ShellRoute] — not a stateful one, so only the active
+/// child builds. /login and the /admin role slot stay outside the shell, so the
+/// guard and the deep-link-only admin route are unaffected.
 GoRouter buildOperatorRouter(Ref ref) {
   return GoRouter(
     initialLocation: OperatorRoutes.login,
@@ -55,34 +91,49 @@ GoRouter buildOperatorRouter(Ref ref) {
         path: OperatorRoutes.login,
         builder: (context, state) => const OperatorLoginScreen(),
       ),
-      GoRoute(
-        path: OperatorRoutes.dashboard,
-        builder: (context, state) => const OperatorDashboardScreen(),
-      ),
-      GoRoute(
-        path: OperatorRoutes.checkin,
-        builder: (context, state) => const OperatorCheckinScreen(),
-      ),
-      GoRoute(
-        path: OperatorRoutes.cheki,
-        builder: (context, state) => const OperatorChekiScreen(),
-      ),
-      GoRoute(
-        path: OperatorRoutes.reports,
-        builder: (context, state) => const OperatorPlaceholderScreen(
-          title: '리포트',
-          message: '일일 집계와 마감 리포트가 이곳에 들어옵니다.',
-          icon: Icons.assessment_outlined,
+      // The post-auth console destinations share one adaptive shell (rail on
+      // web/tablet, bottom bar on mobile). A plain ShellRoute (not a stateful
+      // one) builds only the active child, so the guard tests still see exactly
+      // one destination screen at a time.
+      ShellRoute(
+        builder: (context, state, child) => OperatorShell(
+          currentIndex: shellIndexForLocation(state.matchedLocation),
+          onDestinationSelected: (index) => context.go(shellLocations[index]),
+          child: child,
         ),
+        routes: [
+          GoRoute(
+            path: OperatorRoutes.dashboard,
+            builder: (context, state) => const OperatorDashboardScreen(),
+          ),
+          GoRoute(
+            path: OperatorRoutes.checkin,
+            builder: (context, state) => const OperatorCheckinScreen(),
+          ),
+          GoRoute(
+            path: OperatorRoutes.cheki,
+            builder: (context, state) => const OperatorChekiScreen(),
+          ),
+          GoRoute(
+            path: OperatorRoutes.reports,
+            builder: (context, state) => const OperatorPlaceholderScreen(
+              title: '리포트',
+              message: '일일 집계와 마감 리포트가 이곳에 들어옵니다.',
+              icon: Icons.assessment_outlined,
+            ),
+          ),
+          GoRoute(
+            path: OperatorRoutes.pos,
+            builder: (context, state) => const OperatorPlaceholderScreen(
+              title: 'POS 마감 대조',
+              message: 'POS 마감 대조 도구가 이곳에 들어옵니다.',
+              icon: Icons.point_of_sale_outlined,
+            ),
+          ),
+        ],
       ),
-      GoRoute(
-        path: OperatorRoutes.pos,
-        builder: (context, state) => const OperatorPlaceholderScreen(
-          title: 'POS 마감 대조',
-          message: 'POS 마감 대조 도구가 이곳에 들어옵니다.',
-          icon: Icons.point_of_sale_outlined,
-        ),
-      ),
+      // Admin stays outside the shell: a higher-role, deep-link-only slot that
+      // is not a primary console destination (no rail/tab entry).
       GoRoute(
         path: OperatorRoutes.admin,
         builder: (context, state) => const OperatorPlaceholderScreen(
