@@ -44,4 +44,11 @@ abstract final class AssenLayout {
 
   /// Maximum width for fan-app content on expanded web/tablet layouts.
   static const double contentMaxWidth = 1080;
+
+  /// Maximum width for operator-console content on expanded layouts.
+  ///
+  /// Wider than [contentMaxWidth] because the console is a working surface
+  /// (data lists, boards, tables) rather than a reading column, so it should
+  /// use more of the available desktop width before centering.
+  static const double consoleContentMaxWidth = 1440;
 }

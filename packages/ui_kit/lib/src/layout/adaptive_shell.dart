@@ -22,6 +22,7 @@ class AssenAdaptiveShell extends StatelessWidget {
     required this.onChanged,
     required this.items,
     required this.body,
+    this.contentMaxWidth = AssenLayout.contentMaxWidth,
     super.key,
   }) : assert(items.length >= 2, 'An adaptive shell needs two destinations');
 
@@ -36,6 +37,12 @@ class AssenAdaptiveShell extends StatelessWidget {
 
   /// The active route subtree managed by the app router.
   final Widget body;
+
+  /// Maximum body width at the expanded size class (centered beyond it).
+  ///
+  /// Defaults to the fan reading column; the operator console passes the wider
+  /// [AssenLayout.consoleContentMaxWidth].
+  final double contentMaxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +102,9 @@ class AssenAdaptiveShell extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: expanded ? AssenContentColumn(child: body) : body,
+                child: expanded
+                    ? AssenContentColumn(maxWidth: contentMaxWidth, child: body)
+                    : body,
               ),
             ],
           ),
