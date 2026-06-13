@@ -6,7 +6,7 @@ from django.apps import AppConfig
 
 
 class IdentityConfig(AppConfig):
-    """Configures the identity app. Models arrive in P4/P5 (empty in P0)."""
+    """Configures the identity app (P4 foundation: accounts + opaque tokens)."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.identity"

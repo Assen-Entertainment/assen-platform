@@ -6,7 +6,7 @@ from django.apps import AppConfig
 
 
 class ConsentConfig(AppConfig):
-    """Configures the consent app. Models arrive in P4/P5 (empty in P0)."""
+    """Configures the consent app (P4 foundation: consent records + gate)."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.consent"

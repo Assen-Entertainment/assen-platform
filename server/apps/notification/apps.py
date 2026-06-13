@@ -6,7 +6,7 @@ from django.apps import AppConfig
 
 
 class NotificationConfig(AppConfig):
-    """Configures the notification app. Models arrive in P4/P5 (empty in P0)."""
+    """Configures the notification app (P4 foundation: push adapter interface)."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.notification"
