@@ -107,11 +107,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: AssenTheme.light(),
-          home: Center(
+          home: const Center(
             child: SizedBox(
               width: AssenLayout.contentMaxWidth,
               height: 1100,
-              child: const AssenChekiAlbumTemplate(),
+              child: AssenChekiAlbumTemplate(),
             ),
           ),
         ),
