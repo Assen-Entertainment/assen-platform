@@ -6,7 +6,7 @@ from django.apps import AppConfig
 
 
 class VisitConfig(AppConfig):
-    """Configures the visit app. Models arrive in P4/P5 (empty in P0)."""
+    """Configures the visit app (VisitRecord + the QR CheckinToken, ASS-94/99)."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.visit"

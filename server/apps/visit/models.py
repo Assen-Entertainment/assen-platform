@@ -22,9 +22,16 @@ class VisitRecordStatus(models.TextChoices):
 
 
 class VisitRecordSource(models.TextChoices):
-    """Origin of the visit record; QR lands in ASS-99."""
+    """Origin of the visit record.
+
+    ``operator_manual`` is the operator-entered fallback (ASS-94); ``qr_self`` is
+    a fan self-check-in via a server-issued rotating QR (ASS-99) that an operator
+    scanned. Both are genuine fan visits (they count toward MSFC); the source
+    only records *how* the check-in was captured.
+    """
 
     OPERATOR_MANUAL = "operator_manual", "operator_manual"
+    QR_SELF = "qr_self", "qr_self"
 
 
 class VisitRecord(models.Model):
@@ -74,3 +81,58 @@ class VisitRecord(models.Model):
     def __str__(self) -> str:
         """Identify the visit by fan and visited time for admin/log display."""
         return f"visit:{self.id}:{self.fan_id}@{self.visited_at.isoformat()}"
+
+
+class CheckinToken(models.Model):
+    """A short-lived, single-use rotating check-in credential (ASS-99).
+
+    CONSTRAINTS #18 forbids a *static* QR — a screenshot would be replayable and
+    shareable. The fan app displays this token as a QR for a short window
+    (``_DEFAULT_TTL``, the 15~60s rotation band); the server issues a fresh token
+    on each refresh and accepts any token at most once, so a leaked screenshot is
+    useless the moment it expires or is redeemed. Redemption (an operator scan)
+    records a real fan visit through the visit domain — the fan is the analytics
+    actor, the operator is provenance.
+
+    The row is kept after redemption (not deleted) so a scan is auditable and a
+    replay attempt resolves to "already redeemed" rather than "unknown token".
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    fan = models.ForeignKey(
+        "identity.Account",
+        on_delete=models.PROTECT,
+        related_name="checkin_tokens",
+    )
+    # High-entropy opaque value (secrets.token_urlsafe); unique so a scan resolves
+    # to exactly one credential. It is a bearer secret for its short lifetime.
+    token = models.CharField(max_length=64, unique=True)
+    issued_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+    redeemed_by = models.ForeignKey(
+        "identity.Account",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="redeemed_checkin_tokens",
+    )
+    visit = models.ForeignKey(
+        "visit.VisitRecord",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="checkin_token",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["fan", "issued_at"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        ordering = ["-issued_at"]
+
+    def __str__(self) -> str:
+        """Identify the token by fan and lifecycle for admin/log display."""
+        state = "redeemed" if self.redeemed_at else "pending"
+        return f"checkin_token:{self.id}:{self.fan_id}:{state}"

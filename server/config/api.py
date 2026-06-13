@@ -67,3 +67,4 @@ from apps.cheki import api as cheki_api  # noqa: E402,F401
 from apps.safety import api as safety_api  # noqa: E402,F401
 from apps.schedule import api as schedule_api  # noqa: E402,F401
 from apps.visit import api as visit_api  # noqa: E402,F401
+from apps.visit import checkin_api  # noqa: E402,F401

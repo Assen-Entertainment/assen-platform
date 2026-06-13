@@ -103,6 +103,68 @@ def record_visit(
 
 
 @transaction.atomic
+def record_qr_visit(
+    *,
+    fan: Account,
+    visited_at: datetime,
+    operator: Account,
+    store_id: str | None = None,
+) -> VisitRecord:
+    """Record a fan's QR self-check-in (ASS-99) and its side effects.
+
+    Unlike :func:`record_visit` (operator manual fallback), the fan presented a
+    server-issued rotating QR and the operator only *scanned* it. So the
+    analytics actor is the **fan** (``actor_type=fan``, ``source=fan_app``,
+    ``checkin_method=qr``) and it counts toward MSFC as a genuine self-verified
+    offline visit. The scanning operator is preserved as ``created_by`` (and in
+    ``quality.redeemed_by_operator_id``) for provenance, never as a
+    metric-exclusion flag — ``actor_is_operator`` stays ``False``.
+    """
+    visited_at = _ensure_aware(visited_at)
+    record = VisitRecord.objects.create(
+        fan=fan,
+        visited_at=visited_at,
+        created_by=operator,
+        source=VisitRecordSource.QR_SELF.value,
+        **({"store_id": store_id} if store_id else {}),
+    )
+    record_audit(
+        actor=operator,
+        action=AuditAction.VISIT_RECORDED.value,
+        target=str(record.id),
+        metadata={
+            "fan_id": str(fan.fan_id),
+            "visited_at": visited_at.isoformat(),
+            "checkin_method": "qr",
+        },
+    )
+    business_day = _business_day(visited_at)
+    emit_event(
+        event_name=EventName.VISIT_CHECKED_IN.value,
+        occurred_at=visited_at,
+        actor_type=ActorType.FAN.value,
+        source=EventSource.FAN_APP.value,
+        actor_id=str(fan.fan_id),
+        fan_id=str(fan.fan_id),
+        visit_id=str(record.id),
+        actor_is_operator=False,
+        ids={"fan_id": str(fan.fan_id), "visit_id": str(record.id)},
+        context={"store_id": record.store_id, "business_day": business_day},
+        payload={
+            "visit_id": str(record.id),
+            "store_id": record.store_id,
+            "business_day": business_day,
+            "visit_type": "qr",
+            "checkin_method": "qr",
+            "is_verified_offline_visit": True,
+        },
+        # The fan is the actor; the operator who scanned is provenance only.
+        quality={"redeemed_by_operator_id": str(operator.fan_id)},
+    )
+    return record
+
+
+@transaction.atomic
 def correct_visit(
     record: VisitRecord,
     *,
