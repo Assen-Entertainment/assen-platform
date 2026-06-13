@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-# Build the local web shell: Vite landing at `/` and Flutter fan app at `/app/`.
+# Build the local web shell: Vite landing at `/`, Flutter fan app at `/app/`,
+# and Flutter operator console at `/ops/`.
 # Usage: scripts/build-web-local.sh
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
@@ -17,6 +18,8 @@ WEB_LOCAL_DIR="$REPO_ROOT/build/web-local"
 LANDING_DIR="$REPO_ROOT/landing"
 FAN_APP_DIR="$REPO_ROOT/apps/fan_app"
 FAN_APP_BUILD_DIR="$FAN_APP_DIR/build/web"
+OPERATOR_APP_DIR="$REPO_ROOT/apps/operator_app"
+OPERATOR_APP_BUILD_DIR="$OPERATOR_APP_DIR/build/web"
 
 echo "web local: building landing"
 cd "$LANDING_DIR"
@@ -29,12 +32,18 @@ cd "$FAN_APP_DIR"
 # cannot mask the current landing/app handoff while iterating.
 flutter build web --base-href /app/ --pwa-strategy none
 
+echo "web local: building operator_app for /ops/"
+cd "$OPERATOR_APP_DIR"
+flutter build web --base-href /ops/ --pwa-strategy none
+
 echo "web local: composing build/web-local"
 cd "$REPO_ROOT"
 rm -rf "$WEB_LOCAL_DIR"
-mkdir -p "$WEB_LOCAL_DIR/app"
+mkdir -p "$WEB_LOCAL_DIR/app" "$WEB_LOCAL_DIR/ops"
 cp -R "$LANDING_DIR/dist/." "$WEB_LOCAL_DIR/"
 cp -R "$FAN_APP_BUILD_DIR/." "$WEB_LOCAL_DIR/app/"
+cp -R "$OPERATOR_APP_BUILD_DIR/." "$WEB_LOCAL_DIR/ops/"
 
 echo "web local: output $WEB_LOCAL_DIR"
+echo "web local: / = landing, /app/ = fan app, /ops/ = operator console"
 echo "web local: next run scripts/serve-web-local.sh and open http://127.0.0.1:${WEB_PORT:-8080}"

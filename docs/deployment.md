@@ -72,9 +72,9 @@ Serve it on localhost:
 scripts/serve-web-local.sh
 ```
 
-Then open `http://127.0.0.1:8080`. The landing page is served at `/`, and the
-Flutter fan app is served at `/app/`. Use `WEB_PORT=8081` to serve on another
-port.
+Then open `http://127.0.0.1:8080`. The landing page is served at `/`, the
+Flutter fan app at `/app/`, and the Flutter operator console at `/ops/`. Use
+`WEB_PORT=8081` to serve on another port.
 
 > The composed shell serves **static** builds (no hot reload) — it is the
 > integration / landing→app handoff QA path. For iterative editing use the
