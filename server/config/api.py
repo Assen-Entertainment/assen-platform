@@ -63,4 +63,5 @@ def health(request: HttpRequest) -> HealthResponse:
 
 # Import domain routers after the shared API exists; each module attaches its
 # own Router to this singleton so OpenAPI stays in one document.
+from apps.cheki import api as cheki_api  # noqa: E402,F401
 from apps.visit import api as visit_api  # noqa: E402,F401
