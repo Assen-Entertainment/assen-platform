@@ -313,6 +313,10 @@ def _minimal_payloads() -> dict[str, dict[str, object]]:
             "completed_at": "2026-06-12T00:00:00Z",
             "has_payment_reference": True,
         },
+        EventName.VISIT_INVALIDATED.value: {
+            "visit_id": "v",
+            "reason": "duplicate",
+        },
         EventName.CAST_PROFILE_VIEWED.value: {"cast_id": "c"},
         EventName.SCHEDULE_VIEWED.value: {
             "store_id": "s",

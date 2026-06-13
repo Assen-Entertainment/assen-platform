@@ -42,6 +42,11 @@ class EventName(models.TextChoices):
     # Visit.
     VISIT_CHECKED_IN = "visit_checked_in", "visit_checked_in"
     VISIT_COMPLETED = "visit_completed", "visit_completed"
+    # ``visit_invalidated`` is P0_required in Data_Event_Schema (L274, 방문 기록
+    # 무효 → MSFC 제외) but was missing from ASS-90's enum; registered here so an
+    # operator void (ASS-94) emits the canonical exclusion event through the
+    # validated ``emit_event`` funnel rather than a bespoke name.
+    VISIT_INVALIDATED = "visit_invalidated", "visit_invalidated"
 
     # Cast / schedule / favorite.
     CAST_PROFILE_VIEWED = "cast_profile_viewed", "cast_profile_viewed"
@@ -232,6 +237,19 @@ class VisitCompletedPayload(_PayloadModel):
     has_payment_reference: bool
 
 
+class VisitInvalidatedPayload(_PayloadModel):
+    """``visit_invalidated`` required properties (Data_Event_Schema L274).
+
+    A corrective, append-only event: the original ``visit_checked_in`` row is
+    never mutated, so invalidation is expressed as this new event carrying the
+    ``visit_id`` analytics must exclude. ``reason`` is the operator's void reason
+    for the operational trail; it carries no personal data.
+    """
+
+    visit_id: str
+    reason: str
+
+
 class CastProfileViewedPayload(_PayloadModel):
     """``cast_profile_viewed`` — cast profile impression."""
 
@@ -384,6 +402,7 @@ EVENT_PAYLOAD_SCHEMAS: dict[str, type[_PayloadModel]] = {
     EventName.RESERVATION_CANCELLED.value: ReservationCancelledPayload,
     EventName.VISIT_CHECKED_IN.value: VisitCheckedInPayload,
     EventName.VISIT_COMPLETED.value: VisitCompletedPayload,
+    EventName.VISIT_INVALIDATED.value: VisitInvalidatedPayload,
     EventName.CAST_PROFILE_VIEWED.value: CastProfileViewedPayload,
     EventName.SCHEDULE_VIEWED.value: ScheduleViewedPayload,
     EventName.FAVORITE_ADDED.value: FavoriteAddedPayload,

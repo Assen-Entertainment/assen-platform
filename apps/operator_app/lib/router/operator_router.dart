@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:operator_app/router/routes.dart';
+import 'package:operator_app/screens/operator_checkin_screen.dart';
 import 'package:operator_app/screens/operator_dashboard_screen.dart';
 import 'package:operator_app/screens/operator_login_screen.dart';
 import 'package:operator_app/screens/operator_placeholder_screen.dart';
@@ -59,11 +60,7 @@ GoRouter buildOperatorRouter(Ref ref) {
       ),
       GoRoute(
         path: OperatorRoutes.checkin,
-        builder: (context, state) => const OperatorPlaceholderScreen(
-          title: '체크인 처리',
-          message: '검색·수동 체크인 도구가 이곳에 들어옵니다.',
-          icon: Icons.qr_code_scanner_outlined,
-        ),
+        builder: (context, state) => const OperatorCheckinScreen(),
       ),
       GoRoute(
         path: OperatorRoutes.cheki,
