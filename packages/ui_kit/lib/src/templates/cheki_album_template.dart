@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/icon_button.dart';
 import 'package:ui_kit/src/atoms/progress.dart';
+import 'package:ui_kit/src/layout/window_size.dart';
 import 'package:ui_kit/src/molecules/cheki_frame.dart';
 import 'package:ui_kit/src/molecules/collection_cell.dart';
 import 'package:ui_kit/src/organisms/app_bar.dart';
@@ -199,31 +200,43 @@ class _AlbumGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final owned = entries.length;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: SpacingTokens.s4,
-        crossAxisSpacing: SpacingTokens.s3,
-        // The instax frame is taller than wide (54×86 film ratio).
-        childAspectRatio: 54 / 86,
-      ),
-      itemCount: owned + lockedCount,
-      itemBuilder: (context, index) {
-        if (index < owned) {
-          final entry = entries[index];
-          return AssenChekiFrame(
-            caption: entry.caption,
-            onTap: () {},
-            image: ColoredBox(color: _hueBg(colors, entry.hue)),
-          );
-        }
-        return const AssenCollectionCell(
-          artwork: SizedBox.shrink(),
-          label: '미수집',
-          state: AssenCollectionState.locked,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Densify the gallery with width: 3-up on mobile (unchanged), more
+        // frames per row on web/tablet so the desktop column isn't sparse.
+        final columns = assenGridCrossAxisCount(
+          constraints.maxWidth,
+          compact: 3,
+          medium: 4,
+          expanded: 5,
+        );
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: SpacingTokens.s4,
+            crossAxisSpacing: SpacingTokens.s3,
+            // The instax frame is taller than wide (54×86 film ratio).
+            childAspectRatio: 54 / 86,
+          ),
+          itemCount: owned + lockedCount,
+          itemBuilder: (context, index) {
+            if (index < owned) {
+              final entry = entries[index];
+              return AssenChekiFrame(
+                caption: entry.caption,
+                onTap: () {},
+                image: ColoredBox(color: _hueBg(colors, entry.hue)),
+              );
+            }
+            return const AssenCollectionCell(
+              artwork: SizedBox.shrink(),
+              label: '미수집',
+              state: AssenCollectionState.locked,
+            );
+          },
         );
       },
     );

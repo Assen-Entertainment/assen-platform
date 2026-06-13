@@ -29,6 +29,24 @@ enum AssenWindowSize {
   }
 }
 
+/// Picks a grid column count for [width] from per-size-class counts.
+///
+/// Reuses the Material 3 window size classes so grids densify with width
+/// instead of being capped at one fixed column count — e.g. the cheki album
+/// shows more frames per row on web/tablet while keeping the mobile layout
+/// unchanged. Callers pass the column count for each class explicitly so the
+/// progression stays a deliberate design choice, not an emergent one.
+int assenGridCrossAxisCount(
+  double width, {
+  required int compact,
+  required int medium,
+  required int expanded,
+}) => switch (AssenWindowSize.fromWidth(width)) {
+  AssenWindowSize.compact => compact,
+  AssenWindowSize.medium => medium,
+  AssenWindowSize.expanded => expanded,
+};
+
 /// Authored layout constants that are not generated design tokens.
 ///
 /// These values describe responsive structure rather than visual styling:
