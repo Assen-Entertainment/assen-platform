@@ -7,6 +7,7 @@ import 'package:fan_app/screens/event_screen.dart';
 import 'package:fan_app/screens/home_screen.dart';
 import 'package:fan_app/screens/login_screen.dart';
 import 'package:fan_app/screens/my_screen.dart';
+import 'package:fan_app/screens/notification_settings_screen.dart';
 import 'package:fan_app/screens/onboarding_screen.dart';
 import 'package:fan_app/screens/points_history_screen.dart';
 import 'package:fan_app/screens/qr_screen.dart';
@@ -172,6 +173,11 @@ GoRouter buildFanRouter(Ref ref) {
                   GoRoute(
                     path: 'points',
                     builder: (context, state) => const PointsHistoryScreen(),
+                  ),
+                  GoRoute(
+                    path: 'notifications',
+                    builder: (context, state) =>
+                        const NotificationSettingsScreen(),
                   ),
                 ],
               ),

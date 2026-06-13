@@ -94,8 +94,8 @@ class MyScreen extends ConsumerWidget {
           ),
           AssenListItem(
             title: '알림 설정',
-            leading: Icon(Icons.notifications_none, color: colors.ink700),
-            onTap: () {},
+            leading: Icon(Icons.notifications_outlined, color: colors.ink700),
+            onTap: () => context.push(FanRoutes.notificationSettings),
           ),
           AssenListItem(
             title: '신고하기',

@@ -66,6 +66,7 @@ export 'src/templates/cast_profile_template.dart';
 export 'src/templates/cheki_album_template.dart';
 export 'src/templates/event_template.dart';
 export 'src/templates/home_template.dart';
+export 'src/templates/notification_settings_template.dart';
 export 'src/templates/operator_dashboard_template.dart';
 export 'src/templates/points_history_template.dart';
 export 'src/templates/schedule_template.dart';
