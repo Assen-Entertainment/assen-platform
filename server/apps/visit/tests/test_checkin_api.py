@@ -52,11 +52,11 @@ def test_operator_redeems_token_into_visit(client: Client) -> None:
     """An operator redeems a scanned token; a QR visit is recorded."""
     fan = _account(Role.FAN.value)
     operator = _account(Role.OPERATOR.value)
-    token = issue_checkin_token(fan=fan)
+    _token, raw = issue_checkin_token(fan=fan)
 
     response = client.post(
         "/api/operator/checkin/redeem",
-        data={"token": token.token},
+        data={"token": raw},
         content_type="application/json",
         headers=_auth(operator),
     )
@@ -86,10 +86,10 @@ def test_fan_cannot_redeem(client: Client) -> None:
     """The redeem endpoint is operator-gated; a fan token is denied."""
     fan = _account(Role.FAN.value)
     other_fan = _account(Role.FAN.value)
-    token = issue_checkin_token(fan=other_fan)
+    _token, raw = issue_checkin_token(fan=other_fan)
     response = client.post(
         "/api/operator/checkin/redeem",
-        data={"token": token.token},
+        data={"token": raw},
         content_type="application/json",
         headers=_auth(fan),
     )

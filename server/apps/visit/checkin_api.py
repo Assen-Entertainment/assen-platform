@@ -28,11 +28,10 @@ from config.api import api
 fan_router = Router(auth=OpaqueTokenAuth(), tags=["checkin"])
 operator_router = Router(auth=operator_required, tags=["operator-checkin"])
 
-# A deliberately generous input bound (real tokens are ~43 chars, the column is
-# 64): anything longer simply fails the lookup as "invalid" — the cap only stops
-# an unbounded request body, it is not a correctness check.
+# A deliberately generous input bound (real tokens are ~43 chars): anything
+# longer simply fails the hash lookup as "invalid" — the cap only stops an
+# unbounded request body, it is not a correctness check.
 _TOKEN_MAX = 128
-_STORE_ID_MAX = 64
 
 
 class CheckinError(Schema):
@@ -50,10 +49,15 @@ class CheckinTokenOut(Schema):
 
 
 class RedeemIn(Schema):
-    """An operator-scanned token plus the optional store it was scanned at."""
+    """An operator-scanned check-in token.
+
+    No client-supplied store: until an operator→store binding exists, the visit
+    uses the default store. A multi-store build will derive the store from the
+    operator's association, never from request input (an operator could otherwise
+    misattribute a visit to another store).
+    """
 
     token: str = Field(max_length=_TOKEN_MAX)
-    store_id: str | None = Field(default=None, max_length=_STORE_ID_MAX)
 
 
 class RedeemOut(Schema):
@@ -74,10 +78,10 @@ def issue_token_endpoint(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     if account.role != Role.FAN.value:
         return 403, CheckinError(detail="Only fans can request a check-in QR.")
-    entry = issue_checkin_token(fan=account)
+    entry, raw = issue_checkin_token(fan=account)
     ttl_seconds = int((entry.expires_at - entry.issued_at).total_seconds())
     return 201, CheckinTokenOut(
-        token=entry.token,
+        token=raw,
         expires_at=entry.expires_at,
         ttl_seconds=ttl_seconds,
     )
@@ -93,7 +97,6 @@ def redeem_token_endpoint(
         record, _token = redeem_checkin_token(
             token=payload.token,
             operator=operator,
-            store_id=payload.store_id,
         )
     except ValueError as exc:
         return 400, CheckinError(detail=str(exc))

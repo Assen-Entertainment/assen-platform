@@ -104,9 +104,11 @@ class CheckinToken(models.Model):
         on_delete=models.PROTECT,
         related_name="checkin_tokens",
     )
-    # High-entropy opaque value (secrets.token_urlsafe); unique so a scan resolves
-    # to exactly one credential. It is a bearer secret for its short lifetime.
-    token = models.CharField(max_length=64, unique=True)
+    # The SHA-256 hash (hex, 64 chars) of the high-entropy bearer token. The
+    # plaintext is shown to the fan once and never stored, so a database read
+    # cannot recover a usable token; redemption hashes the presented value and
+    # looks it up here. Unique so a scan resolves to exactly one credential.
+    token_hash = models.CharField(max_length=64, unique=True)
     issued_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     redeemed_at = models.DateTimeField(null=True, blank=True)
