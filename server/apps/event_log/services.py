@@ -13,10 +13,12 @@ excluded.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from django.db.models import Count
+from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.event_log.events import (
@@ -215,6 +217,77 @@ def count_revisits_within(*, days: int = 30, exclude_operators: bool = True) -> 
         qs.values("fan_id").annotate(visits=Count("id")).filter(visits__gte=2)
     )
     return fans_with_repeat.count()
+
+
+@dataclass(frozen=True)
+class DailyMetrics:
+    """At-a-glance operator dashboard counts for one day (ASS-97 v0).
+
+    The daily counts are *gross* events in the day's window — same-day voids are
+    not netted out here (they stay visible in each domain's own list), since the
+    dashboard is an at-a-glance gauge, not the analytics ledger. ``visits`` is
+    therefore an operational check-in count, distinct from the netted MSFC metric
+    (:func:`count_msfc_starts`). ``safety_reports_open`` is the current backlog
+    (created minus resolved, all-time), matching the "신고 대기" gauge rather than
+    a per-day count.
+    """
+
+    business_day: str
+    visits: int
+    cheki: int
+    reservations: int
+    favorites: int
+    safety_reports_open: int
+
+
+def daily_metrics(*, day: date) -> DailyMetrics:
+    """Project the operator dashboard counts for [day] from the event ledger.
+
+    Reads only the append-only ledger (no domain models), so the dashboard is a
+    pure projection of recorded events. The day window is ``[day 00:00, +1d)`` in
+    the project timezone over ``occurred_at``.
+
+    Scoped by ``occurred_at`` (not the canonical ``business_day``) because not
+    every P0 event carries ``business_day`` in its context yet — revisit when a
+    store-hours cutoff is introduced so this stays consistent with
+    ``business_day``-keyed reports. Note the metrics do not share one clock:
+    ``visit_checked_in.occurred_at`` is the (possibly backdated) visit time while
+    ``cheki_recorded.occurred_at`` is the recording time, so a backfilled visit
+    and its same-session cheki can land on different dashboard days — acceptable
+    for an at-a-glance gauge.
+    """
+    start = timezone.make_aware(datetime.combine(day, datetime.min.time()))
+    end = start + timedelta(days=1)
+
+    def _day_count(event_name: str) -> int:
+        # is_invalidated is a defensive guard for any future row-level
+        # invalidation; same-day voids are deliberately NOT netted here (a gross
+        # gauge), so — unlike count_msfc_starts — matching *_invalidated events
+        # are not excluded.
+        return EventRecord.objects.filter(
+            event_name=event_name,
+            occurred_at__gte=start,
+            occurred_at__lt=end,
+            is_invalidated=False,
+        ).count()
+
+    def _all_count(event_name: str) -> int:
+        return EventRecord.objects.filter(event_name=event_name).count()
+
+    # Current open-report backlog from the ledger (created not yet resolved).
+    # All-time scan is intentional (backlog ≠ today's reports); it is index-only
+    # on (event_name, occurred_at) — a v1 optimisation target as the ledger grows.
+    safety_open = _all_count(EventName.SAFETY_REPORT_CREATED.value) - _all_count(
+        EventName.SAFETY_REPORT_RESOLVED.value
+    )
+    return DailyMetrics(
+        business_day=day.isoformat(),
+        visits=_day_count(EventName.VISIT_CHECKED_IN.value),
+        cheki=_day_count(EventName.CHEKI_RECORDED.value),
+        reservations=_day_count(EventName.RESERVATION_CREATED.value),
+        favorites=_day_count(EventName.FAVORITE_ADDED.value),
+        safety_reports_open=max(safety_open, 0),
+    )
 
 
 def _now() -> datetime:
