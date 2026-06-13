@@ -86,7 +86,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AssenEventDetailTemplate), findsOneWidget);
-    expect(find.text('6월 14일 (토) 13:00–21:00'), findsOneWidget);
+    expect(find.text('6월 14일 (일) 13:00–21:00'), findsOneWidget);
     _expectNoPriceText();
   });
 
@@ -103,7 +103,7 @@ void main() {
     expect(find.text('D-3'), findsOneWidget);
     expect(find.text('미오'), findsWidgets);
     expect(find.text('일정'), findsOneWidget);
-    expect(find.text('6월 14일 (토) 13:00–21:00'), findsOneWidget);
+    expect(find.text('6월 14일 (일) 13:00–21:00'), findsOneWidget);
     expect(find.text('참여 방법'), findsOneWidget);
     expect(find.text('예약 후 매장 방문'), findsOneWidget);
     expect(find.text('특전'), findsOneWidget);
