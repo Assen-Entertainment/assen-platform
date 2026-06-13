@@ -1,6 +1,9 @@
 # OMC / tooling
 .omc/
 **/.omc/
+# OMC agent worktrees are transient checkouts — never commit them (the IDE
+# otherwise surfaces each orphaned checkout as hundreds of phantom changes)
+.claude/worktrees/
 
 # Node (landing)
 node_modules/
@@ -49,3 +52,6 @@ venv/
 db.sqlite3
 # Django collected static
 server/staticfiles/
+# Celery Beat runtime schedule + pid (the dev stack writes these into ./server)
+server/celerybeat-schedule*
+server/celerybeat.pid
