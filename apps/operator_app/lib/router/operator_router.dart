@@ -45,9 +45,11 @@ const List<String> shellLocations = <String>[
 /// The console destination index for [location] (0 when it is not a shell
 /// route).
 ///
-/// Exact-equality is tried before the prefix arm so sibling routes whose paths
-/// share a prefix do not collide — notably `/checkin` resolves to its own index
-/// rather than matching `/cheki`.
+/// Matching is exact-or-sub-path: `location == path` resolves a destination's
+/// own route (e.g. `/checkin`), and `startsWith('$path/')` resolves a true
+/// sub-path (e.g. a future `/cheki/detail`) to its parent. A bare
+/// `startsWith(path)` is deliberately avoided so a shorter route can never
+/// capture a longer sibling that merely shares a leading string.
 @visibleForTesting
 int shellIndexForLocation(String location) {
   final index = shellLocations.indexWhere(

@@ -13,8 +13,9 @@ void main() {
       expect(shellIndexForLocation(OperatorRoutes.pos), 4);
     });
 
-    test('does not collide /checkin with /cheki despite the shared prefix', () {
-      // The prefix trap: a naive startsWith would map /checkin onto /cheki.
+    test('resolves the similar /checkin and /cheki routes distinctly', () {
+      // They share a leading substring but neither is a prefix of the other;
+      // exact-or-slash-boundary matching keeps them on separate indices.
       expect(shellIndexForLocation('/checkin'), 1);
       expect(shellIndexForLocation('/cheki'), 2);
     });
