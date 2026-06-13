@@ -68,6 +68,9 @@ jobs:
       - name: Web build smoke (fan_app)
         working-directory: apps/fan_app
         run: flutter build web --no-pub
+      - name: Web build smoke (operator_app)
+        working-directory: apps/operator_app
+        run: flutter build web --no-pub
       - name: Android build smoke (fan_app, debug)
         working-directory: apps/fan_app
         run: flutter build apk --debug --no-pub
