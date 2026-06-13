@@ -31,6 +31,13 @@ class AuditAction(models.TextChoices):
     CHEKI_RECORDED = "cheki_recorded", "cheki_recorded"
     CHEKI_CORRECTED = "cheki_corrected", "cheki_corrected"
     CHEKI_VOIDED = "cheki_voided", "cheki_voided"
+    SAFETY_REPORT_CREATED = "safety_report_created", "safety_report_created"
+    SAFETY_REPORT_STATUS_CHANGED = (
+        "safety_report_status_changed",
+        "safety_report_status_changed",
+    )
+    SAFETY_REPORT_RESOLVED = "safety_report_resolved", "safety_report_resolved"
+    USER_RISK_FLAGGED = "user_risk_flagged", "user_risk_flagged"
 
 
 class AuditEntry(models.Model):
