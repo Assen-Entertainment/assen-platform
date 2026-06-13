@@ -25,6 +25,9 @@ class AuditAction(models.TextChoices):
     RECORD_INVALIDATED = "record_invalidated", "record_invalidated"
     DATA_EXPORTED = "data_exported", "data_exported"
     SAFETY_DETAIL_VIEWED = "safety_detail_viewed", "safety_detail_viewed"
+    VISIT_RECORDED = "visit_recorded", "visit_recorded"
+    VISIT_CORRECTED = "visit_corrected", "visit_corrected"
+    VISIT_VOIDED = "visit_voided", "visit_voided"
 
 
 class AuditEntry(models.Model):

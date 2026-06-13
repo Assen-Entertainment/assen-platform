@@ -162,14 +162,25 @@ def count_msfc_starts(*, exclude_operators: bool = True) -> int:
     MSFC start condition is a verified offline visit that is neither test nor
     invalidated (Data_Event_Schema MSFC 계산 규칙). We filter to
     ``visit_checked_in`` events flagged ``is_verified_offline_visit`` in payload,
-    drop invalidated rows, require a known fan (anonymous-only visits are not MSFC
-    starts until merged), and optionally exclude operator traffic.
+    require a known fan (anonymous-only visits are not MSFC starts until merged),
+    and optionally exclude operator traffic. Invalidation is honoured two ways:
+    the row's own ``is_invalidated`` flag, AND — because the append-only ledger
+    cannot mutate the original check-in — by excluding any ``visit_id`` that has a
+    later ``visit_invalidated`` event (Data_Event_Schema L274 "방문 기록 무효 →
+    제외"); this is how an operator void (ASS-94) removes a visit from MSFC.
     """
-    qs = EventRecord.objects.filter(
-        event_name=EventName.VISIT_CHECKED_IN.value,
-        payload__is_verified_offline_visit=True,
-        is_invalidated=False,
-    ).exclude(fan_id="")
+    invalidated_visit_ids = EventRecord.objects.filter(
+        event_name=EventName.VISIT_INVALIDATED.value,
+    ).values("visit_id")
+    qs = (
+        EventRecord.objects.filter(
+            event_name=EventName.VISIT_CHECKED_IN.value,
+            payload__is_verified_offline_visit=True,
+            is_invalidated=False,
+        )
+        .exclude(fan_id="")
+        .exclude(visit_id__in=invalidated_visit_ids)
+    )
     if exclude_operators:
         qs = qs.filter(actor_is_operator=False)
     return qs.count()
@@ -182,13 +193,22 @@ def count_revisits_within(*, days: int = 30, exclude_operators: bool = True) -> 
     ``visit_completed`` events by fan and flag fans with 2+ within the window.
     This is a structural proof (the schema supports it), not the production
     metric, which would compare consecutive ``occurred_at`` gaps per fan.
+    Invalidated visits are excluded both by the row flag and by a matching
+    ``visit_invalidated`` event (consistent with ``count_msfc_starts``).
     """
     window_start = _now() - timedelta(days=days)
-    qs = EventRecord.objects.filter(
-        event_name=EventName.VISIT_COMPLETED.value,
-        occurred_at__gte=window_start,
-        is_invalidated=False,
-    ).exclude(fan_id="")
+    invalidated_visit_ids = EventRecord.objects.filter(
+        event_name=EventName.VISIT_INVALIDATED.value,
+    ).values("visit_id")
+    qs = (
+        EventRecord.objects.filter(
+            event_name=EventName.VISIT_COMPLETED.value,
+            occurred_at__gte=window_start,
+            is_invalidated=False,
+        )
+        .exclude(fan_id="")
+        .exclude(visit_id__in=invalidated_visit_ids)
+    )
     if exclude_operators:
         qs = qs.filter(actor_is_operator=False)
     fans_with_repeat = (
