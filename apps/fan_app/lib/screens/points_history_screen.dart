@@ -17,7 +17,7 @@ final Provider<_PointsHistoryViewData> _pointsHistoryProvider =
             entries: [
               AssenPointEntry(
                 title: '12번째 방문 적립',
-                dateLabel: '6월 11일 (수)',
+                dateLabel: '6월 11일 (목)',
                 delta: 50,
               ),
               AssenPointEntry(
@@ -27,7 +27,7 @@ final Provider<_PointsHistoryViewData> _pointsHistoryProvider =
               ),
               AssenPointEntry(
                 title: '포인트로 결제',
-                dateLabel: '6월 4일 (수)',
+                dateLabel: '6월 4일 (목)',
                 delta: -500,
               ),
             ],
@@ -37,12 +37,12 @@ final Provider<_PointsHistoryViewData> _pointsHistoryProvider =
             entries: [
               AssenPointEntry(
                 title: '11번째 방문 적립',
-                dateLabel: '5월 28일 (수)',
+                dateLabel: '5월 28일 (목)',
                 delta: 50,
               ),
               AssenPointEntry(
                 title: '출석 보너스 적립',
-                dateLabel: '5월 14일 (수)',
+                dateLabel: '5월 14일 (목)',
                 delta: 100,
               ),
             ],

@@ -37,6 +37,9 @@ abstract final class FanRoutes {
   /// Points history nested under the My tab (F3).
   static const String pointsHistory = '/my/points';
 
+  /// Notification settings nested under the My tab (F4).
+  static const String notificationSettings = '/my/notifications';
+
   /// Event list (C4).
   static const String events = '/events';
 

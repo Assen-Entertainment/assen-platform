@@ -6,6 +6,7 @@ import 'package:ui_kit/src/templates/cast_profile_template.dart';
 import 'package:ui_kit/src/templates/cheki_album_template.dart';
 import 'package:ui_kit/src/templates/event_template.dart';
 import 'package:ui_kit/src/templates/home_template.dart';
+import 'package:ui_kit/src/templates/notification_settings_template.dart';
 import 'package:ui_kit/src/templates/operator_dashboard_template.dart';
 import 'package:ui_kit/src/templates/points_history_template.dart';
 import 'package:ui_kit/src/templates/schedule_template.dart';
@@ -92,6 +93,16 @@ class TemplateCatalog extends StatelessWidget {
             ),
           ),
           _TemplateEntry(
+            title: 'F4 알림 설정',
+            summary: '서비스 알림 + 혜택(광고성) 알림 로컬 토글',
+            builder: (_) => const AssenNotificationSettingsTemplate(
+              servicePreferences: _catalogServiceNotificationPrefs,
+              benefitPreferences: _catalogBenefitNotificationPrefs,
+              onPreferenceChanged: _noopNotificationPrefChanged,
+              onBack: _noopBack,
+            ),
+          ),
+          _TemplateEntry(
             title: 'T5 운영자 대시보드',
             summary: '신고 알림 + 세그먼트 탭 + 지표 그리드 + 예약/대기 보드',
             builder: (_) => const AssenOperatorDashboardTemplate(),
@@ -105,6 +116,8 @@ class TemplateCatalog extends StatelessWidget {
 void _noopBack() {}
 
 void _noopEventTap(String id) {}
+
+void _noopNotificationPrefChanged(String id, {required bool enabled}) {}
 
 const AssenFanEvent _catalogMioBirthdayEvent = AssenFanEvent(
   id: 'mio-birthday-week',
@@ -183,6 +196,49 @@ const List<AssenPointsMonthGroup> _catalogPointGroups = [
         delta: 50,
       ),
     ],
+  ),
+];
+
+const List<AssenNotificationPref> _catalogServiceNotificationPrefs = [
+  AssenNotificationPref(
+    id: 'reservation',
+    title: '예약 상태 변경',
+    subtitle: '확정·변경·취소 알림',
+    enabled: true,
+  ),
+  AssenNotificationPref(
+    id: 'events',
+    title: '이벤트 공지',
+    subtitle: '생탄제·테마데이 소식',
+    enabled: true,
+  ),
+  AssenNotificationPref(
+    id: 'coupons',
+    title: '쿠폰 발급·만료',
+    subtitle: '만료 3일 전에 알려드려요',
+    enabled: true,
+  ),
+  AssenNotificationPref(
+    id: 'favorite_summary',
+    title: '최애 출근 요약',
+    subtitle: '주 1회, 등록한 캐스트만',
+    enabled: true,
+  ),
+];
+
+const List<AssenNotificationPref> _catalogBenefitNotificationPrefs = [
+  AssenNotificationPref(
+    id: 'promotions',
+    title: '혜택·프로모션 소식',
+    subtitle: '동의 시 처리 일시를 안내해 드려요',
+    enabled: false,
+  ),
+  AssenNotificationPref(
+    id: 'night_promotions',
+    title: '야간 수신 (21시–8시)',
+    subtitle: '광고성 알림의 야간 발송 동의',
+    enabled: false,
+    disabled: true,
   ),
 ];
 
