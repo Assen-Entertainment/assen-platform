@@ -1,0 +1,389 @@
+"""Operator/manager API for safety reports and user blocks (ASS-96).
+
+Two-tier access (admin_rbac):
+- **operator+** may file a report, list/triage summaries, and advance status.
+  Detail fields are redacted in their responses (``admin_rbac.redaction``).
+- **manager+** may read the restricted narrative (audited), resolve a report,
+  and block / lift a user.
+
+The narrative never appears in an operator response or any event; it is only
+returned by the manager-only detail endpoint, which writes a
+``SAFETY_DETAIL_VIEWED`` audit entry on every read.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import cast
+
+from django.http import HttpRequest
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from ninja import Router, Schema
+from pydantic import Field
+
+from apps.admin_rbac.permissions import manager_required, operator_required
+from apps.admin_rbac.redaction import redact_safety_report, redact_safety_report_list
+from apps.audit.models import AuditAction
+from apps.audit.services import record_audit
+from apps.identity.models import Account
+from apps.safety.models import (
+    ActorKind,
+    BlockReason,
+    BlockScope,
+    ReportSeverity,
+    ReportStatus,
+    ReportType,
+    SafetyReport,
+    UserBlock,
+)
+from apps.safety.services import (
+    block_user,
+    change_report_status,
+    file_report,
+    lift_block,
+    resolve_report,
+)
+from config.api import api
+
+router = Router(tags=["safety"])
+
+_TEXT_MAX = 2000
+
+
+class SafetyError(Schema):
+    """Stable error shape for safety endpoints."""
+
+    detail: str
+
+
+class ReportSummaryOut(Schema):
+    """Operator-facing report row; detail fields are redacted for non-managers.
+
+    All detail fields are typed ``str`` because the redaction transform may
+    replace them with the ``[redacted]`` sentinel.
+    """
+
+    safety_report_id: str
+    report_type: str
+    severity: str
+    status: str
+    visibility: str
+    created_at: datetime
+    detail_ref: str
+    reporter_id: str
+    target_id: str
+
+
+class ReportDetailOut(Schema):
+    """Manager-only restricted detail (narrative + notes)."""
+
+    safety_report_id: str
+    narrative: str
+    resolution_note: str
+    manager_note: str
+    reporter_id: str
+    target_id: str
+
+
+class ReportCreateIn(Schema):
+    """Operator report intake payload."""
+
+    report_type: str
+    severity: str
+    reporter_type: str
+    target_type: str
+    narrative: str = Field(default="", max_length=_TEXT_MAX)
+    reporter_id: uuid.UUID | None = None
+    target_id: uuid.UUID | None = None
+    cast_id: str = Field(default="", max_length=64)
+    visit_id: uuid.UUID | None = None
+
+
+class ReportStatusIn(Schema):
+    """Status transition (received→reviewing→actioned)."""
+
+    status: str
+
+
+class ReportResolveIn(Schema):
+    """Resolution: a short classification + a restricted-store note."""
+
+    resolution: str = Field(max_length=64)
+    resolution_note: str = Field(default="", max_length=_TEXT_MAX)
+
+
+class BlockCreateIn(Schema):
+    """Block/risk-flag intake (manager+)."""
+
+    target_id: uuid.UUID
+    block_scope: str
+    block_reason: str = Field(max_length=255)
+    is_risk_flag: bool = False
+    source_report_id: uuid.UUID | None = None
+
+
+class BlockOut(Schema):
+    """Block row exposed to managers."""
+
+    id: uuid.UUID
+    target_id: uuid.UUID
+    block_scope: str
+    block_reason: str
+    is_risk_flag: bool
+    status: str
+    effective_from: datetime
+
+
+class BlockLiftIn(Schema):
+    """Reason required to lift a block."""
+
+    reason: str = Field(max_length=_TEXT_MAX)
+
+
+def _fan_id_or_blank(account: Account | None) -> str:
+    """Return the account's public fan_id as a string, or "" when absent."""
+    return str(account.fan_id) if account is not None else ""
+
+
+def _summary_dict(report: SafetyReport) -> dict[str, object]:
+    """Build the pre-redaction summary dict (detail_ref points at the store)."""
+    return {
+        "safety_report_id": str(report.id),
+        "report_type": report.report_type,
+        "severity": report.severity,
+        "status": report.status,
+        "visibility": report.visibility,
+        "created_at": report.created_at,
+        "detail_ref": str(report.id),
+        "reporter_id": _fan_id_or_blank(report.reporter),
+        "target_id": _fan_id_or_blank(report.target),
+    }
+
+
+@router.post(
+    "/reports",
+    auth=operator_required,
+    response={201: ReportSummaryOut, 400: SafetyError, 404: SafetyError},
+)
+def create_report(
+    request: HttpRequest,
+    payload: ReportCreateIn,
+) -> tuple[int, dict[str, object] | SafetyError]:
+    """File a safety report (operator+); narrative goes to the restricted store."""
+    if payload.report_type not in ReportType.values:
+        return 400, SafetyError(detail=f"Unknown report_type '{payload.report_type}'.")
+    if payload.severity not in ReportSeverity.values:
+        return 400, SafetyError(detail=f"Unknown severity '{payload.severity}'.")
+    if payload.reporter_type not in ActorKind.values:
+        return 400, SafetyError(detail=f"Unknown reporter_type '{payload.reporter_type}'.")
+    if payload.target_type not in ActorKind.values:
+        return 400, SafetyError(detail=f"Unknown target_type '{payload.target_type}'.")
+    reporter = _account_or_none(payload.reporter_id)
+    target = _account_or_none(payload.target_id)
+    actor = _actor(request)
+    report = file_report(
+        report_type=payload.report_type,
+        severity=payload.severity,
+        reporter_type=payload.reporter_type,
+        target_type=payload.target_type,
+        narrative=payload.narrative,
+        actor=actor,
+        reporter=reporter,
+        target=target,
+        cast_id=payload.cast_id,
+        visit_id=str(payload.visit_id) if payload.visit_id else "",
+    )
+    return 201, redact_safety_report(_summary_dict(report), viewer=actor)
+
+
+@router.get(
+    "/reports",
+    auth=operator_required,
+    response={200: list[ReportSummaryOut], 400: SafetyError},
+)
+def list_reports(
+    request: HttpRequest,
+    status: str | None = None,
+    limit: int = 200,
+) -> tuple[int, list[dict[str, object]] | SafetyError]:
+    """List report summaries (operator+), each field-redacted for the viewer.
+
+    Bounded by ``limit`` (default 200) so the always-growing safety table cannot
+    return an unbounded response.
+    """
+    if status is not None and status not in ReportStatus.values:
+        return 400, SafetyError(detail=f"Unknown status '{status}'.")
+    qs = SafetyReport.objects.select_related("reporter", "target")
+    if status:
+        qs = qs.filter(status=status)
+    capped = max(1, min(limit, 500))
+    rows = [_summary_dict(report) for report in qs[:capped]]
+    return 200, redact_safety_report_list(rows, viewer=_actor(request))
+
+
+@router.patch(
+    "/reports/{report_id}/status",
+    auth=operator_required,
+    response={200: ReportSummaryOut, 400: SafetyError, 404: SafetyError},
+)
+def patch_report_status(
+    request: HttpRequest,
+    report_id: uuid.UUID,
+    payload: ReportStatusIn,
+) -> tuple[int, dict[str, object] | SafetyError]:
+    """Advance a report's handling status (operator+)."""
+    if payload.status not in ReportStatus.values:
+        return 400, SafetyError(detail=f"Unknown status '{payload.status}'.")
+    report = get_object_or_404(SafetyReport, id=report_id)
+    actor = _actor(request)
+    try:
+        change_report_status(report=report, status=payload.status, actor=actor)
+    except ValueError as exc:
+        return 400, SafetyError(detail=str(exc))
+    return 200, redact_safety_report(_summary_dict(report), viewer=actor)
+
+
+@router.get(
+    "/reports/{report_id}/detail",
+    auth=manager_required,
+    response={200: ReportDetailOut, 400: SafetyError, 404: SafetyError},
+)
+def get_report_detail(
+    request: HttpRequest,
+    report_id: uuid.UUID,
+    reason: str,
+) -> tuple[int, ReportDetailOut | SafetyError]:
+    """Read the restricted narrative (manager+ only).
+
+    A non-empty ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED
+    audit entry: access to the platform's most sensitive data must answer "why"
+    (audit model compliance contract).
+    """
+    if not reason.strip():
+        return 400, SafetyError(detail="A reason is required to view report detail.")
+    report = get_object_or_404(
+        SafetyReport.objects.select_related("detail", "reporter", "target"),
+        id=report_id,
+    )
+    actor = _actor(request)
+    record_audit(
+        actor=actor,
+        action=AuditAction.SAFETY_DETAIL_VIEWED.value,
+        target=str(report.id),
+        reason=reason.strip(),
+    )
+    detail = report.detail
+    return 200, ReportDetailOut(
+        safety_report_id=str(report.id),
+        narrative=detail.narrative,
+        resolution_note=detail.resolution_note,
+        manager_note=detail.manager_note,
+        reporter_id=_fan_id_or_blank(report.reporter),
+        target_id=_fan_id_or_blank(report.target),
+    )
+
+
+@router.post(
+    "/reports/{report_id}/resolve",
+    auth=manager_required,
+    response={200: ReportSummaryOut, 400: SafetyError, 404: SafetyError},
+)
+def resolve_report_endpoint(
+    request: HttpRequest,
+    report_id: uuid.UUID,
+    payload: ReportResolveIn,
+) -> tuple[int, dict[str, object] | SafetyError]:
+    """Close a report (manager+); the note lands in the restricted store."""
+    report = get_object_or_404(SafetyReport, id=report_id)
+    actor = _actor(request)
+    try:
+        resolve_report(
+            report=report,
+            resolution=payload.resolution,
+            resolution_note=payload.resolution_note,
+            actor=actor,
+        )
+    except ValueError as exc:
+        return 400, SafetyError(detail=str(exc))
+    return 200, redact_safety_report(_summary_dict(report), viewer=actor)
+
+
+@router.post(
+    "/blocks",
+    auth=manager_required,
+    response={201: BlockOut, 400: SafetyError, 404: SafetyError},
+)
+def create_block(
+    request: HttpRequest,
+    payload: BlockCreateIn,
+) -> tuple[int, BlockOut | SafetyError]:
+    """Block or risk-flag a fan (manager+)."""
+    if payload.block_scope not in BlockScope.values:
+        return 400, SafetyError(detail=f"Unknown block_scope '{payload.block_scope}'.")
+    if payload.block_reason not in BlockReason.values:
+        # Closed reason codes only — a free string could leak PII into the event.
+        return 400, SafetyError(detail=f"Unknown block_reason '{payload.block_reason}'.")
+    target = get_object_or_404(Account, fan_id=payload.target_id)
+    source_report = None
+    if payload.source_report_id is not None:
+        source_report = get_object_or_404(SafetyReport, id=payload.source_report_id)
+    block = block_user(
+        target=target,
+        block_scope=payload.block_scope,
+        block_reason=payload.block_reason,
+        effective_from=timezone.now(),
+        actor=_actor(request),
+        is_risk_flag=payload.is_risk_flag,
+        source_report=source_report,
+    )
+    return 201, _block_out(block)
+
+
+@router.post(
+    "/blocks/{block_id}/lift",
+    auth=manager_required,
+    response={200: BlockOut, 400: SafetyError, 404: SafetyError},
+)
+def lift_block_endpoint(
+    request: HttpRequest,
+    block_id: uuid.UUID,
+    payload: BlockLiftIn,
+) -> tuple[int, BlockOut | SafetyError]:
+    """Lift an active block (manager+) with a mandatory reason."""
+    block = get_object_or_404(UserBlock, id=block_id)
+    try:
+        lift_block(block=block, reason=payload.reason, actor=_actor(request))
+    except ValueError as exc:
+        return 400, SafetyError(detail=str(exc))
+    return 200, _block_out(block)
+
+
+def _account_or_none(fan_id: uuid.UUID | None) -> Account | None:
+    """Resolve an optional fan_id to an Account (None when absent/unknown)."""
+    if fan_id is None:
+        return None
+    return Account.objects.filter(fan_id=fan_id).first()
+
+
+def _block_out(block: UserBlock) -> BlockOut:
+    """Serialise a block for manager responses."""
+    return BlockOut(
+        id=block.id,
+        target_id=block.target.fan_id,
+        block_scope=block.block_scope,
+        block_reason=block.block_reason,
+        is_risk_flag=block.is_risk_flag,
+        status=block.status,
+        effective_from=block.effective_from,
+    )
+
+
+def _actor(request: HttpRequest) -> Account:
+    """Return the authenticated staff account supplied by RoleRequired."""
+    # request.auth is untyped without Ninja stubs (same idiom as identity/auth.py).
+    return cast(Account, request.auth)  # type: ignore[attr-defined]
+
+
+api.add_router("/safety", router)
