@@ -180,3 +180,8 @@ def _record_out(record: VisitRecord) -> VisitRecordOut:
 
 
 api.add_router("/operator/visits", router)
+
+# The QR check-in routers (fan token issue + operator redeem) live in their own
+# module for separation but are registered here so the visit domain has a single
+# api.py entry point (server AGENTS.md router convention).
+from apps.visit import checkin_api  # noqa: E402,F401

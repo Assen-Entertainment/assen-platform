@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
@@ -25,6 +26,7 @@ from apps.event_log.services import emit_event
 from apps.identity.models import Account
 from apps.safety.models import (
     ActorKind,
+    BlockScope,
     BlockStatus,
     ReportSeverity,
     ReportStatus,
@@ -33,6 +35,25 @@ from apps.safety.models import (
     SafetyReportDetail,
     UserBlock,
 )
+
+
+def has_active_block(*, target: Account, scopes: list[str]) -> bool:
+    """Whether [target] has an active hard block covering any of [scopes].
+
+    A hard block (``status=active``, already effective, and not a soft
+    ``is_risk_flag`` annotation) whose ``block_scope`` is one of [scopes] — or
+    the catch-all ``all`` — restricts that feature surface. Feature surfaces
+    (reservation, QR check-in, …) call this so a blocked fan is refused at the
+    action rather than each surface re-deriving the "active block" predicate.
+    """
+    return UserBlock.objects.filter(
+        target=target,
+        status=BlockStatus.ACTIVE.value,
+        is_risk_flag=False,
+        effective_from__lte=timezone.now(),
+        block_scope__in=[*scopes, BlockScope.ALL.value],
+    ).exists()
+
 
 # Severities whose reports are visible to manager+ only.
 _MANAGER_ONLY_SEVERITIES = frozenset(
