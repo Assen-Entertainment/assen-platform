@@ -76,6 +76,44 @@ Then open `http://127.0.0.1:8080`. The landing page is served at `/`, and the
 Flutter fan app is served at `/app/`. Use `WEB_PORT=8081` to serve on another
 port.
 
+> The composed shell serves **static** builds (no hot reload) — it is the
+> integration / landing→app handoff QA path. For iterative editing use the
+> hot-reload dev flow below.
+
+## Local Dev (hot reload)
+
+The static `build-web-local.sh` shell requires a full rebuild per change. For
+iterative development, run each surface in its own reloading dev server:
+
+**Backend (Django autoreload)** — source-mounted override that swaps gunicorn
+for `runserver` (whose autoreloader restarts on code changes):
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+The override bind-mounts `./server` and preserves the container virtualenv via
+an anonymous `/app/.venv` volume; edit code on the host and the API reloads.
+Celery has no autoreload — `docker compose restart celery-worker` after changes.
+
+**Flutter app (web hot restart)**:
+
+```sh
+scripts/dev-web.sh fan       # or: scripts/dev-web.sh operator 8082
+```
+
+Press `R` in the attached session to hot-restart. (Flutter web has hot restart,
+not the stateful hot reload of mobile.)
+
+**Landing (Vite HMR)**:
+
+```sh
+scripts/dev-landing.sh       # Vite dev server, instant HMR
+```
+
+These are dev-only conveniences; production and CI use `docker-compose.yml`
+alone (gunicorn) and the static composed shell.
+
 ## Production Image Build
 
 Build the backend container image without deploying:
