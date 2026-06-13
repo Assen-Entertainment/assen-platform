@@ -28,6 +28,9 @@ class AuditAction(models.TextChoices):
     VISIT_RECORDED = "visit_recorded", "visit_recorded"
     VISIT_CORRECTED = "visit_corrected", "visit_corrected"
     VISIT_VOIDED = "visit_voided", "visit_voided"
+    CHEKI_RECORDED = "cheki_recorded", "cheki_recorded"
+    CHEKI_CORRECTED = "cheki_corrected", "cheki_corrected"
+    CHEKI_VOIDED = "cheki_voided", "cheki_voided"
 
 
 class AuditEntry(models.Model):

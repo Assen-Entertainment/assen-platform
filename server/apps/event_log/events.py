@@ -56,6 +56,11 @@ class EventName(models.TextChoices):
 
     # Cheki.
     CHEKI_RECORDED = "cheki_recorded", "cheki_recorded"
+    # ``cheki_invalidated`` is P0_required in Data_Event_Schema (L293, 체키 기록
+    # 무효 → 제외) but was missing from ASS-90's enum; registered here so an
+    # operator void (ASS-95) emits the canonical exclusion event through the
+    # validated ``emit_event`` funnel (mirrors visit_invalidated / ASS-94).
+    CHEKI_INVALIDATED = "cheki_invalidated", "cheki_invalidated"
 
     # Event / campaign.
     EVENT_VIEWED = "event_viewed", "event_viewed"
@@ -292,6 +297,17 @@ class ChekiRecordedPayload(_PayloadModel):
     image_stored: bool
 
 
+class ChekiInvalidatedPayload(_PayloadModel):
+    """``cheki_invalidated`` required properties (Data_Event_Schema L293).
+
+    Append-only corrective event for an operator void; carries the ``cheki_id``
+    analytics must exclude and the operator's reason. No personal data.
+    """
+
+    cheki_id: str
+    reason: str
+
+
 class EventViewedPayload(_PayloadModel):
     """``event_viewed`` — campaign/event impression."""
 
@@ -408,6 +424,7 @@ EVENT_PAYLOAD_SCHEMAS: dict[str, type[_PayloadModel]] = {
     EventName.FAVORITE_ADDED.value: FavoriteAddedPayload,
     EventName.FAVORITE_REMOVED.value: FavoriteRemovedPayload,
     EventName.CHEKI_RECORDED.value: ChekiRecordedPayload,
+    EventName.CHEKI_INVALIDATED.value: ChekiInvalidatedPayload,
     EventName.EVENT_VIEWED.value: EventViewedPayload,
     EventName.EVENT_RESERVED.value: EventReservedPayload,
     EventName.COUPON_ISSUED.value: CouponIssuedPayload,

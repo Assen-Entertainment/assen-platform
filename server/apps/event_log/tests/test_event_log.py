@@ -339,6 +339,10 @@ def _minimal_payloads() -> dict[str, dict[str, object]]:
             "quantity": 1,
             "image_stored": True,
         },
+        EventName.CHEKI_INVALIDATED.value: {
+            "cheki_id": "ch",
+            "reason": "duplicate",
+        },
         EventName.EVENT_VIEWED.value: {"event_campaign_id": "e"},
         EventName.EVENT_RESERVED.value: {
             "fan_id": "f",
