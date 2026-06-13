@@ -1,0 +1,32 @@
+# Dev override: source-mounted hot reload for the backend (ASS-145).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# This is a DEV-ONLY layer — production and CI use docker-compose.yml alone
+# (gunicorn, no source mount). It changes the api to Django's runserver, whose
+# autoreloader restarts the process on any code change, and bind-mounts the
+# source so host edits are seen inside the container.
+#
+# The anonymous `/app/.venv` volume is load-bearing: the image builds its
+# virtualenv at /app/.venv, but bind-mounting the host ./server over /app would
+# hide it (the host has no Linux venv). The anonymous volume masks that subpath,
+# preserving the container's venv while the rest of /app is the live source.
+services:
+  api:
+    command: uv run --no-sync python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./server:/app
+      - /app/.venv
+
+  celery-worker:
+    # Celery has no built-in autoreload; the source mount means a
+    # `docker compose restart celery-worker` picks up code changes.
+    volumes:
+      - ./server:/app
+      - /app/.venv
+
+  celery-beat:
+    volumes:
+      - ./server:/app
+      - /app/.venv
