@@ -24,12 +24,23 @@ class AssenOperatorDashboardTemplate extends StatefulWidget {
   /// Creates the operator dashboard template.
   ///
   /// [stats] are the metric cards (a 2-column grid). [reservations] are the
-  /// 예약/대기 board rows. [segments] label the view switch. The `on*` callbacks
-  /// are optional (the gallery passes no-ops).
+  /// 예약/대기 board rows. [segments] label the view switch. [businessDayLabel]
+  /// captions which day the metrics describe. [noticeMessage] is the 신고 알림
+  /// strip text; [onNoticeTap] makes it a status-edit entry point when set.
+  /// [quickActions] are status-edit entry points; [adminActions] are the
+  /// admin-only sections (the caller gates these by role — empty hides the
+  /// section). [onExportCsv] surfaces the CSV export action when set. The `on*`
+  /// callbacks are optional (the gallery passes none).
   const AssenOperatorDashboardTemplate({
     this.stats = _defaultStats,
     this.reservations = _defaultReservations,
     this.segments = const ['현황', '예약'],
+    this.businessDayLabel,
+    this.noticeMessage = _defaultNotice,
+    this.onNoticeTap,
+    this.quickActions = const <AssenDashboardQuickAction>[],
+    this.adminActions = const <AssenDashboardQuickAction>[],
+    this.onExportCsv,
     this.onBack,
     super.key,
   });
@@ -43,8 +54,32 @@ class AssenOperatorDashboardTemplate extends StatefulWidget {
   /// The segmented view-switch labels.
   final List<String> segments;
 
+  /// Optional caption for the day the [stats] describe (e.g. an ISO date).
+  final String? businessDayLabel;
+
+  /// The 신고 알림 strip message.
+  final String noticeMessage;
+
+  /// Optional tap handler turning the notice into a status-edit entry point.
+  final VoidCallback? onNoticeTap;
+
+  /// Status-edit console entry points, rendered as a 바로가기 action row.
+  final List<AssenDashboardQuickAction> quickActions;
+
+  /// Admin-only section entry points (settings / permissions / risk / audit).
+  ///
+  /// The caller decides visibility by role; an empty list hides the 관리
+  /// section entirely (the fail-closed default for an operator viewer).
+  final List<AssenDashboardQuickAction> adminActions;
+
+  /// Optional CSV-export handler (a download action in the app bar when set).
+  final VoidCallback? onExportCsv;
+
   /// Optional back handler.
   final VoidCallback? onBack;
+
+  /// The default 신고 알림 strip text (overridden with the live backlog count).
+  static const String _defaultNotice = '처리 대기 중인 신고를 확인하세요.';
 
   /// The unified placeholder metrics (internal figures — not approved values).
   static const List<AssenDashboardStat> _defaultStats = [
@@ -120,11 +155,12 @@ class _AssenOperatorDashboardTemplateState
         title: '운영자 대시보드',
         onBack: widget.onBack,
         actions: [
-          AssenIconButton(
-            icon: Icons.settings_outlined,
-            semanticLabel: '설정',
-            onPressed: () {},
-          ),
+          if (widget.onExportCsv != null)
+            AssenIconButton(
+              icon: Icons.download_outlined,
+              semanticLabel: 'CSV 내보내기',
+              onPressed: widget.onExportCsv,
+            ),
         ],
       ),
       body: CustomScrollView(
@@ -138,9 +174,9 @@ class _AssenOperatorDashboardTemplateState
             ),
             sliver: SliverList.list(
               children: [
-                const AssenNoticeBar(
-                  message: '신고 1건이 접수되어 처리 대기 중입니다.',
-                  kind: AssenNoticeKind.warning,
+                _Notice(
+                  message: widget.noticeMessage,
+                  onTap: widget.onNoticeTap,
                 ),
                 const SizedBox(height: SpacingTokens.s4),
                 AssenSegmentedTabs(
@@ -151,8 +187,24 @@ class _AssenOperatorDashboardTemplateState
                 const SizedBox(height: SpacingTokens.s5),
                 if (showStats) ...[
                   const AssenSectionHeader(title: '오늘 현황'),
+                  if (widget.businessDayLabel != null) ...[
+                    const SizedBox(height: SpacingTokens.s1),
+                    Text(
+                      '${widget.businessDayLabel!} 기준',
+                      style: TextStyle(
+                        color: colors.ink500,
+                        fontSize: TypographyTokens.bodySSize,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: SpacingTokens.s3),
                   _StatGrid(stats: widget.stats),
+                  if (widget.quickActions.isNotEmpty) ...[
+                    const SizedBox(height: SpacingTokens.s6),
+                    const AssenSectionHeader(title: '바로가기'),
+                    const SizedBox(height: SpacingTokens.s3),
+                    _QuickActionRow(actions: widget.quickActions),
+                  ],
                   const SizedBox(height: SpacingTokens.s6),
                 ],
                 AssenSectionHeader(
@@ -176,6 +228,15 @@ class _AssenOperatorDashboardTemplateState
                         : null,
                   ),
                   const SizedBox(height: SpacingTokens.s3),
+                ],
+                if (showStats && widget.adminActions.isNotEmpty) ...[
+                  const SizedBox(height: SpacingTokens.s5),
+                  const AssenSectionHeader(title: '관리'),
+                  const SizedBox(height: SpacingTokens.s3),
+                  for (final action in widget.adminActions) ...[
+                    _AdminRow(action: action),
+                    const SizedBox(height: SpacingTokens.s2),
+                  ],
                 ],
               ],
             ),
@@ -219,6 +280,117 @@ class _StatGrid extends StatelessWidget {
       },
     );
   }
+}
+
+/// The 신고 알림 strip, optionally tappable as a status-edit entry point.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.message, this.onTap});
+
+  final String message;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = AssenNoticeBar(
+      message: message,
+      kind: AssenNoticeKind.warning,
+    );
+    if (onTap == null) return notice;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.sm)),
+      child: notice,
+    );
+  }
+}
+
+/// The 바로가기 row of status-edit console entry points.
+class _QuickActionRow extends StatelessWidget {
+  const _QuickActionRow({required this.actions});
+
+  final List<AssenDashboardQuickAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: SpacingTokens.s3,
+      runSpacing: SpacingTokens.s3,
+      children: [
+        for (final action in actions)
+          OutlinedButton.icon(
+            onPressed: action.onTap,
+            icon: Icon(action.icon, size: SpacingTokens.s4),
+            label: Text(action.label),
+          ),
+      ],
+    );
+  }
+}
+
+/// One admin-only section row (icon + label + chevron); manager-gated upstream.
+class _AdminRow extends StatelessWidget {
+  const _AdminRow({required this.action});
+
+  final AssenDashboardQuickAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    return Material(
+      color: colors.white,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colors.ink100),
+        borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.sm)),
+      ),
+      child: InkWell(
+        onTap: action.onTap,
+        borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.sm)),
+        child: Padding(
+          padding: const EdgeInsets.all(SpacingTokens.s3),
+          child: Row(
+            children: [
+              Icon(action.icon, size: SpacingTokens.s5, color: colors.ink700),
+              const SizedBox(width: SpacingTokens.s3),
+              Expanded(
+                child: Text(
+                  action.label,
+                  style: TextStyle(
+                    color: colors.ink900,
+                    fontSize: TypographyTokens.bodyMSize,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: SpacingTokens.s5,
+                color: colors.ink500,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A status-edit / admin entry point on the [AssenOperatorDashboardTemplate].
+class AssenDashboardQuickAction {
+  /// Creates a dashboard entry point.
+  const AssenDashboardQuickAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  /// The leading glyph.
+  final IconData icon;
+
+  /// The action label.
+  final String label;
+
+  /// Invoked when the entry point is tapped (typically a navigation).
+  final VoidCallback onTap;
 }
 
 /// A daily metric for the [AssenOperatorDashboardTemplate] grid.
