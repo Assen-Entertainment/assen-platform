@@ -20,7 +20,11 @@ from pydantic import Field
 from apps.admin_rbac.permissions import operator_required
 from apps.identity.auth import OpaqueTokenAuth
 from apps.identity.models import Account, Role
-from apps.visit.checkin_services import issue_checkin_token, redeem_checkin_token
+from apps.visit.checkin_services import (
+    CheckinThrottled,
+    issue_checkin_token,
+    redeem_checkin_token,
+)
 from config.api import api
 
 # Any authenticated account may *ask* for a token; the handler restricts issuance
@@ -70,7 +74,10 @@ class RedeemOut(Schema):
     checkin_method: str = "qr"
 
 
-@fan_router.post("/token", response={201: CheckinTokenOut, 403: CheckinError})
+@fan_router.post(
+    "/token",
+    response={201: CheckinTokenOut, 403: CheckinError, 429: CheckinError},
+)
 def issue_token_endpoint(
     request: HttpRequest,
 ) -> tuple[int, CheckinTokenOut | CheckinError]:
@@ -78,7 +85,10 @@ def issue_token_endpoint(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     if account.role != Role.FAN.value:
         return 403, CheckinError(detail="Only fans can request a check-in QR.")
-    entry, raw = issue_checkin_token(fan=account)
+    try:
+        entry, raw = issue_checkin_token(fan=account)
+    except CheckinThrottled as exc:
+        return 429, CheckinError(detail=str(exc))
     ttl_seconds = int((entry.expires_at - entry.issued_at).total_seconds())
     return 201, CheckinTokenOut(
         token=raw,

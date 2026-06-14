@@ -28,6 +28,16 @@ from apps.visit.services import record_qr_visit
 # screenshot-replay window. Centralised so the API and tests share one value.
 _DEFAULT_TTL = timedelta(seconds=30)
 
+# Issuance throttle (ASS-151): the fan app refreshes its QR about once per
+# rotation window (~25-30s), so a few requests per minute is normal; a tighter
+# loop is abuse. Cap issues per fan per window (counted by issued_at, best-effort).
+_ISSUE_WINDOW = timedelta(seconds=60)
+_ISSUE_MAX = 6
+
+
+class CheckinThrottled(Exception):
+    """Raised when a fan requests check-in tokens faster than the issue cap."""
+
 
 def _hash_token(raw: str) -> str:
     """Hash a bearer token for storage/lookup; the plaintext is never persisted."""
@@ -48,9 +58,17 @@ def issue_checkin_token(
     """
     if fan.role != Role.FAN.value:
         raise ValueError("Only fans can be issued a check-in token.")
+    now = timezone.now()
+    # Throttle abusive tight loops without breaking the normal ~30s refresh.
+    if (
+        CheckinToken.objects.filter(
+            fan=fan, issued_at__gte=now - _ISSUE_WINDOW
+        ).count()
+        >= _ISSUE_MAX
+    ):
+        raise CheckinThrottled("Too many check-in token requests; slow down.")
     # Serialise concurrent issues for this fan (the one-live-token invariant).
     Account.objects.select_for_update().get(pk=fan.pk)
-    now = timezone.now()
     CheckinToken.objects.filter(
         fan=fan, redeemed_at__isnull=True, expires_at__gt=now
     ).update(expires_at=now)

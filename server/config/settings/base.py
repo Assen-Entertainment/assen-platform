@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 # config/settings/base.py -> server/ is three parents up.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -138,4 +139,10 @@ CELERY_RESULT_BACKEND: str = env(
     default="redis://localhost:6379/1",
 )
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULE: dict[str, object] = {}
+CELERY_BEAT_SCHEDULE: dict[str, object] = {
+    # Reap unredeemed, long-expired QR check-in tokens hourly (ASS-151).
+    "purge-expired-checkin-tokens": {
+        "task": "apps.visit.tasks.purge_expired_checkin_tokens",
+        "schedule": crontab(minute=0),
+    },
+}
