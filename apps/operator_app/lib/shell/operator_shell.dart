@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-/// The post-auth operator console shell chrome (대시보드/체크인/체키/리포트/POS).
+/// The post-auth operator console shell chrome (대시보드/체크인/체키/신고/POS).
 ///
 /// Mirrors fan_app's adaptive shell for the operator console: compact keeps a
 /// bottom tab bar, Material 3 medium/expanded widths move the *same*
@@ -57,9 +57,9 @@ class OperatorShell extends StatelessWidget {
       label: '체키',
     ),
     AssenTabItem(
-      icon: Icons.assessment_outlined,
-      activeIcon: Icons.assessment,
-      label: '리포트',
+      icon: Icons.report_outlined,
+      activeIcon: Icons.report,
+      label: '신고',
     ),
     AssenTabItem(
       icon: Icons.point_of_sale_outlined,

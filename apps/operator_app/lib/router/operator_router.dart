@@ -8,6 +8,7 @@ import 'package:operator_app/screens/operator_cheki_screen.dart';
 import 'package:operator_app/screens/operator_dashboard_screen.dart';
 import 'package:operator_app/screens/operator_login_screen.dart';
 import 'package:operator_app/screens/operator_placeholder_screen.dart';
+import 'package:operator_app/screens/operator_reports_screen.dart';
 import 'package:operator_app/shell/operator_shell.dart';
 
 /// Whether [session] satisfies the operator role gate.
@@ -116,11 +117,7 @@ GoRouter buildOperatorRouter(Ref ref) {
           ),
           GoRoute(
             path: OperatorRoutes.reports,
-            builder: (context, state) => const OperatorPlaceholderScreen(
-              title: '리포트',
-              message: '일일 집계와 마감 리포트가 이곳에 들어옵니다.',
-              icon: Icons.assessment_outlined,
-            ),
+            builder: (context, state) => const OperatorReportsScreen(),
           ),
           GoRoute(
             path: OperatorRoutes.pos,
