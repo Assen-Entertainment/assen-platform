@@ -19,7 +19,7 @@ abstract final class OperatorRoutes {
   /// Cheki record entry (O3) — placeholder.
   static const String cheki = '/cheki';
 
-  /// Reports (O4 신고/리포트) — placeholder.
+  /// Safety reports (O4 신고 처리) — the operator report-handling console.
   static const String reports = '/reports';
 
   /// POS close-out (O5) — placeholder.
