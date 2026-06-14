@@ -57,6 +57,11 @@ class OperatorShell extends StatelessWidget {
       label: '체키',
     ),
     AssenTabItem(
+      icon: Icons.calendar_month_outlined,
+      activeIcon: Icons.calendar_month,
+      label: '출근표',
+    ),
+    AssenTabItem(
       icon: Icons.report_outlined,
       activeIcon: Icons.report,
       label: '신고',

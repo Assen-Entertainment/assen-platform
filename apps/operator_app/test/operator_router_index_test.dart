@@ -9,8 +9,9 @@ void main() {
       expect(shellIndexForLocation(OperatorRoutes.dashboard), 0);
       expect(shellIndexForLocation(OperatorRoutes.checkin), 1);
       expect(shellIndexForLocation(OperatorRoutes.cheki), 2);
-      expect(shellIndexForLocation(OperatorRoutes.reports), 3);
-      expect(shellIndexForLocation(OperatorRoutes.pos), 4);
+      expect(shellIndexForLocation(OperatorRoutes.schedule), 3);
+      expect(shellIndexForLocation(OperatorRoutes.reports), 4);
+      expect(shellIndexForLocation(OperatorRoutes.pos), 5);
     });
 
     test('resolves the similar /checkin and /cheki routes distinctly', () {

@@ -9,6 +9,7 @@ import 'package:operator_app/screens/operator_dashboard_screen.dart';
 import 'package:operator_app/screens/operator_login_screen.dart';
 import 'package:operator_app/screens/operator_placeholder_screen.dart';
 import 'package:operator_app/screens/operator_reports_screen.dart';
+import 'package:operator_app/screens/operator_schedule_screen.dart';
 import 'package:operator_app/shell/operator_shell.dart';
 
 /// Whether [session] satisfies the operator role gate.
@@ -39,6 +40,7 @@ const List<String> shellLocations = <String>[
   OperatorRoutes.dashboard,
   OperatorRoutes.checkin,
   OperatorRoutes.cheki,
+  OperatorRoutes.schedule,
   OperatorRoutes.reports,
   OperatorRoutes.pos,
 ];
@@ -114,6 +116,10 @@ GoRouter buildOperatorRouter(Ref ref) {
           GoRoute(
             path: OperatorRoutes.cheki,
             builder: (context, state) => const OperatorChekiScreen(),
+          ),
+          GoRoute(
+            path: OperatorRoutes.schedule,
+            builder: (context, state) => const OperatorScheduleScreen(),
           ),
           GoRoute(
             path: OperatorRoutes.reports,

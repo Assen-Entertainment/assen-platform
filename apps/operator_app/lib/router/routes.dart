@@ -19,6 +19,9 @@ abstract final class OperatorRoutes {
   /// Cheki record entry (O3) — placeholder.
   static const String cheki = '/cheki';
 
+  /// Schedule console (F05 출근표 관리) — the cast-schedule board + approvals.
+  static const String schedule = '/schedule';
+
   /// Safety reports (O4 신고 처리) — the operator report-handling console.
   static const String reports = '/reports';
 
