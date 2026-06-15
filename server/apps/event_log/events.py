@@ -65,6 +65,10 @@ class EventName(models.TextChoices):
     # Event / campaign.
     EVENT_VIEWED = "event_viewed", "event_viewed"
     EVENT_RESERVED = "event_reserved", "event_reserved"
+    EVENT_RESERVATION_CANCELLED = (
+        "event_reservation_cancelled",
+        "event_reservation_cancelled",
+    )
 
     # Coupon.
     COUPON_ISSUED = "coupon_issued", "coupon_issued"
@@ -324,6 +328,19 @@ class EventReservedPayload(_PayloadModel):
     reservation_status: str
 
 
+class EventReservationCancelledPayload(_PayloadModel):
+    """``event_reservation_cancelled`` — corrective cancel of an event reservation.
+
+    P0_required (Data_Event_Schema L313): lets a future conversion metric net a
+    prior ``event_reserved`` out of the MSFC/conversion counts (no such consumer
+    ships in v0). Carries the ids analytics must reconcile; no PII.
+    """
+
+    fan_id: str
+    event_campaign_id: str
+    reservation_id: str
+
+
 class CouponIssuedPayload(_PayloadModel):
     """``coupon_issued`` — coupon granted to a fan."""
 
@@ -427,6 +444,7 @@ EVENT_PAYLOAD_SCHEMAS: dict[str, type[_PayloadModel]] = {
     EventName.CHEKI_INVALIDATED.value: ChekiInvalidatedPayload,
     EventName.EVENT_VIEWED.value: EventViewedPayload,
     EventName.EVENT_RESERVED.value: EventReservedPayload,
+    EventName.EVENT_RESERVATION_CANCELLED.value: EventReservationCancelledPayload,
     EventName.COUPON_ISSUED.value: CouponIssuedPayload,
     EventName.COUPON_REDEEMED.value: CouponRedeemedPayload,
     EventName.POS_ORDER_LINKED.value: PosOrderLinkedPayload,

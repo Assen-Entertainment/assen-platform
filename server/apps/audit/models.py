@@ -65,6 +65,14 @@ class AuditAction(models.TextChoices):
     RESERVATION_CHANGED = "reservation_changed", "reservation_changed"
     RESERVATION_CANCELLED = "reservation_cancelled", "reservation_cancelled"
     RESERVATION_NO_SHOW = "reservation_no_show", "reservation_no_show"
+    EVENT_CAMPAIGN_CREATED = "event_campaign_created", "event_campaign_created"
+    EVENT_CAMPAIGN_UPDATED = "event_campaign_updated", "event_campaign_updated"
+    EVENT_CAMPAIGN_PUBLISHED = "event_campaign_published", "event_campaign_published"
+    EVENT_CAMPAIGN_UNPUBLISHED = (
+        "event_campaign_unpublished",
+        "event_campaign_unpublished",
+    )
+    EVENT_CAMPAIGN_CLOSED = "event_campaign_closed", "event_campaign_closed"
 
 
 class AuditEntry(models.Model):

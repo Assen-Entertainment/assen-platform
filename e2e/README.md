@@ -106,3 +106,20 @@ git-ignored.
   # (--workers=1: the lifecycle row locks serialise writes, which sqlite cannot do
   #  concurrently — "database is locked"; production Postgres handles it fine.)
   ```
+- `tests/event-campaign.api.spec.ts` — ASS-107 v0 event announcements
+  (`/api/operator/event-campaigns` + `/api/fan/event-campaigns` + `/api/fan/event-reservations`):
+  operator sees draft+published; the fan list shows only published; a draft id is
+  **404 to fans** (no existence leak); fan view/reserve/list-own/cancel; the
+  **blocked-fan refusal** (400); a draft cannot be reserved (404); the operator
+  publish/unpublish round-trip toggling fan visibility; and the gates (staff token
+  on reserve → 403; fan/anon on the operator surface → 401/403). Scope stores **no
+  price** (the price value is the approval-gated, deferred slice); seat/prepaid/
+  external ticketing held (PRD F10 P0 제외). Needs `seed_event_campaign.py`
+  (operator + fan + blocked-fan tokens, a published + a draft campaign →
+  `.event_campaign_seed.json`); run with `--workers=1` (sqlite single-writer):
+
+  ```sh
+  export EVENT_CAMPAIGN_SEED_OUT="$PWD/../e2e/.event_campaign_seed.json"
+  uv run python manage.py shell < ../e2e/seed_event_campaign.py   # after step 1's migrate
+  # then: EVENT_CAMPAIGN_SEED_OUT="$PWD/.event_campaign_seed.json" npx playwright test event-campaign.api.spec.ts --workers=1
+  ```

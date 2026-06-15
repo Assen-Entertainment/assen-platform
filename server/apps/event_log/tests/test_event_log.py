@@ -351,6 +351,11 @@ def _minimal_payloads() -> dict[str, dict[str, object]]:
             "event_type": "birthday",
             "reservation_status": "reserved",
         },
+        EventName.EVENT_RESERVATION_CANCELLED.value: {
+            "fan_id": "f",
+            "event_campaign_id": "e",
+            "reservation_id": "r",
+        },
         EventName.COUPON_ISSUED.value: {
             "fan_id": "f",
             "coupon_id": "co",
