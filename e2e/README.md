@@ -51,3 +51,16 @@ git-ignored.
   no internal classification), non-fan-reportable + unknown types → 422, auth
   gate (401/403), and a cross-surface check that the report reaches the operator
   queue with the narrative withheld (uses the seeded operator token).
+- `tests/cast-profile.api.spec.ts` — ASS-92 cast profile management
+  (`/api/cast/...`): the fail-closed consent gate (a profile is hidden until an
+  operator publishes it *and* a manager grants the stage-name scope; a hidden
+  profile 404s), per-scope gating (photo withheld even when the name is shown),
+  the three access tiers (operator CRUD, manager-only consent, fan view), and the
+  fan-role gate on the impression view. Needs `seed_cast.py` (operator + manager
+  + fan tokens → `.cast_seed.json`):
+
+  ```sh
+  export CAST_SEED_OUT="$PWD/../e2e/.cast_seed.json"
+  uv run python manage.py shell < ../e2e/seed_cast.py   # after step 1's migrate
+  # then, alongside the suite: CAST_SEED_OUT="$PWD/.cast_seed.json" npx playwright test
+  ```
