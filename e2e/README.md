@@ -64,3 +64,15 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_cast.py   # after step 1's migrate
   # then, alongside the suite: CAST_SEED_OUT="$PWD/.cast_seed.json" npx playwright test
   ```
+- `tests/report-handling.api.spec.ts` — ASS-111 operator report-handling stats
+  (`GET /api/safety/handling-stats`): the open queue bucketed by status/severity,
+  resolved-in-window throughput, non-negative handling durations, the full field
+  contract, counts-only/no-PII shape, operator gating (fan/anon → 401/403), and an
+  out-of-range window → 422. Needs `seed_handling.py` (operator + fan tokens →
+  `.handling_seed.json`):
+
+  ```sh
+  export HANDLING_SEED_OUT="$PWD/../e2e/.handling_seed.json"
+  uv run python manage.py shell < ../e2e/seed_handling.py   # after step 1's migrate
+  # then, alongside the suite: HANDLING_SEED_OUT="$PWD/.handling_seed.json" npx playwright test
+  ```

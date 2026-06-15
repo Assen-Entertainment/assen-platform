@@ -129,6 +129,10 @@ class SafetyReport(models.Model):
         on_delete=models.PROTECT,
         related_name="created_safety_reports",
     )
+    # Set once when the report is closed (resolve_report); NULL while open. An
+    # explicit close instant — not a reuse of the auto ``updated_at`` — so the
+    # handling-time aggregation (ASS-111) has an unambiguous, stable endpoint.
+    resolved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
