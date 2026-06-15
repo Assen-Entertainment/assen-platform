@@ -79,9 +79,7 @@ def test_operator_cannot_read_detail(client: Client) -> None:
     operator = _account(Role.OPERATOR.value)
     report = _seed_report(operator)
 
-    response = client.get(
-        f"/api/safety/reports/{report.id}/detail", headers=_auth(operator)
-    )
+    response = client.get(f"/api/safety/reports/{report.id}/detail", headers=_auth(operator))
     assert response.status_code in {401, 403}
 
 
@@ -184,9 +182,7 @@ def test_detail_requires_reason(client: Client) -> None:
     manager = _account(Role.MANAGER.value)
     report = _seed_report(operator)
 
-    response = client.get(
-        f"/api/safety/reports/{report.id}/detail", headers=_auth(manager)
-    )
+    response = client.get(f"/api/safety/reports/{report.id}/detail", headers=_auth(manager))
     assert response.status_code in {400, 422}
 
 
@@ -205,4 +201,136 @@ def test_unknown_report_type_rejected(client: Client) -> None:
         headers=_auth(operator),
     )
     assert response.status_code == 400
+    assert not SafetyReport.objects.exists()
+
+
+# --- Fan self-reporting (ASS-110, F11) --------------------------------------
+
+
+def test_fan_files_report_and_gets_a_receipt_only(client: Client) -> None:
+    """A fan files a report and receives a confirmation with no internal fields."""
+    fan = _account(Role.FAN.value)
+    response = client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "private_contact", "narrative": _SECRET},
+        content_type="application/json",
+        headers=_auth(fan),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["safety_report_id"]
+    assert body["status"] == "received"
+    # Receipt only: no severity/visibility/reporter/narrative leaked to the fan.
+    assert set(body) == {"safety_report_id", "status", "created_at"}
+    assert _SECRET not in response.content.decode()
+
+    # The fan is the reporter; the narrative is in the restricted detail store.
+    report = SafetyReport.objects.get(id=body["safety_report_id"])
+    assert report.reporter == fan
+    assert report.reporter_type == "fan"
+    assert report.detail.narrative == _SECRET
+
+
+def test_fan_report_requires_authentication(client: Client) -> None:
+    """Filing a report without a token is refused."""
+    response = client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "verbal_abuse"},
+        content_type="application/json",
+    )
+    assert response.status_code in {401, 403}
+
+
+def test_fan_report_rejects_non_fan_reportable_type(client: Client) -> None:
+    """Operator/finance categories are not fan-reportable (422); no row written."""
+    fan = _account(Role.FAN.value)
+    response = client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "refund_dispute", "narrative": "x"},
+        content_type="application/json",
+        headers=_auth(fan),
+    )
+    assert response.status_code == 422
+    assert not SafetyReport.objects.exists()
+
+
+def test_fan_report_unknown_type_rejected(client: Client) -> None:
+    """An unknown report_type is refused (422) before any row is written."""
+    fan = _account(Role.FAN.value)
+    response = client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "bogus"},
+        content_type="application/json",
+        headers=_auth(fan),
+    )
+    assert response.status_code == 422
+    assert not SafetyReport.objects.exists()
+
+
+def test_fan_filed_report_is_operator_visible_with_detail_redacted(
+    client: Client,
+) -> None:
+    """A fan-filed report reaches the operator queue with its detail redacted."""
+    fan = _account(Role.FAN.value)
+    operator = _account(Role.OPERATOR.value)
+    filed = client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "unwanted_request", "narrative": _SECRET},
+        content_type="application/json",
+        headers=_auth(fan),
+    )
+    report_id = filed.json()["safety_report_id"]
+
+    listed = client.get("/api/safety/reports", headers=_auth(operator))
+    assert listed.status_code == 200
+    rows = {row["safety_report_id"]: row for row in listed.json()}
+    assert report_id in rows
+    assert rows[report_id]["detail_ref"] == REDACTED
+    assert _SECRET not in listed.content.decode()
+
+
+def test_staff_token_cannot_file_a_fan_report(client: Client) -> None:
+    """fan_auth is role-agnostic, so the endpoint must reject a staff token (403).
+
+    Otherwise an operator/manager token would file a report stamped reporter_type=
+    fan / actor_is_operator=False, misclassifying operator traffic as a fan report.
+    """
+    for role in (Role.OPERATOR.value, Role.MANAGER.value):
+        response = client.post(
+            "/api/safety/fan-reports",
+            data={"report_type": "verbal_abuse", "narrative": "x"},
+            content_type="application/json",
+            headers=_auth(_account(role)),
+        )
+        assert response.status_code == 403
+    assert not SafetyReport.objects.exists()
+
+
+def test_fan_supplied_severity_is_ignored_server_derives_it(client: Client) -> None:
+    """A fan cannot downgrade a threat: an injected severity is dropped, not used."""
+    fan = _account(Role.FAN.value)
+    response = client.post(
+        "/api/safety/fan-reports",
+        # physical_threat must enter critical; the injected severity=low is ignored
+        # (FanReportCreateIn has no severity field, so Ninja drops the extra key).
+        data={"report_type": "physical_threat", "narrative": "x", "severity": "low"},
+        content_type="application/json",
+        headers=_auth(fan),
+    )
+    assert response.status_code == 201
+    report = SafetyReport.objects.get(id=response.json()["safety_report_id"])
+    assert report.severity == "critical"
+
+
+def test_fan_report_invalid_type_error_does_not_echo_input(client: Client) -> None:
+    """An invalid report_type must not be reflected back — no PII echo in the 422."""
+    fan = _account(Role.FAN.value)
+    response = client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "leak-010-9999-8888", "narrative": "x"},
+        content_type="application/json",
+        headers=_auth(fan),
+    )
+    assert response.status_code == 422
+    assert "010-9999-8888" not in response.content.decode()
     assert not SafetyReport.objects.exists()
