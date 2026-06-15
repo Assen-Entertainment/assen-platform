@@ -68,6 +68,7 @@ from apps.cheki import api as cheki_api  # noqa: E402,F401
 from apps.dashboard import api as dashboard_api  # noqa: E402,F401
 from apps.identity import api as identity_api  # noqa: E402,F401
 from apps.pos_lite import api as pos_lite_api  # noqa: E402,F401
+from apps.reservation import api as reservation_api  # noqa: E402,F401
 from apps.safety import api as safety_api  # noqa: E402,F401
 from apps.schedule import api as schedule_api  # noqa: E402,F401
 from apps.visit import api as visit_api  # noqa: E402,F401
