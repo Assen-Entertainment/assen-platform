@@ -1,0 +1,6 @@
+node_modules/
+.seed.json
+test-results/
+playwright-report/
+blob-report/
+.cache/
