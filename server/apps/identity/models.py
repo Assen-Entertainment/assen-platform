@@ -76,8 +76,28 @@ class Account(models.Model):
     # provider TBD) and leave these blank.
     username = models.CharField(max_length=150, blank=True, default="", db_index=True)
     password_hash = models.CharField(max_length=256, blank=True, default="")
+    # Fan signup (ASS-98, Fan_Signup_Privacy_Policy). Minimal collection: the
+    # phone number itself is NEVER stored — only its hash in auth_subject_hash —
+    # and nickname is display-only. auth_method records the provider (e.g. phone).
+    nickname = models.CharField(max_length=40, blank=True, default="")
+    auth_method = models.CharField(max_length=16, blank=True, default="")
+    auth_subject_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            # One fan per phone-hash: the re-signup path keys on this hash, so a
+            # DB-level partial unique (only on non-empty hashes — staff rows keep
+            # the default "" and stay unconstrained) closes the concurrent-signup
+            # race that filter()+create() alone cannot. Migration-less app — this
+            # constraint is materialised by ``migrate --run-syncdb``.
+            models.UniqueConstraint(
+                fields=["auth_subject_hash"],
+                condition=~models.Q(auth_subject_hash=""),
+                name="uniq_fan_auth_subject",
+            ),
+        ]
 
     @property
     def is_operator_account(self) -> bool:
