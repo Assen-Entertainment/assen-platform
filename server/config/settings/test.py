@@ -22,3 +22,6 @@ CELERY_TASK_EAGER_PROPAGATES = True
 
 # Fast, deterministic password hashing for tests.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# Fan signup tests + live API E2E use the deterministic mock OTP sender.
+ENABLE_MOCK_FAN_OTP = True

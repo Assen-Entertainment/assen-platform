@@ -27,6 +27,15 @@ SECRET_KEY: str = env("DJANGO_SECRET_KEY", default="insecure-dev-key-override-me
 DEBUG: bool = env("DJANGO_DEBUG")
 ALLOWED_HOSTS: list[str] = env("DJANGO_ALLOWED_HOSTS")
 
+# Fan signup OTP provider gate (ASS-98, Fan_Signup_Privacy_Policy §1/§8). The
+# deterministic mock sender is dev/test only — anyone could reproduce its codes.
+# Hardcoded False here (NOT env-driven) so a stray production env var cannot
+# enable the mock; only the dev/test settings modules opt in. With no real SMS
+# adapter wired yet, production stays False and the signup surface fails closed
+# (503) rather than trust an unverifiable OTP — a real adapter replaces the mock
+# behind a later infra/PII gate.
+ENABLE_MOCK_FAN_OTP: bool = False
+
 # Django contrib + third-party apps.
 DJANGO_APPS = [
     "django.contrib.admin",
