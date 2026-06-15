@@ -89,3 +89,20 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_pos.py   # after step 1's migrate
   # then, alongside the suite: POS_SEED_OUT="$PWD/.pos_seed.json" npx playwright test
   ```
+- `tests/reservation.api.spec.ts` — ASS-109 v0 reservation/waitlist
+  (`/api/operator/reservations` + `/api/fan/reservations`): the seeded operator
+  daily list (counts-only/no-PII), a fan registering + listing their own (bearer,
+  fan view omits operator fields), the **blocked-fan refusal** (the ASS-111
+  reservation-block enforcement → 400), the operator confirm→cancel lifecycle, and
+  the gates (staff token on the fan endpoint → 403; fan/anon on the operator
+  surface → 401/403). Scope is the platform-internal manual slice; external/네이버
+  sync, prepaid, and seat assignment are held (PRD P0 제외 / OQ-E). Needs
+  `seed_reservation.py` (operator + fan + blocked-fan tokens → `.reservation_seed.json`):
+
+  ```sh
+  export RESERVATION_SEED_OUT="$PWD/../e2e/.reservation_seed.json"
+  uv run python manage.py shell < ../e2e/seed_reservation.py   # after step 1's migrate
+  # then: RESERVATION_SEED_OUT="$PWD/.reservation_seed.json" npx playwright test reservation.api.spec.ts --workers=1
+  # (--workers=1: the lifecycle row locks serialise writes, which sqlite cannot do
+  #  concurrently — "database is locked"; production Postgres handles it fine.)
+  ```

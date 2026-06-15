@@ -3,6 +3,7 @@ node_modules/
 .cast_seed.json
 .handling_seed.json
 .pos_seed.json
+.reservation_seed.json
 test-results/
 playwright-report/
 blob-report/

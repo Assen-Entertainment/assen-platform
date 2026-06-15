@@ -60,6 +60,11 @@ class AuditAction(models.TextChoices):
     CAST_CONSENT_RECORDED = "cast_consent_recorded", "cast_consent_recorded"
     POS_ORDER_LINKED = "pos_order_linked", "pos_order_linked"
     POS_ORDER_VOIDED = "pos_order_voided", "pos_order_voided"
+    RESERVATION_CREATED = "reservation_created", "reservation_created"
+    RESERVATION_CONFIRMED = "reservation_confirmed", "reservation_confirmed"
+    RESERVATION_CHANGED = "reservation_changed", "reservation_changed"
+    RESERVATION_CANCELLED = "reservation_cancelled", "reservation_cancelled"
+    RESERVATION_NO_SHOW = "reservation_no_show", "reservation_no_show"
 
 
 class AuditEntry(models.Model):
