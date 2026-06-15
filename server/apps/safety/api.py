@@ -14,7 +14,8 @@ returned by the manager-only detail endpoint, which writes a
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from dataclasses import asdict
+from datetime import datetime, timedelta
 from typing import cast
 
 from django.http import HttpRequest
@@ -29,6 +30,7 @@ from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.identity.api import FanBearerAuth
 from apps.identity.models import Account, Role
+from apps.safety.metrics import report_handling_stats
 from apps.safety.models import (
     ActorKind,
     BlockReason,
@@ -178,6 +180,29 @@ class FanReportOut(Schema):
     created_at: datetime
 
 
+class ReportHandlingStatsOut(Schema):
+    """Operator triage-queue health: open distribution + recent handling time.
+
+    Mirrors :class:`apps.safety.metrics.ReportHandlingStats`. Counts and durations
+    (seconds) only — no narrative, names, or PII.
+    """
+
+    window_days: int
+    as_of: str
+    open_total: int
+    open_received: int
+    open_reviewing: int
+    open_actioned: int
+    open_low: int
+    open_medium: int
+    open_high: int
+    open_critical: int
+    oldest_open_age_seconds: int
+    resolved_in_window: int
+    median_handling_seconds: int
+    avg_handling_seconds: int
+
+
 def _fan_id_or_blank(account: Account | None) -> str:
     """Return the account's public fan_id as a string, or "" when absent."""
     return str(account.fan_id) if account is not None else ""
@@ -302,6 +327,30 @@ def list_reports(
     capped = max(1, min(limit, 500))
     rows = [_summary_dict(report) for report in qs[:capped]]
     return 200, redact_safety_report_list(rows, viewer=_actor(request))
+
+
+@router.get(
+    "/handling-stats",
+    auth=operator_required,
+    response={200: ReportHandlingStatsOut, 422: SafetyError},
+)
+def get_handling_stats(
+    request: HttpRequest,
+    window_days: int = 30,
+) -> tuple[int, ReportHandlingStatsOut | SafetyError]:
+    """Report-handling operations metrics for the operator triage queue (ASS-111).
+
+    Completes the "신고 ... 처리 시간 집계" workflow on top of the ASS-96 lifecycle:
+    the open queue by status/severity, the oldest unresolved age, and how many
+    reports were resolved in the trailing ``window_days`` with their median/mean
+    handling time. Counts + durations only — never narrative or PII. Operator+,
+    matching the report list (these are triage figures, not restricted detail).
+    """
+    del request  # auth only (operator+); no per-report row is read here.
+    if not 1 <= window_days <= 365:
+        return 422, SafetyError(detail="window_days must be between 1 and 365.")
+    stats = report_handling_stats(as_of=timezone.now(), window=timedelta(days=window_days))
+    return 200, ReportHandlingStatsOut(**asdict(stats))
 
 
 @router.patch(

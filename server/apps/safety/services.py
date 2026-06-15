@@ -296,7 +296,8 @@ def resolve_report(
     if report.status == ReportStatus.CLOSED.value:
         raise ValueError("Report is already closed.")
     report.status = ReportStatus.CLOSED.value
-    report.save(update_fields=["status", "updated_at"])
+    report.resolved_at = timezone.now()
+    report.save(update_fields=["status", "resolved_at", "updated_at"])
     detail = report.detail
     detail.resolution_note = resolution_note
     detail.save(update_fields=["resolution_note", "updated_at"])

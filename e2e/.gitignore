@@ -1,6 +1,7 @@
 node_modules/
 .seed.json
 .cast_seed.json
+.handling_seed.json
 test-results/
 playwright-report/
 blob-report/
