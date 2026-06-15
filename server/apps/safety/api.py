@@ -27,7 +27,8 @@ from apps.admin_rbac.permissions import manager_required, operator_required
 from apps.admin_rbac.redaction import redact_safety_report, redact_safety_report_list
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
-from apps.identity.models import Account
+from apps.identity.api import FanBearerAuth
+from apps.identity.models import Account, Role
 from apps.safety.models import (
     ActorKind,
     BlockReason,
@@ -39,8 +40,10 @@ from apps.safety.models import (
     UserBlock,
 )
 from apps.safety.services import (
+    SafetyReportError,
     block_user,
     change_report_status,
+    file_fan_report,
     file_report,
     lift_block,
     resolve_report,
@@ -142,6 +145,39 @@ class BlockLiftIn(Schema):
     reason: str = Field(max_length=_TEXT_MAX)
 
 
+class FanReportCreateIn(Schema):
+    """Fan self-report intake (ASS-110): a report type plus free-text narrative.
+
+    Only the report type and narrative are accepted. The server fixes everything
+    an attacker should not control — the reporter is the authenticated fan,
+    ``reporter_type`` is ``fan``, and severity is derived from the type (a fan
+    cannot self-assign critical, nor downgrade a threat). A structured ``cast_id``
+    is intentionally NOT accepted on the fan surface: it would be untrusted free
+    text riding into the append-only event log (a PII channel that bypasses the
+    narrative-only restricted store). The fan names the cast in the narrative; an
+    operator links the structured cast id during triage.
+
+    ``report_type`` is length-bounded so an oversized value is rejected by schema
+    validation (never echoed); the unknown-type error is generic, so a fan cannot
+    smuggle PII into ``report_type`` and have it reflected back in a 422.
+    """
+
+    report_type: str = Field(max_length=64)
+    narrative: str = Field(default="", max_length=_TEXT_MAX)
+
+
+class FanReportOut(Schema):
+    """Receipt returned to the fan: confirmation only, no internal classification.
+
+    Severity/visibility/narrative are operator-internal (Refusal_Report_Block_
+    Protocol "자세한 내부 기록은 공개하지 않는다") and are deliberately omitted.
+    """
+
+    safety_report_id: str
+    status: str
+    created_at: datetime
+
+
 def _fan_id_or_blank(account: Account | None) -> str:
     """Return the account's public fan_id as a string, or "" when absent."""
     return str(account.fan_id) if account is not None else ""
@@ -196,6 +232,51 @@ def create_report(
         visit_id=str(payload.visit_id) if payload.visit_id else "",
     )
     return 201, redact_safety_report(_summary_dict(report), viewer=actor)
+
+
+@router.post(
+    "/fan-reports",
+    auth=[FanBearerAuth()],
+    response={201: FanReportOut, 403: SafetyError, 422: SafetyError},
+)
+def create_fan_report(
+    request: HttpRequest,
+    payload: FanReportCreateIn,
+) -> tuple[int, FanReportOut | SafetyError]:
+    """File a safety report as the authenticated fan (ASS-110, F11).
+
+    **Bearer-only on purpose.** This is a state-changing POST, and the fan cookie
+    surface (ADR-0002 web httpOnly cookies) needs CSRF protection for unsafe
+    methods — the double-submit defense ASS-98 deferred to "the first authenticated
+    state-changing fan endpoint". Rather than ship a CSRF-exposed cookie path (an
+    auth/session concern, CONSTRAINTS #26 human-gated), v0 accepts only the bearer
+    token (the app surface, which browsers do not auto-send, so it is not CSRF-
+    prone). Web-cookie reporting lands with the CSRF work. The endpoint issues no
+    tokens, so it stays an ordinary business endpoint, not auth code.
+
+    The fan is recorded as the reporter, severity is server-derived from the type,
+    and the narrative goes only to the restricted store.
+    """
+    fan = _fan_account(request)
+    # FanBearerAuth proves token ownership but is role-agnostic; require the FAN
+    # role so a staff token cannot file a report that is then stamped as a fan
+    # self-report (reporter_type=fan / actor_is_operator=False would misclassify
+    # operator traffic). Mirrors the QR check-in fan gate (apps/visit/checkin_api.py).
+    if fan.role != Role.FAN.value:
+        return 403, SafetyError(detail="Only fans can file a self-report.")
+    try:
+        report = file_fan_report(
+            reporter=fan,
+            report_type=payload.report_type,
+            narrative=payload.narrative,
+        )
+    except SafetyReportError as exc:
+        return 422, SafetyError(detail=str(exc))
+    return 201, FanReportOut(
+        safety_report_id=str(report.id),
+        status=report.status,
+        created_at=report.created_at,
+    )
 
 
 @router.get(
@@ -383,6 +464,13 @@ def _block_out(block: UserBlock) -> BlockOut:
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated staff account supplied by RoleRequired."""
     # request.auth is untyped without Ninja stubs (same idiom as identity/auth.py).
+    return cast(Account, request.auth)  # type: ignore[attr-defined]
+
+
+def _fan_account(request: HttpRequest) -> Account:
+    """Return the authenticated fan account supplied by ``fan_auth``."""
+    # request.auth is the Account resolved by FanBearerAuth/FanCookieAuth; untyped
+    # without Ninja stubs (same idiom as _actor / identity.api).
     return cast(Account, request.auth)  # type: ignore[attr-defined]
 
 

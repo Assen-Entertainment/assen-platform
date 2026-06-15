@@ -44,3 +44,10 @@ git-ignored.
   seeded-value assertions, the full field contract, counts-only/no-PII shape,
   operator gating (fan/anon → 401/403), inverted-window 422, and a v0 dashboard
   no-regression smoke.
+- `tests/fan-signup.api.spec.ts` — ASS-98 fan phone-OTP signup + membership card:
+  app body-token and web httpOnly-cookie delivery, consent/OTP 422s, auth gate.
+- `tests/fan-report.api.spec.ts` — ASS-110 fan self-report intake
+  (`POST /api/safety/fan-reports`): a signed-up fan files a report (receipt only,
+  no internal classification), non-fan-reportable + unknown types → 422, auth
+  gate (401/403), and a cross-surface check that the report reaches the operator
+  queue with the narrative withheld (uses the seeded operator token).

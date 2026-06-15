@@ -30,11 +30,16 @@ from apps.safety.models import (
     BlockStatus,
     ReportSeverity,
     ReportStatus,
+    ReportType,
     ReportVisibility,
     SafetyReport,
     SafetyReportDetail,
     UserBlock,
 )
+
+
+class SafetyReportError(Exception):
+    """Raised when a self-filed safety report is rejected (e.g. unknown type)."""
 
 
 def has_active_block(*, target: Account, scopes: list[str]) -> bool:
@@ -56,9 +61,7 @@ def has_active_block(*, target: Account, scopes: list[str]) -> bool:
 
 
 # Severities whose reports are visible to manager+ only.
-_MANAGER_ONLY_SEVERITIES = frozenset(
-    {ReportSeverity.HIGH.value, ReportSeverity.CRITICAL.value}
-)
+_MANAGER_ONLY_SEVERITIES = frozenset({ReportSeverity.HIGH.value, ReportSeverity.CRITICAL.value})
 
 
 def _visibility_for(severity: str) -> str:
@@ -75,6 +78,47 @@ def _event_fan_id(report: SafetyReport) -> str:
     if report.reporter_type == ActorKind.FAN.value and report.reporter is not None:
         return str(report.reporter.fan_id)
     return ""
+
+
+# --- Fan self-reporting (ASS-110, F11) --------------------------------------
+
+# The report types a fan may file directly from the app ("신고 유형 9종"). The
+# operator/finance-side categories (refund_dispute, fraud_abuse) are excluded — a
+# fan raises those through the refund/dispute flow, not a safety self-report.
+FAN_REPORTABLE_TYPES: frozenset[str] = frozenset(
+    {
+        ReportType.UNWANTED_REQUEST.value,
+        ReportType.PRIVATE_CONTACT.value,
+        ReportType.EXTERNAL_MEETING.value,
+        ReportType.VERBAL_ABUSE.value,
+        ReportType.PHYSICAL_THREAT.value,
+        ReportType.PHOTO_VIOLATION.value,
+        ReportType.STALKING_CONCERN.value,
+        ReportType.PRIVACY_PORTRAIT_CONCERN.value,
+        ReportType.OTHER.value,
+    }
+)
+
+# Severity a fan self-report ENTERS at, derived from the report type — a fan never
+# sets severity (it is operator/manager judgement, Refusal_Report_Block_Protocol
+# 역할표), operators re-triage afterwards. The mapping mirrors the protocol 심각도
+# 기준: physical threat / stalking are critical; private contact, external meeting,
+# photo-or-posting violation and verbal abuse are high; the rest enter at medium
+# ("운영자가 판단하기 어려우면 낮게 보지 말고 한 단계 높게").
+_FAN_REPORT_SEVERITY: dict[str, str] = {
+    ReportType.PHYSICAL_THREAT.value: ReportSeverity.CRITICAL.value,
+    ReportType.STALKING_CONCERN.value: ReportSeverity.CRITICAL.value,
+    ReportType.PRIVATE_CONTACT.value: ReportSeverity.HIGH.value,
+    ReportType.EXTERNAL_MEETING.value: ReportSeverity.HIGH.value,
+    ReportType.PHOTO_VIOLATION.value: ReportSeverity.HIGH.value,
+    ReportType.VERBAL_ABUSE.value: ReportSeverity.HIGH.value,
+}
+_FAN_REPORT_DEFAULT_SEVERITY = ReportSeverity.MEDIUM.value
+
+
+def fan_report_severity(report_type: str) -> str:
+    """Entry severity for a fan self-report of [report_type] (protocol-derived)."""
+    return _FAN_REPORT_SEVERITY.get(report_type, _FAN_REPORT_DEFAULT_SEVERITY)
 
 
 @transaction.atomic
@@ -145,9 +189,78 @@ def file_report(
 
 
 @transaction.atomic
-def change_report_status(
-    *, report: SafetyReport, status: str, actor: Account
+def file_fan_report(
+    *,
+    reporter: Account,
+    report_type: str,
+    narrative: str = "",
 ) -> SafetyReport:
+    """File a safety report submitted directly by a fan (ASS-110, F11).
+
+    The fan is both the actor and the reporter. Unlike the operator intake
+    (:func:`file_report`), the severity is *derived* from the report type
+    (:func:`fan_report_severity`) rather than caller-supplied, and the event is
+    recorded as a fan action (``actor_is_operator=False``) so it is never mistaken
+    for operator traffic in the metrics. The narrative goes only to the restricted
+    :class:`SafetyReportDetail`; the event keeps classification + ids.
+
+    No structured ``cast_id`` is taken from the fan: an untrusted free-string id
+    would ride into the append-only event log (``EventRecord.cast_id``) and could
+    carry the very PII the narrative isolation exists to contain. The fan names the
+    cast in the narrative (restricted store) and an operator links the structured
+    cast during triage, so a fan self-report always enters ``target_type=unknown``.
+
+    Reporting stays available regardless of any block on the fan: a safety channel
+    must not be closed to the person trying to use it. No staff audit row is
+    written (the fan is not staff) — the append-only ``safety_report_created``
+    event is the record of intake.
+
+    Idempotency: intake is deliberately not de-duplicated. There is no P0
+    idempotency layer yet (Redis-backed, ADR-0003), and for a safety channel
+    recording a duplicate on a client retry is strictly safer than dropping a
+    report — operators de-duplicate during triage. Never lose a safety signal.
+
+    Raises :class:`SafetyReportError` for a type a fan may not self-file.
+    """
+    if report_type not in FAN_REPORTABLE_TYPES:
+        # Generic message — never echo the raw report_type back (a fan could put PII
+        # in it and have it reflected through the 422 response).
+        raise SafetyReportError("report_type is not fan-reportable.")
+    severity = fan_report_severity(report_type)
+    report = SafetyReport.objects.create(
+        report_type=report_type,
+        severity=severity,
+        visibility=_visibility_for(severity),
+        reporter_type=ActorKind.FAN.value,
+        target_type=ActorKind.UNKNOWN.value,
+        reporter=reporter,
+        created_by=reporter,
+    )
+    SafetyReportDetail.objects.create(report=report, narrative=narrative)
+    emit_event(
+        event_name=EventName.SAFETY_REPORT_CREATED.value,
+        occurred_at=report.created_at,
+        actor_type=ActorType.FAN.value,
+        source=EventSource.FAN_APP.value,
+        actor_id=str(reporter.fan_id),
+        fan_id=str(reporter.fan_id),
+        actor_is_operator=False,
+        ids={"safety_report_id": str(report.id)},
+        # Classification + visibility + ids only — never the narrative.
+        payload={
+            "safety_report_id": str(report.id),
+            "reporter_type": ActorKind.FAN.value,
+            "target_type": ActorKind.UNKNOWN.value,
+            "report_type": report_type,
+            "severity": severity,
+            "visibility": report.visibility,
+        },
+    )
+    return report
+
+
+@transaction.atomic
+def change_report_status(*, report: SafetyReport, status: str, actor: Account) -> SafetyReport:
     """Advance the report's handling status with an audit entry.
 
     Closing is done via :func:`resolve_report` (which also emits the resolved
@@ -237,9 +350,7 @@ def block_user(
     record_audit(
         actor=actor,
         action=(
-            AuditAction.USER_RISK_FLAGGED.value
-            if is_risk_flag
-            else AuditAction.USER_BLOCKED.value
+            AuditAction.USER_RISK_FLAGGED.value if is_risk_flag else AuditAction.USER_BLOCKED.value
         ),
         target=str(target.fan_id),
         reason=block_reason,
