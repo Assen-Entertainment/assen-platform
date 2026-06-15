@@ -55,6 +55,9 @@ class AuditAction(models.TextChoices):
         "schedule_change_rejected",
         "schedule_change_rejected",
     )
+    CAST_PROFILE_CREATED = "cast_profile_created", "cast_profile_created"
+    CAST_PROFILE_UPDATED = "cast_profile_updated", "cast_profile_updated"
+    CAST_CONSENT_RECORDED = "cast_consent_recorded", "cast_consent_recorded"
 
 
 class AuditEntry(models.Model):
