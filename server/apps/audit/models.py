@@ -58,6 +58,8 @@ class AuditAction(models.TextChoices):
     CAST_PROFILE_CREATED = "cast_profile_created", "cast_profile_created"
     CAST_PROFILE_UPDATED = "cast_profile_updated", "cast_profile_updated"
     CAST_CONSENT_RECORDED = "cast_consent_recorded", "cast_consent_recorded"
+    POS_ORDER_LINKED = "pos_order_linked", "pos_order_linked"
+    POS_ORDER_VOIDED = "pos_order_voided", "pos_order_voided"
 
 
 class AuditEntry(models.Model):

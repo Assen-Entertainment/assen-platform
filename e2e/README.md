@@ -76,3 +76,16 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_handling.py   # after step 1's migrate
   # then, alongside the suite: HANDLING_SEED_OUT="$PWD/.handling_seed.json" npx playwright test
   ```
+- `tests/pos-link.api.spec.ts` — ASS-102 v0 operator POS Lite manual linking
+  (`/api/operator/pos/...`): the seeded daily link coverage (POS 연결률 + 미연결
+  목록 on an isolated date), duplicate-receipt rejection (400), the create→link
+  round-trip on a fresh visit, and operator gating (fan/anon → 401/403). Scope is
+  the POS-vendor-independent manual slice (P0_Scope_Reconciliation G-2); CSV
+  import + daily reconciliation are held (OQ-C). Needs `seed_pos.py` (operator +
+  fan tokens → `.pos_seed.json`):
+
+  ```sh
+  export POS_SEED_OUT="$PWD/../e2e/.pos_seed.json"
+  uv run python manage.py shell < ../e2e/seed_pos.py   # after step 1's migrate
+  # then, alongside the suite: POS_SEED_OUT="$PWD/.pos_seed.json" npx playwright test
+  ```
