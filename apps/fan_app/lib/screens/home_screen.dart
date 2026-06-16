@@ -29,8 +29,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
-    const member = FanMockData.member;
-    final favorites = FanFavoriteStore.instance;
 
     return Scaffold(
       backgroundColor: colors.cream50,
@@ -44,78 +42,154 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              SpacingTokens.screenMargin,
-              SpacingTokens.s4,
-              SpacingTokens.screenMargin,
-              SpacingTokens.s8,
-            ),
-            sliver: SliverList.list(
-              children: [
-                AssenMembershipCard(
-                  name: member.name,
-                  memberNumber: member.memberNumber,
-                  points: member.points,
-                  tierLabel: member.tierLabel,
-                  avatar: AssenAvatar(
-                    name: member.name,
-                    hue: AssenBadgeHue.strawberry,
-                  ),
-                  onShowQr: () => context.push(FanRoutes.qr),
+      // The same sections lay out as one stacked reading column on
+      // compact/medium widths and as a two-column dashboard on expanded
+      // web/desktop widths, so a wide browser fills the surface with content
+      // instead of leaving large empty gutters around a narrow column.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isExpanded =
+              AssenWindowSize.fromWidth(constraints.maxWidth) ==
+              AssenWindowSize.expanded;
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  SpacingTokens.screenMargin,
+                  SpacingTokens.s4,
+                  SpacingTokens.screenMargin,
+                  SpacingTokens.s8,
                 ),
-                const SizedBox(height: SpacingTokens.s5),
-                AssenStampCard(
-                  title: '방문 스탬프',
-                  filled: member.stampsFilled,
-                  slots: member.stampSlots,
-                  rewardLabel: '체키',
+                sliver: SliverList.list(
+                  children: isExpanded
+                      ? _dashboardChildren(context)
+                      : _stackedChildren(context),
                 ),
-                const SizedBox(height: SpacingTokens.s6),
-                AssenSectionHeader(
-                  title: '오늘의 출근',
-                  actionLabel: '출근표',
-                  onAction: () => context.go(FanRoutes.schedule),
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                AssenScheduleCalendar(
-                  days: FanMockData.homeWeek,
-                  selectedIndex: _selectedDay,
-                  todayIndex: FanMockData.todayIndexHome,
-                  onSelect: (i) => setState(() => _selectedDay = i),
-                ),
-                const SizedBox(height: SpacingTokens.s6),
-                AssenSectionHeader(
-                  title: '최애 캐스트',
-                  actionLabel: '전체보기',
-                  onAction: () => context.go(FanRoutes.schedule),
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                ListenableBuilder(
-                  listenable: favorites,
-                  builder: (context, _) => _FavoriteCastPreview(
-                    favorites: favorites,
-                    onOpenSchedule: () => context.go(FanRoutes.schedule),
-                    onOpenCast: (castId) =>
-                        context.push(FanRoutes.castPath(castId)),
-                  ),
-                ),
-                const SizedBox(height: SpacingTokens.s6),
-                const AssenSectionHeader(title: '이벤트'),
-                const SizedBox(height: SpacingTokens.s3),
-                AssenBannerCard(
-                  title: '6월 콜라보 이벤트',
-                  subtitle: '6.10 – 6.30 · 한정 체키 증정',
-                  background: ColoredBox(color: colors.lavenderBg),
-                  onTap: () => context.push(FanRoutes.events),
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  /// Stacked single-column layout for compact/medium widths (mobile/tablet).
+  List<Widget> _stackedChildren(BuildContext context) => [
+    _membershipCard(context),
+    const SizedBox(height: SpacingTokens.s5),
+    _stampCard(),
+    const SizedBox(height: SpacingTokens.s6),
+    _scheduleSection(context),
+    const SizedBox(height: SpacingTokens.s6),
+    _favoritesSection(context),
+    const SizedBox(height: SpacingTokens.s6),
+    _eventSection(context),
+  ];
+
+  /// Two-column dashboard for expanded widths: the membership card spans the
+  /// full width, then the remaining sections pair up two-per-row.
+  ///
+  /// The layout is row-major (each [Row] holds the next two sections) rather
+  /// than two independent columns, so the source order — stamps, schedule,
+  /// favorites, events — matches the visual left-to-right, top-to-bottom
+  /// reading order. That keeps screen-reader and focus traversal aligned with
+  /// what's on screen instead of reading down one column and back up the other.
+  List<Widget> _dashboardChildren(BuildContext context) => [
+    _membershipCard(context),
+    const SizedBox(height: SpacingTokens.s5),
+    _dashboardRow(_stampCard(), _scheduleSection(context)),
+    const SizedBox(height: SpacingTokens.s6),
+    _dashboardRow(_favoritesSection(context), _eventSection(context)),
+  ];
+
+  Widget _dashboardRow(Widget left, Widget right) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(child: left),
+      const SizedBox(width: SpacingTokens.s5),
+      Expanded(child: right),
+    ],
+  );
+
+  Widget _membershipCard(BuildContext context) {
+    const member = FanMockData.member;
+    return AssenMembershipCard(
+      name: member.name,
+      memberNumber: member.memberNumber,
+      points: member.points,
+      tierLabel: member.tierLabel,
+      avatar: AssenAvatar(name: member.name, hue: AssenBadgeHue.strawberry),
+      onShowQr: () => context.push(FanRoutes.qr),
+    );
+  }
+
+  Widget _stampCard() {
+    const member = FanMockData.member;
+    return AssenStampCard(
+      title: '방문 스탬프',
+      filled: member.stampsFilled,
+      slots: member.stampSlots,
+      rewardLabel: '체키',
+    );
+  }
+
+  Widget _scheduleSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AssenSectionHeader(
+          title: '오늘의 출근',
+          actionLabel: '출근표',
+          onAction: () => context.go(FanRoutes.schedule),
+        ),
+        const SizedBox(height: SpacingTokens.s3),
+        AssenScheduleCalendar(
+          days: FanMockData.homeWeek,
+          selectedIndex: _selectedDay,
+          todayIndex: FanMockData.todayIndexHome,
+          onSelect: (i) => setState(() => _selectedDay = i),
+        ),
+      ],
+    );
+  }
+
+  Widget _favoritesSection(BuildContext context) {
+    final favorites = FanFavoriteStore.instance;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AssenSectionHeader(
+          title: '최애 캐스트',
+          actionLabel: '전체보기',
+          onAction: () => context.go(FanRoutes.schedule),
+        ),
+        const SizedBox(height: SpacingTokens.s3),
+        ListenableBuilder(
+          listenable: favorites,
+          builder: (context, _) => _FavoriteCastPreview(
+            favorites: favorites,
+            onOpenSchedule: () => context.go(FanRoutes.schedule),
+            onOpenCast: (castId) => context.push(FanRoutes.castPath(castId)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _eventSection(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const AssenSectionHeader(title: '이벤트'),
+        const SizedBox(height: SpacingTokens.s3),
+        AssenBannerCard(
+          title: '6월 콜라보 이벤트',
+          subtitle: '6.10 – 6.30 · 한정 체키 증정',
+          background: ColoredBox(color: colors.lavenderBg),
+          onTap: () => context.push(FanRoutes.events),
+        ),
+      ],
     );
   }
 }

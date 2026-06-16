@@ -95,12 +95,12 @@ void main() {
       expect(_albumColumns(tester), 5);
     });
 
-    testWidgets('stays 5 columns at the shell-clamped desktop column (1080)', (
+    testWidgets('stays 5 columns at the shell-clamped desktop column (1280)', (
       tester,
     ) async {
       // fan_app renders this template inside ASS-141's adaptive shell, which
-      // clamps content to AssenLayout.contentMaxWidth (1080). Pin the real
-      // integrated geometry, not just the unclamped viewport: 1080 is still in
+      // clamps content to AssenLayout.contentMaxWidth (1280). Pin the real
+      // integrated geometry, not just the unclamped viewport: 1280 is still in
       // the expanded class, so the gallery is 5-up.
       _setLogicalSize(tester, 1280);
 

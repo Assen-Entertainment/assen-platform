@@ -41,10 +41,7 @@ class LoginScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: colors.cream50,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: SpacingTokens.screenMargin,
-          ),
+        child: AssenFormFrame(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
