@@ -123,3 +123,17 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_event_campaign.py   # after step 1's migrate
   # then: EVENT_CAMPAIGN_SEED_OUT="$PWD/.event_campaign_seed.json" npx playwright test event-campaign.api.spec.ts --workers=1
   ```
+- `tests/notification.api.spec.ts` — ASS-113 v0 notification policy guard
+  (`/api/operator/notifications/...`): the policy registry (allowed 4 + forbidden
+  kinds), an allowed category dispatching (200), the fail-closed refusals (a
+  named-forbidden category, an unknown category, a real-time presence field in
+  `data`, and a non-future favourite-cast schedule → 422), and the operator gate
+  (fan/anon → 401/403). Scope is the **policy guard + dispatch boundary**: no
+  durable model/event and the in-memory mock adapter (real FCM is P5). Needs
+  `seed_notification.py` (operator + fan tokens → `.notification_seed.json`):
+
+  ```sh
+  export NOTIFICATION_SEED_OUT="$PWD/../e2e/.notification_seed.json"
+  uv run python manage.py shell < ../e2e/seed_notification.py   # after step 1's migrate
+  # then: NOTIFICATION_SEED_OUT="$PWD/.notification_seed.json" npx playwright test notification.api.spec.ts
+  ```

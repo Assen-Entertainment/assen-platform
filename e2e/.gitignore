@@ -5,6 +5,7 @@ node_modules/
 .pos_seed.json
 .reservation_seed.json
 .event_campaign_seed.json
+.notification_seed.json
 test-results/
 playwright-report/
 blob-report/
