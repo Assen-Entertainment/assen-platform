@@ -63,6 +63,7 @@ LOCAL_APPS = [
     "apps.cheki",
     "apps.coupon",
     "apps.event_campaign",
+    "apps.visit_guide",
     "apps.safety",
     "apps.pos_lite",
     "apps.notification",
