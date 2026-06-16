@@ -137,3 +137,19 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_notification.py   # after step 1's migrate
   # then: NOTIFICATION_SEED_OUT="$PWD/.notification_seed.json" npx playwright test notification.api.spec.ts
   ```
+- `tests/visit-guide.api.spec.ts` — ASS-101 v0 visit guide / 이용 안내 CMS
+  (`/api/operator/visit-guide` + `/api/visit-guide` + `/api/fan/visit-guide`):
+  operator sees draft+published; the **public** list/detail show only published and
+  are **unauthenticated** (pre-visit reading); a draft id is **404** to the public
+  (no existence leak); a published section is **draft-only for edits** (400); the
+  fan rule acknowledgement (records `rule_consent_given`); and the gates (staff
+  token on ack → 403; fan/anon on the operator surface → 401/403). Scope stores
+  **no price/menu value** (the approved values are the approval-gated, deferred
+  slice). Needs `seed_visit_guide.py` (operator + fan tokens, a published + a draft
+  section → `.visit_guide_seed.json`):
+
+  ```sh
+  export VISIT_GUIDE_SEED_OUT="$PWD/../e2e/.visit_guide_seed.json"
+  uv run python manage.py shell < ../e2e/seed_visit_guide.py   # after step 1's migrate
+  # then: VISIT_GUIDE_SEED_OUT="$PWD/.visit_guide_seed.json" npx playwright test visit-guide.api.spec.ts
+  ```

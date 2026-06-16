@@ -6,6 +6,7 @@ node_modules/
 .reservation_seed.json
 .event_campaign_seed.json
 .notification_seed.json
+.visit_guide_seed.json
 test-results/
 playwright-report/
 blob-report/

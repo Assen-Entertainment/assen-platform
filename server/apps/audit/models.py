@@ -73,6 +73,10 @@ class AuditAction(models.TextChoices):
         "event_campaign_unpublished",
     )
     EVENT_CAMPAIGN_CLOSED = "event_campaign_closed", "event_campaign_closed"
+    GUIDE_SECTION_CREATED = "guide_section_created", "guide_section_created"
+    GUIDE_SECTION_UPDATED = "guide_section_updated", "guide_section_updated"
+    GUIDE_SECTION_PUBLISHED = "guide_section_published", "guide_section_published"
+    GUIDE_SECTION_UNPUBLISHED = "guide_section_unpublished", "guide_section_unpublished"
 
 
 class AuditEntry(models.Model):
