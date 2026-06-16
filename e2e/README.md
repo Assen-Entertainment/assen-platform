@@ -153,3 +153,18 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_visit_guide.py   # after step 1's migrate
   # then: VISIT_GUIDE_SEED_OUT="$PWD/.visit_guide_seed.json" npx playwright test visit-guide.api.spec.ts
   ```
+- `tests/coupon.api.spec.ts` — ASS-108 v0 coupons + points
+  (`/api/operator/coupon` + `/api/fan/coupon`): the coupon lifecycle (issue →
+  redeem minting a `redemption_id` → cancel/expire), the **blocked-fan redeem
+  refusal** (FANDOM_FEATURE → 400), the point ledger (grant/adjust + balance), the
+  **non-negative balance guard** (400), the fan's own coupon/point reads, and the
+  gates (staff token on the fan surface → 403; fan/anon on the operator surface →
+  401/403). Scope stores **no discount/money figure** (the coupon value is the
+  approval-gated, deferred slice). Needs `seed_coupon.py` (operator + fan +
+  blocked-fan tokens, an active + a blocked coupon → `.coupon_seed.json`):
+
+  ```sh
+  export COUPON_SEED_OUT="$PWD/../e2e/.coupon_seed.json"
+  uv run python manage.py shell < ../e2e/seed_coupon.py   # after step 1's migrate
+  # then: COUPON_SEED_OUT="$PWD/.coupon_seed.json" npx playwright test coupon.api.spec.ts --workers=1
+  ```

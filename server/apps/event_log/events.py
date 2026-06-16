@@ -73,6 +73,12 @@ class EventName(models.TextChoices):
     # Coupon.
     COUPON_ISSUED = "coupon_issued", "coupon_issued"
     COUPON_REDEEMED = "coupon_redeemed", "coupon_redeemed"
+    COUPON_CANCELLED = "coupon_cancelled", "coupon_cancelled"
+    COUPON_EXPIRED = "coupon_expired", "coupon_expired"
+
+    # Point (P0_optional).
+    POINT_GRANTED = "point_granted", "point_granted"
+    POINT_ADJUSTED = "point_adjusted", "point_adjusted"
 
     # POS.
     POS_ORDER_LINKED = "pos_order_linked", "pos_order_linked"
@@ -359,6 +365,38 @@ class CouponRedeemedPayload(_PayloadModel):
     redemption_status: str
 
 
+class CouponCancelledPayload(_PayloadModel):
+    """``coupon_cancelled`` — a coupon (or its redemption) is cancelled/voided."""
+
+    fan_id: str
+    coupon_id: str
+    coupon_type: str
+
+
+class CouponExpiredPayload(_PayloadModel):
+    """``coupon_expired`` — a coupon lapsed past its expiry."""
+
+    fan_id: str
+    coupon_id: str
+    coupon_type: str
+
+
+class PointGrantedPayload(_PayloadModel):
+    """``point_granted`` — points granted to a fan (P0_optional)."""
+
+    fan_id: str
+    point_entry_id: str
+    delta: int
+
+
+class PointAdjustedPayload(_PayloadModel):
+    """``point_adjusted`` — a manual point correction (P0_optional)."""
+
+    fan_id: str
+    point_entry_id: str
+    delta: int
+
+
 class PosOrderLinkedPayload(_PayloadModel):
     """``pos_order_linked`` required properties (Data_Event_Schema L526-542)."""
 
@@ -447,6 +485,10 @@ EVENT_PAYLOAD_SCHEMAS: dict[str, type[_PayloadModel]] = {
     EventName.EVENT_RESERVATION_CANCELLED.value: EventReservationCancelledPayload,
     EventName.COUPON_ISSUED.value: CouponIssuedPayload,
     EventName.COUPON_REDEEMED.value: CouponRedeemedPayload,
+    EventName.COUPON_CANCELLED.value: CouponCancelledPayload,
+    EventName.COUPON_EXPIRED.value: CouponExpiredPayload,
+    EventName.POINT_GRANTED.value: PointGrantedPayload,
+    EventName.POINT_ADJUSTED.value: PointAdjustedPayload,
     EventName.POS_ORDER_LINKED.value: PosOrderLinkedPayload,
     EventName.POS_RECONCILIATION_FLAGGED.value: PosReconciliationFlaggedPayload,
     EventName.PAYMENT_REFUNDED.value: PaymentRefundedPayload,

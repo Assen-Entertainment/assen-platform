@@ -65,6 +65,7 @@ def health(request: HttpRequest) -> HealthResponse:
 # own Router to this singleton so OpenAPI stays in one document.
 from apps.cast import api as cast_api  # noqa: E402,F401
 from apps.cheki import api as cheki_api  # noqa: E402,F401
+from apps.coupon import api as coupon_api  # noqa: E402,F401
 from apps.dashboard import api as dashboard_api  # noqa: E402,F401
 from apps.event_campaign import api as event_campaign_api  # noqa: E402,F401
 from apps.identity import api as identity_api  # noqa: E402,F401
