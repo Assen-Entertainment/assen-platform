@@ -168,3 +168,17 @@ git-ignored.
   uv run python manage.py shell < ../e2e/seed_coupon.py   # after step 1's migrate
   # then: COUPON_SEED_OUT="$PWD/.coupon_seed.json" npx playwright test coupon.api.spec.ts --workers=1
   ```
+- `tests/rbac.api.spec.ts` — RBAC v0 admin role assignment
+  (`/api/admin/rbac/roles`): an admin promotes a fan; an unassignable role (cast)
+  → 400; a no-op → 409; demoting a second admin is allowed while another remains;
+  the **last-admin demotion** is refused (409); the staff list; and the admin-only
+  gate (operator/fan/anon → 401/403). **HUMAN-REVIEW-REQUIRED: authz surface
+  (#26)** — merge is gated on explicit human approval. Run serially (ordered
+  transitions + row locks). Needs `seed_rbac.py` (admin + second admin + target
+  fan + operator + fan → `.rbac_seed.json`):
+
+  ```sh
+  export RBAC_SEED_OUT="$PWD/../e2e/.rbac_seed.json"
+  uv run python manage.py shell < ../e2e/seed_rbac.py   # after step 1's migrate
+  # then: RBAC_SEED_OUT="$PWD/.rbac_seed.json" npx playwright test rbac.api.spec.ts --workers=1
+  ```

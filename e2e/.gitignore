@@ -8,6 +8,7 @@ node_modules/
 .notification_seed.json
 .visit_guide_seed.json
 .coupon_seed.json
+.rbac_seed.json
 test-results/
 playwright-report/
 blob-report/
