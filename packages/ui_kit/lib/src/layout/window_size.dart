@@ -61,7 +61,20 @@ abstract final class AssenLayout {
   static const double expandedMinWidth = 840;
 
   /// Maximum width for fan-app content on expanded web/tablet layouts.
-  static const double contentMaxWidth = 1080;
+  ///
+  /// Sized so the expanded fan surfaces (notably the home dashboard) use more
+  /// of a desktop browser's width before centering, instead of leaving wide
+  /// empty gutters around a narrow reading column. The home screen lays its
+  /// sections into two columns at this width; other fan screens read wider.
+  static const double contentMaxWidth = 1280;
+
+  /// Maximum width for a centered form body (login, signup) before it stops
+  /// stretching edge-to-edge.
+  ///
+  /// Auth screens are fixed-height (non-scrolling) bodies, so they cannot use
+  /// AssenContentColumn (which loosens height for scrolling content); the
+  /// AssenFormFrame caps them to this width via symmetric padding instead.
+  static const double formMaxWidth = 420;
 
   /// Maximum width for operator-console content on expanded layouts.
   ///

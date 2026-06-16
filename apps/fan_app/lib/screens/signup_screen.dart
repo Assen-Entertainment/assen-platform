@@ -59,28 +59,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         onPrimary: _advance,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            SpacingTokens.screenMargin,
-            SpacingTokens.s5,
-            SpacingTokens.screenMargin,
-            SpacingTokens.s5,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AssenStepIndicator(
-                count: _steps.length,
-                currentStep: _step,
-                labels: _steps,
-              ),
-              const SizedBox(height: SpacingTokens.s8),
-              Expanded(
-                child: Center(
-                  child: _StepBody(label: _steps[_step], colors: colors),
+        child: AssenFormFrame(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AssenStepIndicator(
+                  count: _steps.length,
+                  currentStep: _step,
+                  labels: _steps,
                 ),
-              ),
-            ],
+                const SizedBox(height: SpacingTokens.s8),
+                Expanded(
+                  child: Center(
+                    child: _StepBody(label: _steps[_step], colors: colors),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

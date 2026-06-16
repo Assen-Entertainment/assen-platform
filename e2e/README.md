@@ -38,6 +38,34 @@ KPI_SEED_OUT="$PWD/.seed.json" npx playwright test
 Artifacts: `playwright-report/` (HTML) and `test-results/` (traces) — both
 git-ignored.
 
+The default `npx playwright test` (and `npm test`) runs only the API specs
+(`*.api.spec.ts`); the web/UI specs are a separate config (see below), so the
+API flow stays self-contained.
+
+## Web/UI suite (Flutter web shell)
+
+`tests/*.web.spec.ts` drive the composed local web shell instead of the API
+server, so they have their own config (`playwright.web.config.ts`). Bring up the
+shell first, then run the web suite:
+
+```sh
+# 1. Build + serve the composed shell (landing + fan_app /app + operator /ops).
+scripts/build-web-local.sh
+WEB_PORT=8080 scripts/serve-web-local.sh &   # background
+
+# 2. Run the web suite (default WEB_BASE_URL is http://127.0.0.1:8080).
+cd e2e
+npm install
+npm run test:web
+```
+
+- `tests/fan-desktop-shell.web.spec.ts` — ASS-147 fan app adaptive shell: the
+  login form is width-capped on a wide desktop (not edge-to-edge), sign-in
+  advances the hash route to `/home`, and desktop (two-column dashboard) +
+  mobile (stacked) home screenshots are captured for visual verdict. The
+  column/stack geometry itself is asserted deterministically by the fan_app
+  widget test `home_dashboard_layout_test.dart`.
+
 ## Scope
 
 - `tests/kpi-metrics.api.spec.ts` — ASS-112 operator KPI/MSFC endpoint:
