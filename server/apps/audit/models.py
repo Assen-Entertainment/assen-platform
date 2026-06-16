@@ -77,6 +77,12 @@ class AuditAction(models.TextChoices):
     GUIDE_SECTION_UPDATED = "guide_section_updated", "guide_section_updated"
     GUIDE_SECTION_PUBLISHED = "guide_section_published", "guide_section_published"
     GUIDE_SECTION_UNPUBLISHED = "guide_section_unpublished", "guide_section_unpublished"
+    COUPON_ISSUED = "coupon_issued", "coupon_issued"
+    COUPON_REDEEMED = "coupon_redeemed", "coupon_redeemed"
+    COUPON_CANCELLED = "coupon_cancelled", "coupon_cancelled"
+    COUPON_EXPIRED = "coupon_expired", "coupon_expired"
+    POINT_GRANTED = "point_granted", "point_granted"
+    POINT_ADJUSTED = "point_adjusted", "point_adjusted"
 
 
 class AuditEntry(models.Model):

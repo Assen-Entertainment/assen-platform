@@ -368,6 +368,26 @@ def _minimal_payloads() -> dict[str, dict[str, object]]:
             "coupon_type": "revisit",
             "redemption_status": "redeemed",
         },
+        EventName.COUPON_CANCELLED.value: {
+            "fan_id": "f",
+            "coupon_id": "co",
+            "coupon_type": "revisit",
+        },
+        EventName.COUPON_EXPIRED.value: {
+            "fan_id": "f",
+            "coupon_id": "co",
+            "coupon_type": "revisit",
+        },
+        EventName.POINT_GRANTED.value: {
+            "fan_id": "f",
+            "point_entry_id": "pe",
+            "delta": 10,
+        },
+        EventName.POINT_ADJUSTED.value: {
+            "fan_id": "f",
+            "point_entry_id": "pe",
+            "delta": -5,
+        },
         EventName.POS_ORDER_LINKED.value: {
             "visit_id": "v",
             "link_method": "manual",
