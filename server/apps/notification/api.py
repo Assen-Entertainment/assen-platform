@@ -1,0 +1,142 @@
+"""Operator API for the notification policy guard (ASS-113 v0).
+
+Two endpoints under ``/api/operator/notifications`` (``operator_required``):
+  - ``GET /policy`` — the self-documenting policy registry (allowed 4 + the named
+    forbidden kinds), so the guard's rules are inspectable.
+  - ``POST /dispatch`` — dispatch one notification; the policy guard runs first,
+    so a forbidden/unknown category, a real-time presence field, or an unsafe
+    cast-schedule date is refused (422) and never sent. v0 uses the in-memory mock
+    adapter (no real FCM yet — that transport lands in P5).
+
+#26 비차단: reuses ``operator_required`` (existing staff RBAC); issues no token and
+does not touch auth/session code.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+from django.http import HttpRequest
+from ninja import Router, Schema
+from pydantic import Field
+
+from apps.admin_rbac.permissions import operator_required
+from apps.notification.adapters import MockNotificationAdapter, NotificationAdapter
+from apps.notification.policy import (
+    FORBIDDEN_NOTIFICATIONS,
+    NotificationCategory,
+    NotificationPolicyError,
+)
+from apps.notification.services import send_notification
+from config.api import api
+
+notification_router = Router(auth=operator_required, tags=["operator-notification"])
+
+_TEXT_MAX = 500
+_DATA_MAX_KEYS = 20
+_KEY_MAX = 100
+
+
+def _adapter() -> NotificationAdapter:
+    """Return the push adapter. P0/dev uses the in-memory mock (no real FCM).
+
+    Mirrors ``apps.identity.api._otp_sender`` — a single seam so the real FCM
+    transport can be injected in P5 without touching callers.
+    """
+    return MockNotificationAdapter()
+
+
+class NotificationError(Schema):
+    """Stable error shape for notification endpoints."""
+
+    detail: str
+
+
+class PolicyCategoryOut(Schema):
+    """One allowed category: its code + human label."""
+
+    value: str
+    label: str
+
+
+class ForbiddenOut(Schema):
+    """One explicitly-forbidden notification kind: its code + reason."""
+
+    value: str
+    reason: str
+
+
+class PolicyOut(Schema):
+    """The notification policy: the allowed 4 + the named forbidden kinds."""
+
+    allowed: list[PolicyCategoryOut]
+    forbidden: list[ForbiddenOut]
+
+
+class DispatchIn(Schema):
+    """Operator payload to dispatch one notification (policy-guarded)."""
+
+    category: str = Field(max_length=_TEXT_MAX)
+    token: str = Field(min_length=1, max_length=_TEXT_MAX)
+    title: str = Field(max_length=_TEXT_MAX)
+    body: str = Field(max_length=_TEXT_MAX)
+    data: dict[str, str] = Field(default_factory=dict)
+    scheduled_date: date | None = None
+
+
+class DispatchOut(Schema):
+    """Result of a dispatch attempt."""
+
+    accepted: bool
+    message_id: str
+    category: str
+
+
+@notification_router.get("/policy", response=PolicyOut)
+def get_policy(request: HttpRequest) -> PolicyOut:
+    """Return the notification policy registry (allowed 4 + forbidden kinds)."""
+    del request
+    allowed = [
+        PolicyCategoryOut(value=choice.value, label=choice.label) for choice in NotificationCategory
+    ]
+    forbidden = [
+        ForbiddenOut(value=value, reason=reason)
+        for value, reason in FORBIDDEN_NOTIFICATIONS.items()
+    ]
+    return PolicyOut(allowed=allowed, forbidden=forbidden)
+
+
+@notification_router.post("/dispatch", response={200: DispatchOut, 422: NotificationError})
+def dispatch_notification(
+    request: HttpRequest, payload: DispatchIn
+) -> tuple[int, DispatchOut | NotificationError]:
+    """Dispatch one notification after the policy guard passes (else 422)."""
+    del request
+    if len(payload.data) > _DATA_MAX_KEYS:
+        return 422, NotificationError(detail="Too many data keys.")
+    # Bound each data key/value too (the scalar fields are capped via Field; keep
+    # the map symmetric so a 20-key payload cannot smuggle arbitrarily large blobs).
+    if any(len(k) > _KEY_MAX or len(v) > _TEXT_MAX for k, v in payload.data.items()):
+        return 422, NotificationError(detail="A data key or value is too long.")
+    try:
+        result = send_notification(
+            category=payload.category,
+            token=payload.token,
+            title=payload.title,
+            body=payload.body,
+            adapter=_adapter(),
+            data=payload.data,
+            scheduled_date=payload.scheduled_date,
+        )
+    except NotificationPolicyError as exc:
+        return 422, NotificationError(detail=str(exc))
+    # payload.category equals the stamped category: the fail-closed allowlist is an
+    # exact match (no normalisation), so the validated input is the stamped value.
+    return 200, DispatchOut(
+        accepted=result.accepted,
+        message_id=result.message_id,
+        category=payload.category,
+    )
+
+
+api.add_router("/operator/notifications", notification_router)
