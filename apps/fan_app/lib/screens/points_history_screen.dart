@@ -1,4 +1,5 @@
 import 'package:fan_app/router/routes.dart';
+import 'package:fan_app/screens/my_hub_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -64,10 +65,17 @@ class PointsHistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(_pointsHistoryProvider);
 
-    return AssenPointsHistoryTemplate(
-      summary: data.summary,
-      monthGroups: data.monthGroups,
-      onBack: () => context.go(FanRoutes.my),
+    return MyHubScaffold(
+      active: MySubPage.points,
+      narrow: AssenPointsHistoryTemplate(
+        summary: data.summary,
+        monthGroups: data.monthGroups,
+        onBack: () => context.go(FanRoutes.my),
+      ),
+      detail: AssenPointsHistoryBody(
+        summary: data.summary,
+        monthGroups: data.monthGroups,
+      ),
     );
   }
 }

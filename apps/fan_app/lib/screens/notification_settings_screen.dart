@@ -1,4 +1,5 @@
 import 'package:fan_app/router/routes.dart';
+import 'package:fan_app/screens/my_hub_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -39,50 +40,61 @@ class _NotificationSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return AssenNotificationSettingsTemplate(
-      servicePreferences: [
-        AssenNotificationPref(
-          id: _reservationId,
-          title: '예약 상태 변경',
-          subtitle: '확정·변경·취소 알림',
-          enabled: _prefs[_reservationId] ?? true,
-        ),
-        AssenNotificationPref(
-          id: _eventsId,
-          title: '이벤트 공지',
-          subtitle: '생탄제·테마데이 소식',
-          enabled: _prefs[_eventsId] ?? true,
-        ),
-        AssenNotificationPref(
-          id: _couponsId,
-          title: '쿠폰 발급·만료',
-          subtitle: '만료 3일 전에 알려드려요',
-          enabled: _prefs[_couponsId] ?? true,
-        ),
-        AssenNotificationPref(
-          id: _favoriteSummaryId,
-          title: '최애 출근 요약',
-          subtitle: '주 1회, 등록한 캐스트만',
-          enabled: _prefs[_favoriteSummaryId] ?? true,
-        ),
-      ],
-      benefitPreferences: [
-        AssenNotificationPref(
-          id: _promotionsId,
-          title: '혜택·프로모션 소식',
-          subtitle: '동의 시 처리 일시를 안내해 드려요',
-          enabled: _prefs[_promotionsId] ?? false,
-        ),
-        AssenNotificationPref(
-          id: _nightPromotionsId,
-          title: '야간 수신 (21시–8시)',
-          subtitle: '광고성 알림의 야간 발송 동의',
-          enabled: _prefs[_nightPromotionsId] ?? false,
-          disabled: !(_prefs[_promotionsId] ?? false),
-        ),
-      ],
-      onPreferenceChanged: _handlePreferenceChanged,
-      onBack: () => context.go(FanRoutes.my),
+    final servicePreferences = [
+      AssenNotificationPref(
+        id: _reservationId,
+        title: '예약 상태 변경',
+        subtitle: '확정·변경·취소 알림',
+        enabled: _prefs[_reservationId] ?? true,
+      ),
+      AssenNotificationPref(
+        id: _eventsId,
+        title: '이벤트 공지',
+        subtitle: '생탄제·테마데이 소식',
+        enabled: _prefs[_eventsId] ?? true,
+      ),
+      AssenNotificationPref(
+        id: _couponsId,
+        title: '쿠폰 발급·만료',
+        subtitle: '만료 3일 전에 알려드려요',
+        enabled: _prefs[_couponsId] ?? true,
+      ),
+      AssenNotificationPref(
+        id: _favoriteSummaryId,
+        title: '최애 출근 요약',
+        subtitle: '주 1회, 등록한 캐스트만',
+        enabled: _prefs[_favoriteSummaryId] ?? true,
+      ),
+    ];
+    final benefitPreferences = [
+      AssenNotificationPref(
+        id: _promotionsId,
+        title: '혜택·프로모션 소식',
+        subtitle: '동의 시 처리 일시를 안내해 드려요',
+        enabled: _prefs[_promotionsId] ?? false,
+      ),
+      AssenNotificationPref(
+        id: _nightPromotionsId,
+        title: '야간 수신 (21시–8시)',
+        subtitle: '광고성 알림의 야간 발송 동의',
+        enabled: _prefs[_nightPromotionsId] ?? false,
+        disabled: !(_prefs[_promotionsId] ?? false),
+      ),
+    ];
+
+    return MyHubScaffold(
+      active: MySubPage.notifications,
+      narrow: AssenNotificationSettingsTemplate(
+        servicePreferences: servicePreferences,
+        benefitPreferences: benefitPreferences,
+        onPreferenceChanged: _handlePreferenceChanged,
+        onBack: () => context.go(FanRoutes.my),
+      ),
+      detail: AssenNotificationSettingsBody(
+        servicePreferences: servicePreferences,
+        benefitPreferences: benefitPreferences,
+        onPreferenceChanged: _handlePreferenceChanged,
+      ),
     );
   }
 

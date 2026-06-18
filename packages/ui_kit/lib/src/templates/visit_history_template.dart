@@ -138,6 +138,51 @@ class AssenVisitHistoryTemplate extends StatelessWidget {
   }
 }
 
+/// The Scaffold-less visit-history body for embedding in a list-detail pane
+/// (ASS-147 Slice 4): the same summary card + monthly visit timelines as
+/// [AssenVisitHistoryTemplate] but WITHOUT a [Scaffold] or [AssenAppBar], so it
+/// mounts as the detail pane of the My hub. The route-built full-Scaffold
+/// template is unchanged.
+class AssenVisitHistoryBody extends StatelessWidget {
+  /// Creates an embeddable visit-history body.
+  const AssenVisitHistoryBody({
+    required this.summary,
+    required this.monthGroups,
+    super.key,
+  });
+
+  /// Valid-visit summary shown in the hero row.
+  final AssenVisitHistorySummary summary;
+
+  /// Month-grouped valid visit rows, newest first.
+  final List<AssenVisitHistoryMonthGroup> monthGroups;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        SpacingTokens.screenMargin,
+        SpacingTokens.s4,
+        SpacingTokens.screenMargin,
+        SpacingTokens.s8,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _VisitSummaryCard(summary: summary),
+          const SizedBox(height: SpacingTokens.s6),
+          for (final group in monthGroups) ...[
+            AssenSectionHeader(title: group.monthLabel),
+            const SizedBox(height: SpacingTokens.s3),
+            _VisitTimeline(entries: group.entries),
+            const SizedBox(height: SpacingTokens.s5),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _VisitSummaryCard extends StatelessWidget {
   const _VisitSummaryCard({required this.summary});
 
