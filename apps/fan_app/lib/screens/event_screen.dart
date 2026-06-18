@@ -12,19 +12,154 @@ final Provider<List<AssenFanEvent>> _fanEventsProvider =
 ///
 /// It keeps C4 on local fictional data until the event API lands, while the
 /// shared ui_kit template owns only the visual states and filter behavior.
-class EventListScreen extends ConsumerWidget {
+///
+/// Below the large desktop class (<1200dp) it renders the unchanged stacked
+/// [AssenEventListTemplate] and tapping a card pushes `/events/:id` (mobile
+/// flow, byte-for-byte as before). At large and wider it becomes a Material 3
+/// list-detail (ASS-147 Slice 3): a responsive event feed beside a detail pane
+/// that mounts the chrome-less [AssenEventDetailBody] for the selected event,
+/// so a desktop browser fills the surface. The route push is retained for
+/// deep-links and back. Selection lives in screen-local state — this is an
+/// out-of-shell route, so leaving and re-entering disposes/recreates the screen
+/// and the detail pane resets (no app-global provider, no stale selection).
+class EventListScreen extends ConsumerStatefulWidget {
   /// Creates the event list screen.
   const EventListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EventListScreen> createState() => _EventListScreenState();
+}
+
+class _EventListScreenState extends ConsumerState<EventListScreen> {
+  static const List<String> _tabs = ['전체', '캐스트', '이벤트', '공지'];
+
+  int _selectedTab = 0;
+  String? _selectedId;
+
+  @override
+  Widget build(BuildContext context) {
     final events = ref.watch(_fanEventsProvider);
 
-    return AssenEventListTemplate(
-      events: events,
-      onEventTap: (id) => context.push(FanRoutes.eventPath(id)),
-      onBack: () => _pop(context),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Gate on the width the list-detail scaffold will actually receive
+        // (after the screen-margin padding), so the screen and the scaffold
+        // agree on the breakpoint. Gating on the raw width would open a dead
+        // band just above 1200dp where the screen enters the wide path but the
+        // padded scaffold collapses to list-only, leaving a card tap with
+        // nowhere to go (no push, no pane).
+        final contentWidth =
+            constraints.maxWidth - SpacingTokens.screenMargin * 2;
+        final wide = AssenWindowSize.fromWidth(
+          contentWidth,
+        ).atLeast(AssenWindowSize.large);
+
+        // Mobile / tablet: unchanged single-column list; the template owns its
+        // own filter state and tapping a card pushes the detail route.
+        if (!wide) {
+          return AssenEventListTemplate(
+            events: events,
+            onEventTap: (id) => context.push(FanRoutes.eventPath(id)),
+            onBack: () => _pop(context),
+          );
+        }
+
+        return _buildWide(context, events);
+      },
     );
+  }
+
+  Widget _buildWide(BuildContext context, List<AssenFanEvent> events) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    final visible = _filteredEvents(events);
+    final selected = _resolveSelected(visible);
+
+    return Scaffold(
+      backgroundColor: colors.cream50,
+      appBar: AssenAppBar(title: '하츠코이', onBack: () => _pop(context)),
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              SpacingTokens.screenMargin,
+              SpacingTokens.s3,
+              SpacingTokens.screenMargin,
+              SpacingTokens.s8,
+            ),
+            sliver: SliverList.list(
+              children: [
+                AssenUnderlineTabs(
+                  tabs: _tabs,
+                  selectedIndex: _selectedTab,
+                  onChanged: (index) => setState(() => _selectedTab = index),
+                ),
+                const SizedBox(height: SpacingTokens.s6),
+                const AssenSectionHeader(title: '이벤트'),
+                const SizedBox(height: SpacingTokens.s4),
+                AssenListDetailScaffold(
+                  // breakpoint defaults to large; the outer LayoutBuilder above
+                  // already gates the whole wide path at >= large.
+                  list: AssenFeedGrid(
+                    maxColumns: 2,
+                    children: [
+                      for (final event in visible)
+                        _EventGridCard(
+                          event: event,
+                          selected: event.id == selected?.id,
+                          onTap: () => setState(() => _selectedId = event.id),
+                        ),
+                    ],
+                  ),
+                  detail: selected == null
+                      ? const AssenEmptyState(
+                          title: '이벤트를 선택해 주세요',
+                          message: '왼쪽 목록에서 이벤트를 고르면 상세가 여기에 표시돼요.',
+                        )
+                      : AssenEventDetailBody(
+                          key: ValueKey(selected.id),
+                          event: selected,
+                          onClose: () => setState(() => _selectedId = null),
+                          onReserve:
+                              selected.status == AssenFanEventStatus.ended
+                              ? null
+                              : () => context.go(FanRoutes.reservation),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<AssenFanEvent> _filteredEvents(List<AssenFanEvent> events) {
+    return switch (_selectedTab) {
+      1 =>
+        events
+            .where((event) => event.category == AssenFanEventCategory.cast)
+            .toList(),
+      2 =>
+        events
+            .where((event) => event.category == AssenFanEventCategory.event)
+            .toList(),
+      3 =>
+        events
+            .where((event) => event.category == AssenFanEventCategory.notice)
+            .toList(),
+      _ => events,
+    };
+  }
+
+  // Resolve the selection against the currently visible (filtered) events so
+  // the detail pane always corresponds to a card on screen; a filter that hides
+  // the selected event falls back to the empty-state prompt.
+  AssenFanEvent? _resolveSelected(List<AssenFanEvent> visible) {
+    if (_selectedId == null) return null;
+    for (final event in visible) {
+      if (event.id == _selectedId) return event;
+    }
+    return null;
   }
 
   void _pop(BuildContext context) {
@@ -33,6 +168,107 @@ class EventListScreen extends ConsumerWidget {
     } else {
       context.go(FanRoutes.home);
     }
+  }
+}
+
+/// A selectable event card for the wide list-detail feed (ASS-147 Slice 3).
+///
+/// Tapping selects the event (the host populates the detail pane) rather than
+/// pushing a route — the desktop list-detail keeps the user on `/events`. The
+/// selection ring is the only visual difference from the stacked card.
+class _EventGridCard extends StatelessWidget {
+  const _EventGridCard({
+    required this.event,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AssenFanEvent event;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    final active = event.status != AssenFanEventStatus.ended;
+
+    // InkWell (not a bare GestureDetector) so the desktop list cards are
+    // keyboard-focusable and activatable (Enter/Space) and traverse in the
+    // feed's row-major order; Semantics carries the selected state for AT.
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: colors.white,
+        borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.lg)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: const BorderRadius.all(
+            Radius.circular(RadiusTokens.lg),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: selected ? colors.roseMain : colors.ink100,
+                width: selected ? 2 : 1,
+              ),
+              borderRadius: const BorderRadius.all(
+                Radius.circular(RadiusTokens.lg),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(SpacingTokens.s4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          event.title,
+                          style: TypographyTokens.titleL.copyWith(
+                            color: colors.ink900,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: SpacingTokens.s2),
+                      AssenBadge(
+                        label: event.statusLabel,
+                        hue: switch (event.status) {
+                          AssenFanEventStatus.upcoming => AssenBadgeHue.lemon,
+                          AssenFanEventStatus.ongoing => AssenBadgeHue.matcha,
+                          AssenFanEventStatus.ended => AssenBadgeHue.sky,
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: SpacingTokens.s2),
+                  Text(
+                    event.meta,
+                    style: TypographyTokens.bodyM.copyWith(
+                      color: colors.ink700,
+                    ),
+                  ),
+                  const SizedBox(height: SpacingTokens.s4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      event.actionLabel,
+                      style: TypographyTokens.label.copyWith(
+                        color: active ? colors.roseMain : colors.ink500,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
