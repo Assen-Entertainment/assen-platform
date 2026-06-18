@@ -69,7 +69,10 @@ class AssenAdaptiveShell extends StatelessWidget {
           );
         }
 
-        final expanded = size == AssenWindowSize.expanded;
+        // `atLeast` (not `== expanded`) so that un-collapsing large/XL from
+        // expanded keeps this legacy path identical at 1200dp+: one boolean
+        // drives BOTH the extended rail and the AssenContentColumn wrap below.
+        final expanded = size.atLeast(AssenWindowSize.expanded);
         return Scaffold(
           backgroundColor: colors.cream50,
           body: Row(

@@ -42,15 +42,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      // The same sections lay out as one stacked reading column on
-      // compact/medium widths and as a two-column dashboard on expanded
-      // web/desktop widths, so a wide browser fills the surface with content
-      // instead of leaving large empty gutters around a narrow column.
+      // Compact/medium keep the stacked reading column (mobile/tablet). At
+      // expanded and wider the home becomes a Material 3 "supporting pane": a
+      // responsive card feed (columns scale with the local body width) beside a
+      // persistent membership rail, so a desktop browser fills the surface with
+      // organized content instead of a narrow centered column with big gutters.
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isExpanded =
-              AssenWindowSize.fromWidth(constraints.maxWidth) ==
-              AssenWindowSize.expanded;
+          final wide = AssenWindowSize.fromWidth(
+            constraints.maxWidth,
+          ).atLeast(AssenWindowSize.expanded);
           return CustomScrollView(
             slivers: [
               SliverPadding(
@@ -61,8 +62,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   SpacingTokens.s8,
                 ),
                 sliver: SliverList.list(
-                  children: isExpanded
-                      ? _dashboardChildren(context)
+                  children: wide
+                      ? _wideChildren(context)
                       : _stackedChildren(context),
                 ),
               ),
@@ -86,30 +87,25 @@ class _HomeScreenState extends State<HomeScreen> {
     _eventSection(context),
   ];
 
-  /// Two-column dashboard for expanded widths: the membership card spans the
-  /// full width, then the remaining sections pair up two-per-row.
-  ///
-  /// The layout is row-major (each [Row] holds the next two sections) rather
-  /// than two independent columns, so the source order — stamps, schedule,
-  /// favorites, events — matches the visual left-to-right, top-to-bottom
-  /// reading order. That keeps screen-reader and focus traversal aligned with
-  /// what's on screen instead of reading down one column and back up the other.
-  List<Widget> _dashboardChildren(BuildContext context) => [
-    _membershipCard(context),
-    const SizedBox(height: SpacingTokens.s5),
-    _dashboardRow(_stampCard(), _scheduleSection(context)),
-    const SizedBox(height: SpacingTokens.s6),
-    _dashboardRow(_favoritesSection(context), _eventSection(context)),
+  /// Desktop "supporting pane" layout for expanded widths and wider: a
+  /// responsive [AssenFeedGrid] of section cards beside a persistent membership
+  /// rail. The feed's column count derives from the local body width, so the
+  /// feed + rail fill the available width rather than centering in a reading
+  /// column. The feed lists stamps then today's schedule first, so at the 2-up
+  /// width they share the first row (방문 스탬프 left of 오늘의 출근).
+  List<Widget> _wideChildren(BuildContext context) => [
+    AssenSupportingPaneScaffold(
+      supporting: _membershipCard(context),
+      main: AssenFeedGrid(
+        children: [
+          _stampCard(),
+          _scheduleSection(context),
+          _favoritesSection(context),
+          _eventSection(context),
+        ],
+      ),
+    ),
   ];
-
-  Widget _dashboardRow(Widget left, Widget right) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(child: left),
-      const SizedBox(width: SpacingTokens.s5),
-      Expanded(child: right),
-    ],
-  );
 
   Widget _membershipCard(BuildContext context) {
     const member = FanMockData.member;
