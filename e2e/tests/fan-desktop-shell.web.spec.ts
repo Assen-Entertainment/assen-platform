@@ -4,13 +4,14 @@ import { expect, type Page, test } from '@playwright/test';
 //
 // Unlike the API specs in this folder, this drives the composed local web shell
 // (scripts/build-web-local.sh -> serve-web-local.sh, default :8080). Flutter web
-// paints its widgets to a canvas, so the home dashboard's column/stack geometry
-// is asserted deterministically by the fan_app widget test
-// home_dashboard_layout_test.dart. Here we cover what only a real browser shows:
-// the login form's IME input proxies are width-capped (not edge-to-edge) on a
-// wide viewport, sign-in works (hash route advances to /home), and screenshots
-// of the desktop two-column home and mobile stacked home are captured for visual
-// verdict.
+// paints its widgets to a canvas, so the home's feed/stack geometry is asserted
+// deterministically by the fan_app widget tests (home_dashboard_layout_test,
+// home_supporting_pane_layout_test, home_sidebar_budget_test) and
+// sidebar_shell_test. Here we cover what only a real browser shows: the login
+// form's IME input proxies are width-capped (not edge-to-edge) on a wide
+// viewport, sign-in works (hash route advances to /home), and screenshots of
+// the desktop (sidebar + feed + membership rail), QHD, and mobile (stacked)
+// home are captured for visual verdict.
 //
 // Run (web suite is separate from the default API config — see README):
 //   WEB_BASE_URL=http://127.0.0.1:8080 npm run test:web
@@ -72,7 +73,7 @@ test.describe('fan app adaptive shell (web)', () => {
     });
   });
 
-  test('desktop home renders the two-column dashboard after sign-in', async ({
+  test('desktop home renders the sidebar + feed + rail after sign-in', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -82,10 +83,30 @@ test.describe('fan app adaptive shell (web)', () => {
     await signIn(page);
 
     await expect(page.locator('flutter-view, flt-glass-pane').first()).toBeVisible();
-    // Visual verdict artifact: membership card full-width, then stamp|schedule
-    // and favorites|events paired two-per-row.
+    // Visual verdict artifact (large class): persistent sidebar + a feed of
+    // section cards beside the membership rail (geometry asserted by the
+    // fan_app widget tests home_supporting_pane_layout_test / sidebar_shell).
     await page.screenshot({
       path: 'test-results/fan-home-desktop-1440.png',
+      fullPage: false,
+    });
+  });
+
+  test('QHD home fills the width with the desktop layout after sign-in', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 2560, height: 1440 });
+    await page.goto(APP);
+    await waitForFlutter(page);
+    await enableSemantics(page);
+    await signIn(page);
+
+    await expect(page.locator('flutter-view, flt-glass-pane').first()).toBeVisible();
+    // Visual verdict artifact (extra-large/QHD): 256px sidebar + a 3-column feed
+    // + membership rail spanning the full width (no centered 1280 reading
+    // column / right gutter). This is the user-reported "50% empty" fix.
+    await page.screenshot({
+      path: 'test-results/fan-home-qhd-2560.png',
       fullPage: false,
     });
   });

@@ -1,8 +1,13 @@
 /// Material 3 window size classes used by Assen adaptive shells.
 ///
-/// P0 intentionally collapses large and extra-large desktop widths into
-/// [expanded]; the product need is chrome relocation and a readable content
-/// column, not a separate desktop information architecture.
+/// The full M3 ladder compact → extraLarge. Mobile/tablet chrome (bottom bar →
+/// collapsed rail → extended rail + centered reading column) lives at
+/// compact/medium/expanded; the fan web desktop information architecture
+/// (persistent sidebar + canonical layouts that fill the width) engages at
+/// [large] and [extraLarge]. Call sites that mean "expanded and wider" use
+/// [atLeast] so the legacy extended-rail/content-column path (operator console)
+/// keeps working unchanged now that large/XL are no longer folded into
+/// [expanded].
 enum AssenWindowSize {
   /// Widths below 600dp keep the mobile bottom navigation pattern.
   compact,
@@ -10,15 +15,26 @@ enum AssenWindowSize {
   /// Widths from 600dp to 839dp use a collapsed navigation rail.
   medium,
 
-  /// Widths at 840dp and above use an extended rail and centered body column.
-  expanded;
+  /// Widths from 840dp to 1199dp use an extended rail and centered column.
+  expanded,
 
-  /// Maps logical width to the M3 compact/medium/expanded buckets.
+  /// Widths from 1200dp to 1599dp begin the desktop sidebar layout.
+  large,
+
+  /// Widths at 1600dp and above use the widest desktop sidebar layout.
+  extraLarge;
+
+  /// Maps logical width to the M3 size-class buckets.
   ///
-  /// Boundary values are inclusive on the larger class: 600dp is [medium], and
-  /// 840dp is [expanded]. This mirrors Material 3 window size classes while
-  /// keeping P0 large/XL behaviour folded into [expanded].
+  /// Boundary values are inclusive on the larger class: 600dp is [medium],
+  /// 840dp is [expanded], 1200dp is [large], and 1600dp is [extraLarge].
   static AssenWindowSize fromWidth(double width) {
+    if (width >= AssenLayout.extraLargeMinWidth) {
+      return AssenWindowSize.extraLarge;
+    }
+    if (width >= AssenLayout.largeMinWidth) {
+      return AssenWindowSize.large;
+    }
     if (width >= AssenLayout.expandedMinWidth) {
       return AssenWindowSize.expanded;
     }
@@ -27,6 +43,13 @@ enum AssenWindowSize {
     }
     return AssenWindowSize.compact;
   }
+
+  /// Whether this class is at least as wide as [other], by class order.
+  ///
+  /// Lets "expanded and wider" call sites survive un-collapsing large/XL from
+  /// [expanded]: `size.atLeast(AssenWindowSize.expanded)` stays true at [large]
+  /// and [extraLarge], so the legacy rail + content-column path is preserved.
+  bool atLeast(AssenWindowSize other) => index >= other.index;
 }
 
 /// Picks a grid column count for [width] from per-size-class counts.
@@ -36,15 +59,23 @@ enum AssenWindowSize {
 /// shows more frames per row on web/tablet while keeping the mobile layout
 /// unchanged. Callers pass the column count for each class explicitly so the
 /// progression stays a deliberate design choice, not an emergent one.
+/// Pass the width of the LOCAL grid/pane, not the raw window: a desktop sidebar
+/// shrinks the body below the window width, so window-width math over-counts
+/// columns. [large]/[extraLarge] are optional and fall back to [expanded] (then
+/// [large]) so existing 3-arg callers compile unchanged.
 int assenGridCrossAxisCount(
   double width, {
   required int compact,
   required int medium,
   required int expanded,
+  int? large,
+  int? extraLarge,
 }) => switch (AssenWindowSize.fromWidth(width)) {
   AssenWindowSize.compact => compact,
   AssenWindowSize.medium => medium,
   AssenWindowSize.expanded => expanded,
+  AssenWindowSize.large => large ?? expanded,
+  AssenWindowSize.extraLarge => extraLarge ?? large ?? expanded,
 };
 
 /// Authored layout constants that are not generated design tokens.
@@ -59,6 +90,21 @@ abstract final class AssenLayout {
 
   /// The first Material 3 expanded window class width in logical pixels.
   static const double expandedMinWidth = 840;
+
+  /// The first Material 3 large window class width in logical pixels.
+  ///
+  /// At and above this width the fan web shell switches from a navigation rail
+  /// to a persistent desktop sidebar and surfaces lay out as canonical
+  /// (feed / supporting-pane / list-detail) layouts rather than a centered
+  /// reading column.
+  static const double largeMinWidth = 1200;
+
+  /// The first Material 3 extra-large window class width in logical pixels.
+  static const double extraLargeMinWidth = 1600;
+
+  /// Fixed width of the persistent desktop sidebar at [AssenWindowSize.large]
+  /// and wider (non-collapsible in this version).
+  static const double sidebarWidth = 256;
 
   /// Maximum width for fan-app content on expanded web/tablet layouts.
   ///
