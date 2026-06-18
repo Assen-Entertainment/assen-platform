@@ -61,10 +61,12 @@ npm run test:web
 
 - `tests/fan-desktop-shell.web.spec.ts` — ASS-147 fan app adaptive shell: the
   login form is width-capped on a wide desktop (not edge-to-edge), sign-in
-  advances the hash route to `/home`, and desktop (two-column dashboard) +
-  mobile (stacked) home screenshots are captured for visual verdict. The
-  column/stack geometry itself is asserted deterministically by the fan_app
-  widget test `home_dashboard_layout_test.dart`.
+  advances the hash route to `/home`, and desktop (sidebar + feed + membership
+  rail), QHD, and mobile (stacked) home screenshots are captured for visual
+  verdict. The feed/stack geometry itself is asserted deterministically by the
+  fan_app widget tests (`home_dashboard_layout_test`,
+  `home_supporting_pane_layout_test`, `home_sidebar_budget_test`) and
+  `sidebar_shell_test`.
 
 ## Scope
 
