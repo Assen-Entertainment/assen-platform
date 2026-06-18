@@ -1,6 +1,7 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:fan_app/mock/fan_mock_data.dart';
 import 'package:fan_app/router/routes.dart';
+import 'package:fan_app/screens/my_hub_scaffold.dart';
 import 'package:features/features.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,7 +24,7 @@ class MyScreen extends ConsumerWidget {
     final colors = Theme.of(context).extension<AssenColors>()!;
     const member = FanMockData.member;
 
-    return Scaffold(
+    final narrow = Scaffold(
       backgroundColor: colors.cream50,
       appBar: const AssenAppBar(title: '마이'),
       body: ListView(
@@ -110,6 +111,17 @@ class MyScreen extends ConsumerWidget {
             onTap: () => ref.read(authSessionProvider.notifier).signOut(),
           ),
         ],
+      ),
+    );
+
+    // At large+ the hub becomes an inline list-detail (menu + selected sub-page
+    // body); at /my root the detail pane prompts the user to pick a row.
+    return MyHubScaffold(
+      active: MySubPage.home,
+      narrow: narrow,
+      detail: const AssenEmptyState(
+        title: '메뉴를 선택해 주세요',
+        message: '왼쪽 메뉴에서 항목을 선택하면 여기에 표시돼요.',
       ),
     );
   }

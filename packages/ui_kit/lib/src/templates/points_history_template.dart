@@ -125,6 +125,62 @@ class AssenPointsHistoryTemplate extends StatelessWidget {
   }
 }
 
+/// The Scaffold-less points-history body for embedding in a list-detail pane
+/// (ASS-147 Slice 4): the same summary header + monthly point timelines as
+/// [AssenPointsHistoryTemplate] but WITHOUT a [Scaffold] or [AssenAppBar], so
+/// it mounts as the detail pane of the My hub. The route-built full-Scaffold
+/// template is unchanged.
+class AssenPointsHistoryBody extends StatelessWidget {
+  /// Creates an embeddable points-history body.
+  const AssenPointsHistoryBody({
+    required this.summary,
+    required this.monthGroups,
+    super.key,
+  });
+
+  /// Current points summary shown in the header.
+  final AssenPointsSummary summary;
+
+  /// Month-grouped point rows, newest first.
+  final List<AssenPointsMonthGroup> monthGroups;
+
+  @override
+  Widget build(BuildContext context) {
+    if (monthGroups.isEmpty) {
+      return const AssenEmptyState(
+        title: '포인트 내역이 없어요',
+        message: '적립하거나 사용한 포인트가 아직 없습니다.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _PointsSummaryHeader(summary: summary),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            SpacingTokens.screenMargin,
+            SpacingTokens.s5,
+            SpacingTokens.screenMargin,
+            SpacingTokens.s8,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final group in monthGroups) ...[
+                AssenSectionHeader(title: group.monthLabel),
+                const SizedBox(height: SpacingTokens.s3),
+                _PointsTimeline(entries: group.entries),
+                const SizedBox(height: SpacingTokens.s5),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _PointsSummaryHeader extends StatelessWidget {
   const _PointsSummaryHeader({required this.summary});
 

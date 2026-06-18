@@ -139,6 +139,94 @@ class AssenNotificationSettingsTemplate extends StatelessWidget {
   }
 }
 
+/// The Scaffold-less notification-settings body for embedding in a list-detail
+/// pane (ASS-147 Slice 4): the same service/benefit preference sections as
+/// [AssenNotificationSettingsTemplate] but WITHOUT a [Scaffold] or
+/// [AssenAppBar], so it mounts as the detail pane of the My hub. The
+/// route-built full-Scaffold template is unchanged.
+class AssenNotificationSettingsBody extends StatelessWidget {
+  /// Creates an embeddable notification-settings body.
+  const AssenNotificationSettingsBody({
+    required this.servicePreferences,
+    required this.benefitPreferences,
+    required this.onPreferenceChanged,
+    super.key,
+  });
+
+  /// Service notification rows shown in the first section.
+  final List<AssenNotificationPref> servicePreferences;
+
+  /// Advertising/benefit notification rows shown after the divider band.
+  final List<AssenNotificationPref> benefitPreferences;
+
+  /// Called when an enabled switch changes.
+  final AssenNotificationPrefChanged onPreferenceChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            SpacingTokens.screenMargin,
+            SpacingTokens.s5,
+            SpacingTokens.screenMargin,
+            SpacingTokens.s3,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '알림',
+                style: TypographyTokens.titleL.copyWith(
+                  color: colors.ink900,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: SpacingTokens.s1),
+              Text(
+                '서비스 알림',
+                style: TypographyTokens.captionMicro.copyWith(
+                  color: colors.ink500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        for (final pref in servicePreferences)
+          _NotificationPreferenceRow(
+            pref: pref,
+            onPreferenceChanged: onPreferenceChanged,
+          ),
+        Container(height: SpacingTokens.s2, color: colors.cream100),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            SpacingTokens.screenMargin,
+            SpacingTokens.s5,
+            SpacingTokens.screenMargin,
+            SpacingTokens.s2,
+          ),
+          child: Text(
+            '혜택(광고성) 알림',
+            style: TypographyTokens.titleL.copyWith(
+              color: colors.ink900,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        for (final pref in benefitPreferences)
+          _NotificationPreferenceRow(
+            pref: pref,
+            onPreferenceChanged: onPreferenceChanged,
+          ),
+      ],
+    );
+  }
+}
+
 class _NotificationPreferenceRow extends StatelessWidget {
   const _NotificationPreferenceRow({
     required this.pref,
