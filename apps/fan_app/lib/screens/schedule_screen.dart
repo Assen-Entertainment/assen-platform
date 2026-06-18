@@ -104,77 +104,94 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Scaffold(
       backgroundColor: colors.cream50,
       appBar: const AssenAppBar(title: '출근표'),
-      body: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              SpacingTokens.screenMargin,
-              SpacingTokens.s4,
-              SpacingTokens.screenMargin,
-              SpacingTokens.s8,
-            ),
-            sliver: SliverList.list(
-              children: [
-                _FavoriteFilters(
-                  labels: _filters,
-                  selectedIndex: _filter,
-                  onSelect: (i) => setState(() => _filter = i),
+      // Compact/medium keep the single stacked column; at expanded and wider the
+      // working-cast list becomes a responsive feed (filters + week calendar
+      // stay full width) so a desktop browser fills the surface.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = AssenWindowSize.fromWidth(
+            constraints.maxWidth,
+          ).atLeast(AssenWindowSize.expanded);
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  SpacingTokens.screenMargin,
+                  SpacingTokens.s4,
+                  SpacingTokens.screenMargin,
+                  SpacingTokens.s8,
                 ),
-                const SizedBox(height: SpacingTokens.s5),
-                AssenScheduleCalendar(
-                  days: _week,
-                  selectedIndex: _selectedDay,
-                  todayIndex: _todayIndex,
-                  onSelect: (i) => setState(() => _selectedDay = i),
-                ),
-                const SizedBox(height: SpacingTokens.s6),
-                const AssenSectionHeader(title: '출근 캐스트'),
-                const SizedBox(height: SpacingTokens.s3),
-                ListenableBuilder(
-                  listenable: favorites,
-                  builder: (context, _) {
-                    final visibleCasts = _visibleCasts(casts, favorites);
+                sliver: SliverList.list(
+                  children: [
+                    _FavoriteFilters(
+                      labels: _filters,
+                      selectedIndex: _filter,
+                      onSelect: (i) => setState(() => _filter = i),
+                    ),
+                    const SizedBox(height: SpacingTokens.s5),
+                    AssenScheduleCalendar(
+                      days: _week,
+                      selectedIndex: _selectedDay,
+                      todayIndex: _todayIndex,
+                      onSelect: (i) => setState(() => _selectedDay = i),
+                    ),
+                    const SizedBox(height: SpacingTokens.s6),
+                    const AssenSectionHeader(title: '출근 캐스트'),
+                    const SizedBox(height: SpacingTokens.s3),
+                    ListenableBuilder(
+                      listenable: favorites,
+                      builder: (context, _) {
+                        final visibleCasts = _visibleCasts(casts, favorites);
 
-                    if (visibleCasts.isEmpty) {
-                      return _NoCastNotice(
-                        message: emptyMessage,
-                        colors: colors,
-                      );
-                    }
+                        if (visibleCasts.isEmpty) {
+                          return _NoCastNotice(
+                            message: emptyMessage,
+                            colors: colors,
+                          );
+                        }
 
-                    return Column(
-                      children: [
-                        for (final cast in visibleCasts) ...[
-                          AssenCastProfileCard(
-                            name: cast.name,
-                            hue:
-                                _castHues[cast.name] ??
-                                AssenBadgeHue.strawberry,
-                            tagline: '출근 ${cast.shift}',
-                            isOnShift: true,
-                            isFavorite: favorites.isFavorite(
-                              _castIdFor(cast.name),
-                            ),
-                            onFavoriteChanged: (isFavorite) {
-                              favorites.setFavorite(
+                        final cards = [
+                          for (final cast in visibleCasts)
+                            AssenCastProfileCard(
+                              name: cast.name,
+                              hue:
+                                  _castHues[cast.name] ??
+                                  AssenBadgeHue.strawberry,
+                              tagline: '출근 ${cast.shift}',
+                              isOnShift: true,
+                              isFavorite: favorites.isFavorite(
                                 _castIdFor(cast.name),
-                                isFavorite: isFavorite,
-                              );
-                            },
-                            onTap: () => context.push(
-                              FanRoutes.castPath(_castIdFor(cast.name)),
+                              ),
+                              onFavoriteChanged: (isFavorite) {
+                                favorites.setFavorite(
+                                  _castIdFor(cast.name),
+                                  isFavorite: isFavorite,
+                                );
+                              },
+                              onTap: () => context.push(
+                                FanRoutes.castPath(_castIdFor(cast.name)),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: SpacingTokens.s3),
-                        ],
-                      ],
-                    );
-                  },
+                        ];
+
+                        if (wide) return AssenFeedGrid(children: cards);
+                        return Column(
+                          children: [
+                            for (var i = 0; i < cards.length; i++) ...[
+                              if (i > 0)
+                                const SizedBox(height: SpacingTokens.s3),
+                              cards[i],
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
