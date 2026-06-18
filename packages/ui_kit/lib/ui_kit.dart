@@ -25,6 +25,7 @@ export 'src/catalog.dart';
 export 'src/layout/adaptive_shell.dart';
 export 'src/layout/content_column.dart';
 export 'src/layout/feed_grid.dart';
+export 'src/layout/list_detail_scaffold.dart';
 export 'src/layout/sidebar_shell.dart';
 export 'src/layout/supporting_pane_scaffold.dart';
 export 'src/layout/window_size.dart';

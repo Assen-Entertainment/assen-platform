@@ -203,12 +203,18 @@ class _AlbumGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Densify the gallery with width: 3-up on mobile (unchanged), more
-        // frames per row on web/tablet so the desktop column isn't sparse.
+        // frames per row on web/tablet so the desktop column isn't sparse. At
+        // the large/extra-large desktop classes the album fills the widened
+        // sidebar-shell body with 5–6 frames per row. The count reads the LOCAL
+        // grid width (constraints.maxWidth), not the window, so the 256dp
+        // sidebar is already subtracted.
         final columns = assenGridCrossAxisCount(
           constraints.maxWidth,
           compact: 3,
           medium: 4,
           expanded: 5,
+          large: 5,
+          extraLarge: 6,
         );
         return GridView.builder(
           shrinkWrap: true,

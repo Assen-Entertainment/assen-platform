@@ -1,7 +1,9 @@
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
+import 'package:ui_kit/src/atoms/button.dart';
 import 'package:ui_kit/src/atoms/card.dart';
+import 'package:ui_kit/src/atoms/icon_button.dart';
 import 'package:ui_kit/src/molecules/banner_card.dart';
 import 'package:ui_kit/src/molecules/key_value_row.dart';
 import 'package:ui_kit/src/molecules/notice_bar.dart';
@@ -289,17 +291,106 @@ class AssenEventDetailTemplate extends StatelessWidget {
     );
   }
 
-  AssenBadge _statusBadge(AssenFanEvent event) {
-    return AssenBadge(
-      label: event.statusLabel,
-      hue: switch (event.status) {
-        AssenFanEventStatus.upcoming => AssenBadgeHue.lemon,
-        AssenFanEventStatus.ongoing => AssenBadgeHue.matcha,
-        AssenFanEventStatus.ended => AssenBadgeHue.sky,
-      },
+  AssenBadge _statusBadge(AssenFanEvent event) => _eventStatusBadge(event);
+}
+
+/// The Scaffold-less event detail body for embedding in a list-detail pane
+/// (ASS-147 Slice 3, Rec 1 pane-embed contract).
+///
+/// Renders the same content as [AssenEventDetailTemplate] (hero, badges,
+/// key-value card, notice) but WITHOUT a [Scaffold], [AssenAppBar], or
+/// [AssenBottomCta], so it mounts cleanly inside a detail pane that already
+/// lives under the surrounding screen's chrome — no nested app bar or bottom
+/// CTA. Its affordances act on the PANE, not the route: [onClose] clears the
+/// host's selection (it must NOT pop the route), and [onReserve] is the host's
+/// pane-supplied reserve action. The reserve affordance is an inline
+/// [AssenButton] (not an [AssenBottomCta]) shown only for active events.
+///
+/// The route-built full-Scaffold path ([AssenEventDetailTemplate]) is unchanged
+/// and stays the only thing `/events/:id` builds on push and on cold deep-link.
+class AssenEventDetailBody extends StatelessWidget {
+  /// Creates an embeddable event detail body for [event].
+  const AssenEventDetailBody({
+    required this.event,
+    this.onReserve,
+    this.onClose,
+    super.key,
+  });
+
+  /// Event data to render.
+  final AssenFanEvent event;
+
+  /// Pane-supplied reserve action; omitted (or for ended events) hides the
+  /// inline reserve button. Acts on the host, not on global navigation.
+  final VoidCallback? onReserve;
+
+  /// Clears the host's pane selection. MUST act on the pane (e.g. set the
+  /// selected id to null), never `context.pop()` the surrounding route.
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = event.status != AssenFanEventStatus.ended;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (onClose != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: AssenIconButton(
+              icon: Icons.close,
+              semanticLabel: '상세 닫기',
+              onPressed: onClose,
+            ),
+          ),
+        _EventHero(event: event),
+        const SizedBox(height: SpacingTokens.s4),
+        Wrap(
+          spacing: SpacingTokens.s2,
+          runSpacing: SpacingTokens.s2,
+          children: [
+            _eventStatusBadge(event),
+            AssenBadge(label: event.relatedCast, hue: AssenBadgeHue.lavender),
+          ],
+        ),
+        const SizedBox(height: SpacingTokens.s4),
+        AssenCard(
+          child: Column(
+            children: [
+              AssenKeyValueRow(label: '일정', value: event.schedule),
+              AssenKeyValueRow(label: '참여 방법', value: event.participation),
+              AssenKeyValueRow(label: '특전', value: event.benefit),
+            ],
+          ),
+        ),
+        const SizedBox(height: SpacingTokens.s4),
+        const AssenNoticeBar(
+          kind: AssenNoticeKind.warning,
+          message: '당일 예약 변경은 매장으로 문의해 주세요',
+        ),
+        if (active && onReserve != null) ...[
+          const SizedBox(height: SpacingTokens.s5),
+          AssenButton(
+            label: '이 날짜로 예약하기',
+            onPressed: onReserve,
+            expand: true,
+          ),
+        ],
+      ],
     );
   }
 }
+
+/// The status badge shared by the event card, detail template, and detail body.
+AssenBadge _eventStatusBadge(AssenFanEvent event) => AssenBadge(
+  label: event.statusLabel,
+  hue: switch (event.status) {
+    AssenFanEventStatus.upcoming => AssenBadgeHue.lemon,
+    AssenFanEventStatus.ongoing => AssenBadgeHue.matcha,
+    AssenFanEventStatus.ended => AssenBadgeHue.sky,
+  },
+);
 
 class _FanEventCard extends StatelessWidget {
   const _FanEventCard({required this.event, required this.onTap});
@@ -374,16 +465,7 @@ class _FanEventCard extends StatelessWidget {
     );
   }
 
-  AssenBadge _statusBadge(AssenFanEvent event) {
-    return AssenBadge(
-      label: event.statusLabel,
-      hue: switch (event.status) {
-        AssenFanEventStatus.upcoming => AssenBadgeHue.lemon,
-        AssenFanEventStatus.ongoing => AssenBadgeHue.matcha,
-        AssenFanEventStatus.ended => AssenBadgeHue.sky,
-      },
-    );
-  }
+  AssenBadge _statusBadge(AssenFanEvent event) => _eventStatusBadge(event);
 }
 
 class _EventHero extends StatelessWidget {
