@@ -4,6 +4,9 @@ import 'package:ui_kit/src/atoms/avatar.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/card.dart';
 import 'package:ui_kit/src/atoms/favorite_button.dart';
+import 'package:ui_kit/src/layout/content_column.dart';
+import 'package:ui_kit/src/layout/supporting_pane_scaffold.dart';
+import 'package:ui_kit/src/layout/window_size.dart';
 import 'package:ui_kit/src/molecules/collection_cell.dart';
 import 'package:ui_kit/src/molecules/section_header.dart';
 import 'package:ui_kit/src/organisms/app_bar.dart';
@@ -144,54 +147,106 @@ class _AssenCastProfileTemplateState extends State<AssenCastProfileTemplate> {
         primaryLabel: '예약하기',
         onPrimary: widget.onReserve ?? () {},
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              SpacingTokens.screenMargin,
-              SpacingTokens.s4,
-              SpacingTokens.screenMargin,
-              SpacingTokens.s8,
-            ),
-            sliver: SliverList.list(
-              children: [
-                _ProfileHeader(
-                  name: widget.castName,
-                  hue: widget.castHue,
-                  tagline: widget.tagline,
-                  isFavorite: _favorite,
-                  onFavoriteChanged: _setFavorite,
+      // Compact/medium keep the single stacked column; at expanded and wider
+      // the profile is a reading-centric detail page — width-capped and split
+      // into a main (profile + 출근 일정) pane and a 체키 collection supporting
+      // rail, so the chrome-less route fills the surface without full-bleed.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = AssenWindowSize.fromWidth(
+            constraints.maxWidth,
+          ).atLeast(AssenWindowSize.expanded);
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  SpacingTokens.screenMargin,
+                  SpacingTokens.s4,
+                  SpacingTokens.screenMargin,
+                  SpacingTokens.s8,
                 ),
-                const SizedBox(height: SpacingTokens.s4),
-                _ProfileSummary(
-                  introduction: widget.introduction,
-                  eventSummary: widget.eventSummary,
-                  chekiAvailability: widget.chekiAvailability,
+                sliver: SliverList.list(
+                  children: wide
+                      ? [_wideBody(colors)]
+                      : _stackedChildren(colors),
                 ),
-                const SizedBox(height: SpacingTokens.s6),
-                const AssenSectionHeader(title: '출근 일정'),
-                const SizedBox(height: SpacingTokens.s3),
-                AssenScheduleCalendar(
-                  days: widget.schedule,
-                  selectedIndex: _scheduleDay,
-                  todayIndex: 2,
-                  onSelect: (i) => setState(() => _scheduleDay = i),
-                ),
-                const SizedBox(height: SpacingTokens.s6),
-                AssenSectionHeader(
-                  title: '체키 컬렉션',
-                  actionLabel: '전체보기',
-                  onAction: () {},
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                _ChekiGrid(colors: colors),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
+
+  // Caps to the fan reading column (AssenContentColumn default) so the profile
+  // text never goes full-bleed on a chrome-less wide route.
+  Widget _wideBody(AssenColors colors) => AssenContentColumn(
+    child: AssenSupportingPaneScaffold(
+      main: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(),
+          const SizedBox(height: SpacingTokens.s4),
+          _summary(),
+          const SizedBox(height: SpacingTokens.s6),
+          const AssenSectionHeader(title: '출근 일정'),
+          const SizedBox(height: SpacingTokens.s3),
+          _calendar(),
+        ],
+      ),
+      supporting: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AssenSectionHeader(
+            title: '체키 컬렉션',
+            actionLabel: '전체보기',
+            onAction: () {},
+          ),
+          const SizedBox(height: SpacingTokens.s3),
+          _ChekiGrid(colors: colors),
+        ],
+      ),
+    ),
+  );
+
+  List<Widget> _stackedChildren(AssenColors colors) => [
+    _header(),
+    const SizedBox(height: SpacingTokens.s4),
+    _summary(),
+    const SizedBox(height: SpacingTokens.s6),
+    const AssenSectionHeader(title: '출근 일정'),
+    const SizedBox(height: SpacingTokens.s3),
+    _calendar(),
+    const SizedBox(height: SpacingTokens.s6),
+    AssenSectionHeader(
+      title: '체키 컬렉션',
+      actionLabel: '전체보기',
+      onAction: () {},
+    ),
+    const SizedBox(height: SpacingTokens.s3),
+    _ChekiGrid(colors: colors),
+  ];
+
+  Widget _header() => _ProfileHeader(
+    name: widget.castName,
+    hue: widget.castHue,
+    tagline: widget.tagline,
+    isFavorite: _favorite,
+    onFavoriteChanged: _setFavorite,
+  );
+
+  Widget _summary() => _ProfileSummary(
+    introduction: widget.introduction,
+    eventSummary: widget.eventSummary,
+    chekiAvailability: widget.chekiAvailability,
+  );
+
+  Widget _calendar() => AssenScheduleCalendar(
+    days: widget.schedule,
+    selectedIndex: _scheduleDay,
+    todayIndex: 2,
+    onSelect: (i) => setState(() => _scheduleDay = i),
+  );
 }
 
 /// The profile header: large avatar, name, catchphrase, and the 최애 toggle.
