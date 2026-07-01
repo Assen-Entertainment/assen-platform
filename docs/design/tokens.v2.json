@@ -1,0 +1,209 @@
+{
+  "$description": "Assen Platform design tokens v2 — Fanding 테마/색상 베이스라인(2026-06-27 fanding.kr 실측 재계측, 요소 2137개). W3C DTCG 2025.10. light+dark. 검증: WSL에서 tokens.json으로 스왑 후 `melos run codegen` → 골든 회귀. 기존 tokens.json(v0.1 하츠코이)은 폐기.",
+  "color": {
+    "ref": {
+      "white": { "$type": "color", "$value": "#FFFFFF", "$description": "서피스 (Fanding 142회)" },
+      "neutral": {
+        "50": { "$type": "color", "$value": "#F8F8F9" },
+        "100": { "$type": "color", "$value": "#F4F4F5", "$description": "보조 필" },
+        "200": { "$type": "color", "$value": "#E9E9F1", "$description": "보더/divider/보조서피스 (Fanding 실측, 보더 141·bg 20)" },
+        "300": { "$type": "color", "$value": "#D4D4D8" }
+      },
+      "ink": {
+        "900": { "$type": "color", "$value": "#191919", "$description": "본문·제목 (Fanding 실측 1793회)" },
+        "600": { "$type": "color", "$value": "#52525B", "$description": "보조 강조 (파생)" },
+        "500": { "$type": "color", "$value": "#6E6E80", "$description": "보조 텍스트 — a11y AA: 흰 4.99:1 · neutral.100(#F4F4F5 필/고서피스) 4.54:1. 구 #747486은 neutral.100서 4.17(미달) — 어드버서리얼 리뷰 2026-06-28 정정" },
+        "400": { "$type": "color", "$value": "#8A8A9A", "$description": "힌트/placeholder — a11y UI: 흰 3.40:1 · neutral.100 3.09:1. 구 #9292A2은 neutral.100서 2.79(미달) — 리뷰 2026-06-28 정정. 본문 금지" }
+      },
+      "dark": {
+        "bg": { "$type": "color", "$value": "#141417", "$description": "다크 베이스 (파생 — Fanding 공개사이트는 라이트)" },
+        "surface": { "$type": "color", "$value": "#1C1C20" },
+        "surfaceHigh": { "$type": "color", "$value": "#26262B" },
+        "border": { "$type": "color", "$value": "#34343A" },
+        "ink": { "$type": "color", "$value": "#F4F4F5" },
+        "inkSub": { "$type": "color", "$value": "#A1A1AA" }
+      },
+      "indigo": {
+        "500": { "$type": "color", "$value": "#5A4DF0", "$description": "Assen Indigo — primary 액센트. 2026-06-28 브랜드 시그니처: Stripe #635BFF/범용 SaaS 인디고 탈피 위해 violet 방향 hue 미세시프트+심도. 흰 대비 5.6:1(구 #5E63F8 4.54→개선). 라이트/다크 불변. ※대표 최종 사인 대기(가역)" },
+        "600": { "$type": "color", "$value": "#4B50E0", "$description": "pressed (파생)" },
+        "100": { "$type": "color", "$value": "#EFEFFE", "$description": "accentContainer/필 (Fanding 실측)" },
+        "ink": { "$type": "color", "$value": "#2E2C8A", "$description": "강한 대비 필요 시 (파생)" },
+        "darkContainer": { "$type": "color", "$value": "#2A2A52" },
+        "onDarkContainer": { "$type": "color", "$value": "#C7C9FF" }
+      },
+      "lavender": { "bg": { "$type": "color", "$value": "#EFEFFE" }, "ink": { "$type": "color", "$value": "#4338CA" } },
+      "violet": { "bg": { "$type": "color", "$value": "#F6EEFD", "$description": "Fanding 실측 퍼플 틴트" }, "ink": { "$type": "color", "$value": "#6D28D9" } },
+      "cream": { "bg": { "$type": "color", "$value": "#FFF9EB" }, "ink": { "$type": "color", "$value": "#926A14" } },
+      "mint": { "bg": { "$type": "color", "$value": "#E8FEF1" }, "ink": { "$type": "color", "$value": "#166534" } },
+      "sky": { "bg": { "$type": "color", "$value": "#E7F6FF" }, "ink": { "$type": "color", "$value": "#1F566B" } },
+      "pink": { "bg": { "$type": "color", "$value": "#FFF2F2" }, "ink": { "$type": "color", "$value": "#9F1239" } },
+      "zinc": { "bg": { "$type": "color", "$value": "#F4F4FA" }, "ink": { "$type": "color", "$value": "#3F3F46" } },
+      "green": { "main": { "$type": "color", "$value": "#1DA951", "$description": "success (#22C55E → a11y 3.05:1)" } },
+      "amber": { "main": { "$type": "color", "$value": "#CE8509", "$description": "warning (#F59E0B → a11y 3.02:1)" } },
+      "red": { "main": { "$type": "color", "$value": "#D73D3D", "$description": "error #EF4444 → a11y 4.53:1" }, "bg": { "$type": "color", "$value": "#FFF2F2" }, "ink": { "$type": "color", "$value": "#9F1239" } }
+    },
+    "$note_theme": "메이드 테마(color.ref.hatsukoi)는 2026-06-27 대표 '완전 제거' 결정으로 삭제됨. 제품=순수 범용 크리에이터 플랫폼, 단일 클린/인디고 레지스터. 크리에이터 개성은 향후 일반 theme.{creator} 사용자 액센트(런타임)로만. 참조: 전략_방향_범용크리에이터플랫폼_2026-06-27.",
+    "sys": {
+      "surface": { "$type": "color", "$value": "{color.ref.white}" },
+      "surfaceContainer": { "$type": "color", "$value": "{color.ref.white}" },
+      "surfaceContainerHigh": { "$type": "color", "$value": "{color.ref.neutral.100}" },
+      "onSurface": { "$type": "color", "$value": "{color.ref.ink.900}" },
+      "onSurfaceVariant": { "$type": "color", "$value": "{color.ref.ink.500}" },
+      "outline": { "$type": "color", "$value": "{color.ref.neutral.200}" },
+      "outlineVariant": { "$type": "color", "$value": "{color.ref.neutral.100}" },
+      "primary": { "$type": "color", "$value": "{color.ref.indigo.500}" },
+      "onPrimary": { "$type": "color", "$value": "{color.ref.white}" },
+      "primaryContainer": { "$type": "color", "$value": "{color.ref.indigo.100}" },
+      "onPrimaryContainer": { "$type": "color", "$value": "{color.ref.indigo.ink}", "$description": "라벤더 필 위 텍스트 — a11y AA: indigo.ink #2E2C8A (10:1)" },
+      "secondary": { "$type": "color", "$value": "{color.ref.ink.600}", "$description": "2026-06-29: Figma 정합 위해 ink.500→ink.600(#52525b). SSOT를 Figma에 맞춤(건용 결정)." },
+      "error": { "$type": "color", "$value": "{color.ref.red.main}" },
+      "onError": { "$type": "color", "$value": "{color.ref.white}" },
+      "errorContainer": { "$type": "color", "$value": "{color.ref.red.bg}" },
+      "onErrorContainer": { "$type": "color", "$value": "{color.ref.red.ink}" },
+      "success": { "$type": "color", "$value": "{color.ref.green.main}" },
+      "warning": { "$type": "color", "$value": "{color.ref.amber.main}" },
+      "successContainer": { "$type": "color", "$value": "{color.ref.mint.bg}", "$description": "2026-06-29: 상태 배지 filled용(a11y AA). mint.bg #E8FEF1 + onSuccessContainer mint.ink #166534 ≈ 8:1" },
+      "onSuccessContainer": { "$type": "color", "$value": "{color.ref.mint.ink}" },
+      "warningContainer": { "$type": "color", "$value": "{color.ref.cream.bg}", "$description": "cream.bg #FFF9EB + onWarningContainer cream.ink #926A14 ≈ 5:1" },
+      "onWarningContainer": { "$type": "color", "$value": "{color.ref.cream.ink}" }
+    },
+    "sysDark": {
+      "surface": { "$type": "color", "$value": "{color.ref.dark.bg}" },
+      "surfaceContainer": { "$type": "color", "$value": "{color.ref.dark.surface}" },
+      "surfaceContainerHigh": { "$type": "color", "$value": "{color.ref.dark.surfaceHigh}" },
+      "onSurface": { "$type": "color", "$value": "{color.ref.dark.ink}" },
+      "onSurfaceVariant": { "$type": "color", "$value": "{color.ref.dark.inkSub}" },
+      "outline": { "$type": "color", "$value": "{color.ref.dark.border}" },
+      "outlineVariant": { "$type": "color", "$value": "{color.ref.dark.border}" },
+      "primary": { "$type": "color", "$value": "{color.ref.indigo.500}" },
+      "onPrimary": { "$type": "color", "$value": "{color.ref.white}" },
+      "primaryContainer": { "$type": "color", "$value": "{color.ref.indigo.darkContainer}" },
+      "onPrimaryContainer": { "$type": "color", "$value": "{color.ref.indigo.onDarkContainer}" },
+      "secondary": { "$type": "color", "$value": "{color.ref.dark.inkSub}" },
+      "error": { "$type": "color", "$value": "#FF6B6B", "$description": "다크: 밝은 적색 (red.main은 다크 배경 대비 부족)" },
+      "onError": { "$type": "color", "$value": "{color.ref.white}" },
+      "errorContainer": { "$type": "color", "$value": "#3A1518", "$description": "다크 에러 필 (리뷰 2026-06-28 신규)" },
+      "onErrorContainer": { "$type": "color", "$value": "#FFB4B4" },
+      "success": { "$type": "color", "$value": "#3DD17E", "$description": "다크: 밝은 녹색 (신규)" },
+      "warning": { "$type": "color", "$value": "#F5B53D", "$description": "다크: 밝은 앰버 (신규)" },
+      "successContainer": { "$type": "color", "$value": "#14301F", "$description": "2026-06-29 다크 상태 배지 필 + onSuccessContainer #6EE7A8" },
+      "onSuccessContainer": { "$type": "color", "$value": "#6EE7A8" },
+      "warningContainer": { "$type": "color", "$value": "#3A2E12" },
+      "onWarningContainer": { "$type": "color", "$value": "#F5D98A" }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "display": { "$type": "fontFamily", "$value": ["Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "sans-serif"] },
+      "body": { "$type": "fontFamily", "$value": ["Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "sans-serif"] }
+    },
+    "scale": {
+      "displayXL": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.display}", "fontSize": { "value": 32, "unit": "px" }, "lineHeight": 1.25, "fontWeight": 700 }, "$description": "히어로(리뷰 2026-06-28: 모바일 임팩트). 온보딩/스플래시 등 브랜드 표면 한정" },
+      "displayL": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.display}", "fontSize": { "value": 28, "unit": "px" }, "lineHeight": 1.29, "fontWeight": 700 } },
+      "displayM": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.display}", "fontSize": { "value": 24, "unit": "px" }, "lineHeight": 1.33, "fontWeight": 700 } },
+      "headline": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.display}", "fontSize": { "value": 20, "unit": "px" }, "lineHeight": 1.4, "fontWeight": 700 } },
+      "titleL": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 18, "unit": "px" }, "lineHeight": 1.44, "fontWeight": 700 } },
+      "titleM": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 16, "unit": "px" }, "lineHeight": 1.5, "fontWeight": 500 } },
+      "bodyL": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 17, "unit": "px" }, "lineHeight": 1.53, "fontWeight": 400 } },
+      "bodyM": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 15, "unit": "px" }, "lineHeight": 1.53, "fontWeight": 400 } },
+      "bodyS": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 13, "unit": "px" }, "lineHeight": 1.54, "fontWeight": 400 } },
+      "label": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 14, "unit": "px" }, "lineHeight": 1.43, "fontWeight": 500 } },
+      "caption": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.body}", "fontSize": { "value": 12, "unit": "px" }, "lineHeight": 1.33, "fontWeight": 500 } }
+    }
+  },
+  "spacing": {
+    "1": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } },
+    "2": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } },
+    "3": { "$type": "dimension", "$value": { "value": 12, "unit": "px" } },
+    "4": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } },
+    "5": { "$type": "dimension", "$value": { "value": 20, "unit": "px" } },
+    "6": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } },
+    "8": { "$type": "dimension", "$value": { "value": 32, "unit": "px" } },
+    "10": { "$type": "dimension", "$value": { "value": 40, "unit": "px" } },
+    "12": { "$type": "dimension", "$value": { "value": 48, "unit": "px" } },
+    "16": { "$type": "dimension", "$value": { "value": 64, "unit": "px" } },
+    "screenMargin": { "$type": "dimension", "$value": { "value": 20, "unit": "px" } }
+  },
+  "radius": {
+    "xs": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } },
+    "sm": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } },
+    "ms": { "$type": "dimension", "$value": { "value": 10, "unit": "px" }, "$description": "Fanding 보조 (칩/소형)" },
+    "md": { "$type": "dimension", "$value": { "value": 12, "unit": "px" }, "$description": "기본 (Fanding 실측 최다)" },
+    "lg": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } },
+    "xl": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } },
+    "full": { "$type": "dimension", "$value": { "value": 999, "unit": "px" }, "$description": "pill" }
+  },
+  "elevation": {
+    "level0": { "$type": "shadow", "$value": { "color": "#00000000", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 0, "unit": "px" }, "blur": { "value": 0, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }, "$description": "보더만(border-first). 다크=surface 톤+border" },
+    "level1": { "$type": "shadow", "$value": { "color": "#19191914", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 2, "unit": "px" }, "blur": { "value": 8, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }, "$description": "카드" },
+    "level2": { "$type": "shadow", "$value": { "color": "#1919191F", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 8, "unit": "px" }, "blur": { "value": 24, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }, "$description": "popover·Menu·드롭다운" },
+    "level3": { "$type": "shadow", "$value": { "color": "#1919191F", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 6, "unit": "px" }, "blur": { "value": 16, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }, "$description": "FAB·BottomCTA·Snackbar" },
+    "level4": { "$type": "shadow", "$value": { "color": "#19191929", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 12, "unit": "px" }, "blur": { "value": 32, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }, "$description": "Sheet·Dialog·Modal (리뷰 2026-06-28: 2단→5단 z-스택)" }
+  },
+  "motion": {
+    "duration": {
+      "short": { "$type": "duration", "$value": { "value": 120, "unit": "ms" } },
+      "standard": { "$type": "duration", "$value": { "value": 200, "unit": "ms" } },
+      "medium": { "$type": "duration", "$value": { "value": 300, "unit": "ms" } },
+      "emphasized": { "$type": "duration", "$value": { "value": 400, "unit": "ms" } }
+    },
+    "easing": {
+      "standard": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1] },
+      "decelerate": { "$type": "cubicBezier", "$value": [0, 0, 0, 1], "$description": "enter(진입: 시트·다이얼로그·push)" },
+      "accelerate": { "$type": "cubicBezier", "$value": [0.3, 0, 1, 1], "$description": "exit(이탈: pop·dismiss)" },
+      "emphasized": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1], "$description": "강조; 시트는 spring 권장" }
+    },
+    "spring": {
+      "sheet": { "$type": "custom", "$value": { "mass": 1, "stiffness": 220, "damping": 26 }, "$description": "BottomSheet settle/drag — 런타임 적용(Style Dictionary 정적생성 외)" }
+    },
+    "$note_reducedMotion": "prefers-reduced-motion 시 이동/스케일/패럴럭스 제거 → opacity 페이드(100ms), shimmer→정적 skeleton (WCAG 2.3.3). 리뷰 2026-06-28."
+  },
+  "focus": {
+    "ring": { "$type": "color", "$value": "{color.ref.indigo.500}", "$description": "focus-visible 2px outline + 2px offset (WCAG 2.4.7)" }
+  },
+  "state": {
+    "disabledOpacity": { "$type": "number", "$value": 0.38, "$description": "disabled 콘텐츠(onSurface 38%)" }
+  },
+  "gradient": {
+    "brand": { "$type": "custom", "$value": { "type": "linear", "angle": 135, "stops": ["#5A4DF0", "#8A5CF7"] }, "$description": "브랜드 시그니처 그라데이션(Assen Indigo→violet) — 히어로/스플래시/딜라이트 표면 한정. 2026-06-28 채택(대표 사인 대기)" }
+  },
+  "creatorAccent": {
+    "$note": "★런타임 크리에이터 액센트 = 정적 토큰 아님(리뷰 2026-06-28 분류정정). base 입력색 → WCAG/APCA 자동 darken·lighten으로 onAccent(흑/백 대비큰쪽)·container(surface 12% 틴트) 파생하는 Dart 런타임 유틸로 구현. Style Dictionary 미생성. 미달색→보정 후 ≥4.5 단위테스트.",
+    "base": { "$type": "color", "$value": "#5E63F8", "$description": "런타임 입력 placeholder" }
+  },
+  "chart": {
+    "$description": "데이터 시각화(Web-StudioAnalytics 수익/조회/구독 차트 등). categorical=정성 비교(indigo 시작, 색맹 대비 명도 교차)·sequential=단일 hue 농담(추이/히트맵)·positive/negative=증감·axis/grid=축·격자. 리뷰 2026-06-28 '차트 토큰 부재' 해소. AA: 텍스트 라벨은 axis(ink) 사용, 색은 면적 인코딩 전용.",
+    "categorical": {
+      "1": { "$type": "color", "$value": "#5A4DF0", "$description": "Assen Indigo (기본 시리즈)" },
+      "2": { "$type": "color", "$value": "#0E9E9E", "$description": "teal" },
+      "3": { "$type": "color", "$value": "#F2994A", "$description": "orange" },
+      "4": { "$type": "color", "$value": "#9B51E0", "$description": "violet" },
+      "5": { "$type": "color", "$value": "#2D9CDB", "$description": "blue" },
+      "6": { "$type": "color", "$value": "#EB5757", "$description": "red" },
+      "7": { "$type": "color", "$value": "#27AE60", "$description": "green" },
+      "8": { "$type": "color", "$value": "#BB6BD9", "$description": "magenta" }
+    },
+    "sequential": {
+      "1": { "$type": "color", "$value": "#EFEFFE" },
+      "2": { "$type": "color", "$value": "#C4BEF9" },
+      "3": { "$type": "color", "$value": "#9A8FF4" },
+      "4": { "$type": "color", "$value": "#7060F2" },
+      "5": { "$type": "color", "$value": "#5A4DF0" }
+    },
+    "positive": { "$type": "color", "$value": "{color.ref.green.main}", "$description": "수익 증가/순증" },
+    "negative": { "$type": "color", "$value": "{color.ref.red.main}", "$description": "감소/순감" },
+    "axis": { "$type": "color", "$value": "{color.ref.ink.400}", "$description": "축 라벨/틱 (라이트)" },
+    "grid": { "$type": "color", "$value": "{color.ref.neutral.200}", "$description": "격자선 (라이트)" },
+    "axisDark": { "$type": "color", "$value": "{color.ref.dark.inkSub}" },
+    "gridDark": { "$type": "color", "$value": "{color.ref.dark.border}" }
+  },
+  "dimension": {
+    "safeArea": {
+      "top": { "$type": "dimension", "$value": { "value": 0, "unit": "px" }, "$description": "런타임 인셋(노치) — AppBar 가산" },
+      "bottom": { "$type": "dimension", "$value": { "value": 0, "unit": "px" }, "$description": "런타임 인셋(홈인디케이터) — BottomNav/BottomCTA 가산" }
+    },
+    "breakpoint": {
+      "compact": { "$type": "dimension", "$value": { "value": 600, "unit": "px" }, "$description": "<600 폰 / ≥600 태블릿(adaptive_shell)" }
+    }
+  }
+}
