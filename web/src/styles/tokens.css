@@ -1,0 +1,76 @@
+/*
+ * Assen 웹 디자인 토큰 — docs/design/tokens.v2.json 미러 (web). GENERATED — build-tokens.mjs.
+ * 라이트 = :root, 다크 = .dark. 무접두 원시 CSS변수 → globals.css @theme inline.
+ */
+:root {
+  --surface: #ffffff;
+  --surface-container: #ffffff;
+  --surface-container-high: #f4f4f5;
+  --on-surface: #191919;
+  --on-surface-variant: #6e6e80;
+  --outline: #e9e9f1;
+  --outline-variant: #f4f4f5;
+  --primary: #5a4df0;
+  --on-primary: #ffffff;
+  --primary-container: #efeffe;
+  --on-primary-container: #2e2c8a;
+  --secondary: #52525b;
+  --error: #d73d3d;
+  --on-error: #ffffff;
+  --error-container: #fff2f2;
+  --on-error-container: #9f1239;
+  --success: #1da951;
+  --warning: #ce8509;
+  --success-container: #e8fef1;
+  --on-success-container: #166534;
+  --warning-container: #fff9eb;
+  --on-warning-container: #926a14;
+
+  --gradient-brand: linear-gradient(135deg, #5a4df0 0%, #8a5cf7 100%);
+
+  --creator-accent: #5a4df0;
+  --on-creator-accent: #ffffff;
+  --creator-accent-container: #efeffe;
+  --on-creator-accent-container: #2e2c8a;
+
+  --chart-1: #5a4df0;
+  --chart-2: #0e9e9e;
+  --chart-3: #f2994a;
+  --chart-4: #9b51e0;
+  --chart-5: #2d9cdb;
+  --chart-6: #eb5757;
+  --chart-7: #27ae60;
+  --chart-8: #bb6bd9;
+  --chart-positive: #1da951;
+  --chart-negative: #d73d3d;
+  --chart-axis: #8a8a9a;
+  --chart-grid: #e9e9f1;
+}
+
+.dark {
+  --surface: #141417;
+  --surface-container: #1c1c20;
+  --surface-container-high: #26262b;
+  --on-surface: #f4f4f5;
+  --on-surface-variant: #a1a1aa;
+  --outline: #34343a;
+  --outline-variant: #34343a;
+  --primary: #5a4df0;
+  --on-primary: #ffffff;
+  --primary-container: #2a2a52;
+  --on-primary-container: #c7c9ff;
+  --secondary: #a1a1aa;
+  --error: #ff6b6b;
+  --on-error: #ffffff;
+  --error-container: #3a1518;
+  --on-error-container: #ffb4b4;
+  --success: #3dd17e;
+  --warning: #f5b53d;
+  --success-container: #14301f;
+  --on-success-container: #6ee7a8;
+  --warning-container: #3a2e12;
+  --on-warning-container: #f5d98a;
+
+  --chart-axis: #a1a1aa;
+  --chart-grid: #34343a;
+}
