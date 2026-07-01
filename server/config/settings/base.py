@@ -72,6 +72,13 @@ LOCAL_APPS = [
     "apps.audit",
     "apps.event_log",
     "apps.dashboard",
+    # New-direction (creator platform) bounded contexts (SDLC 09 §3, E11/B1).
+    # Migration-less like the rest — tables are built by `migrate --run-syncdb`.
+    "apps.creator",
+    "apps.social",
+    "apps.content",
+    "apps.commerce",
+    "apps.membership",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
