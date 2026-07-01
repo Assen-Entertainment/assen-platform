@@ -41,6 +41,8 @@ export interface Comment {
 
 export interface Product {
   id: string;
+  /** 소유 크리에이터(스토어 스코프). 전역 카탈로그 항목은 미지정. */
+  creatorId?: string;
   type: MonetizableItemType;
   title: string;
   price: number;
@@ -50,6 +52,8 @@ export interface Product {
 
 export interface MembershipTier {
   id: string;
+  /** 소유 크리에이터. 전역 목록은 미지정. */
+  creatorId?: string;
   name: string;
   price: number;
   period: string;

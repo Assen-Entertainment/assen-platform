@@ -25,7 +25,7 @@ export function useCreator(handle: string, initialData?: Creator) {
   return useQuery({ queryKey: qk.creator(handle), queryFn: () => getCreator(handle), initialData });
 }
 export function useProducts() {
-  return useQuery({ queryKey: qk.products, queryFn: getProducts });
+  return useQuery({ queryKey: qk.products, queryFn: () => getProducts() });
 }
 export function useMembershipTiers(id?: string) {
   return useQuery({ queryKey: qk.tiers(id), queryFn: () => getMembershipTiers(id) });

@@ -9,7 +9,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ handle
   if (!creator) notFound();
   const [posts, products, tiers] = await Promise.all([
     getPosts(creator.id),
-    getProducts(),
+    getProducts(creator.id),
     getMembershipTiers(creator.id),
   ]);
   return <CreatorProfileView creator={creator} posts={posts} products={products} tiers={tiers} />;

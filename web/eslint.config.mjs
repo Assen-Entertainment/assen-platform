@@ -18,7 +18,7 @@ const config = [
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
-  { ignores: [".next/**", "node_modules/**", "scripts/**", "**/*.config.*"] },
+  { ignores: [".next/**", "node_modules/**", "scripts/**", "**/*.config.*", "src/lib/api/schema.d.ts"] },
 ];
 
 export default config;
