@@ -1,7 +1,7 @@
 ---
 title: Assen Platform 컴포넌트 인벤토리
 date: 2026-06-11
-status: 기준
+status: 대체됨(superseded) — 메이드era ui_kit 기준. 현행 DS 정본은 웹 `web/src/components/ui`(42종, SDLC 08)·Figma DS·design-system-fanding-redesign (2026-06-30 방향 전환)
 owner: Assen Entertainment
 tags: [Design, DesignSystem, Components]
 related: ["[[tokens]]", "[[references]]"]
@@ -76,7 +76,7 @@ linear: ASS-87
 | 컴포넌트 | 우선순위 | variants | 상태 |
 |---|---|---|---|
 | AppBar | P0 | 기본형 (센터 타이틀) | ✅ |
-| TabBar(Bottom) | P0 | 4탭, active 표시 | ✅ |
+| TabBar(Bottom) | P0 | 5탭(홈/출근표/예약/체키/마이), active 표시 | ✅ |
 | SegmentedTabs | P0 | 2분할 selected/unselected — 운영자 화면 전환 | 🔨 |
 | UnderlineTabs | P0 | 가로 스크롤형 — 캐스트/이벤트 목록 | 🔨 |
 | PageIndicator | P0 | dots — 배너 캐러셀 | 🔨 |

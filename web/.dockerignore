@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.screenshots
+.playwright-mcp
+coverage
+test-results
+playwright-report
+*.log
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore

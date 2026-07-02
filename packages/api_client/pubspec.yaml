@@ -1,0 +1,17 @@
+name: api_client
+description: >-
+  Typed HTTP client for the Assen Platform backend. Empty skeleton for P0; P6
+  replaces lib/src/generated/ with swagger_parser output driven by the backend
+  openapi.json snapshot (CONSTRAINTS #15). Only hand-written glue lives outside
+  the generated directory.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+dev_dependencies:
+  test: ^1.25.0

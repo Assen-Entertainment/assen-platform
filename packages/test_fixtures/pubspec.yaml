@@ -1,0 +1,16 @@
+name: test_fixtures
+description: >-
+  Shared, deterministic test data builders for Assen Platform. Imported as a
+  dev_dependency by other packages so fixtures live in one place. Production
+  code must never depend on this package.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+dev_dependencies:
+  test: ^1.25.0

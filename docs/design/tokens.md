@@ -1,7 +1,7 @@
 ---
 title: Assen Platform 디자인 토큰 스펙 v0.1
 date: 2026-06-11
-status: 초안(리뷰 대기)
+status: 대체됨(superseded) — 정본은 tokens.v2.json + SDLC 03/08/10 (2026-06-30 방향 전환: 하츠코이 팔레트 폐기, Dart 파이프라인의 v2 이관은 E12/M1)
 owner: Assen Entertainment
 tags: [Design, Tokens, DesignSystem, Hatsukoi]
 related: ["[[references]]", "[[CONSTRAINTS]]"]
@@ -89,6 +89,7 @@ linear: ASS-85
 |---|---|---|---|
 | display.l | 카페24 써라운드 | 36/46 | 풀스크린 축하, 온보딩 타이틀 |
 | display.m | 카페24 써라운드 | 28/38 | 화면 히어로 |
+| display.s | 카페24 써라운드 | 24/32 | 온보딩 슬라이드 헤드라인 |
 | headline | 카페24 써라운드 | 22/30 | 섹션 타이틀 |
 | title.l | Pretendard SemiBold | 19/27 | 카드 타이틀 |
 | title.m | Pretendard SemiBold | 16/24 | 리스트 타이틀 |
@@ -96,10 +97,12 @@ linear: ASS-85
 | body.m | Pretendard | 14/22 | 기본 본문 (한국어 행간 1.55+) |
 | body.s | Pretendard | 12/18 | 보조 설명 |
 | label | Pretendard Medium | 13/18 | 버튼·칩·탭 |
+| caption.micro | Pretendard Medium | 11/16 | 하단탭·필드 라벨·요일 라벨 |
 | pixel | 갈무리11 (Galmuri) | 11/16 | 일련번호·스탬프 번호·장식 캡션 한정 |
 | serif-formal | (랜딩 Fraunces 계열, 한글은 추후 결정) | — | 등급명·증서 등 격식 표면 한정 (투트랙 원칙) |
 
 - 라이선스 전부 검증 완료(OFL/임베드 허용): Pretendard, 카페24 써라운드, 갈무리. 숫자·라틴 보조로 Space Grotesk(OFL) 후보.
+- display.m 행간은 `28 * 1.36 = 38.08`로 Figma/Flutter 표기에서 38px로 반올림한다.
 - serif-formal의 한글 폰트는 미정 — Figma 단계에서 후보 비교(ASS-87).
 
 ## 4. spacing / radius / elevation / motion

@@ -1,0 +1,18 @@
+# 민감 표면 리뷰 라우팅 — 인간 게이트(#25 마이그레이션/#26 인증/#30 프로덕션, 대표·법무 게이트) 표면은
+# 자동 머지 대상이 아니며 PR에 소유자 리뷰가 요구된다. (솔로 단계에선 문서적 장치이나
+# 팀 확장 시 브랜치 보호의 required review와 결합된다 — SDLC 11 §7.)
+
+# 인증/세션/토큰 (#26)
+/server/apps/identity/        @SqixOW
+
+# 결제·정산·구독 (대표·법무 게이트)
+/server/apps/commerce/        @SqixOW
+/server/apps/membership/      @SqixOW
+/server/apps/coupon/          @SqixOW
+
+# 설정·미들웨어·배포 (프로덕션 경계, #30)
+/server/config/               @SqixOW
+/scripts/deploy-prod-ecs.sh   @SqixOW
+/server/Dockerfile            @SqixOW
+/web/Dockerfile               @SqixOW
+/.github/workflows/           @SqixOW

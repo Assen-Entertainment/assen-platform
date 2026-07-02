@@ -1,0 +1,15 @@
+node_modules/
+.seed.json
+.cast_seed.json
+.handling_seed.json
+.pos_seed.json
+.reservation_seed.json
+.event_campaign_seed.json
+.notification_seed.json
+.visit_guide_seed.json
+.coupon_seed.json
+.rbac_seed.json
+test-results/
+playwright-report/
+blob-report/
+.cache/

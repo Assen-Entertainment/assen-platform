@@ -1,0 +1,25 @@
+name: core_tokens
+description: >-
+  Design token primitives for Assen Platform. The raw values (color.ref ramp,
+  spacing, radius, elevation, motion) are GENERATED from docs/design/tokens.json
+  by Style Dictionary (tools/tokens, ASS-128); regenerate with
+  `dart run melos run codegen`. The semantic ColorScheme is hand-written here
+  (NOT generated) because an M3-seeded scheme distorts the cream surface.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+  flutter: ">=3.44.0"
+
+# Resolve against the workspace lockfile (CONSTRAINTS #17).
+resolution: workspace
+
+dependencies:
+  # ThemeExtension + ColorScheme live in the Flutter SDK.
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

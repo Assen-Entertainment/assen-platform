@@ -8,6 +8,8 @@ related: ["[[tokens]]", "[[references]]", "[[components]]"]
 autoresearch: hatsukoi-design-signature / iteration 2
 ---
 
+> ⛔ **SUPERSEDED (2026-06-27, 대표 "완전 제거")** — 하츠코이 시그니처(메이드 큐트)는 제품의 **순수 범용 클린 전환**으로 폐기. 디자인 정본 = [[design-system-fanding-redesign-2026-06-26]] (메이드 테마 토큰 `color.ref.hatsukoi`도 tokens.v2.json에서 삭제). 정본 전략 [[전략_방향_범용크리에이터플랫폼_2026-06-27]].
+
 # 하츠코이 시그니처 디자인 v1.1 — "밋밋함"의 해법
 
 **16개 플랫폼**(4개 카테고리: F&B·레트로 / 게임·수집형 / 캐릭터 IP·서브컬처 / 콘카페 — @home·메이드리밍을 분리하면 17개)을 "성격 → 구현 장치"로 분해한 결과. 전체 출처·검증 메모(적대적 검증 REFUTED 0건, 부분 검증·추정 표기 포함)는 `.omc/autoresearch/hatsukoi-design-signature/runs/run-20260611/research-sources.md`에 실재하며, 아래 표에는 행별 대표 출처를 직접 표기한다.

@@ -1,0 +1,13 @@
+{
+  "name": "assen-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright end-to-end / API checks against a live local Assen stack (Claude QA gate; not wired into CI).",
+  "scripts": {
+    "test": "playwright test",
+    "test:web": "playwright test --config playwright.web.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

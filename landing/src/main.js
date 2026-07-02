@@ -63,8 +63,15 @@ if (reduced) {
   safe(() => {
     const track = document.querySelector('.marquee-track');
     if (track) {
-      /* 트랙 = 동일한 절반 2개(index.html 참고) → 자기 폭 기준 -50%면 이음새 없는 루프.
-         픽셀 측정과 달리 폰트 로드 후 폭이 바뀌어도 어긋나지 않는다 */
+      /* index.html에는 소스 1세트만 두고, 모션 실행 시 복제해 DOM 정적 폭을 줄인다. */
+      if (!track.dataset.cloned) {
+        Array.from(track.children).forEach((node) => {
+          const clone = node.cloneNode(true);
+          clone.setAttribute('aria-hidden', 'true');
+          track.appendChild(clone);
+        });
+        track.dataset.cloned = 'true';
+      }
       gsap.to(track, { xPercent: -50, duration: 22, ease: 'none', repeat: -1 });
     }
   });
@@ -160,17 +167,35 @@ if (reduced) {
 
 /* ── 모션 여부와 무관한 동작 ── */
 
-/* 도트 내비 활성 표시 — IntersectionObserver (모션 설정과 무관) */
+/* 헤더는 스크롤 후 블러 없이 솔리드 배경으로 고정한다. */
 safe(() => {
-  const dots = Array.from(document.querySelectorAll('.dot-nav a'));
-  if (!dots.length || !('IntersectionObserver' in window)) return;
-  const byId = new Map(dots.map((d) => [d.getAttribute('href').slice(1), d]));
+  const header = document.querySelector('.site-header');
+  if (!header) return;
+  const setHeaderState = () => {
+    header.classList.toggle('is-solid', window.scrollY > 8);
+  };
+  setHeaderState();
+  window.addEventListener('scroll', setHeaderState, { passive: true });
+});
+
+/* 섹션 내비 활성 표시 — IntersectionObserver (모션 설정과 무관) */
+safe(() => {
+  const links = Array.from(document.querySelectorAll('.dot-nav a, .mobile-section-nav a'));
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map();
+  links.forEach((link) => {
+    const targetId = link.getAttribute('href')?.slice(1);
+    if (!targetId) return;
+    const group = byId.get(targetId) || [];
+    group.push(link);
+    byId.set(targetId, group);
+  });
   const io = new IntersectionObserver(
     (entries) => {
       entries.forEach((en) => {
         if (!en.isIntersecting) return;
-        dots.forEach((d) => d.classList.remove('active'));
-        byId.get(en.target.id)?.classList.add('active');
+        links.forEach((link) => link.classList.remove('active'));
+        byId.get(en.target.id)?.forEach((link) => link.classList.add('active'));
       });
     },
     { rootMargin: '-45% 0px -45% 0px' }
@@ -198,5 +223,96 @@ safe(() => {
     if (!reduced) {
       gsap.from(success, { scale: 0.6, opacity: 0, rotate: -5, duration: 0.5, ease: 'back.out(2)' });
     }
+  });
+});
+
+/* ASS-140 mock login bridge: same-origin `/` -> `/app/` via localStorage. */
+safe(() => {
+  const SESSION_KEY = 'assen.session.v1';
+  const APP_PATH = '/app/';
+  const openButton = document.querySelector('[data-login-open]');
+  const dialog = document.querySelector('.login-dialog');
+  const closeButton = document.querySelector('[data-login-close]');
+  const form = document.querySelector('[data-login-form]');
+  const error = document.querySelector('[data-login-error]');
+  if (!openButton || !dialog || !form) return;
+
+  let opener = null;
+
+  const readSession = () => {
+    try {
+      const raw = window.localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed.accessToken !== 'string' || typeof parsed.expiresAt !== 'string') return null;
+      const expiresAt = Date.parse(parsed.expiresAt);
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const writeSession = () => {
+    const session = {
+      accessToken: `mock-landing-${Date.now()}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    try {
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch (_) {
+      /* Safari private mode can reject storage; never persist credentials as fallback. */
+    }
+  };
+
+  const closeDialog = () => {
+    if (dialog.open) dialog.close();
+  };
+
+  if (readSession()) {
+    openButton.textContent = '앱으로 가기';
+    openButton.addEventListener('click', () => {
+      window.location.assign(APP_PATH);
+    });
+    return;
+  }
+
+  openButton.addEventListener('click', () => {
+    opener = openButton;
+    dialog.showModal();
+    const firstInput = form.querySelector('input');
+    if (firstInput) firstInput.focus();
+    if (!reduced) {
+      gsap.fromTo('.login-panel', { scale: 0.92, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: 'back.out(1.7)' });
+    }
+  });
+
+  closeButton?.addEventListener('click', closeDialog);
+
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) closeDialog();
+  });
+
+  dialog.addEventListener('close', () => {
+    if (error) error.textContent = '';
+    if (opener) opener.focus();
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const identifier = form.elements.identifier;
+    const password = form.elements.password;
+    if (!identifier || !password) return;
+    identifier.value = identifier.value.trim();
+    const passwordValue = password.value.trim();
+    if (!identifier.value || !passwordValue) {
+      if (error) error.textContent = '아이디와 비밀번호를 모두 입력해 주세요.';
+      form.reportValidity();
+      return;
+    }
+    if (!form.reportValidity()) return;
+    /* Password is checked only for non-empty mock parity; it is never stored, logged, or put in the URL. */
+    writeSession();
+    window.location.assign(APP_PATH);
   });
 });
