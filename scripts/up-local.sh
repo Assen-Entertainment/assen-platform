@@ -24,8 +24,10 @@ compose_env_run up -d postgres redis
 echo "local up: building backend services"
 compose_env_run build api celery-worker celery-beat
 
-echo "local up: applying local Django migrations"
-compose_env_run run --rm api uv run --no-sync python manage.py migrate --noinput
+echo "local up: applying local Django migrations (+run-syncdb for migration-less apps)"
+# --run-syncdb: every domain app is migration-less (models-only; see server/AGENTS.md),
+# so plain `migrate` would create ZERO domain tables. run-syncdb materialises them.
+compose_env_run run --rm api uv run --no-sync python manage.py migrate --noinput --run-syncdb
 
 echo "local up: starting api/celery worker/celery beat"
 compose_env_run up -d api celery-worker celery-beat

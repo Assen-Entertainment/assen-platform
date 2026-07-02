@@ -44,6 +44,19 @@ echo "local smoke: API /api/health"
 curl -fsS "${API_URL}/api/health"
 printf '\n'
 
+# Domain-table probe: /api/creators queries a migration-less domain table, so a
+# 200 page here proves `migrate --run-syncdb` actually provisioned the schema
+# (a bare healthz cannot catch a missing-table regression).
+echo "local smoke: API /api/creators (domain tables provisioned)"
+_creators_body="$(curl -fsS "${API_URL}/api/creators")"
+case "$_creators_body" in
+  *'"items"'*) echo "local smoke: creators page ok" ;;
+  *)
+    echo "error: /api/creators did not return a page — domain tables missing (run-syncdb)?" >&2
+    exit 1
+    ;;
+esac
+
 echo "local smoke: redis"
 local_compose exec -T redis redis-cli ping
 

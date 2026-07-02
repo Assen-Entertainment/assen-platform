@@ -19,3 +19,11 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run build
       - run: npm test
+
+  # 컨테이너 패키징(ECS 경로) 상시 검증 — 빌드만, 푸시 없음(SDLC 11 §3).
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web standalone image
+        run: docker build -f web/Dockerfile web

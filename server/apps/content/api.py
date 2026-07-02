@@ -102,7 +102,7 @@ def _comment_out(comment: Comment) -> CommentOut:
     public endpoint can never be used to harvest fan ids.
     """
     author = comment.author_name
-    if not author and comment.author_id:
+    if not author and comment.author is not None:
         author = comment.author.nickname
     return CommentOut(
         id=comment.id,
