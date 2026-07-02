@@ -11,8 +11,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 COPY . .
-ARG NEXT_PUBLIC_SITE_URL
-ARG NEXT_PUBLIC_API_URL
+# build-arg 미지정(CI 스모크 등) 시에도 빈 문자열이 새지 않도록 기본값을 준다 —
+# 빈 NEXT_PUBLIC_SITE_URL은 metadataBase의 new URL("")을 깨뜨린다(config.ts 참조).
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} \
     NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
     NEXT_TELEMETRY_DISABLED=1
