@@ -67,6 +67,53 @@ echo "prod deploy: pushing image tags"
 docker_run push "${ASSEN_ECR_REPOSITORY_URI}:${COMMIT_SHA}"
 docker_run push "${ASSEN_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}"
 
+# Schema provisioning (migration-less apps): domain tables only come from
+# `migrate --noinput --run-syncdb`, which a plain service boot never runs.
+# Until the formal-migrations gate flips (SDLC 11 §5), run it as a one-off
+# ECS task per release — the task definition's command carries the migrate.
+if [ -n "${ASSEN_ECS_MIGRATE_TASKDEF:-}" ]; then
+  echo "prod deploy: running one-off schema task (migrate --run-syncdb)"
+  # Fire-and-forget is not enough: run-task can fail placement, and the task
+  # itself can exit nonzero — either way deploying services on top would ship
+  # an API whose domain tables are missing. Capture, wait, and assert exit 0.
+  # shellcheck disable=SC2086
+  MIGRATE_TASK_ARN="$(
+    aws ecs run-task \
+      --region "$AWS_REGION" \
+      --cluster "$ASSEN_ECS_CLUSTER" \
+      --task-definition "$ASSEN_ECS_MIGRATE_TASKDEF" \
+      --launch-type FARGATE \
+      ${ASSEN_ECS_MIGRATE_NETWORK:+--network-configuration "$ASSEN_ECS_MIGRATE_NETWORK"} \
+      --query 'tasks[0].taskArn' \
+      --output text
+  )"
+  if [ -z "$MIGRATE_TASK_ARN" ] || [ "$MIGRATE_TASK_ARN" = "None" ]; then
+    echo "error: schema task was not placed (inspect ecs run-task failures)" >&2
+    exit 1
+  fi
+  echo "prod deploy: waiting for schema task to stop (${MIGRATE_TASK_ARN})"
+  aws ecs wait tasks-stopped \
+    --region "$AWS_REGION" \
+    --cluster "$ASSEN_ECS_CLUSTER" \
+    --tasks "$MIGRATE_TASK_ARN"
+  MIGRATE_EXIT_CODE="$(
+    aws ecs describe-tasks \
+      --region "$AWS_REGION" \
+      --cluster "$ASSEN_ECS_CLUSTER" \
+      --tasks "$MIGRATE_TASK_ARN" \
+      --query 'tasks[0].containers[0].exitCode' \
+      --output text
+  )"
+  if [ "$MIGRATE_EXIT_CODE" != "0" ]; then
+    echo "error: schema task exited with code ${MIGRATE_EXIT_CODE} — aborting deploy" >&2
+    exit 1
+  fi
+  echo "prod deploy: schema task succeeded"
+else
+  echo "prod deploy: NOTE — schema provisioning is manual until ASSEN_ECS_MIGRATE_TASKDEF is set"
+  echo "             run once per release: manage.py migrate --noinput --run-syncdb (SDLC 11 §5)"
+fi
+
 echo "prod deploy: forcing ECS deployments"
 for SERVICE in "$ASSEN_ECS_API_SERVICE" "$ASSEN_ECS_WORKER_SERVICE" "$ASSEN_ECS_BEAT_SERVICE"; do
   aws ecs update-service \

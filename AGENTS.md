@@ -1,6 +1,8 @@
 # AGENTS.md — Assen Platform
 
-Assen Platform: 메이드카페 '하츠코이'의 오프라인 경험을 온라인으로 잇는 크로스플랫폼 서비스.
+> ⚠️ **방향 전환(2026-06-30):** 현행 제품 = 범용·서브컬쳐 **크리에이터-팬 플랫폼**. 신방향 정본은 `Company-OS/02_Product/SDLC/08(웹)·09(백엔드)·10(모바일)·11(배포/DevOps)` — 웹=React+Next(`web/`), 모바일=Flutter, 백엔드 신규 도메인 5앱(creator·social·content·commerce·membership). 아래 메이드카페 서술은 구방향(아카이브 예정) 기록이다. 게이트 원칙(가격/정산/약관/본인인증/IAP/결제/migrate = 대표·법무)은 신방향에도 동일 적용.
+
+Assen Platform: 메이드카페 '하츠코이'의 오프라인 경험을 온라인으로 잇는 크로스플랫폼 서비스. *(구방향)*
 Flutter(web+iOS+Android) + Django 5.2 LTS + Django Ninja. P0는 Fan CRM이다 — 팬덤 수익화 기능(P1/P2)은 feature flag off로 시작한다.
 
 ## 필수 선행 문서

@@ -65,13 +65,19 @@ jobs:
         run: dart run melos run analyze --no-select
       - name: Test
         run: dart run melos run test --no-select
+      # 레거시 메이드 앱(fan_app/operator_app)은 M10 아카이브 예정 — 상시 PR
+      # 게이트에서 제외하고 iOS smoke처럼 수동/주간으로만 빌드한다(SDLC 11 §7).
+      # 재사용 패키지(core_tokens·ui_kit·api_client)는 위 analyze/test가 계속 게이트.
       - name: Web build smoke (fan_app)
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
         working-directory: apps/fan_app
         run: flutter build web --no-pub
       - name: Web build smoke (operator_app)
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
         working-directory: apps/operator_app
         run: flutter build web --no-pub
       - name: Android build smoke (fan_app, debug)
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
         working-directory: apps/fan_app
         run: flutter build apk --debug --no-pub
 

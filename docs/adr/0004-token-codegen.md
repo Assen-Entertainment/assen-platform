@@ -1,7 +1,7 @@
 # ADR-0004: 디자인 토큰 코드젠 도구
 
 - 날짜: 2026-06-12
-- 상태: **Accepted** — P1 스파이크(ASS-128) pass. 도구·버전 고정은 아래.
+- 상태: **Accepted (부분 대체, 2026-07-02)** — 도구 선택(Style Dictionary)은 유효하나, **단일 소스는 `tokens.json`(v0.1) → `tokens.v2.json`으로 교체 예정**(SDLC 02 §5 G012 → E12/M1 이관). 웹(React) 타깃은 별도 인스턴스 `web/scripts/build-tokens.mjs`가 이미 v2를 소비 중. Dart/landing 파이프라인의 v2 이관 전까지 본 ADR의 tokens.json 서술은 과도기 현황이다.
 - 결정자: 대표 (Geon Yong Kim) — 결정 스프린트 OQ-11(단일 소스 확정), 도구 선택은 스파이크 종속
 
 ## 맥락

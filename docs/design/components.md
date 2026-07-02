@@ -1,7 +1,7 @@
 ---
 title: Assen Platform 컴포넌트 인벤토리
 date: 2026-06-11
-status: 기준
+status: 대체됨(superseded) — 메이드era ui_kit 기준. 현행 DS 정본은 웹 `web/src/components/ui`(42종, SDLC 08)·Figma DS·design-system-fanding-redesign (2026-06-30 방향 전환)
 owner: Assen Entertainment
 tags: [Design, DesignSystem, Components]
 related: ["[[tokens]]", "[[references]]"]

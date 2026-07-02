@@ -14,9 +14,11 @@ related:
 
 # Assen Platform 개발 제약사항
 
+> ⚠️ **방향 전환 주(2026-07-02):** 2026-06-30 재편으로 현행 제품=범용·서브컬쳐 크리에이터-팬 플랫폼(웹=**React+Next.js** `web/`, 모바일=Flutter — 정본 `Company-OS/02_Product/SDLC/08~11`). 본 문서의 **Flutter-web 전제 항목(#11~13)과 메이드/하츠코이·구 수익모델 서술은 구방향 기준**이라 재검토 대상이다. 인간 게이트 원칙(#24~27: 마이그레이션·결제·인증·시크릿·프로덕션)과 하네스 제약은 신방향에도 그대로 유효.
+
 ## 문서 목적
 
-Assen Platform(하츠코이 오프라인 경험의 온라인 확장, Flutter web+iOS+Android + Django) 개발의 제약사항을 정의한다. 이 문서는 Company-OS의 `Development_Constraints`, `LLM_Harness_Index`, `GitOps_Harness`를 **상속**하며 충돌 시 Company-OS 기준 문서가 우선한다. 근거 출처는 `docs/research/` 두 문서에 있다.
+Assen Platform(하츠코이 오프라인 경험의 온라인 확장, Flutter web+iOS+Android + Django) 개발의 제약사항을 정의한다. *(구방향 서술)* 이 문서는 Company-OS의 `Development_Constraints`, `LLM_Harness_Index`, `GitOps_Harness`를 **상속**하며 충돌 시 Company-OS 기준 문서가 우선한다. 근거 출처는 `docs/research/` 두 문서에 있다.
 
 핵심 합의 3줄 (하네스 담론 조사):
 1. 에이전트에게 기계 판정 가능한 검증 루프를 주되, 작성자가 채점하지 못하게 한다.

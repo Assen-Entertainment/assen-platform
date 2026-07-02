@@ -3,9 +3,17 @@
 This document records the current deployment status and the repeatable scripts
 for local/dev builds and production deployment preparation.
 
+> **정본 포인터(2026-07-02):** 배포/환경/CI·CD/GitOps/관측의 설계 정본은
+> `Company-OS/02_Product/SDLC/11_패키징_배포_DevOps_설계_2026-07-02.md`다.
+> 본 문서는 스크립트 사용법 레퍼런스로 유지한다. 신방향 요점: 웹은 `web/`(Next.js,
+> standalone 이미지 `web/Dockerfile` — 호스팅은 E10 게이트), 백엔드 스키마는
+> migration-less라 **`migrate --run-syncdb`가 유일한 테이블 생성 경로**(up-local에
+> 배선, prod는 one-off task 심), 프로덕션 설정은 `config.settings.prod`(fail-closed).
+> 아래 "Local Web Shell"의 Flutter-web 셸은 **구방향 잔재**(M10 아카이브 대상)다.
+
 ## Current Status
 
-As of 2026-06-12:
+As of 2026-06-12 (스크립트·리포 상태 스냅샷 — 설계 현행은 SDLC 11):
 
 - Source repository: `https://github.com/Assen-Entertainment/assen-platform`
   (private).
@@ -58,7 +66,19 @@ scripts/smoke-local.sh
 These scripts set `COMMIT_SHA` from the current git commit unless the caller
 already provided it, so `/api/health` can report which image is running.
 
-## Local Web Shell
+## Web (Next.js — 신방향)
+
+```sh
+cd web && npm install --legacy-peer-deps
+npm run dev                      # 개발 서버 :3000
+npm run build && npm start      # 프로덕션 로컬 확인
+docker build -f web/Dockerfile web   # standalone 이미지 (CI가 상시 스모크)
+```
+
+배포 타깃(Vercel vs ECS)은 E10 게이트 — SDLC 11 §1/§3. `NEXT_PUBLIC_*`는
+빌드 타임 인라인이므로 컨테이너는 build-arg로 주입한다(`web/.env.example`).
+
+## Local Web Shell (구방향 — Flutter-web 셸, M10 아카이브 대상)
 
 Build the composed local web shell:
 

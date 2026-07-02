@@ -42,6 +42,7 @@ build/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-win/
 venv/
 *.egg-info/
 .mypy_cache/

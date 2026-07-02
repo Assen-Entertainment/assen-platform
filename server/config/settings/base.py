@@ -47,6 +47,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "corsheaders",
     "django_linear_migrations",
 ]
 
@@ -72,6 +73,13 @@ LOCAL_APPS = [
     "apps.audit",
     "apps.event_log",
     "apps.dashboard",
+    # New-direction (creator platform) bounded contexts (SDLC 09 §3, E11/B1).
+    # Migration-less like the rest — tables are built by `migrate --run-syncdb`.
+    "apps.creator",
+    "apps.social",
+    "apps.content",
+    "apps.commerce",
+    "apps.membership",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -86,6 +94,11 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # state in Redis and is deployment-bound, so only the position is fixed here.
 MIDDLEWARE = [
     "config.middleware.RequestIDMiddleware",
+    # CORS must sit above anything that can emit a response (CommonMiddleware
+    # etc.) so preflight OPTIONS short-circuits with the right headers. The
+    # browser-facing web app calls the API cross-origin (NEXT_PUBLIC_API_URL),
+    # so allowed origins are env-driven and CLOSED by default (SDLC 11 §4).
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "config.middleware.SecurityHeadersMiddleware",
     "config.middleware.InMemoryRateLimitMiddleware",
@@ -140,6 +153,10 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# CORS — fail-closed: no origin is allowed unless the environment says so.
+# dev.py opts in localhost web origins; prod supplies the real web origin(s).
+CORS_ALLOWED_ORIGINS: list[str] = env.list("CORS_ALLOWED_ORIGINS", default=[])
 
 # Celery + Redis (ADR-0001). Broker/result backend come from env; beat schedule
 # is a placeholder until periodic tasks are defined in later phases.

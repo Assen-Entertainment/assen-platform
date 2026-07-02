@@ -1,7 +1,7 @@
 ---
 title: Assen Platform 디자인 토큰 스펙 v0.1
 date: 2026-06-11
-status: 초안(리뷰 대기)
+status: 대체됨(superseded) — 정본은 tokens.v2.json + SDLC 03/08/10 (2026-06-30 방향 전환: 하츠코이 팔레트 폐기, Dart 파이프라인의 v2 이관은 E12/M1)
 owner: Assen Entertainment
 tags: [Design, Tokens, DesignSystem, Hatsukoi]
 related: ["[[references]]", "[[CONSTRAINTS]]"]
