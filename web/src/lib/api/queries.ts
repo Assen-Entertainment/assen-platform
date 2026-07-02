@@ -1,6 +1,16 @@
 "use client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getCreators, getCreator, getProducts, getMembershipTiers, getPosts, getPost, getComments } from "./index";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  getCreators,
+  getCreator,
+  getProducts,
+  getMembershipTiers,
+  getPosts,
+  getPost,
+  getComments,
+  getFeed,
+  getSearch,
+} from "./index";
 import type { Creator, Post, Comment } from "./types";
 
 /** 네트워크 지연 시뮬레이션(목업). 실 API 연동 시 제거. */
@@ -10,12 +20,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const qk = {
   creators: ["creators"] as const,
   creator: (handle: string) => ["creator", handle] as const,
-  products: ["products"] as const,
+  products: (creatorId?: string) => ["products", creatorId ?? "all"] as const,
   tiers: (id?: string) => ["tiers", id ?? "all"] as const,
   posts: (id?: string) => ["posts", id ?? "all"] as const,
   feed: ["feed"] as const,
   post: (id: string) => ["post", id] as const,
   comments: (postId: string) => ["comments", postId] as const,
+  search: (q: string) => ["search", q] as const,
 };
 
 export function useCreators() {
@@ -24,8 +35,8 @@ export function useCreators() {
 export function useCreator(handle: string, initialData?: Creator) {
   return useQuery({ queryKey: qk.creator(handle), queryFn: () => getCreator(handle), initialData });
 }
-export function useProducts() {
-  return useQuery({ queryKey: qk.products, queryFn: () => getProducts() });
+export function useProducts(creatorId?: string) {
+  return useQuery({ queryKey: qk.products(creatorId), queryFn: () => getProducts(creatorId) });
 }
 export function useMembershipTiers(id?: string) {
   return useQuery({ queryKey: qk.tiers(id), queryFn: () => getMembershipTiers(id) });
@@ -33,9 +44,18 @@ export function useMembershipTiers(id?: string) {
 export function usePosts(id?: string) {
   return useQuery({ queryKey: qk.posts(id), queryFn: () => getPosts(id) });
 }
-/** 팔로잉 피드(전체 포스트). 서버 initialData 하이드레이션. */
+/** 피드 — B2 `/feed` 소비(B3 개인화 배선 지점). 서버 initialData 하이드레이션. */
 export function useFeed(initialData?: Post[]) {
-  return useQuery({ queryKey: qk.feed, queryFn: () => getPosts(), initialData });
+  return useQuery({ queryKey: qk.feed, queryFn: getFeed, initialData });
+}
+/** 검색 — B2 `/search?q=` 소비. 빈 질의는 비활성, 타이핑 중 직전 결과 유지. */
+export function useSearch(q: string) {
+  return useQuery({
+    queryKey: qk.search(q),
+    queryFn: () => getSearch(q),
+    enabled: q.trim().length > 0,
+    placeholderData: keepPreviousData,
+  });
 }
 export function usePost(id: string, initialData?: Post) {
   return useQuery({ queryKey: qk.post(id), queryFn: () => getPost(id), initialData });

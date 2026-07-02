@@ -633,8 +633,12 @@ def _auth(account: Account) -> dict[str, str]:
 def test_metrics_endpoint_returns_kpis_and_logs_usage(client: Client) -> None:
     operator = Account.objects.create(role=Role.OPERATOR.value)
     today = timezone.localdate()
-    _visit("fan-a", timezone.now(), visit_id="va")
-    _favorite("fan-a", timezone.now())
+    now = timezone.now()
+    _visit("fan-a", now, visit_id="va")
+    # A follow-up must be strictly AFTER its anchor to pair as an MSFC
+    # (_has_safe_followup). Two bare timezone.now() calls can tie on Windows'
+    # clock resolution (observed ~50% flake), so offset the follow-up explicitly.
+    _favorite("fan-a", now + timedelta(minutes=5))
 
     response = client.get(
         "/api/operator/metrics/",

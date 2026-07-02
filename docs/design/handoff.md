@@ -1,7 +1,7 @@
 ---
 title: Vite 랜딩 → Flutter 앱 핸드오프 URL 계약
 date: 2026-06-12
-status: 기준
+status: 대체됨(superseded) — "Flutter web 앱 경험" 전제가 2026-06-30 방향 전환(웹=React+Next, ADR-09)으로 폐기됨. 랜딩→웹앱 핸드오프는 신방향 웹(`web/`) 기준 재설계 대상
 owner: Assen Entertainment
 tags: [Design, Routing, Handoff]
 linear: ASS-131

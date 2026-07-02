@@ -8,18 +8,12 @@
  */
 import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "./client";
-import type { Comment, Creator, MembershipTier, Post, Product } from "./types";
+import type { Comment, Creator, MembershipTier, Paginated, Post, Product, SearchResult } from "./types";
 
 export * from "./types";
 export { apiFetch, ApiError } from "./client";
 
 const USE_API = Boolean(config.apiUrl);
-
-// --- 실 API 원시 응답(snake_case, Django Ninja B2 계약) ---------------------
-interface Page<T> {
-  items: T[];
-  next_cursor: string | null;
-}
 interface RawCreator {
   id: string;
   handle: string;
@@ -73,6 +67,18 @@ interface RawTier {
   badge: string;
   featured: boolean;
   sort_order: number;
+}
+/** /search 결과의 축약 상품(ProductBrief — creator_id/media_url 없음). */
+interface RawProductBrief {
+  id: string;
+  type: string;
+  title: string;
+  price: number;
+  meta: string;
+}
+interface RawSearch {
+  creators: RawCreator[];
+  products: RawProductBrief[];
 }
 
 /** ISO 시각 → 상대 라벨(방금 / N분·시간·일 전 / 날짜). */
@@ -142,6 +148,13 @@ const mapTier = (t: RawTier): MembershipTier => ({
   badge: t.badge || undefined,
   featured: t.featured,
 });
+const mapProductBrief = (p: RawProductBrief): Product => ({
+  id: p.id,
+  type: p.type as Product["type"],
+  title: p.title,
+  price: p.price,
+  meta: p.meta || undefined,
+});
 
 // --- mock 폴백 데이터 (apiUrl 미설정 시) ------------------------------------
 const CREATORS: Creator[] = [
@@ -183,7 +196,7 @@ const COMMENTS: Comment[] = [
 
 // --- 도메인 함수 (apiUrl 설정 시 실 B2 API, 아니면 mock 폴백) ----------------
 export async function getCreators(): Promise<Creator[]> {
-  if (USE_API) return (await apiFetch<Page<RawCreator>>("/creators")).items.map(mapCreator);
+  if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);
   return CREATORS;
 }
 export async function getCreator(handle: string): Promise<Creator | undefined> {
@@ -201,7 +214,7 @@ export async function getCreator(handle: string): Promise<Creator | undefined> {
 export async function getProducts(creatorId?: string): Promise<Product[]> {
   if (USE_API) {
     const q = creatorId ? `?creator_id=${encodeURIComponent(creatorId)}` : "";
-    return (await apiFetch<Page<RawProduct>>(`/products${q}`)).items.map(mapProduct);
+    return (await apiFetch<Paginated<RawProduct>>(`/products${q}`)).items.map(mapProduct);
   }
   return creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS;
 }
@@ -212,13 +225,34 @@ export async function getMembershipTiers(creatorId?: string): Promise<Membership
   }
   return creatorId ? TIERS.filter((t) => t.creatorId === creatorId) : TIERS;
 }
-/** creatorId 지정 시 해당 크리에이터 포스트, 미지정 시 전체(피드). */
+/** creatorId 지정 시 해당 크리에이터 포스트, 미지정 시 전체. */
 export async function getPosts(creatorId?: string): Promise<Post[]> {
   if (USE_API) {
     const q = creatorId ? `?creator_id=${encodeURIComponent(creatorId)}` : "";
-    return (await apiFetch<Page<RawPost>>(`/posts${q}`)).items.map(mapPost);
+    return (await apiFetch<Paginated<RawPost>>(`/posts${q}`)).items.map(mapPost);
   }
   return creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS;
+}
+/** 피드 — B2 `/feed` 소비(익명=최신 전체). B3 개인화(팔로잉) 피드의 배선 지점. */
+export async function getFeed(): Promise<Post[]> {
+  if (USE_API) return (await apiFetch<Paginated<RawPost>>("/feed")).items.map(mapPost);
+  return POSTS;
+}
+/** 검색 — B2 `/search?q=` 소비. mock 폴백은 서버 의미론(name/handle·title 부분일치, 10건)을 미러. */
+export async function getSearch(q: string): Promise<SearchResult> {
+  const term = q.trim();
+  if (!term) return { creators: [], products: [] };
+  if (USE_API) {
+    const raw = await apiFetch<RawSearch>(`/search?q=${encodeURIComponent(term)}`);
+    return { creators: raw.creators.map(mapCreator), products: raw.products.map(mapProductBrief) };
+  }
+  const t = term.toLowerCase();
+  return {
+    creators: CREATORS.filter(
+      (c) => c.name.toLowerCase().includes(t) || c.handle.toLowerCase().includes(t),
+    ).slice(0, 10),
+    products: PRODUCTS.filter((p) => p.title.toLowerCase().includes(t)).slice(0, 10),
+  };
 }
 export async function getPost(id: string): Promise<Post | undefined> {
   if (USE_API) {
@@ -235,7 +269,7 @@ export async function getPost(id: string): Promise<Post | undefined> {
 export async function getComments(postId: string): Promise<Comment[]> {
   if (USE_API) {
     const path = `/posts/${encodeURIComponent(postId)}/comments`;
-    return (await apiFetch<Page<RawComment>>(path)).items.map(mapComment);
+    return (await apiFetch<Paginated<RawComment>>(path)).items.map(mapComment);
   }
   return COMMENTS.filter((c) => c.postId === postId);
 }

@@ -1,13 +1,17 @@
 "use client";
 import * as React from "react";
 import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem } from "@/components/ui";
+import { useSearch } from "@/lib/api/queries";
 import type { Creator, Product } from "@/lib/api";
 
+/** 검색 뷰 — 빈 질의=서버 제공 목록(브라우즈), 질의 시 B2 `/search` 소비(mock 폴백 동일 의미론). */
 export function SearchView({ creators, products }: { creators: Creator[]; products: Product[] }) {
   const [q, setQ] = React.useState("");
   const [tab, setTab] = React.useState("all");
-  const cl = creators.filter((c) => c.name.toLowerCase().includes(q.toLowerCase()));
-  const pl = products.filter((p) => p.title.toLowerCase().includes(q.toLowerCase()));
+  const deferredQ = React.useDeferredValue(q.trim());
+  const search = useSearch(deferredQ);
+  const cl = deferredQ ? (search.data?.creators ?? []) : creators;
+  const pl = deferredQ ? (search.data?.products ?? []) : products;
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <SearchField value={q} onChange={(e) => setQ(e.target.value)} placeholder="크리에이터·상품 검색" />

@@ -62,7 +62,14 @@ export interface MembershipTier {
   featured?: boolean;
 }
 
+/** 커서 페이지 응답 — B2 wire 계약(snake_case). 마지막 페이지에서 next_cursor=null. */
 export interface Paginated<T> {
   items: T[];
-  nextCursor?: string | null;
+  next_cursor?: string | null;
+}
+
+/** /search 결과 (creators + products). */
+export interface SearchResult {
+  creators: Creator[];
+  products: Product[];
 }

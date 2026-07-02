@@ -1,7 +1,7 @@
 ---
 title: Assen Platform 화면 맵 (P0)
 date: 2026-06-11
-status: 기준
+status: 대체됨(superseded) — 메이드/하츠코이 IA 기준. 현행 화면 정본은 SDLC 08(웹 라우트)·10 §3(모바일 화면) (2026-06-30 방향 전환)
 owner: Assen Entertainment
 tags: [Design, Screens, IA]
 related: ["[[components]]", "[[tokens]]"]

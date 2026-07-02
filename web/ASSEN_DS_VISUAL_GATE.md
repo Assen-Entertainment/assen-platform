@@ -1,18 +1,19 @@
-# Assen DS 시각 게이트 (WSL 전용)
+# Assen DS 시각 게이트
 
-빌드 → 스크린샷 → Figma 픽셀 비교. Windows 세션에서는 JS 빌드/dev 서버가 불가하므로 **WSL에서 수행**한다. 코드·토큰·Figma 정합과 브랜드 루브릭은 이미 통과(정적/프로그래매틱). 이 게이트는 **런타임 시각 회귀 확인**용.
+빌드 → 스크린샷 → Figma 픽셀 비교. **Windows npm으로 수행**한다(구 "WSL 전용" 전제는 폐기 — ADR-10, WSL 제거됨). 코드·토큰·Figma 정합과 브랜드 루브릭은 이미 통과(정적/프로그래매틱). 이 게이트는 **런타임 시각 회귀 확인**용.
 
-## 1. 스캐폴드 + 실행
-`ASSEN_WEB_SETUP.md` 절차대로 스캐폴드 후:
+## 1. 설치 + 실행
+`ASSEN_WEB_SETUP.md` §1 대로 설치 후:
 ```bash
-pnpm install
-pnpm dev        # http://localhost:3000/gallery 확인
+npm install --legacy-peer-deps
+npm run dev     # http://localhost:3000/gallery 확인
 ```
 
 ## 2. 스크린샷 (Playwright)
 ```bash
-pnpm add -D playwright && npx playwright install chromium
-node scripts/visual-gate.mjs
+npx playwright install chromium   # playwright는 devDependency로 이미 포함
+bash scripts/visual.sh            # 권장: 포트 정리→프로덕션 build/start→전 라우트 촬영
+# 또는 dev 서버 위에서: node scripts/visual-gate.mjs
 # → .screenshots/gallery-{light,dark,mobile}.png
 # → .screenshots/screen-{discovery,creator,store,checkout}.png  (서비스 플로우)
 ```
