@@ -35,7 +35,7 @@ from apps.cast.services import (
     update_cast_profile,
     view_public_profile,
 )
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth
 from apps.identity.models import Account, Role
 from config.api import api
 

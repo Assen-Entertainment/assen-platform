@@ -25,3 +25,8 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # Fan signup tests + live API E2E use the deterministic mock OTP sender.
 ENABLE_MOCK_FAN_OTP = True
+
+# Disable per-user write throttling: the suite fires many writes for one fixture
+# account, and the shared LocMem throttle cache would otherwise leak state across
+# tests and trip 429s. Throttle behaviour itself is exercised in dev/prod config.
+FAN_WRITE_THROTTLE_ENABLED = False

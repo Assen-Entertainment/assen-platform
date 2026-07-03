@@ -3,6 +3,7 @@
 // 참고 메모리: assen-icons-material.
 export {
   MdHome as HomeIcon,
+  MdDynamicFeed as FeedIcon,
   MdStorefront as StoreIcon,
   MdFavoriteBorder as HeartIcon,
   MdFavorite as HeartFilledIcon,
@@ -24,4 +25,16 @@ export {
   MdRemove as RemoveIcon,
   MdPerson as PersonIcon,
   MdSettings as SettingsIcon,
+  MdLightMode as SunIcon,
+  MdDarkMode as MoonIcon,
+  MdCardGiftcard as GiftIcon,
+  // 카테고리 아이콘 행(디스커버리 #7)
+  MdBrush as IllustIcon,
+  MdMusicNote as MusicIcon,
+  MdVideocam as VtuberIcon,
+  MdShoppingBag as GoodsIcon,
+  MdSportsEsports as GameIcon,
+  MdPhotoCamera as PhotoIcon,
+  MdTheaterComedy as CosplayIcon,
+  MdEditNote as WritingIcon,
 } from "react-icons/md";

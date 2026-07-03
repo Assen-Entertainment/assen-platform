@@ -124,96 +124,6 @@
         ]
       }
     },
-    "/api/fan/signup/otp": {
-      "post": {
-        "operationId": "apps_identity_api_request_otp",
-        "summary": "Request Otp",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "description": "Send (mock) an OTP for the phone. Returns a bare ack — never the code.",
-        "tags": [
-          "fan-signup"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OtpRequestIn"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/fan/signup": {
-      "post": {
-        "operationId": "apps_identity_api_signup",
-        "summary": "Signup",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SignupOut"
-                }
-              }
-            }
-          }
-        },
-        "description": "Create/attach a fan from a verified OTP + consent; issue a token pair.\n\nDelivery follows the requested surface (ADR-0002): the web flow gets hardened\nhttpOnly cookies (no token in the body); the app gets the tokens in the body.",
-        "tags": [
-          "fan-signup"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignupIn"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/fan/membership-card": {
-      "get": {
-        "operationId": "apps_identity_api_get_membership_card",
-        "summary": "Get Membership Card",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MembershipCardOut"
-                }
-              }
-            }
-          }
-        },
-        "description": "Return the authenticated fan's digital membership card (either surface).",
-        "tags": [
-          "fan-signup"
-        ],
-        "security": [
-          {
-            "FanBearerAuth": []
-          },
-          {
-            "FanCookieAuth": []
-          }
-        ]
-      }
-    },
     "/api/cast/profiles": {
       "post": {
         "operationId": "apps_cast_api_create_profile",
@@ -896,6 +806,366 @@
         ]
       }
     },
+    "/api/products/{product_id}": {
+      "get": {
+        "operationId": "apps_commerce_api_get_product",
+        "summary": "Get Product",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Product Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return one catalog product by id; 404 if unknown (B5).\n\nThe web product-detail page consumes this contract. ``creator`` is\n``select_related`` so the owning creator name is served without an extra query.",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/api/orders": {
+      "post": {
+        "operationId": "apps_commerce_api_create_order",
+        "summary": "Create Order",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Place a mock order for one product.\n\nMOCK: records a ``paid`` order and snapshots the line item, but **no real\npayment is taken and no money moves** (B7 gated). Stock is *validated* but not\ndecremented (inventory movement is out of B4 scope).\n\nIdempotency (B1): if the caller supplies ``idempotency_key`` and already has an\norder for it, the existing order is returned (200) rather than duplicated. The\norder + its line are written in one ``transaction.atomic`` block so a failure\ncan never leave a header without its item; the (buyer, key) unique constraint\ncloses the concurrent-retry race (both requests pass the pre-check, one insert\nwins, the loser catches ``IntegrityError`` and returns the winner's order). The\nfan notification is sent only *after* the transaction commits, so a rolled-back\norder never emits a stray \"order received\" notice.",
+        "tags": [
+          "commerce-orders"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "apps_commerce_api_list_orders",
+        "summary": "List Orders",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderPage"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the requesting fan's own orders, newest first, cursor-paginated.",
+        "tags": [
+          "commerce-orders"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/orders/{order_id}": {
+      "get": {
+        "operationId": "apps_commerce_api_get_order",
+        "summary": "Get Order",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return one of the requesting fan's own orders (404 if not theirs).",
+        "tags": [
+          "commerce-orders"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/orders/{order_id}/cancel": {
+      "post": {
+        "operationId": "apps_commerce_api_cancel_order",
+        "summary": "Cancel Order",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel one of the fan's own orders (only while paid/shipping).",
+        "tags": [
+          "commerce-orders"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/orders/{order_id}/refund": {
+      "post": {
+        "operationId": "apps_commerce_api_request_refund",
+        "summary": "Request Refund",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Request a refund against one of the fan's own orders (shipping/completed).",
+        "tags": [
+          "commerce-orders"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/posts": {
       "get": {
         "operationId": "apps_content_api_list_posts",
@@ -967,6 +1237,55 @@
         "tags": [
           "content"
         ]
+      },
+      "post": {
+        "operationId": "apps_content_api_create_post",
+        "summary": "Create Post",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a post as the caller's creator profile; 403 if they operate none.\n\nOwner guard: only an account that operates a :class:`Creator` may post, and\nthe post is always attributed to *that* creator — the author is never taken\nfrom client input, so a fan cannot post as someone else.",
+        "tags": [
+          "content"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
       }
     },
     "/api/posts/{post_id}": {
@@ -1010,6 +1329,108 @@
         "description": "Fetch a single post; 404 if unknown.",
         "tags": [
           "content"
+        ]
+      }
+    },
+    "/api/posts/{post_id}/like": {
+      "put": {
+        "operationId": "apps_content_api_like_post",
+        "summary": "Like Post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LikeOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Like a post; idempotent (a second like is a no-op, still 200).",
+        "tags": [
+          "content"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "apps_content_api_unlike_post",
+        "summary": "Unlike Post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LikeOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Unlike a post; idempotent (unliking a non-liked post is a no-op).",
+        "tags": [
+          "content"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
         ]
       }
     },
@@ -1087,6 +1508,66 @@
         "tags": [
           "content"
         ]
+      },
+      "post": {
+        "operationId": "apps_content_api_create_comment",
+        "summary": "Create Comment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Add a comment to a post as the authenticated fan; 404 if the post is unknown.\n\n``author`` is the account; ``author_name`` denormalises the display nickname so\nthe comment renders identically to a seeded one (and _comment_out never leaks\nthe internal fan_id).",
+        "tags": [
+          "content"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
       }
     },
     "/api/feed": {
@@ -1139,7 +1620,7 @@
             }
           }
         },
-        "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs the authenticated user and lands in\nB3/B4; for now this returns the same recent-posts page as ``/posts``.",
+        "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs a richer ranking and lands later; for\nnow this returns the same recent-posts page as ``/posts``, but with the\nper-user ``liked`` flag filled in when the caller is authenticated.",
         "tags": [
           "content"
         ]
@@ -2701,6 +3182,225 @@
         ]
       }
     },
+    "/api/fan/signup/otp": {
+      "post": {
+        "operationId": "apps_identity_api_request_otp",
+        "summary": "Request Otp",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Send (mock) an OTP for the phone. Returns a bare ack — never the code.",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRequestIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/signup": {
+      "post": {
+        "operationId": "apps_identity_api_signup",
+        "summary": "Signup",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create/attach a fan from a verified OTP + consent; issue a token pair.\n\nDelivery follows the requested surface (ADR-0002): the web flow gets hardened\nhttpOnly cookies (no token in the body); the app gets the tokens in the body.",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/login": {
+      "post": {
+        "operationId": "apps_identity_api_login",
+        "summary": "Login",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Re-authenticate an existing fan (phone + OTP) and issue a fresh token pair.\n\nDisclosure minimisation: the OTP is verified *first*, so \"가입이 필요해요\" (no\naccount) is only ever revealed to a caller who already proved control of the\nphone via a valid code — a wrong code and an unregistered number both look the\nsame (422) to anyone else. Delivery follows the requested surface (ADR-0002).",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/logout": {
+      "post": {
+        "operationId": "apps_identity_api_logout",
+        "summary": "Logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Best-effort logout: revoke the session's token family and clear cookies (A2).\n\nUnauthenticated on purpose. A web session whose short-lived access cookie has\nalready expired must still be able to log out using its live refresh cookie, so\ngating this on ``fan_auth`` (which validates the *access* token) would strand\nexactly that case. Instead we revoke off whatever the caller presents: the\naccess token (bearer or cookie) and/or the refresh cookie — either burns the\nwhole family (F11). Cookie clearing is unconditional so the browser is logged\nout even when no token was presented; the operation is idempotent.\n\nCSRF: this endpoint is left CSRF-open. A forged cross-site logout can only\n*destroy* a session (revoke tokens + clear cookies), never read data or act as\nthe user, so it is a nuisance-level risk accepted for reachability — consistent\nwith keeping logout usable from an access-expired web session.",
+        "tags": [
+          "fan-signup"
+        ]
+      }
+    },
+    "/api/fan/refresh": {
+      "post": {
+        "operationId": "apps_identity_api_refresh",
+        "summary": "Refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Rotate a refresh token and issue a fresh pair; deliver by surface.\n\nThe web surface presents the refresh token via the path-scoped cookie (and\ngets fresh cookies back); the app presents it in the body (and gets a fresh\nbody pair). Rotation supersedes the presented token; replay of a consumed\ntoken revokes the whole family (reuse detection in ``rotate_refresh_token``).\nAny token failure returns a flat 401 that does not distinguish expired vs\nrevoked vs reused.\n\nCSRF (A3): the cookie surface is browser-driven and auto-sends the refresh\ncookie, so this endpoint — which the broadened cookie path (A2) now exposes on\nan unsafe method — verifies the double-submit CSRF token (``/fan/csrf`` cookie\nechoed in ``X-CSRFToken``) whenever the token arrives by cookie. The app/body\nsurface presents no cookie and is exempt.",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/me": {
+      "get": {
+        "operationId": "apps_identity_api_get_me",
+        "summary": "Get Me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FanMeOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the authenticated fan's identity summary (either surface).",
+        "tags": [
+          "fan-signup"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/csrf": {
+      "get": {
+        "operationId": "apps_identity_api_get_csrf",
+        "summary": "Get Csrf",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Issue the ``csrftoken`` cookie for the web double-submit CSRF defense.\n\n``get_token`` marks the request so ``CsrfViewMiddleware`` writes the cookie on\nthe way out — the ninja-safe equivalent of ``@ensure_csrf_cookie`` (which can\nonly wrap a view returning an ``HttpResponse``, not a serialised dict). The web\nclient reads the cookie and echoes it in ``X-CSRFToken`` on unsafe methods.",
+        "tags": [
+          "fan-signup"
+        ]
+      }
+    },
+    "/api/fan/membership-card": {
+      "get": {
+        "operationId": "apps_identity_api_get_membership_card",
+        "summary": "Get Membership Card",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipCardOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the authenticated fan's digital membership card (either surface).",
+        "tags": [
+          "fan-signup"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/tiers": {
       "get": {
         "operationId": "apps_membership_api_list_tiers",
@@ -2743,6 +3443,162 @@
         "description": "List membership tiers, optionally filtered to one creator.",
         "tags": [
           "membership"
+        ]
+      }
+    },
+    "/api/subscriptions": {
+      "post": {
+        "operationId": "apps_membership_api_subscribe",
+        "summary": "Subscribe",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Subscribe the requesting fan to a tier (mock — no money moves).\n\nRefuses (422) if the fan already has an active subscription to the same\ncreator (one active membership per creator).",
+        "tags": [
+          "membership-subscriptions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "apps_membership_api_list_subscriptions",
+        "summary": "List Subscriptions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SubscriptionOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the requesting fan's own subscriptions (newest first).",
+        "tags": [
+          "membership-subscriptions"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/subscriptions/{subscription_id}/cancel": {
+      "post": {
+        "operationId": "apps_membership_api_cancel_subscription",
+        "summary": "Cancel Subscription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Subscription Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Schedule end-of-period cancellation of the fan's own subscription.\n\n\"말일 해지\": records ``cancelled_at`` and keeps ``status = active`` so the\nmembership stays usable until period-end; the response's ``cancel_scheduled``\nflag lets the web show \"해지 예정\". A real billing job would flip it later.",
+        "tags": [
+          "membership-subscriptions"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
         ]
       }
     },
@@ -2818,6 +3674,153 @@
         "security": [
           {
             "RoleRequired": []
+          }
+        ]
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "apps_notification_api_list_notifications",
+        "summary": "List Notifications",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPage"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the requesting fan's own notifications, newest first, cursor-paginated.",
+        "tags": [
+          "notification"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/notifications/read-all": {
+      "post": {
+        "operationId": "apps_notification_api_mark_all_read",
+        "summary": "Mark All Read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAllOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark all of the requesting fan's unread notifications as read.",
+        "tags": [
+          "notification"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/notifications/{notification_id}/read": {
+      "post": {
+        "operationId": "apps_notification_api_mark_read",
+        "summary": "Mark Read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark one of the fan's own notifications read (404 if not theirs).",
+        "tags": [
+          "notification"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
           }
         ]
       }
@@ -3744,7 +4747,7 @@
             }
           }
         },
-        "description": "File a safety report as the authenticated fan (ASS-110, F11).\n\n**Bearer-only on purpose.** This is a state-changing POST, and the fan cookie\nsurface (ADR-0002 web httpOnly cookies) needs CSRF protection for unsafe\nmethods — the double-submit defense ASS-98 deferred to \"the first authenticated\nstate-changing fan endpoint\". Rather than ship a CSRF-exposed cookie path (an\nauth/session concern, CONSTRAINTS #26 human-gated), v0 accepts only the bearer\ntoken (the app surface, which browsers do not auto-send, so it is not CSRF-\nprone). Web-cookie reporting lands with the CSRF work. The endpoint issues no\ntokens, so it stays an ordinary business endpoint, not auth code.\n\nThe fan is recorded as the reporter, severity is server-derived from the type,\nand the narrative goes only to the restricted store.",
+        "description": "File a safety report as the authenticated fan (ASS-110, F11; B3).\n\n**Both surfaces (B3).** Now accepts either the app bearer token or the web\nhttpOnly access cookie via :data:`~apps.identity.auth.fan_auth`. The cookie\nsurface is CSRF-prone on this state-changing POST, but the grace condition\nASS-98 attached to enabling it is now met: :data:`fan_auth`'s\n:class:`~apps.identity.auth.FanCookieAuth` enforces Django's double-submit CSRF\non unsafe methods, so a web caller must echo the ``/fan/csrf`` cookie in\n``X-CSRFToken`` (the app/bearer surface is not browser-auto-sent and stays\nexempt). Per-user rate-limited (``user_write_throttle``) like the other fan\nwrites. The endpoint issues no tokens, so it stays an ordinary business\nendpoint, not auth code.\n\nThe fan is recorded as the reporter, severity is server-derived from the type,\nand the narrative goes only to the restricted store.",
         "tags": [
           "safety"
         ],
@@ -3761,6 +4764,9 @@
         "security": [
           {
             "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
           }
         ]
       }
@@ -4692,6 +5698,106 @@
         ]
       }
     },
+    "/api/creators/{handle}/follow": {
+      "put": {
+        "operationId": "apps_social_api_follow_creator",
+        "summary": "Follow Creator",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handle",
+            "schema": {
+              "title": "Handle",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Follow a creator; idempotent (a second follow is a no-op, still 200).",
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "apps_social_api_unfollow_creator",
+        "summary": "Unfollow Creator",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handle",
+            "schema": {
+              "title": "Handle",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Unfollow a creator; idempotent (unfollowing a non-follow is a no-op).",
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/operator/visits/": {
       "post": {
         "operationId": "apps_visit_api_create_visit",
@@ -4959,7 +6065,7 @@
         ],
         "security": [
           {
-            "OpaqueTokenAuth": []
+            "FanBearerAuth": []
           }
         ]
       }
@@ -5586,131 +6692,6 @@
         "title": "RoleAssignIn",
         "type": "object"
       },
-      "OtpRequestIn": {
-        "description": "Request body for sending a signup OTP.",
-        "properties": {
-          "phone": {
-            "title": "Phone",
-            "type": "string"
-          }
-        },
-        "required": [
-          "phone"
-        ],
-        "title": "OtpRequestIn",
-        "type": "object"
-      },
-      "SignupOut": {
-        "description": "Signup result. ``token_delivery`` says where the tokens are.\n\n``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``\n(web): both are empty here and delivered as httpOnly cookies instead, so no\nsecret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned\neither way so the client knows when to refresh.",
-        "properties": {
-          "token_delivery": {
-            "title": "Token Delivery",
-            "type": "string"
-          },
-          "access_token": {
-            "default": "",
-            "title": "Access Token",
-            "type": "string"
-          },
-          "refresh_token": {
-            "default": "",
-            "title": "Refresh Token",
-            "type": "string"
-          },
-          "access_expires_at": {
-            "format": "date-time",
-            "title": "Access Expires At",
-            "type": "string"
-          },
-          "refresh_expires_at": {
-            "format": "date-time",
-            "title": "Refresh Expires At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token_delivery",
-          "access_expires_at",
-          "refresh_expires_at"
-        ],
-        "title": "SignupOut",
-        "type": "object"
-      },
-      "SignupIn": {
-        "description": "Request body for completing fan signup.\n\n``web`` lets the web flow ask for cookie delivery (ADR-0002): when true the\ntokens are set as hardened httpOnly cookies and omitted from the body.",
-        "properties": {
-          "phone": {
-            "title": "Phone",
-            "type": "string"
-          },
-          "otp_code": {
-            "title": "Otp Code",
-            "type": "string"
-          },
-          "nickname": {
-            "maxLength": 40,
-            "minLength": 1,
-            "title": "Nickname",
-            "type": "string"
-          },
-          "consent_terms": {
-            "title": "Consent Terms",
-            "type": "boolean"
-          },
-          "consent_privacy": {
-            "title": "Consent Privacy",
-            "type": "boolean"
-          },
-          "web": {
-            "default": false,
-            "title": "Web",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "phone",
-          "otp_code",
-          "nickname",
-          "consent_terms",
-          "consent_privacy"
-        ],
-        "title": "SignupIn",
-        "type": "object"
-      },
-      "MembershipCardOut": {
-        "description": "Digital membership card (counts only; nickname is the sole display PII).",
-        "properties": {
-          "nickname": {
-            "title": "Nickname",
-            "type": "string"
-          },
-          "member_id": {
-            "title": "Member Id",
-            "type": "string"
-          },
-          "visit_count": {
-            "title": "Visit Count",
-            "type": "integer"
-          },
-          "points": {
-            "title": "Points",
-            "type": "integer"
-          },
-          "coupons": {
-            "title": "Coupons",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "nickname",
-          "member_id",
-          "visit_count",
-          "points",
-          "coupons"
-        ],
-        "title": "MembershipCardOut",
-        "type": "object"
-      },
       "CastProfileOut": {
         "description": "Operator-facing profile, including the per-scope consent map.\n\nOperators see the full content and every scope's consent state so they can\ntell what a fan would and would not see; the fan-facing projection is a\nseparate schema (``CastPublicProfileOut``).",
         "properties": {
@@ -6199,6 +7180,11 @@
             ],
             "title": "Creator Id"
           },
+          "creator_name": {
+            "default": "",
+            "title": "Creator Name",
+            "type": "string"
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -6218,6 +7204,36 @@
           "media_url": {
             "title": "Media Url",
             "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "stock": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock"
+          },
+          "sold_out": {
+            "title": "Sold Out",
+            "type": "boolean"
+          },
+          "locked": {
+            "title": "Locked",
+            "type": "boolean"
           }
         },
         "required": [
@@ -6226,7 +7242,11 @@
           "title",
           "price",
           "meta",
-          "media_url"
+          "media_url",
+          "description",
+          "options",
+          "sold_out",
+          "locked"
         ],
         "title": "ProductOut",
         "type": "object"
@@ -6257,6 +7277,244 @@
           "items"
         ],
         "title": "ProductPage",
+        "type": "object"
+      },
+      "CommerceError": {
+        "description": "Stable error shape for commerce endpoints.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "CommerceError",
+        "type": "object"
+      },
+      "OrderItemOut": {
+        "description": "One line of an order (snapshot at purchase; maps to frontend ``OrderItem``).",
+        "properties": {
+          "product_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "option": {
+            "title": "Option",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "type",
+          "option",
+          "price",
+          "qty"
+        ],
+        "title": "OrderItemOut",
+        "type": "object"
+      },
+      "OrderOut": {
+        "description": "A fan's order (maps to the frontend ``Order`` type).\n\n``subtotal``/``shipping``/``total`` are display snapshots (shipping is a mock\n``0`` — no real fulfilment cost is computed). NOT settlement figures.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "integer"
+          },
+          "shipping": {
+            "title": "Shipping",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "creator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Name"
+          },
+          "refund": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderRefundOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "items",
+          "subtotal",
+          "shipping",
+          "total"
+        ],
+        "title": "OrderOut",
+        "type": "object"
+      },
+      "OrderRefundOut": {
+        "description": "The order's latest refund request, if any (embedded in ``OrderOut``).",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason"
+        ],
+        "title": "OrderRefundOut",
+        "type": "object"
+      },
+      "CreateOrderIn": {
+        "description": "Fan payload to place a (mock) order for one product.",
+        "properties": {
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          },
+          "qty": {
+            "default": 1,
+            "maximum": 99,
+            "minimum": 1,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "option": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Option",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          }
+        },
+        "required": [
+          "product_id"
+        ],
+        "title": "CreateOrderIn",
+        "type": "object"
+      },
+      "OrderPage": {
+        "description": "One page of the fan's orders plus the next cursor.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OrderPage",
+        "type": "object"
+      },
+      "RefundIn": {
+        "description": "Fan payload to request a refund against an order.",
+        "properties": {
+          "reason": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RefundIn",
         "type": "object"
       },
       "PostOut": {
@@ -6355,7 +7613,7 @@
         "type": "object"
       },
       "ErrorOut": {
-        "description": "Stable error shape for creator endpoints.",
+        "description": "Stable error shape for social endpoints.",
         "properties": {
           "detail": {
             "title": "Detail",
@@ -6366,6 +7624,46 @@
           "detail"
         ],
         "title": "ErrorOut",
+        "type": "object"
+      },
+      "PostIn": {
+        "description": "Request body for creating a post (author is the caller's creator profile).",
+        "properties": {
+          "body": {
+            "maxLength": 2000,
+            "title": "Body",
+            "type": "string"
+          },
+          "media_url": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Media Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "PostIn",
+        "type": "object"
+      },
+      "LikeOut": {
+        "description": "Like state after a toggle (fresh aggregate like count).",
+        "properties": {
+          "liked": {
+            "title": "Liked",
+            "type": "boolean"
+          },
+          "like_count": {
+            "title": "Like Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "liked",
+          "like_count"
+        ],
+        "title": "LikeOut",
         "type": "object"
       },
       "CommentOut": {
@@ -6431,6 +7729,22 @@
           "items"
         ],
         "title": "CommentPage",
+        "type": "object"
+      },
+      "CommentIn": {
+        "description": "Request body for creating a comment.",
+        "properties": {
+          "body": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "CommentIn",
         "type": "object"
       },
       "CouponOut": {
@@ -7372,6 +8686,213 @@
         "title": "EventReserveIn",
         "type": "object"
       },
+      "OtpRequestIn": {
+        "description": "Request body for sending a signup OTP.",
+        "properties": {
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "title": "OtpRequestIn",
+        "type": "object"
+      },
+      "SignupOut": {
+        "description": "Token issuance result. ``token_delivery`` says where the tokens are.\n\n``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``\n(web): both are empty here and delivered as httpOnly cookies instead, so no\nsecret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned\neither way so the client knows when to refresh. Shared by signup, login, and\nrefresh.",
+        "properties": {
+          "token_delivery": {
+            "title": "Token Delivery",
+            "type": "string"
+          },
+          "access_token": {
+            "default": "",
+            "title": "Access Token",
+            "type": "string"
+          },
+          "refresh_token": {
+            "default": "",
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "access_expires_at": {
+            "format": "date-time",
+            "title": "Access Expires At",
+            "type": "string"
+          },
+          "refresh_expires_at": {
+            "format": "date-time",
+            "title": "Refresh Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token_delivery",
+          "access_expires_at",
+          "refresh_expires_at"
+        ],
+        "title": "SignupOut",
+        "type": "object"
+      },
+      "SignupIn": {
+        "description": "Request body for completing fan signup.\n\n``web`` lets the web flow ask for cookie delivery (ADR-0002): when true the\ntokens are set as hardened httpOnly cookies and omitted from the body.",
+        "properties": {
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "otp_code": {
+            "title": "Otp Code",
+            "type": "string"
+          },
+          "nickname": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Nickname",
+            "type": "string"
+          },
+          "consent_terms": {
+            "title": "Consent Terms",
+            "type": "boolean"
+          },
+          "consent_privacy": {
+            "title": "Consent Privacy",
+            "type": "boolean"
+          },
+          "web": {
+            "default": false,
+            "title": "Web",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "phone",
+          "otp_code",
+          "nickname",
+          "consent_terms",
+          "consent_privacy"
+        ],
+        "title": "SignupIn",
+        "type": "object"
+      },
+      "LoginIn": {
+        "description": "Request body for re-authenticating an existing fan (phone + OTP).\n\n``web`` selects cookie delivery exactly like :class:`SignupIn`.",
+        "properties": {
+          "phone": {
+            "title": "Phone",
+            "type": "string"
+          },
+          "otp_code": {
+            "title": "Otp Code",
+            "type": "string"
+          },
+          "web": {
+            "default": false,
+            "title": "Web",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "phone",
+          "otp_code"
+        ],
+        "title": "LoginIn",
+        "type": "object"
+      },
+      "RefreshIn": {
+        "description": "Request body for token rotation on the app surface.\n\nThe web surface presents the refresh token via the path-scoped httpOnly\ncookie instead, so this field is optional (empty on the cookie surface).",
+        "properties": {
+          "refresh_token": {
+            "default": "",
+            "title": "Refresh Token",
+            "type": "string"
+          }
+        },
+        "title": "RefreshIn",
+        "type": "object"
+      },
+      "FanMeOut": {
+        "description": "The authenticated fan's identity summary (web/app session bootstrap).\n\n``handle`` and ``avatar_url`` are populated only when the account operates a\ncreator profile (else ``None``); nickname is the sole display PII.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handle"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "required": [
+          "id",
+          "nickname",
+          "role"
+        ],
+        "title": "FanMeOut",
+        "type": "object"
+      },
+      "MembershipCardOut": {
+        "description": "Digital membership card (counts only; nickname is the sole display PII).",
+        "properties": {
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "visit_count": {
+            "title": "Visit Count",
+            "type": "integer"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "coupons": {
+            "title": "Coupons",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "nickname",
+          "member_id",
+          "visit_count",
+          "points",
+          "coupons"
+        ],
+        "title": "MembershipCardOut",
+        "type": "object"
+      },
       "TierOut": {
         "description": "Membership tier (maps to the frontend ``MembershipTier`` type).",
         "properties": {
@@ -7435,6 +8956,115 @@
           "sort_order"
         ],
         "title": "TierOut",
+        "type": "object"
+      },
+      "SubscriptionOut": {
+        "description": "A fan's subscription (maps to the frontend ``Subscription`` type).\n\n``cancel_scheduled`` is ``True`` for an active subscription the fan has set to\nend at period-end (\"해지 예정\"); the web renders that state distinctly.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "creator_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Id"
+          },
+          "creator_name": {
+            "title": "Creator Name",
+            "type": "string"
+          },
+          "creator_handle": {
+            "title": "Creator Handle",
+            "type": "string"
+          },
+          "tier_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier Id"
+          },
+          "tier_name": {
+            "title": "Tier Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "next_billing_date": {
+            "format": "date",
+            "title": "Next Billing Date",
+            "type": "string"
+          },
+          "cancel_scheduled": {
+            "title": "Cancel Scheduled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "creator_name",
+          "creator_handle",
+          "tier_name",
+          "price",
+          "period",
+          "status",
+          "next_billing_date",
+          "cancel_scheduled"
+        ],
+        "title": "SubscriptionOut",
+        "type": "object"
+      },
+      "SubscriptionError": {
+        "description": "Stable error shape for subscription endpoints.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SubscriptionError",
+        "type": "object"
+      },
+      "SubscribeIn": {
+        "description": "Fan payload to subscribe to a membership tier.",
+        "properties": {
+          "tier_id": {
+            "format": "uuid",
+            "title": "Tier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier_id"
+        ],
+        "title": "SubscribeIn",
         "type": "object"
       },
       "ForbiddenOut": {
@@ -7589,6 +9219,89 @@
           "body"
         ],
         "title": "DispatchIn",
+        "type": "object"
+      },
+      "NotificationOut": {
+        "description": "One in-app notification (maps to the frontend ``Notification`` type).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "read": {
+            "title": "Read",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "href",
+          "read",
+          "created_at"
+        ],
+        "title": "NotificationOut",
+        "type": "object"
+      },
+      "NotificationPage": {
+        "description": "One page of the fan's notifications plus the next cursor.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "NotificationPage",
+        "type": "object"
+      },
+      "ReadAllOut": {
+        "description": "Result of marking every notification read: how many changed.",
+        "properties": {
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "ReadAllOut",
         "type": "object"
       },
       "PosOrderOut": {
@@ -8923,6 +10636,25 @@
         "title": "DecisionIn",
         "type": "object"
       },
+      "FollowOut": {
+        "description": "Follow-edge state after a mutation (fresh aggregate follower count).",
+        "properties": {
+          "following": {
+            "title": "Following",
+            "type": "boolean"
+          },
+          "followers": {
+            "title": "Followers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "following",
+          "followers"
+        ],
+        "title": "FollowOut",
+        "type": "object"
+      },
       "VisitRecordOut": {
         "description": "Visit record fields exposed to operator tools without personal data.",
         "properties": {
@@ -9420,10 +11152,6 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "assen_access"
-      },
-      "OpaqueTokenAuth": {
-        "type": "http",
-        "scheme": "bearer"
       }
     }
   },

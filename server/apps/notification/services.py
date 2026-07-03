@@ -19,7 +19,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date
 
+from apps.identity.models import Account
 from apps.notification.adapters import NotificationAdapter, PushMessage, SendResult
+from apps.notification.models import Notification
 from apps.notification.policy import (
     NotificationCategory,
     assert_cast_schedule_future_only,
@@ -64,3 +66,16 @@ def send_notification(
     payload["category"] = category
     message = PushMessage(token=token, title=title, body=body, data=payload)
     return adapter.send(message)
+
+
+def notify(recipient: Account, kind: str, title: str, href: str = "") -> Notification:
+    """Append one notification to a recipient's in-app feed (B4).
+
+    Domain triggers (order placed, follow, comment, …) call this to add to the
+    fan's durable notification feed (:class:`~apps.notification.models.Notification`).
+    This is separate from :func:`send_notification`, the policy-guarded push
+    transport — notify only records the in-app row; a later stitch step wires push.
+    """
+    return Notification.objects.create(
+        recipient=recipient, kind=kind, title=title, href=href
+    )

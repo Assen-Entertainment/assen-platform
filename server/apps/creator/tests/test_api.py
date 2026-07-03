@@ -11,6 +11,7 @@ from apps.commerce.models import Product
 from apps.content.models import Post
 from apps.creator.models import Creator
 from apps.identity.models import Account, Role
+from apps.identity.services import issue_token_pair
 from apps.social.models import Follow
 
 pytestmark = pytest.mark.django_db
@@ -21,6 +22,11 @@ BASE = "/api/creators"
 def _creator(handle: str, name: str = "크리에이터", **extra: object) -> Creator:
     """Create a creator with the given handle."""
     return Creator.objects.create(handle=handle, name=name, **extra)
+
+
+def _bearer(account: Account) -> dict[str, str]:
+    """Authorization header carrying a freshly issued access token for ``account``."""
+    return {"authorization": f"Bearer {issue_token_pair(account).access_token}"}
 
 
 def test_creator_app_installed() -> None:
@@ -87,6 +93,36 @@ def test_search(client: Client) -> None:
     assert client.get("/api/search?q=").json() == {"creators": [], "products": []}
 
 
+def test_following_flag_is_false_for_anonymous(client: Client) -> None:
+    """An anonymous read never breaks and always reports ``following`` False."""
+    creator = _creator("stellar")
+    Follow.objects.create(follower=Account.objects.create(role=Role.FAN.value), creator=creator)
+    assert client.get(f"{BASE}/stellar").json()["following"] is False
+    assert client.get(BASE).json()["items"][0]["following"] is False
+
+
+def test_following_flag_is_true_for_the_follower(client: Client) -> None:
+    """An authenticated read reflects the caller's own follow (detail + list)."""
+    creator = _creator("stellar")
+    fan = Account.objects.create(role=Role.FAN.value, nickname="미오팬")
+    Follow.objects.create(follower=fan, creator=creator)
+    headers = _bearer(fan)
+
+    assert client.get(f"{BASE}/stellar", headers=headers).json()["following"] is True
+    row = next(
+        c for c in client.get(BASE, headers=headers).json()["items"] if c["handle"] == "stellar"
+    )
+    assert row["following"] is True
+
+
+def test_following_flag_is_isolated_per_user(client: Client) -> None:
+    """One fan's follow does not surface as another fan's ``following``."""
+    creator = _creator("stellar")
+    Follow.objects.create(follower=Account.objects.create(role=Role.FAN.value), creator=creator)
+    other = Account.objects.create(role=Role.FAN.value, nickname="다른팬")
+    assert client.get(f"{BASE}/stellar", headers=_bearer(other)).json()["following"] is False
+
+
 def test_handle_rejects_non_slug() -> None:
     """A non-slug handle (slash/space/uppercase) fails model validation."""
     from django.core.exceptions import ValidationError
@@ -96,13 +132,12 @@ def test_handle_rejects_non_slug() -> None:
             Creator(handle=bad, name="x").full_clean()
 
 
-def test_seed_demo_is_idempotent(client: Client) -> None:
-    """Running the seed twice yields the same fixed counts."""
+def test_seed_demo_creators_are_listable(client: Client) -> None:
+    """After seeding, the creator list endpoint serves the five demo creators.
+
+    The seed *counts*/idempotency are asserted in ``creator/tests/test_seed_demo.py``
+    (the canonical seed smoke, B7); this only guards that seeded creators surface
+    through the read API.
+    """
     call_command("seed_demo")
-    call_command("seed_demo")
-    assert Creator.objects.count() == 5
-    assert Post.objects.count() == 6
-    stellar = Creator.objects.get(handle="stellar")
-    assert stellar.products.count() == 4
-    assert stellar.tiers.count() == 3
     assert len(client.get(BASE).json()["items"]) == 5

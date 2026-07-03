@@ -2,6 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { gradientStyle } from "@/lib/placeholder";
 
 /**
  * MonetizableItem — Figma DS MonetizableItem 세트(260:28) 매핑.
@@ -50,7 +51,12 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
         )}
         {...props}
       >
-        <div className="aspect-[5/3] w-full bg-surface-container-high">{media}</div>
+        <div
+          className="aspect-[5/3] w-full bg-surface-container-high"
+          style={media ? undefined : gradientStyle(title)}
+        >
+          {media}
+        </div>
         <div className="flex flex-col gap-2 p-3">
           <Badge variant="primary" className="self-start">
             {t.tag}

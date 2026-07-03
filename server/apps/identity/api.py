@@ -1,13 +1,24 @@
-"""Fan signup + digital membership card API (ASS-98 v0).
+"""Fan signup, re-auth, session, and digital membership card API (ASS-98 / ASS-237).
 
-Phone-OTP signup (mock sender in P0) and the membership-card read endpoint.
-Tokens are delivered per ADR-0002 by surface: the native app receives them in
-the JSON body (and stores them in platform secure storage); the web flow asks
-for cookies and receives hardened httpOnly cookies instead, with no secret in
-the body. The card endpoint authenticates either surface — bearer header or the
-access cookie — via :data:`fan_auth`.
+Phone-OTP signup + login (mock sender in dev) and the fan session surface. Tokens
+are delivered per ADR-0002 by surface: the native app receives them in the JSON
+body (and stores them in platform secure storage); the web flow asks for cookies
+and receives hardened httpOnly cookies instead, with no secret in the body. The
+authenticated endpoints accept either surface — bearer header or the access
+cookie — via :data:`fan_auth` (defined in :mod:`apps.identity.auth`).
 
-HUMAN-REVIEW-REQUIRED: auth (CONSTRAINTS #26) — this endpoint issues tokens.
+Endpoints (``/api/fan``):
+- ``POST /signup/otp``  — send a (mock) signup OTP.
+- ``POST /signup``      — create/attach a fan and issue a token pair.
+- ``POST /login``       — re-authenticate an existing fan (phone + OTP).
+- ``POST /logout``      — revoke the current token family and clear cookies.
+- ``POST /refresh``     — rotate the refresh token (reserved refresh-cookie path).
+- ``GET  /me``          — the authenticated fan's identity summary.
+- ``GET  /csrf``        — issue the ``csrftoken`` cookie for the web double-submit.
+- ``GET  /membership-card`` — the authenticated fan's digital membership card.
+
+HUMAN-REVIEW-REQUIRED: auth (CONSTRAINTS #26) — this module issues, rotates, and
+revokes tokens. Raw phone numbers and token plaintext are never logged.
 """
 
 from __future__ import annotations
@@ -17,81 +28,63 @@ from typing import cast
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
+from django.middleware.csrf import get_token
 from ninja import Router, Schema
 from ninja.errors import HttpError
-from ninja.security import APIKeyCookie, HttpBearer
+from ninja.utils import check_csrf
 from pydantic import Field
 
+from apps.identity.auth import access_token_from_request, fan_auth
 from apps.identity.cookies import (
     ACCESS_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
+    clear_auth_cookie,
     set_auth_cookie,
 )
-from apps.identity.models import Account
-from apps.identity.services import TokenError, verify_access_token
+from apps.identity.models import Account, Role
+from apps.identity.services import (
+    IssuedTokenPair,
+    TokenError,
+    issue_token_pair,
+    revoke_family_for_access,
+    revoke_family_for_refresh,
+    rotate_refresh_token,
+)
 from apps.identity.signup_services import (
     SignupError,
+    hash_phone,
     membership_card,
     normalize_phone,
     register_fan,
 )
 from config.api import api
 from config.otp import MockOtpSender, OtpSender
+from config.throttle import anon_throttle
 
-# The refresh cookie is scoped to the (future) refresh endpoint so it is never
-# sent on ordinary authenticated reads — only the short-lived access cookie is.
-_REFRESH_COOKIE_PATH = "/api/fan/refresh"
+# The refresh cookie is scoped to the fan surface. It is deliberately broadened
+# from the refresh endpoint alone to the whole ``/api/fan`` prefix (A2): logout
+# lives at ``/api/fan/logout`` and must be able to read the refresh cookie to burn
+# the family even when the short-lived access cookie has expired. The trade-off is
+# a wider send surface for the refresh cookie, accepted because it keeps
+# ``SameSite=Strict`` + ``httponly`` (so it is not sent cross-site and is invisible
+# to JS) and the one refresh-consuming endpoint (``/refresh``) now enforces CSRF on
+# the cookie surface (A3).
+_REFRESH_COOKIE_PATH = "/api/fan"
 
 
 def _otp_sender() -> OtpSender | None:
     """Return the configured OTP sender, or ``None`` when none is wired.
 
     The deterministic mock is gated behind ``ENABLE_MOCK_FAN_OTP`` (off in
-    production) so its reproducible codes can never back a real signup. With no
-    SMS adapter yet, production returns ``None`` and the signup surface fails
-    closed with 503 rather than trust an unverifiable code
-    (Fan_Signup_Privacy_Policy §1, §8).
+    production) so its reproducible codes can never back a real signup/login. With
+    no SMS adapter yet, production returns ``None`` and the surface fails closed
+    with 503 rather than trust an unverifiable code (Fan_Signup_Privacy_Policy).
     """
     if settings.ENABLE_MOCK_FAN_OTP:
         return MockOtpSender()
     return None
 
 
-def _authenticate(request: HttpRequest, token: str) -> Account | None:
-    """Resolve a token to its account (shared by both auth surfaces)."""
-    try:
-        account = verify_access_token(token)
-    except TokenError:
-        return None
-    request.account = account  # type: ignore[attr-defined]
-    return account
-
-
-class FanBearerAuth(HttpBearer):
-    """App surface: authenticate ``Authorization: Bearer <access token>``."""
-
-    def authenticate(self, request: HttpRequest, token: str) -> Account | None:
-        """Return the account for a valid bearer token, else None (→ 401)."""
-        return _authenticate(request, token)
-
-
-class FanCookieAuth(APIKeyCookie):
-    """Web surface: authenticate the httpOnly ``assen_access`` cookie."""
-
-    param_name = ACCESS_COOKIE_NAME
-
-    def authenticate(self, request: HttpRequest, key: str | None) -> Account | None:
-        """Return the account for a valid access cookie, else None (→ 401)."""
-        if not key:
-            return None
-        return _authenticate(request, key)
-
-
-# Role-agnostic authentication for the fan surface: try the app bearer token
-# first, then the web access cookie. Either one proves the caller owns the token;
-# the card endpoint returns only the caller's own data, so no staff role is
-# required (mirrors the prior authenticate-only design).
-fan_auth = [FanBearerAuth(), FanCookieAuth()]
 router = Router(tags=["fan-signup"])
 
 
@@ -116,13 +109,35 @@ class SignupIn(Schema):
     web: bool = False
 
 
+class LoginIn(Schema):
+    """Request body for re-authenticating an existing fan (phone + OTP).
+
+    ``web`` selects cookie delivery exactly like :class:`SignupIn`.
+    """
+
+    phone: str
+    otp_code: str
+    web: bool = False
+
+
+class RefreshIn(Schema):
+    """Request body for token rotation on the app surface.
+
+    The web surface presents the refresh token via the path-scoped httpOnly
+    cookie instead, so this field is optional (empty on the cookie surface).
+    """
+
+    refresh_token: str = ""
+
+
 class SignupOut(Schema):
-    """Signup result. ``token_delivery`` says where the tokens are.
+    """Token issuance result. ``token_delivery`` says where the tokens are.
 
     ``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``
     (web): both are empty here and delivered as httpOnly cookies instead, so no
     secret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned
-    either way so the client knows when to refresh.
+    either way so the client knows when to refresh. Shared by signup, login, and
+    refresh.
     """
 
     token_delivery: str
@@ -130,6 +145,20 @@ class SignupOut(Schema):
     refresh_token: str = ""
     access_expires_at: datetime
     refresh_expires_at: datetime
+
+
+class FanMeOut(Schema):
+    """The authenticated fan's identity summary (web/app session bootstrap).
+
+    ``handle`` and ``avatar_url`` are populated only when the account operates a
+    creator profile (else ``None``); nickname is the sole display PII.
+    """
+
+    id: str
+    nickname: str
+    role: str
+    handle: str | None = None
+    avatar_url: str | None = None
 
 
 class MembershipCardOut(Schema):
@@ -142,53 +171,19 @@ class MembershipCardOut(Schema):
     coupons: int
 
 
-@router.post("/signup/otp")
-def request_otp(request: HttpRequest, data: OtpRequestIn) -> dict[str, str]:
-    """Send (mock) an OTP for the phone. Returns a bare ack — never the code."""
-    del request
-    sender = _otp_sender()
-    if sender is None:
-        raise HttpError(503, "Signup is temporarily unavailable.")
-    try:
-        # Canonicalise before send so the code is derived from the same form the
-        # signup step verifies against (otherwise a formatted number mismatches).
-        phone = normalize_phone(data.phone)
-    except SignupError as exc:
-        raise HttpError(422, str(exc)) from exc
-    sender.send(phone=phone)
-    return {"status": "sent"}
+def _deliver_token_pair(
+    pair: IssuedTokenPair, response: HttpResponse, *, web: bool
+) -> SignupOut:
+    """Deliver an issued token pair by surface (ADR-0002).
 
-
-@router.post("/signup", response=SignupOut)
-def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> SignupOut:
-    """Create/attach a fan from a verified OTP + consent; issue a token pair.
-
-    Delivery follows the requested surface (ADR-0002): the web flow gets hardened
-    httpOnly cookies (no token in the body); the app gets the tokens in the body.
+    Web asks for cookies: the access cookie is SameSite=Lax so same-site reads
+    carry it, and the refresh cookie is SameSite=Strict and path-scoped to the
+    refresh endpoint so it is never sent on ordinary reads. ``secure`` is relaxed
+    only under DEBUG (local http); production keeps it on. The app surface gets the
+    tokens in the body and stores them in secure platform storage. Centralised so
+    signup, login, and refresh set identical cookie hardening.
     """
-    del request
-    sender = _otp_sender()
-    if sender is None:
-        raise HttpError(503, "Signup is temporarily unavailable.")
-    try:
-        pair = register_fan(
-            phone=data.phone,
-            nickname=data.nickname,
-            consent_terms=data.consent_terms,
-            consent_privacy=data.consent_privacy,
-            otp_code=data.otp_code,
-            otp_sender=sender,
-        )
-    except SignupError as exc:
-        raise HttpError(422, str(exc)) from exc
-
-    if data.web:
-        # secure is relaxed only under DEBUG (local http); production keeps it on.
-        # The refresh cookie is SameSite=Strict and path-scoped to the refresh
-        # endpoint; the access cookie is Lax so same-site reads carry it. No
-        # authenticated state-changing fan endpoint exists in v0, so double-submit
-        # CSRF enforcement attaches with the first one — httpOnly + SameSite guard
-        # the cookies meanwhile.
+    if web:
         secure = not settings.DEBUG
         set_auth_cookie(
             response,
@@ -220,6 +215,175 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
         access_expires_at=pair.access_expires_at,
         refresh_expires_at=pair.refresh_expires_at,
     )
+
+
+@router.post("/signup/otp", throttle=anon_throttle("5/min"))
+def request_otp(request: HttpRequest, data: OtpRequestIn) -> dict[str, str]:
+    """Send (mock) an OTP for the phone. Returns a bare ack — never the code."""
+    del request
+    sender = _otp_sender()
+    if sender is None:
+        raise HttpError(503, "Signup is temporarily unavailable.")
+    try:
+        # Canonicalise before send so the code is derived from the same form the
+        # signup step verifies against (otherwise a formatted number mismatches).
+        phone = normalize_phone(data.phone)
+    except SignupError as exc:
+        raise HttpError(422, str(exc)) from exc
+    sender.send(phone=phone)
+    return {"status": "sent"}
+
+
+@router.post("/signup", response=SignupOut, throttle=anon_throttle("10/min"))
+def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> SignupOut:
+    """Create/attach a fan from a verified OTP + consent; issue a token pair.
+
+    Delivery follows the requested surface (ADR-0002): the web flow gets hardened
+    httpOnly cookies (no token in the body); the app gets the tokens in the body.
+    """
+    del request
+    sender = _otp_sender()
+    if sender is None:
+        raise HttpError(503, "Signup is temporarily unavailable.")
+    try:
+        pair = register_fan(
+            phone=data.phone,
+            nickname=data.nickname,
+            consent_terms=data.consent_terms,
+            consent_privacy=data.consent_privacy,
+            otp_code=data.otp_code,
+            otp_sender=sender,
+        )
+    except SignupError as exc:
+        raise HttpError(422, str(exc)) from exc
+
+    return _deliver_token_pair(pair, response, web=data.web)
+
+
+@router.post("/login", response=SignupOut, throttle=anon_throttle("10/min"))
+def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> SignupOut:
+    """Re-authenticate an existing fan (phone + OTP) and issue a fresh token pair.
+
+    Disclosure minimisation: the OTP is verified *first*, so "가입이 필요해요" (no
+    account) is only ever revealed to a caller who already proved control of the
+    phone via a valid code — a wrong code and an unregistered number both look the
+    same (422) to anyone else. Delivery follows the requested surface (ADR-0002).
+    """
+    del request
+    sender = _otp_sender()
+    if sender is None:
+        raise HttpError(503, "Login is temporarily unavailable.")
+    try:
+        phone = normalize_phone(data.phone)
+    except SignupError as exc:
+        raise HttpError(422, str(exc)) from exc
+
+    if not sender.verify(phone=phone, code=data.otp_code):
+        raise HttpError(422, "인증번호가 올바르지 않아요.")
+
+    account = Account.objects.filter(
+        auth_subject_hash=hash_phone(phone),
+        role=Role.FAN.value,
+        is_active=True,
+    ).first()
+    if account is None:
+        # The number holds no active fan account: guide to signup without exposing
+        # more than the caller (who controls the phone) already knows.
+        raise HttpError(422, "가입이 필요해요.")
+
+    return _deliver_token_pair(issue_token_pair(account), response, web=data.web)
+
+
+@router.post("/logout")
+def logout(request: HttpRequest, response: HttpResponse) -> dict[str, str]:
+    """Best-effort logout: revoke the session's token family and clear cookies (A2).
+
+    Unauthenticated on purpose. A web session whose short-lived access cookie has
+    already expired must still be able to log out using its live refresh cookie, so
+    gating this on ``fan_auth`` (which validates the *access* token) would strand
+    exactly that case. Instead we revoke off whatever the caller presents: the
+    access token (bearer or cookie) and/or the refresh cookie — either burns the
+    whole family (F11). Cookie clearing is unconditional so the browser is logged
+    out even when no token was presented; the operation is idempotent.
+
+    CSRF: this endpoint is left CSRF-open. A forged cross-site logout can only
+    *destroy* a session (revoke tokens + clear cookies), never read data or act as
+    the user, so it is a nuisance-level risk accepted for reachability — consistent
+    with keeping logout usable from an access-expired web session.
+    """
+    access = access_token_from_request(request)
+    if access is not None:
+        revoke_family_for_access(access)
+    refresh_cookie = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    if refresh_cookie:
+        revoke_family_for_refresh(refresh_cookie)
+    clear_auth_cookie(response, name=ACCESS_COOKIE_NAME)
+    clear_auth_cookie(response, name=REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
+    return {"status": "ok"}
+
+
+@router.post("/refresh", response=SignupOut)
+def refresh(
+    request: HttpRequest, response: HttpResponse, data: RefreshIn | None = None
+) -> SignupOut:
+    """Rotate a refresh token and issue a fresh pair; deliver by surface.
+
+    The web surface presents the refresh token via the path-scoped cookie (and
+    gets fresh cookies back); the app presents it in the body (and gets a fresh
+    body pair). Rotation supersedes the presented token; replay of a consumed
+    token revokes the whole family (reuse detection in ``rotate_refresh_token``).
+    Any token failure returns a flat 401 that does not distinguish expired vs
+    revoked vs reused.
+
+    CSRF (A3): the cookie surface is browser-driven and auto-sends the refresh
+    cookie, so this endpoint — which the broadened cookie path (A2) now exposes on
+    an unsafe method — verifies the double-submit CSRF token (``/fan/csrf`` cookie
+    echoed in ``X-CSRFToken``) whenever the token arrives by cookie. The app/body
+    surface presents no cookie and is exempt.
+    """
+    cookie_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    web = cookie_token is not None
+    if web and check_csrf(request) is not None:
+        raise HttpError(403, "CSRF 검증에 실패했어요.")
+    presented = cookie_token or (data.refresh_token if data is not None else None)
+    if not presented:
+        raise HttpError(401, "Refresh token required.")
+    try:
+        pair = rotate_refresh_token(presented)
+    except TokenError as exc:
+        raise HttpError(401, "Refresh token is invalid.") from exc
+    return _deliver_token_pair(pair, response, web=web)
+
+
+@router.get("/me", response=FanMeOut, auth=fan_auth)
+def get_me(request: HttpRequest) -> FanMeOut:
+    """Return the authenticated fan's identity summary (either surface)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    # Lazy import: apps.creator depends on identity, so importing it at module load
+    # would create an import cycle. Resolved here per request instead.
+    from apps.creator.models import Creator
+
+    creator = Creator.objects.filter(owner=account).first()
+    return FanMeOut(
+        id=str(account.fan_id),
+        nickname=account.nickname,
+        role=account.role,
+        handle=creator.handle if creator is not None else None,
+        avatar_url=creator.avatar_url if creator is not None else None,
+    )
+
+
+@router.get("/csrf")
+def get_csrf(request: HttpRequest) -> dict[str, str]:
+    """Issue the ``csrftoken`` cookie for the web double-submit CSRF defense.
+
+    ``get_token`` marks the request so ``CsrfViewMiddleware`` writes the cookie on
+    the way out — the ninja-safe equivalent of ``@ensure_csrf_cookie`` (which can
+    only wrap a view returning an ``HttpResponse``, not a serialised dict). The web
+    client reads the cookie and echoes it in ``X-CSRFToken`` on unsafe methods.
+    """
+    get_token(request)
+    return {"status": "ok"}
 
 
 @router.get("/membership-card", response=MembershipCardOut, auth=fan_auth)

@@ -1,22 +1,30 @@
+"use client";
 import Link from "next/link";
 import { Avatar, ListItem, Divider, Button } from "@/components/ui";
+import { useSession } from "@/lib/session";
 
 const MENU = [
-  { label: "알림 설정", subtitle: "푸시·이메일", href: "/notifications" },
-  { label: "결제 수단", href: "/checkout" },
+  { label: "알림 설정", subtitle: "푸시·이메일", href: "/settings/notifications" },
+  { label: "결제 수단", href: "/settings/payments" },
   { label: "주문 내역", href: "/orders" },
-  { label: "멤버십 관리", href: "/membership" },
-  { label: "계정 설정", href: "/settings" },
+  { label: "구독 관리", subtitle: "멤버십 해지·변경", href: "/mypage/subscriptions" },
+  { label: "멤버십 둘러보기", href: "/membership" },
+  { label: "계정 설정", href: "/settings/account" },
 ];
 
 export default function MyPage() {
+  const { user } = useSession();
+  const name = user?.name ?? "게스트";
+  const handle = user?.handle ?? "guest";
+  const initial = name.slice(0, 1);
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <section className="flex items-center gap-4">
-        <Avatar fallback="나" size="xl" />
+        <Avatar fallback={initial} size="xl" />
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-title-l text-on-surface">내 이름</span>
-          <span className="text-body-s text-on-surface-variant">@me · 팔로잉 24 · 구독 2</span>
+          <span className="text-title-l text-on-surface">{name}</span>
+          <span className="text-body-s text-on-surface-variant">@{handle} · 팔로잉 24 · 구독 2</span>
         </div>
         <Button variant="outline" className="ml-auto" asChild>
           <Link href="/settings">프로필 편집</Link>

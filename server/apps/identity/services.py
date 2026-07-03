@@ -21,6 +21,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.utils import timezone
 
 from apps.identity.models import (
@@ -133,6 +134,11 @@ def verify_access_token(plaintext: str) -> Account:
         raise TokenError("Access token not recognised.") from exc
     if not token.is_valid():
         raise TokenError("Access token is expired or revoked.")
+    # Family-level gate: revoke_family()의 per-row 벌크 업데이트와 회전이 경합하면
+    # 소각 이후 생성된 access 행이 revoked=False로 남을 수 있다 — 쓰기 순서와 무관하게
+    # 소각된 family의 access는 여기서 전부 차단한다.
+    if token.family.revoked:
+        raise TokenError("Access token family is revoked.")
     if not token.family.account.is_active:
         raise TokenError("Account is inactive.")
     return token.family.account
@@ -144,6 +150,16 @@ def rotate_refresh_token(plaintext: str) -> IssuedTokenPair:
     Reuse detection: if the presented token is already used (or its family is
     revoked), this is a replay — revoke the whole family and raise, so a stolen
     refresh token cannot outlive the legitimate client's next rotation.
+
+    Concurrency (A1): the token is consumed by a *conditional* UPDATE
+    (``... WHERE used = FALSE``) inside a transaction, so two rotations racing on
+    the same refresh token cannot both mint a successor pair — exactly one wins
+    the update; the loser sees ``rowcount == 0`` and is treated as reuse. The
+    conditional consume and the successor-pair issuance share one
+    ``transaction.atomic`` block so a half-rotation can never be observed. The
+    reuse *burn* is done OUTSIDE that block on purpose: it is a durable side effect
+    that must survive the ``TokenError`` we raise, and anything inside the atomic
+    block would roll back with the exception.
     """
     try:
         token = RefreshToken.objects.select_related("family", "family__account").get(
@@ -155,11 +171,8 @@ def rotate_refresh_token(plaintext: str) -> IssuedTokenPair:
     family = token.family
 
     # Replay of a consumed token, or use within an already-revoked family, is the
-    # reuse signal: burn the family down.
+    # reuse signal (observed on the snapshot we just read): burn the family down.
     if token.used or family.revoked:
-        if not family.revoked:
-            family.revoke(reason="refresh_reuse_detected")
-        # Belt and suspenders: also revoke outstanding access tokens now.
         revoke_family(family, reason="refresh_reuse_detected")
         raise TokenError("Refresh token reuse detected; token family revoked.")
 
@@ -167,13 +180,32 @@ def rotate_refresh_token(plaintext: str) -> IssuedTokenPair:
     if token.expires_at <= now:
         raise TokenError("Refresh token is expired.")
 
-    # Consume the presented token and mint a successor pair in the same family.
-    token.mark_used()
-    access_plain, access = _issue_access_token(family, now=now)
-    refresh_plain, refresh = _issue_refresh_token(family, now=now)
+    access_plain: str | None = None
+    access: AccessToken | None = None
+    refresh_plain: str | None = None
+    refresh: RefreshToken | None = None
+    with transaction.atomic():
+        # Atomically claim the token: only the writer whose UPDATE matches an
+        # unused row proceeds. A stale snapshot that passed the check above but
+        # lost the race here reports 0 rows and falls through to the burn below.
+        consumed = RefreshToken.objects.filter(pk=token.pk, used=False).update(
+            used=True, used_at=now
+        )
+        if consumed:
+            access_plain, access = _issue_access_token(family, now=now)
+            refresh_plain, refresh = _issue_refresh_token(family, now=now)
+
+    if not consumed:
+        # Lost the race to a concurrent rotation of the same token → reuse. Burn
+        # the family here (its own autocommit) so the revocation persists past the
+        # error we raise.
+        revoke_family(family, reason="refresh_reuse_detected")
+        raise TokenError("Refresh token reuse detected; token family revoked.")
+
+    assert access is not None and refresh is not None  # set when consumed is truthy
     return IssuedTokenPair(
-        access_token=access_plain,
-        refresh_token=refresh_plain,
+        access_token=access_plain,  # type: ignore[arg-type]
+        refresh_token=refresh_plain,  # type: ignore[arg-type]
         family_id=family.pk,
         access_expires_at=access.expires_at,
         refresh_expires_at=refresh.expires_at,
@@ -190,6 +222,43 @@ def revoke_family(family: TokenFamily, *, reason: str) -> None:
     if not family.revoked:
         family.revoke(reason=reason)
     AccessToken.objects.filter(family=family, revoked=False).update(revoked=True)
+
+
+def revoke_family_for_access(plaintext: str) -> None:
+    """Revoke the token family behind a presented access token (logout).
+
+    Looks the access token up by hash and revokes its whole family, so the access
+    token and the paired refresh lineage die together (F11). An unrecognised token
+    is a silent no-op: logout is idempotent and must not reveal whether a token
+    existed. The plaintext is never logged.
+    """
+    try:
+        token = AccessToken.objects.select_related("family").get(
+            token_hash=hash_token(plaintext)
+        )
+    except AccessToken.DoesNotExist:
+        return
+    revoke_family(token.family, reason="logout")
+
+
+def revoke_family_for_refresh(plaintext: str) -> None:
+    """Revoke the token family behind a presented refresh token (logout).
+
+    The web logout path (A2) may reach the server with only the refresh cookie —
+    the short-lived access cookie can have expired while the refresh lineage is
+    still live. Revoking the family off the refresh token kills that lineage too,
+    so a best-effort logout still ends the session (F11). Like
+    :func:`revoke_family_for_access`, an unrecognised token is a silent no-op
+    (logout is idempotent and must not reveal whether a token existed); the
+    plaintext is never logged.
+    """
+    try:
+        token = RefreshToken.objects.select_related("family").get(
+            token_hash=hash_token(plaintext)
+        )
+    except RefreshToken.DoesNotExist:
+        return
+    revoke_family(token.family, reason="logout")
 
 
 def revoke_all_for_account(account: Account, *, reason: str) -> None:

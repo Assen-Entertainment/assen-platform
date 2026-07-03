@@ -420,8 +420,9 @@ def test_web_signup_sets_httponly_cookies_not_body() -> None:
     assert client.cookies[ACCESS_COOKIE_NAME]["httponly"]
     refresh = client.cookies[REFRESH_COOKIE_NAME]
     assert refresh["httponly"]
-    # Refresh is path-scoped to the refresh endpoint + SameSite=Strict.
-    assert refresh["path"] == "/api/fan/refresh"
+    # Refresh is path-scoped to the fan surface (A2 broadened it from /refresh so
+    # logout can read it) + SameSite=Strict.
+    assert refresh["path"] == "/api/fan"
     assert refresh["samesite"].lower() == "strict"
 
 

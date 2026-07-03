@@ -12,6 +12,7 @@ from django.test import Client
 
 from apps.admin_rbac.redaction import REDACTED
 from apps.audit.models import AuditAction, AuditEntry
+from apps.identity.cookies import ACCESS_COOKIE_NAME
 from apps.identity.models import Account, Role
 from apps.identity.services import issue_token_pair
 from apps.safety.models import SafetyReport
@@ -334,3 +335,31 @@ def test_fan_report_invalid_type_error_does_not_echo_input(client: Client) -> No
     assert response.status_code == 422
     assert "010-9999-8888" not in response.content.decode()
     assert not SafetyReport.objects.exists()
+
+
+def test_fan_report_cookie_surface_with_csrf_is_201() -> None:
+    """The web cookie surface can file a report when the CSRF token accompanies it (B3).
+
+    Uses a CSRF-enforcing client: the fan's access token rides the web httpOnly
+    cookie, and the ``/fan/csrf`` cookie is echoed in ``X-CSRFToken`` (the
+    double-submit grace condition). ``fan_auth``'s cookie surface enforces CSRF on
+    this unsafe POST, so a valid token yields 201.
+    """
+    csrf_client = Client(enforce_csrf_checks=True)
+    fan = _account(Role.FAN.value)
+    # Plant the access token as the web access cookie (cookie surface, not bearer).
+    csrf_client.cookies[ACCESS_COOKIE_NAME] = issue_token_pair(fan).access_token
+    # Obtain the CSRF cookie, then echo it back on the report POST.
+    csrf_client.get("/api/fan/csrf")
+    token = csrf_client.cookies["csrftoken"].value
+
+    response = csrf_client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "private_contact", "narrative": _SECRET},
+        content_type="application/json",
+        HTTP_X_CSRFTOKEN=token,
+    )
+    assert response.status_code == 201
+    report = SafetyReport.objects.get(id=response.json()["safety_report_id"])
+    assert report.reporter == fan
+    assert report.reporter_type == "fan"

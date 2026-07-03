@@ -31,7 +31,7 @@ ENV NODE_ENV=production \
 USER node
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
-# public/ 은 현재 없음 — 생기면 아래 주석 해제
-# COPY --from=build --chown=node:node /app/public ./public
+# public/ (폰트 등 정적 자산) — standalone은 public을 자동 포함하지 않으므로 명시 복사.
+COPY --from=build --chown=node:node /app/public ./public
 EXPOSE 3000
 CMD ["node", "server.js"]

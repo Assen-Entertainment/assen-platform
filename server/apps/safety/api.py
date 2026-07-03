@@ -28,7 +28,7 @@ from apps.admin_rbac.permissions import manager_required, operator_required
 from apps.admin_rbac.redaction import redact_safety_report, redact_safety_report_list
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import fan_auth
 from apps.identity.models import Account, Role
 from apps.safety.metrics import report_handling_stats
 from apps.safety.models import (
@@ -51,6 +51,7 @@ from apps.safety.services import (
     resolve_report,
 )
 from config.api import api
+from config.throttle import user_write_throttle
 
 router = Router(tags=["safety"])
 
@@ -261,23 +262,26 @@ def create_report(
 
 @router.post(
     "/fan-reports",
-    auth=[FanBearerAuth()],
+    auth=fan_auth,
+    throttle=user_write_throttle("10/min"),
     response={201: FanReportOut, 403: SafetyError, 422: SafetyError},
 )
 def create_fan_report(
     request: HttpRequest,
     payload: FanReportCreateIn,
 ) -> tuple[int, FanReportOut | SafetyError]:
-    """File a safety report as the authenticated fan (ASS-110, F11).
+    """File a safety report as the authenticated fan (ASS-110, F11; B3).
 
-    **Bearer-only on purpose.** This is a state-changing POST, and the fan cookie
-    surface (ADR-0002 web httpOnly cookies) needs CSRF protection for unsafe
-    methods — the double-submit defense ASS-98 deferred to "the first authenticated
-    state-changing fan endpoint". Rather than ship a CSRF-exposed cookie path (an
-    auth/session concern, CONSTRAINTS #26 human-gated), v0 accepts only the bearer
-    token (the app surface, which browsers do not auto-send, so it is not CSRF-
-    prone). Web-cookie reporting lands with the CSRF work. The endpoint issues no
-    tokens, so it stays an ordinary business endpoint, not auth code.
+    **Both surfaces (B3).** Now accepts either the app bearer token or the web
+    httpOnly access cookie via :data:`~apps.identity.auth.fan_auth`. The cookie
+    surface is CSRF-prone on this state-changing POST, but the grace condition
+    ASS-98 attached to enabling it is now met: :data:`fan_auth`'s
+    :class:`~apps.identity.auth.FanCookieAuth` enforces Django's double-submit CSRF
+    on unsafe methods, so a web caller must echo the ``/fan/csrf`` cookie in
+    ``X-CSRFToken`` (the app/bearer surface is not browser-auto-sent and stays
+    exempt). Per-user rate-limited (``user_write_throttle``) like the other fan
+    writes. The endpoint issues no tokens, so it stays an ordinary business
+    endpoint, not auth code.
 
     The fan is recorded as the reporter, severity is server-derived from the type,
     and the narrative goes only to the restricted store.

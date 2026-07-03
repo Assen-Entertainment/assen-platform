@@ -14,14 +14,20 @@ does not touch auth/session code.
 
 from __future__ import annotations
 
-from datetime import date
+import uuid
+from datetime import date, datetime
+from typing import cast
 
 from django.http import HttpRequest
+from django.utils import timezone
 from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
+from apps.identity.auth import fan_auth
+from apps.identity.models import Account
 from apps.notification.adapters import MockNotificationAdapter, NotificationAdapter
+from apps.notification.models import Notification
 from apps.notification.policy import (
     FORBIDDEN_NOTIFICATIONS,
     NotificationCategory,
@@ -29,6 +35,7 @@ from apps.notification.policy import (
 )
 from apps.notification.services import send_notification
 from config.api import api
+from config.pagination import paginate
 
 notification_router = Router(auth=operator_required, tags=["operator-notification"])
 
@@ -140,3 +147,92 @@ def dispatch_notification(
 
 
 api.add_router("/operator/notifications", notification_router)
+
+
+# --------------------------------------------------------------------------- #
+# Fan surface — the in-app notification feed (B4)
+# --------------------------------------------------------------------------- #
+fan_notifications_router = Router(auth=fan_auth, tags=["notification"])
+
+
+class NotificationOut(Schema):
+    """One in-app notification (maps to the frontend ``Notification`` type)."""
+
+    id: uuid.UUID
+    kind: str
+    title: str
+    href: str
+    read: bool
+    created_at: datetime
+
+
+class NotificationPage(Schema):
+    """One page of the fan's notifications plus the next cursor."""
+
+    items: list[NotificationOut]
+    next_cursor: str | None = None
+
+
+class ReadAllOut(Schema):
+    """Result of marking every notification read: how many changed."""
+
+    updated: int
+
+
+def _notification_out(notification: Notification) -> NotificationOut:
+    """Build the notification response."""
+    return NotificationOut(
+        id=notification.id,
+        kind=notification.kind,
+        title=notification.title,
+        href=notification.href,
+        read=notification.read_at is not None,
+        created_at=notification.created_at,
+    )
+
+
+@fan_notifications_router.get("", response=NotificationPage)
+def list_notifications(
+    request: HttpRequest, cursor: str | None = None, limit: int | None = None
+) -> NotificationPage:
+    """List the requesting fan's own notifications, newest first, cursor-paginated."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    queryset = Notification.objects.filter(recipient=account).order_by("-created_at", "id")
+    items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
+    return NotificationPage(
+        items=[_notification_out(n) for n in items], next_cursor=next_cursor
+    )
+
+
+@fan_notifications_router.post(
+    "/read-all", response=ReadAllOut
+)
+def mark_all_read(request: HttpRequest) -> ReadAllOut:
+    """Mark all of the requesting fan's unread notifications as read."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    updated = Notification.objects.filter(recipient=account, read_at__isnull=True).update(
+        read_at=timezone.now()
+    )
+    return ReadAllOut(updated=updated)
+
+
+@fan_notifications_router.post(
+    "/{notification_id}/read", response={200: NotificationOut, 404: NotificationError}
+)
+def mark_read(
+    request: HttpRequest, notification_id: uuid.UUID
+) -> tuple[int, NotificationOut | NotificationError]:
+    """Mark one of the fan's own notifications read (404 if not theirs)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    notification = Notification.objects.filter(
+        id=notification_id, recipient=account
+    ).first()
+    if notification is None:
+        return 404, NotificationError(detail="알림을 찾을 수 없어요.")
+    if notification.read_at is None:
+        notification.read_at = timezone.now()
+        notification.save(update_fields=["read_at"])
+    return 200, _notification_out(notification)
+
+
+api.add_router("/notifications", fan_notifications_router)

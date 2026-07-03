@@ -1,10 +1,21 @@
-"""Seed the new-direction demo data, mirroring the web frontend mock (E11/B1).
+"""Seed the new-direction demo data, mirroring the web frontend mock (E11/B1·B4).
 
 Idempotent: keyed on natural keys (creator handle, post body, product title,
-tier name) so re-running does not duplicate. Mirrors
-``web/src/lib/api/index.ts`` so the B5 mock→API swap is 1:1.
+tier name, account username / phone-hash) so re-running does not duplicate.
+
+This is a **partial** mirror of ``web/src/lib/api/index.ts`` — close enough that
+the B5 mock→API swap is drop-in for the seeded surfaces, but not a byte-for-byte
+1:1. Intentional differences are called out inline with NOTE comments so the drift
+is deliberate, not accidental:
 
     python manage.py seed_demo
+
+NOTE (differences from the web mock):
+- The web mock's locked *post* (po2) is not seeded — the ``Post`` model has no
+  ``locked`` field, so a locked-post flag is out of this command's scope.
+- The web mock numbers products p1..pN on its own scheme; the server keys products
+  by (creator, title), so the p-numbers do not line up 1:1 (e.g. the web coupon is
+  "p7"). The coupon listing below mirrors the web welcome-coupon product.
 """
 
 from __future__ import annotations
@@ -17,6 +28,7 @@ from apps.commerce.models import Product
 from apps.content.models import Comment, Post
 from apps.creator.models import Creator
 from apps.identity.models import Account, Role
+from apps.identity.signup_services import hash_phone, normalize_phone
 from apps.membership.models import MembershipTier
 from apps.social.models import Follow
 
@@ -47,27 +59,51 @@ _COMMENTS = [
     ("오늘 저녁 8시 라이브 켜요! 놀러오세요 🐰", "토끼팬", "기다렸어요!!"),
 ]
 
-# Catalog attached to the primary demo creator (stellar): (type, title, price, meta)
+# Product catalog, mirroring the web mock's extended detail fields.
+# (handle, type, title, price, meta, description, options, stock, sold_out, locked)
+# A blank handle ("") seeds a global (creatorless) catalog listing.
 # NOTE: no realtime 1:1 video-call item — `future.video_call` is off/forbidden in
-# P0/P1 (Technical Architecture), so the demo must not publish it as a purchasable
-# offering. Non-gated experiences only.
+# P0/P1 (Technical Architecture). The 브러시팩 is a membership-locked listing, the
+# 피규어 is sold out, and the 웰컴 쿠폰 is a global (no-creator) coupon mirroring
+# the web mock's "p7" welcome-coupon product.
 _PRODUCTS = [
-    ("goods", "아크릴 스탠드", 18000, "한정 200개"),
-    ("digital", "고해상도 화보집", 9900, "다운로드"),
-    ("experience", "포토카드 팬사인", 30000, "선착순 20"),
-    ("ticket", "온라인 팬미팅", 25000, "12/24 20:00"),
+    ("stellar", "goods", "아크릴 스탠드", 18000, "한정 200개",
+     "별빛 일러스트 아크릴 스탠드입니다.", ["A타입", "B타입"], 120, False, False),
+    ("stellar", "digital", "고해상도 화보집", 9900, "다운로드",
+     "풀 해상도 디지털 화보집 (PDF).", [], None, False, False),
+    ("stellar", "experience", "포토카드 팬사인", 30000, "선착순 20",
+     "1:1 포토카드 팬사인 이벤트.", [], 20, False, False),
+    ("neonbeats", "digital", "새 EP 음원팩", 12000, "MP3+FLAC",
+     "신규 EP 고음질 음원 번들.", ["MP3", "FLAC"], None, False, False),
+    ("rabbit", "ticket", "온라인 팬미팅", 25000, "12/24 20:00",
+     "라이브 온라인 팬미팅 입장권.", [], 100, False, False),
+    ("myo", "goods", "냥이 스티커팩", 6000, "10종",
+     "손그림 고양이 스티커 10종 세트.", [], 300, False, False),
+    ("lumi", "goods", "굿즈 키링", 8000, "신상",
+     "스튜디오 루미 아크릴 키링.", ["핑크", "블루"], 80, False, False),
+    ("stellar", "digital", "멤버 전용 브러시팩", 15000, "멤버십",
+     "멤버십 구독자 전용 브러시 리소스.", [], None, False, True),
+    ("lumi", "goods", "한정 피규어", 45000, "품절",
+     "완판된 한정판 피규어.", [], 0, True, False),
+    ("", "coupon", "웰컴 10% 할인 쿠폰", 3000, "30일 유효",
+     "첫 구매를 위한 10% 할인 쿠폰. 발급 후 30일간 사용할 수 있습니다.", [], None, False, False),
 ]
 
-# (name, price, period, benefits, badge, featured, sort_order)
+# (name, price, period, benefits, badge, featured, sort_order) — attached to stellar.
 _TIERS = [
     ("라이트", 4900, "월", ["전용 포스트", "멤버 뱃지"], "", False, 0),
     ("스탠다드", 9900, "월", ["라이트 혜택 전부", "고해상도 화보", "월간 라이브"], "인기", True, 1),
     ("프리미엄", 19900, "월", ["스탠다드 전부", "팬사인 우선", "한정 굿즈 우선"], "", False, 2),
 ]
 
+# The primary demo fan (mirrors the web mock session). Phone → auth_subject_hash so
+# it can log in through the mock-OTP fan login flow with this number.
+_DEMO_FAN_PHONE = "010-0000-0001"
+_DEMO_FAN_NICKNAME = "데모팬"
+
 
 class Command(BaseCommand):
-    """Populate demo creators, posts, comments, products, and tiers."""
+    """Populate demo creators, owners, posts, comments, products, tiers, and a fan."""
 
     help = "Seed new-direction demo data (idempotent)."
 
@@ -87,6 +123,14 @@ class Command(BaseCommand):
                 },
             )
             creators[handle] = creator
+            # Each creator is operated by its own (demo) owner account.
+            if creator.owner is None:
+                owner, _ = Account.objects.get_or_create(
+                    username=f"owner_{handle}",
+                    defaults={"role": Role.FAN.value, "nickname": name},
+                )
+                creator.owner = owner
+                creator.save(update_fields=["owner"])
 
         posts: dict[str, Post] = {}
         for handle, body in _POSTS:
@@ -98,14 +142,26 @@ class Command(BaseCommand):
                 post=posts[post_body], author_name=author_name, body=body
             )
 
-        stellar = creators["stellar"]
-        for type_, title, price, meta in _PRODUCTS:
+        for (
+            handle, type_, title, price, meta, description, option_labels, stock, sold_out, locked
+        ) in _PRODUCTS:
             Product.objects.get_or_create(
-                creator=stellar,
+                # A blank handle is a global (creatorless) catalog listing.
+                creator=creators[handle] if handle else None,
                 title=title,
-                defaults={"type": type_, "price": price, "meta": meta},
+                defaults={
+                    "type": type_,
+                    "price": price,
+                    "meta": meta,
+                    "description": description,
+                    "options": option_labels,
+                    "stock": stock,
+                    "sold_out": sold_out,
+                    "locked": locked,
+                },
             )
 
+        stellar = creators["stellar"]
         for name, price, period, benefits, badge, featured, order in _TIERS:
             MembershipTier.objects.get_or_create(
                 creator=stellar,
@@ -120,21 +176,24 @@ class Command(BaseCommand):
                 },
             )
 
-        # A couple of demo fans following creators, so follower counts are > 0.
-        fans = [
-            Account.objects.get_or_create(
-                username=f"demo_fan_{i}", defaults={"role": Role.FAN.value}
-            )[0]
-            for i in range(2)
-        ]
-        for fan in fans:
-            for handle in ("stellar", "rabbit"):
-                Follow.objects.get_or_create(follower=fan, creator=creators[handle])
+        # The primary demo fan, keyed on the phone-hash so login is deterministic.
+        phone_hash = hash_phone(normalize_phone(_DEMO_FAN_PHONE))
+        demo_fan, _ = Account.objects.get_or_create(
+            auth_subject_hash=phone_hash,
+            defaults={
+                "role": Role.FAN.value,
+                "nickname": _DEMO_FAN_NICKNAME,
+                "auth_method": "phone",
+            },
+        )
+        for handle in ("stellar", "rabbit"):
+            Follow.objects.get_or_create(follower=demo_fan, creator=creators[handle])
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"seeded: {Creator.objects.count()} creators, {Post.objects.count()} posts, "
                 f"{Comment.objects.count()} comments, {Product.objects.count()} products, "
-                f"{MembershipTier.objects.count()} tiers, {Follow.objects.count()} follows"
+                f"{MembershipTier.objects.count()} tiers, {Follow.objects.count()} follows, "
+                f"demo fan '{demo_fan.nickname}'"
             )
         )

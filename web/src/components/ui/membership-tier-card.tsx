@@ -17,17 +17,20 @@ export interface MembershipTierCardProps extends React.HTMLAttributes<HTMLDivEle
   featured?: boolean;
   /** featured 강조를 크리에이터 액센트로(상위 creatorAccentVars 스코프 필요). 미지정 시 primary/gradient.brand. */
   accent?: boolean;
+  /** perk 빌드업 시각화(루브릭 #15) — 예: "라이트 혜택 포함". 상위 티어가 하위 perk 누적임을 표기. */
+  inheritNote?: string;
   ctaLabel?: string;
   onSubscribe?: () => void;
 }
 
-function won(v: number | string): string {
+/** 가격 표기 포맷 — 숫자면 천 단위 구분, 문자열이면 그대로. (₩ 접두는 소비 측에서). */
+function formatPrice(v: number | string): string {
   return typeof v === "number" ? v.toLocaleString("ko-KR") : v;
 }
 
 export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTierCardProps>(
   (
-    { name, price, period = "월", benefits, badge, featured, accent, ctaLabel = "구독하기", onSubscribe, className, ...props },
+    { name, price, period = "월", benefits, badge, featured, accent, inheritNote, ctaLabel = "구독하기", onSubscribe, className, ...props },
     ref,
   ) => (
     <div
@@ -51,10 +54,23 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
           {badge ? <Badge variant="primary">{badge}</Badge> : null}
         </div>
         <div className="flex items-baseline gap-1">
-          <span className={cn("text-display-m tabular-nums", accent ? "text-creator-accent" : "text-primary")}>₩{won(price)}</span>
+          <span className={cn("text-display-m tabular-nums", accent ? "text-creator-accent" : "text-primary")}>₩{formatPrice(price)}</span>
           {period ? <span className="text-body-m text-on-surface-variant">/{period}</span> : null}
         </div>
         <div className="h-px w-full bg-outline" />
+        {inheritNote ? (
+          <p
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-body-s",
+              accent ? "bg-creator-accent-container text-on-creator-accent-container" : "bg-primary-container text-on-primary-container",
+            )}
+          >
+            <svg viewBox="0 0 24 24" className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} aria-hidden>
+              <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+            </svg>
+            {inheritNote}
+          </p>
+        ) : null}
         <ul className="flex flex-col gap-2">
           {benefits.map((b, i) => (
             <li key={`${b}-${i}`} className="flex items-center gap-2 text-body-m text-on-surface">

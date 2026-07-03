@@ -1,23 +1,37 @@
-"""Public read API for posts, feed, and comments (SDLC 09 §4, E11/B2).
+"""Read + write API for posts, feed, and comments (SDLC 09 §4, E11/B2+B4).
 
-Anonymous reads. Like/comment counts are annotated (single query, no drift).
-``liked`` is always ``False`` here — it becomes per-user once auth lands (B3).
-Creator-scoped posts use ``?creator_id=`` rather than a nested path so the
-``/creators`` prefix stays owned by the creator app.
+Reads are anonymous but personalised when a token is presented: ``liked`` is
+derived per user via :func:`~apps.identity.auth.resolve_optional_account` (a
+single ``Exists`` subquery, so no N+1 and no broken anonymous read). Like/comment
+counts are annotated (single query, no drift). Creator-scoped posts use
+``?creator_id=`` rather than a nested path so the ``/creators`` prefix stays owned
+by the creator app.
+
+Writes (like toggle, comment create, post create — E11/B4) are gated by
+:data:`~apps.identity.auth.fan_auth` and rate-limited per user. Posting requires
+the caller to operate a creator profile (owner guard); everyone can like/comment.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import cast
 
-from django.db.models import Count, QuerySet
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Exists, OuterRef, QuerySet
 from django.http import HttpRequest
 from ninja import Router, Schema
+from pydantic import Field, field_validator
 
-from apps.content.models import Comment, Post
+from apps.content.models import Comment, Like, Post
+from apps.creator.models import Creator
+from apps.identity.auth import fan_auth, resolve_optional_account
+from apps.identity.models import Account
+from apps.notification.services import notify
 from config.api import api
 from config.pagination import paginate
+from config.throttle import user_write_throttle
 
 posts_router = Router(tags=["content"])
 feed_router = Router(tags=["content"])
@@ -69,12 +83,57 @@ class CommentPage(Schema):
     next_cursor: str | None = None
 
 
-def _post_qs() -> QuerySet[Post]:
-    """Posts with annotated like/comment counts and their creator preloaded."""
-    return Post.objects.select_related("creator").annotate(
+class LikeOut(Schema):
+    """Like state after a toggle (fresh aggregate like count)."""
+
+    liked: bool
+    like_count: int
+
+
+class CommentIn(Schema):
+    """Request body for creating a comment."""
+
+    body: str = Field(min_length=1, max_length=1000)
+
+
+class PostIn(Schema):
+    """Request body for creating a post (author is the caller's creator profile)."""
+
+    body: str = Field(max_length=2000)
+    media_url: str = Field(default="", max_length=500)
+
+    @field_validator("media_url")
+    @classmethod
+    def _validate_media_url(cls, value: str) -> str:
+        """Reject non-http(s) / non-relative media URLs (A5).
+
+        A post's ``media_url`` is echoed straight into the feed, so an attacker-
+        supplied ``javascript:``/``data:`` scheme could drive XSS on a naive
+        renderer. Accept only an absolute http(s) URL or a site-relative path
+        (leading ``/``); anything else fails schema validation (422). Empty stays
+        allowed (no media).
+        """
+        if value == "" or value.startswith(("/", "http://", "https://")):
+            return value
+        raise ValueError("media_url must be an http(s) URL or a site-relative path.")
+
+
+def _post_qs(account: Account | None = None) -> QuerySet[Post]:
+    """Posts with annotated like/comment counts and their creator preloaded.
+
+    When ``account`` is given, a per-user ``is_liked`` flag is annotated via a
+    single ``Exists`` subquery — no extra per-row query — so a list stays one
+    query. Anonymous callers pass ``None`` and get no annotation (``liked`` False).
+    """
+    queryset = Post.objects.select_related("creator").annotate(
         like_count=Count("likes", distinct=True),
         comment_count=Count("comments", distinct=True),
     )
+    if account is not None:
+        queryset = queryset.annotate(
+            is_liked=Exists(Like.objects.filter(post=OuterRef("pk"), user=account))
+        )
+    return queryset
 
 
 def _post_out(post: Post) -> PostOut:
@@ -89,7 +148,7 @@ def _post_out(post: Post) -> PostOut:
         media_url=post.media_url,
         like_count=getattr(post, "like_count", 0),
         comment_count=getattr(post, "comment_count", 0),
-        liked=False,
+        liked=bool(getattr(post, "is_liked", False)),
         created_at=post.created_at,
     )
 
@@ -121,8 +180,7 @@ def list_posts(
     limit: int | None = None,
 ) -> PostPage:
     """List posts, newest first; filter to one creator via ``?creator_id=``."""
-    del request
-    queryset = _post_qs().order_by("-created_at", "id")
+    queryset = _post_qs(resolve_optional_account(request)).order_by("-created_at", "id")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
@@ -134,11 +192,81 @@ def get_post(
     request: HttpRequest, post_id: uuid.UUID
 ) -> tuple[int, PostOut | ErrorOut]:
     """Fetch a single post; 404 if unknown."""
-    del request
-    post = _post_qs().filter(id=post_id).first()
+    post = _post_qs(resolve_optional_account(request)).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     return 200, _post_out(post)
+
+
+@posts_router.post(
+    "",
+    response={201: PostOut, 403: ErrorOut},
+    auth=fan_auth,
+    throttle=user_write_throttle("6/min"),
+)
+def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | ErrorOut]:
+    """Create a post as the caller's creator profile; 403 if they operate none.
+
+    Owner guard: only an account that operates a :class:`Creator` may post, and
+    the post is always attributed to *that* creator — the author is never taken
+    from client input, so a fan cannot post as someone else.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = Creator.objects.filter(owner=account).first()
+    if creator is None:
+        return 403, ErrorOut(detail="크리에이터만 게시물을 작성할 수 있어요.")
+    post = Post.objects.create(
+        creator=creator, body=data.body, media_url=data.media_url
+    )
+    # A fresh post carries no count annotations; _post_out defaults them to 0 and
+    # liked to False, which is correct for a just-created post. ``post.creator`` is
+    # already the in-memory creator (passed to create), so no extra query.
+    return 201, _post_out(post)
+
+
+@posts_router.put(
+    "/{post_id}/like",
+    response={200: LikeOut, 404: ErrorOut},
+    auth=fan_auth,
+    throttle=user_write_throttle("60/min"),
+)
+def like_post(
+    request: HttpRequest, post_id: uuid.UUID
+) -> tuple[int, LikeOut | ErrorOut]:
+    """Like a post; idempotent (a second like is a no-op, still 200)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    post = Post.objects.filter(id=post_id).first()
+    if post is None:
+        return 404, ErrorOut(detail="post not found")
+    # No notification is emitted on a like (B6): likes are high-volume and would
+    # spam the creator's feed. Only comments notify. The web mock's like-notification
+    # is demo-only and intentionally not mirrored server-side.
+    try:
+        # Idempotent under concurrency: the unique (post, user) constraint
+        # collapses a double-like race into a single edge rather than an error.
+        with transaction.atomic():
+            Like.objects.get_or_create(post=post, user=account)
+    except IntegrityError:
+        pass
+    return 200, LikeOut(liked=True, like_count=Like.objects.filter(post=post).count())
+
+
+@posts_router.delete(
+    "/{post_id}/like",
+    response={200: LikeOut, 404: ErrorOut},
+    auth=fan_auth,
+    throttle=user_write_throttle("60/min"),
+)
+def unlike_post(
+    request: HttpRequest, post_id: uuid.UUID
+) -> tuple[int, LikeOut | ErrorOut]:
+    """Unlike a post; idempotent (unliking a non-liked post is a no-op)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    post = Post.objects.filter(id=post_id).first()
+    if post is None:
+        return 404, ErrorOut(detail="post not found")
+    Like.objects.filter(post=post, user=account).delete()
+    return 200, LikeOut(liked=False, like_count=Like.objects.filter(post=post).count())
 
 
 @posts_router.get("/{post_id}/comments", response={200: CommentPage, 404: ErrorOut})
@@ -163,17 +291,51 @@ def list_comments(
     )
 
 
+@posts_router.post(
+    "/{post_id}/comments",
+    response={201: CommentOut, 404: ErrorOut},
+    auth=fan_auth,
+    throttle=user_write_throttle("10/min"),
+)
+def create_comment(
+    request: HttpRequest, post_id: uuid.UUID, data: CommentIn
+) -> tuple[int, CommentOut | ErrorOut]:
+    """Add a comment to a post as the authenticated fan; 404 if the post is unknown.
+
+    ``author`` is the account; ``author_name`` denormalises the display nickname so
+    the comment renders identically to a seeded one (and _comment_out never leaks
+    the internal fan_id).
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    post = Post.objects.filter(id=post_id).select_related("creator__owner").first()
+    if post is None:
+        return 404, ErrorOut(detail="post not found")
+    comment = Comment.objects.create(
+        post=post, author=account, author_name=account.nickname, body=data.body
+    )
+    # 알림 훅 — 포스트의 크리에이터 오너에게(자기 포스트 셀프 댓글은 제외).
+    owner = post.creator.owner
+    if owner is not None and owner != account:
+        notify(
+            owner,
+            "comment",
+            f"{account.nickname}님이 댓글을 남겼습니다",
+            href=f"/post/{post.id}",
+        )
+    return 201, _comment_out(comment)
+
+
 @feed_router.get("", response=PostPage)
 def feed(
     request: HttpRequest, cursor: str | None = None, limit: int | None = None
 ) -> PostPage:
     """Anonymous feed = most recent posts across creators.
 
-    Personalised (following-only) feed needs the authenticated user and lands in
-    B3/B4; for now this returns the same recent-posts page as ``/posts``.
+    Personalised (following-only) feed needs a richer ranking and lands later; for
+    now this returns the same recent-posts page as ``/posts``, but with the
+    per-user ``liked`` flag filled in when the caller is authenticated.
     """
-    del request
-    queryset = _post_qs().order_by("-created_at", "id")
+    queryset = _post_qs(resolve_optional_account(request)).order_by("-created_at", "id")
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
     return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
 

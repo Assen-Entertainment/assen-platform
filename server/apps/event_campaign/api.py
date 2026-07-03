@@ -39,7 +39,7 @@ from apps.event_campaign.services import (
     unpublish_campaign,
     update_campaign,
 )
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth
 from apps.identity.models import Account, Role
 from config.api import api
 

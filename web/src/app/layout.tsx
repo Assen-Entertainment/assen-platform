@@ -1,9 +1,21 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import localFont from "next/font/local";
 import "@/styles/globals.css";
 import { config } from "@/lib/config";
 import { QueryProvider } from "@/components/query-provider";
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme-provider";
+import { SessionProvider } from "@/lib/session";
+import { SessionGuard } from "@/components/session-guard";
 import { Toaster } from "@/components/ui/use-toast";
+
+/** Pretendard Variable — 자체 호스팅(next/font/local, FOIT 방지 display:swap). CSS 변수로 노출. */
+const pretendard = localFont({
+  src: "../../public/fonts/pretendard-variable.woff2",
+  variable: "--font-pretendard",
+  display: "swap",
+  weight: "45 920",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(config.siteUrl),
@@ -15,11 +27,23 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang="ko" className={pretendard.variable} suppressHydrationWarning>
+      <head>
+        {/* FOUC 방지 — 하이드레이션 전 테마 적용(theme-provider.THEME_INIT_SCRIPT). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
-        <QueryProvider>
-          <Toaster>{children}</Toaster>
-        </QueryProvider>
+        <ThemeProvider>
+          {/* QueryProvider가 SessionProvider 바깥 — 세션이 React Query(['auth','me'])를 사용. */}
+          <QueryProvider>
+            <SessionProvider>
+              <Toaster>
+                <SessionGuard />
+                {children}
+              </Toaster>
+            </SessionProvider>
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
