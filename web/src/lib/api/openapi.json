@@ -800,7 +800,7 @@
             }
           }
         },
-        "description": "List catalog products; filter by creator and/or type, cursor-paginated.",
+        "description": "List catalog products; filter by creator and/or type, cursor-paginated.\n\nConsumer surface: draft/hidden listings and gated 19+ items are excluded\n(:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.",
         "tags": [
           "commerce"
         ]
@@ -844,9 +844,255 @@
             }
           }
         },
-        "description": "Return one catalog product by id; 404 if unknown (B5).\n\nThe web product-detail page consumes this contract. ``creator`` is\n``select_related`` so the owning creator name is served without an extra query.",
+        "description": "Return one catalog product by id; 404 if unknown or not publicly visible.\n\nThe web product-detail page consumes this contract. Gating goes through\n:func:`_public_product_qs`, so a draft/hidden/gated-adult product 404s to a\nconsumer just like an unknown id (no existence leak).",
         "tags": [
           "commerce"
+        ]
+      }
+    },
+    "/api/studio/products": {
+      "get": {
+        "operationId": "apps_commerce_api_studio_list_products",
+        "summary": "Studio List Products",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StudioProductOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the caller's own creator's products, including draft/hidden and 19+.",
+        "tags": [
+          "studio-commerce"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "apps_commerce_api_studio_create_product",
+        "summary": "Studio Create Product",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProductOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a product owned by the caller's creator profile; 403 if they operate none.",
+        "tags": [
+          "studio-commerce"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioProductIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/studio/products/{product_id}": {
+      "patch": {
+        "operationId": "apps_commerce_api_studio_update_product",
+        "summary": "Studio Update Product",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Product Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioProductOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update fields on the caller's own product; 403 (no creator) / 404 (not theirs).",
+        "tags": [
+          "studio-commerce"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioProductPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "apps_commerce_api_studio_delete_product",
+        "summary": "Studio Delete Product",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "product_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Product Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioAck"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs).\n\nHistorical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),\nso removing a catalog listing never rewrites a fan's order history.",
+        "tags": [
+          "studio-commerce"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
         ]
       }
     },
@@ -2329,6 +2575,57 @@
         ]
       }
     },
+    "/api/studio/profile": {
+      "patch": {
+        "operationId": "apps_creator_api_studio_update_profile",
+        "summary": "Studio Update Profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update the caller's own creator profile; 403 if they operate no creator.",
+        "tags": [
+          "studio-creator"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioProfilePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/operator/dashboard/": {
       "get": {
         "operationId": "apps_dashboard_api_get_dashboard",
@@ -3315,11 +3612,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshIn"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
-          "required": true
+          "required": false
         }
       }
     },
@@ -3341,6 +3645,100 @@
           }
         },
         "description": "Return the authenticated fan's identity summary (either surface).",
+        "tags": [
+          "fan-signup"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "apps_identity_api_update_me",
+        "summary": "Update Me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FanMeOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update the caller's own profile (nickname). Scope is always ``request.auth``.\n\nThe account is taken from the authenticated token, never from the body, so a\nfan can only edit their own profile. nickname is display-only PII (already the\nsole one stored); no new PII is introduced.",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FanMeUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/verify/start": {
+      "post": {
+        "operationId": "apps_identity_api_verify_start",
+        "summary": "Verify Start",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Begin (mock) 본인인증/성인 인증 for the authenticated fan.\n\nFail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)\nthis returns 503 rather than pretend a challenge started — mirroring the signup\nOTP surface. On success the mock records a ``pending`` transition and returns a\nbare ack (no PII is sent to or received from the mock).",
+        "tags": [
+          "fan-signup"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/verify/confirm": {
+      "post": {
+        "operationId": "apps_identity_api_verify_confirm",
+        "summary": "Verify Confirm",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyConfirmOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Confirm (mock) 본인인증 and persist the derived adult flag + status.\n\nFail-closed (503) when no verifier is wired. On success the mock returns a\ndeterministic adult result; only the derived ``adult_verified`` / ``kyc_status``\n/ ``kyc_verified_at`` are written (never 주민번호/CI/DI/생년월일), and the age\nconsent is recorded (``ConsentKind.AGE``) so the age-gate has a durable grant.\nNo domain event is emitted (AGE consent is not the RULE kind — closed registry).",
         "tags": [
           "fan-signup"
         ],
@@ -3440,9 +3838,235 @@
             }
           }
         },
-        "description": "List membership tiers, optionally filtered to one creator.",
+        "description": "List *active* membership tiers, optionally filtered to one creator.\n\nInactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from\nthis consumer surface, mirroring draft/hidden products in the catalog.",
         "tags": [
           "membership"
+        ]
+      }
+    },
+    "/api/studio/tiers": {
+      "get": {
+        "operationId": "apps_membership_api_studio_list_tiers",
+        "summary": "Studio List Tiers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StudioTierOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the caller's own creator's tiers, including inactive ones.",
+        "tags": [
+          "studio-membership"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "apps_membership_api_studio_create_tier",
+        "summary": "Studio Create Tier",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioTierOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a membership tier owned by the caller's creator; 403 if they operate none.",
+        "tags": [
+          "studio-membership"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioTierIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/studio/tiers/{tier_id}": {
+      "patch": {
+        "operationId": "apps_membership_api_studio_update_tier",
+        "summary": "Studio Update Tier",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tier_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Tier Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioTierOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update fields on the caller's own tier; 403 (no creator) / 404 (not theirs).",
+        "tags": [
+          "studio-membership"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioTierPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "apps_membership_api_studio_delete_tier",
+        "summary": "Studio Delete Tier",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tier_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Tier Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioTierAck"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete the caller's own tier; 403 (no creator) / 404 (not theirs).\n\nExisting subscriptions cascade with the tier (``Subscription.tier`` is CASCADE);\nan owner who only wants to stop new signups should set ``active=False`` instead.",
+        "tags": [
+          "studio-membership"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
         ]
       }
     },
@@ -3814,6 +4438,194 @@
         "description": "Mark one of the fan's own notifications read (404 if not theirs).",
         "tags": [
           "notification"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/payment-methods": {
+      "get": {
+        "operationId": "apps_payments_api_list_payment_methods",
+        "summary": "List Payment Methods",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentMethodOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the requesting fan's own saved payment methods (newest first).",
+        "tags": [
+          "payment-methods"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "apps_payments_api_register_payment_method",
+        "summary": "Register Payment Method",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register a (mock) payment method for the requesting fan.\n\nFail-closed (503) when no tokenizer is wired. The mock tokenizer discards the\ncard, keeping only brand + last4 + a placeholder token — the PAN never touches\nthe DB or logs. The first method (or one flagged ``make_primary``) becomes\nprimary; the per-owner partial-unique constraint keeps at most one primary.",
+        "tags": [
+          "payment-methods"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentMethodIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/payment-methods/{method_id}/primary": {
+      "post": {
+        "operationId": "apps_payments_api_set_primary_payment_method",
+        "summary": "Set Primary Payment Method",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "method_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Method Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Make one of the fan's own methods primary (404 if not theirs).\n\nDemotes the current primary and promotes the target in one transaction so the\nper-owner single-primary constraint is never transiently violated.",
+        "tags": [
+          "payment-methods"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/payment-methods/{method_id}": {
+      "delete": {
+        "operationId": "apps_payments_api_delete_payment_method",
+        "summary": "Delete Payment Method",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "method_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Method Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentAck"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete one of the fan's own saved methods (404 if not theirs).",
+        "tags": [
+          "payment-methods"
         ],
         "security": [
           {
@@ -7234,6 +8046,11 @@
           "locked": {
             "title": "Locked",
             "type": "boolean"
+          },
+          "is_adult": {
+            "default": false,
+            "title": "Is Adult",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7291,6 +8108,355 @@
           "detail"
         ],
         "title": "CommerceError",
+        "type": "object"
+      },
+      "StudioProductOut": {
+        "description": "Owner-view product: adds the management fields (status, 19+, timestamps).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "creator_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Id"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          },
+          "meta": {
+            "title": "Meta",
+            "type": "string"
+          },
+          "media_url": {
+            "title": "Media Url",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "stock": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock"
+          },
+          "sold_out": {
+            "title": "Sold Out",
+            "type": "boolean"
+          },
+          "locked": {
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "is_adult": {
+            "title": "Is Adult",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "price",
+          "meta",
+          "media_url",
+          "description",
+          "options",
+          "sold_out",
+          "locked",
+          "status",
+          "is_adult",
+          "created_at"
+        ],
+        "title": "StudioProductOut",
+        "type": "object"
+      },
+      "StudioProductIn": {
+        "description": "Owner payload to create a catalog product (display price, not settlement).",
+        "properties": {
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "price": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Price",
+            "type": "integer"
+          },
+          "meta": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Meta",
+            "type": "string"
+          },
+          "media_url": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Media Url",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "stock": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock"
+          },
+          "sold_out": {
+            "default": false,
+            "title": "Sold Out",
+            "type": "boolean"
+          },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "status": {
+            "default": "selling",
+            "title": "Status",
+            "type": "string"
+          },
+          "is_adult": {
+            "default": false,
+            "title": "Is Adult",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "title"
+        ],
+        "title": "StudioProductIn",
+        "type": "object"
+      },
+      "StudioProductPatch": {
+        "description": "Owner payload to update a product; only the provided fields are applied.",
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          },
+          "media_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Url"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "stock": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock"
+          },
+          "sold_out": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sold Out"
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "is_adult": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Adult"
+          }
+        },
+        "title": "StudioProductPatch",
+        "type": "object"
+      },
+      "StudioAck": {
+        "description": "Bare status ack for studio mutations that return no body (delete).",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "StudioAck",
         "type": "object"
       },
       "OrderItemOut": {
@@ -7563,6 +8729,11 @@
             "title": "Liked",
             "type": "boolean"
           },
+          "is_adult": {
+            "default": false,
+            "title": "Is Adult",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -7639,6 +8810,11 @@
             "maxLength": 500,
             "title": "Media Url",
             "type": "string"
+          },
+          "is_adult": {
+            "default": false,
+            "title": "Is Adult",
+            "type": "boolean"
           }
         },
         "required": [
@@ -8185,6 +9361,86 @@
           "products"
         ],
         "title": "SearchOut",
+        "type": "object"
+      },
+      "StudioProfilePatch": {
+        "description": "Owner payload to update the caller's own creator profile (provided fields only).",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "bio": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "accent_color": {
+            "anyOf": [
+              {
+                "maxLength": 9,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accent Color"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          }
+        },
+        "title": "StudioProfilePatch",
         "type": "object"
       },
       "DashboardOut": {
@@ -8814,7 +10070,7 @@
         "type": "object"
       },
       "FanMeOut": {
-        "description": "The authenticated fan's identity summary (web/app session bootstrap).\n\n``handle`` and ``avatar_url`` are populated only when the account operates a\ncreator profile (else ``None``); nickname is the sole display PII.",
+        "description": "The authenticated fan's identity summary (web/app session bootstrap).\n\n``handle`` and ``avatar_url`` are populated only when the account operates a\ncreator profile (else ``None``); nickname is the sole display PII.\n``adult_verified`` / ``kyc_status`` are derived 인증 flags (never PII) the web\nsession reads to drive 19+ gating and the KYC banner (fail-closed defaults).",
         "properties": {
           "id": {
             "title": "Id",
@@ -8849,6 +10105,16 @@
               }
             ],
             "title": "Avatar Url"
+          },
+          "adult_verified": {
+            "default": false,
+            "title": "Adult Verified",
+            "type": "boolean"
+          },
+          "kyc_status": {
+            "default": "unverified",
+            "title": "Kyc Status",
+            "type": "string"
           }
         },
         "required": [
@@ -8857,6 +10123,41 @@
           "role"
         ],
         "title": "FanMeOut",
+        "type": "object"
+      },
+      "FanMeUpdateIn": {
+        "description": "Request body for updating the fan's own profile (nickname only for now).\n\nEmail/phone change is out of this round: both are behind a 본인인증 re-verify\ngate (they key the account's auth), so they are deliberately not editable here.",
+        "properties": {
+          "nickname": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Nickname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nickname"
+        ],
+        "title": "FanMeUpdateIn",
+        "type": "object"
+      },
+      "VerifyConfirmOut": {
+        "description": "Result of confirming (mock) 본인인증 — derived flags only, no PII.",
+        "properties": {
+          "adult_verified": {
+            "title": "Adult Verified",
+            "type": "boolean"
+          },
+          "kyc_status": {
+            "title": "Kyc Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "adult_verified",
+          "kyc_status"
+        ],
+        "title": "VerifyConfirmOut",
         "type": "object"
       },
       "MembershipCardOut": {
@@ -8958,6 +10259,271 @@
         "title": "TierOut",
         "type": "object"
       },
+      "StudioTierOut": {
+        "description": "Owner-view membership tier (adds the ``active`` management flag + timestamp).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "creator_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "integer"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "benefits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Benefits",
+            "type": "array"
+          },
+          "badge": {
+            "title": "Badge",
+            "type": "string"
+          },
+          "featured": {
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price",
+          "period",
+          "benefits",
+          "badge",
+          "featured",
+          "active",
+          "sort_order",
+          "created_at"
+        ],
+        "title": "StudioTierOut",
+        "type": "object"
+      },
+      "SubscriptionError": {
+        "description": "Stable error shape for subscription and studio-tier endpoints.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SubscriptionError",
+        "type": "object"
+      },
+      "StudioTierIn": {
+        "description": "Owner payload to create a membership tier (display price, not settlement).",
+        "properties": {
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Price",
+            "type": "integer"
+          },
+          "period": {
+            "default": "월",
+            "maxLength": 8,
+            "title": "Period",
+            "type": "string"
+          },
+          "benefits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Benefits",
+            "type": "array"
+          },
+          "badge": {
+            "default": "",
+            "maxLength": 20,
+            "title": "Badge",
+            "type": "string"
+          },
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "sort_order": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "StudioTierIn",
+        "type": "object"
+      },
+      "StudioTierPatch": {
+        "description": "Owner payload to update a tier; only the provided fields are applied.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "maxLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "benefits": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benefits"
+          },
+          "badge": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge"
+          },
+          "featured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Featured"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "title": "StudioTierPatch",
+        "type": "object"
+      },
+      "StudioTierAck": {
+        "description": "Bare status ack for studio mutations that return no body (delete).",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "StudioTierAck",
+        "type": "object"
+      },
       "SubscriptionOut": {
         "description": "A fan's subscription (maps to the frontend ``Subscription`` type).\n\n``cancel_scheduled`` is ``True`` for an active subscription the fan has set to\nend at period-end (\"해지 예정\"); the web renders that state distinctly.",
         "properties": {
@@ -9036,20 +10602,6 @@
           "cancel_scheduled"
         ],
         "title": "SubscriptionOut",
-        "type": "object"
-      },
-      "SubscriptionError": {
-        "description": "Stable error shape for subscription endpoints.",
-        "properties": {
-          "detail": {
-            "title": "Detail",
-            "type": "string"
-          }
-        },
-        "required": [
-          "detail"
-        ],
-        "title": "SubscriptionError",
         "type": "object"
       },
       "SubscribeIn": {
@@ -9302,6 +10854,97 @@
           "updated"
         ],
         "title": "ReadAllOut",
+        "type": "object"
+      },
+      "PaymentMethodOut": {
+        "description": "A saved payment method — display metadata only (never a PAN).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "last4": {
+            "title": "Last4",
+            "type": "string"
+          },
+          "is_primary": {
+            "title": "Is Primary",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "brand",
+          "last4",
+          "is_primary",
+          "created_at"
+        ],
+        "title": "PaymentMethodOut",
+        "type": "object"
+      },
+      "PaymentMethodError": {
+        "description": "Stable error shape for payment-method endpoints.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "PaymentMethodError",
+        "type": "object"
+      },
+      "PaymentMethodIn": {
+        "description": "Payload to register a (mock) payment method.\n\n``card_number`` is a MOCK card used ONLY to derive the display last4; the\ntokenizer discards it and it is never stored or logged (R4 / PCI). No expiry/cvc\nis accepted at all — those are out of scope for the mock and forbidden to store.",
+        "properties": {
+          "brand": {
+            "default": "",
+            "maxLength": 20,
+            "title": "Brand",
+            "type": "string"
+          },
+          "card_number": {
+            "maxLength": 32,
+            "minLength": 4,
+            "title": "Card Number",
+            "type": "string"
+          },
+          "make_primary": {
+            "default": false,
+            "title": "Make Primary",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card_number"
+        ],
+        "title": "PaymentMethodIn",
+        "type": "object"
+      },
+      "PaymentAck": {
+        "description": "Bare status ack for a mutation that returns no body (delete).",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PaymentAck",
         "type": "object"
       },
       "PosOrderOut": {

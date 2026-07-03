@@ -25,6 +25,10 @@ class ConsentKind(models.TextChoices):
     PRIVACY = "privacy", "privacy"
     TERMS = "terms", "terms"
     MARKETING = "marketing", "marketing"
+    # 성인(19+) 연령 확인 동의. 본인인증(KYC) 확정 시 기록되며, age-gate 프론트가
+    # "age"를 사용하므로 record_consent의 enum 검증을 통과하려면 필수. 저장되는 것은
+    # 동의 사실(kind/version)뿐 — 생년월일 원본은 저장하지 않는다(법무 경계 §2).
+    AGE = "age", "age"
 
 
 class ConsentRecord(models.Model):

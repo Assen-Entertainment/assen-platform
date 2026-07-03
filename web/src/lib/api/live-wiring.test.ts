@@ -5,6 +5,9 @@ import {
   apiCancelSubscription,
   apiMarkNotificationRead,
   apiReport,
+  apiAddPaymentMethod,
+  apiCreateStudioProduct,
+  apiUpdateStudioTier,
 } from "./index";
 
 /**
@@ -125,5 +128,88 @@ describe("커머스/구독/알림 매핑", () => {
     const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(String(url)).toContain("/safety/fan-reports");
     expect(JSON.parse(init.body)).toEqual({ report_type: "spam", narrative: "도배성 홍보" });
+  });
+});
+
+describe("결제수단 PCI(R4) — raw 카드 미전송", () => {
+  it("apiAddPaymentMethod: brand + mock PG 토큰만 전송하고 raw PAN/CVC/expiry는 절대 보내지 않는다", async () => {
+    const f = mockJson(201, { id: "pm1", brand: "신한카드", last4: "1234", is_primary: true, created_at: "2026-07-03T10:00:00Z" });
+    vi.stubGlobal("fetch", f);
+
+    const method = await apiAddPaymentMethod({ brand: "신한카드", makePrimary: true });
+    expect(method).toEqual({ id: "pm1", brand: "신한카드", last4: "1234", isPrimary: true, createdAt: "2026-07-03T10:00:00Z" });
+
+    const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain("/fan/payment-methods");
+    const body = JSON.parse(init.body);
+    // 정확히 brand·card_number·make_primary만 — 카드번호는 mock 토큰, CVC/유효기간 필드는 없음.
+    expect(Object.keys(body).sort()).toEqual(["brand", "card_number", "make_primary"]);
+    expect(body.brand).toBe("신한카드");
+    expect(body.make_primary).toBe(true);
+    expect(body.card_number).toMatch(/^pg_mock_tok_/);
+    expect(body).not.toHaveProperty("cvc");
+    expect(body).not.toHaveProperty("expiry");
+  });
+});
+
+describe("스튜디오 카탈로그 쓰기 매핑", () => {
+  it("apiCreateStudioProduct: StudioProductOut snake→StudioProduct(sold=0·updatedAt 파생)", async () => {
+    const f = mockJson(201, {
+      id: "sp1",
+      creator_id: "c1",
+      type: "goods",
+      title: "굿즈",
+      price: 10000,
+      meta: "",
+      media_url: "",
+      description: "",
+      options: [],
+      stock: 50,
+      sold_out: false,
+      locked: false,
+      status: "draft",
+      is_adult: false,
+      created_at: new Date().toISOString(),
+    });
+    vi.stubGlobal("fetch", f);
+
+    const p = await apiCreateStudioProduct({ type: "goods", title: "굿즈", price: 10000 });
+    expect(p.id).toBe("sp1");
+    expect(p.status).toBe("draft");
+    expect(p.sold).toBe(0);
+    expect(p.stock).toBe(50);
+    expect(typeof p.updatedAt).toBe("string");
+
+    const [, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toMatchObject({ type: "goods", title: "굿즈", price: 10000, status: "draft" });
+  });
+
+  it("apiUpdateStudioTier: 제공 필드만 PATCH 전송 + StudioTier(subscribers=0) 매핑", async () => {
+    const f = mockJson(200, {
+      id: "t1",
+      creator_id: "c1",
+      name: "베이직",
+      price: 5000,
+      period: "월",
+      benefits: ["멤버 전용 포스트"],
+      badge: "",
+      featured: false,
+      active: false,
+      sort_order: 0,
+      created_at: new Date().toISOString(),
+    });
+    vi.stubGlobal("fetch", f);
+
+    const t = await apiUpdateStudioTier("t1", { active: false });
+    expect(t.active).toBe(false);
+    expect(t.subscribers).toBe(0);
+    expect(t.name).toBe("베이직");
+
+    const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain("/studio/tiers/t1");
+    expect(init.method).toBe("PATCH");
+    // undefined 필드는 직렬화에서 제거 → active만 전송.
+    expect(JSON.parse(init.body)).toEqual({ active: false });
   });
 });

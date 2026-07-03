@@ -75,6 +75,7 @@ from apps.event_campaign import api as event_campaign_api  # noqa: E402,F401
 from apps.identity import api as identity_api  # noqa: E402,F401
 from apps.membership import api as membership_api  # noqa: E402,F401
 from apps.notification import api as notification_api  # noqa: E402,F401
+from apps.payments import api as payments_api  # noqa: E402,F401
 from apps.pos_lite import api as pos_lite_api  # noqa: E402,F401
 from apps.reservation import api as reservation_api  # noqa: E402,F401
 from apps.safety import api as safety_api  # noqa: E402,F401

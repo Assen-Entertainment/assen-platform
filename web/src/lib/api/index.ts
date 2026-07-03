@@ -21,9 +21,18 @@ import type {
   Post,
   Product,
   RefundStatus,
+  SavedPaymentMethod,
   Subscription,
   SearchResult,
 } from "./types";
+// 스튜디오 카탈로그 타입/목업은 studio-mock의 순수 유틸을 정본으로 재사용(데이터만 실 API로 전환).
+import {
+  STUDIO_PRODUCTS,
+  STUDIO_TIERS,
+  type StudioProduct,
+  type StudioTier,
+  type ProductStatus,
+} from "@/lib/studio-mock";
 
 export * from "./types";
 export { apiFetch, ApiError } from "./client";
@@ -54,6 +63,7 @@ interface RawPost {
   like_count: number;
   comment_count: number;
   liked: boolean;
+  is_adult?: boolean;
   created_at: string;
 }
 interface RawComment {
@@ -77,6 +87,9 @@ interface RawProduct {
   stock: number | null;
   sold_out: boolean;
   locked: boolean;
+  is_adult?: boolean;
+  // status는 오너 스코프(StudioProductOut) 전용 — 공개 ProductOut엔 없어 옵셔널.
+  status?: string;
 }
 interface RawTier {
   id: string;
@@ -146,6 +159,47 @@ interface RawNotification {
   read: boolean;
   created_at: string;
 }
+// --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기·결제수단 wire 계약(snake_case) ------
+/** 오너 뷰 상품(StudioProductOut) — 관리 필드(status/is_adult/timestamp) 포함. */
+interface RawStudioProduct {
+  id: string;
+  creator_id: string | null;
+  type: string;
+  title: string;
+  price: number;
+  meta: string;
+  media_url: string;
+  description: string;
+  options: string[];
+  stock: number | null;
+  sold_out: boolean;
+  locked: boolean;
+  status: string;
+  is_adult: boolean;
+  created_at: string;
+}
+/** 오너 뷰 티어(StudioTierOut) — active 관리 플래그 포함. */
+interface RawStudioTier {
+  id: string;
+  creator_id: string | null;
+  name: string;
+  price: number;
+  period: string;
+  benefits: string[];
+  badge: string;
+  featured: boolean;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+/** 저장된 결제수단(SavedPaymentMethod wire) — brand+last4만(PAN 미보관). */
+interface RawPaymentMethod {
+  id: string;
+  brand: string;
+  last4: string;
+  is_primary: boolean;
+  created_at: string;
+}
 /** 소셜 토글 응답(카운트 정정용). */
 export interface FollowResult {
   following: boolean;
@@ -202,6 +256,7 @@ const mapPost = (p: RawPost): Post => ({
   likeCount: p.like_count,
   commentCount: p.comment_count,
   liked: p.liked,
+  isAdult: p.is_adult || undefined,
 });
 const mapComment = (c: RawComment): Comment => ({
   id: c.id,
@@ -225,6 +280,8 @@ const mapProduct = (p: RawProduct): Product => ({
   stock: p.stock ?? undefined,
   soldOut: p.sold_out || undefined,
   locked: p.locked || undefined,
+  isAdult: p.is_adult || undefined,
+  status: p.status || undefined,
 });
 const mapTier = (t: RawTier): MembershipTier => ({
   id: t.id,
@@ -304,6 +361,35 @@ const mapNotification = (n: RawNotification): Notification => {
     read: n.read,
   };
 };
+
+const PRODUCT_STATUSES: readonly ProductStatus[] = ["selling", "soldout", "draft", "hidden"];
+/** 오너 상품 매핑 — 서버 계약엔 판매수(sold)가 없어 0(정산·분석은 별도 게이트). updatedAt은 생성 시각 파생. */
+const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
+  id: p.id,
+  type: p.type as StudioProduct["type"],
+  title: p.title,
+  price: p.price,
+  status: (PRODUCT_STATUSES as readonly string[]).includes(p.status) ? (p.status as ProductStatus) : "draft",
+  sold: 0,
+  stock: p.stock ?? null,
+  updatedAt: relativeTime(p.created_at),
+});
+/** 오너 티어 매핑 — 서버 계약엔 구독자수가 없어 0(분석은 별도 게이트). */
+const mapStudioTier = (t: RawStudioTier): StudioTier => ({
+  id: t.id,
+  name: t.name,
+  price: t.price,
+  benefits: t.benefits,
+  subscribers: 0,
+  active: t.active,
+});
+const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({
+  id: m.id,
+  brand: m.brand,
+  last4: m.last4,
+  isPrimary: m.is_primary,
+  createdAt: m.created_at,
+});
 
 // --- mock 폴백 데이터 (apiUrl 미설정 시) ------------------------------------
 const CREATORS: Creator[] = [
@@ -397,6 +483,12 @@ const NOTIFICATIONS: Notification[] = [
 const SUBSCRIPTIONS: Subscription[] = [
   { id: "s1", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", tierName: "스탠다드", price: 9900, period: "월", nextBillingDate: "2026-07-15", status: "active" },
   { id: "s2", creatorId: "c3", creatorName: "토끼방송국", creatorHandle: "rabbit", tierName: "라이트", price: 4900, period: "월", nextBillingDate: "2026-07-22", status: "active" },
+];
+
+// 결제수단 mock 폴백(표시용 — 실 카드정보 아님). last4만 노출.
+const PAYMENT_METHODS: SavedPaymentMethod[] = [
+  { id: "m1", brand: "신한카드", last4: "4321", isPrimary: true, createdAt: "2026-06-01T00:00:00Z" },
+  { id: "m2", brand: "카카오페이", last4: "8890", isPrimary: false, createdAt: "2026-06-10T00:00:00Z" },
 ];
 
 // --- 도메인 함수 (apiUrl 설정 시 실 B2 API, 아니면 mock 폴백) ----------------
@@ -624,11 +716,193 @@ export async function apiReport(input: { reportType: string; narrative?: string 
   );
   return { safetyReportId: raw.safety_report_id, status: raw.status, createdAt: raw.created_at };
 }
-/** 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. */
-export async function apiPublishPost(input: { body: string; mediaUrl?: string }): Promise<Post> {
+/** 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. is_adult=19+ 성인 등급(서버가 노출 통제). */
+export async function apiPublishPost(input: { body: string; mediaUrl?: string; isAdult?: boolean }): Promise<Post> {
   const raw = await apiFetch<RawPost>("/posts", {
     method: "POST",
-    body: JSON.stringify({ body: input.body, media_url: input.mediaUrl }),
+    body: JSON.stringify({ body: input.body, media_url: input.mediaUrl, is_adult: input.isAdult ?? false }),
   });
   return mapPost(raw);
+}
+
+// --- 게이트 기능(R3): KYC 본인인증 -------------------------------------------
+/**
+ * 본인인증 시작(mock) — 서버 verifier 미배선 시 503. 성공은 pending 전이만 기록(PII 무전송).
+ * ※실 provider(PASS/NICE/KCB) 연동은 명시적 게이트(대표·법무).
+ */
+export function apiStartVerify(): Promise<void> {
+  return apiFetch<void>("/fan/verify/start", { method: "POST" });
+}
+/** 본인인증 확인(mock) → 파생 플래그만 반환(주민번호/CI/DI/생년월일 미수신·미저장). */
+export async function apiConfirmVerify(): Promise<{ adultVerified: boolean; kycStatus: string }> {
+  const raw = await apiFetch<{ adult_verified: boolean; kyc_status: string }>("/fan/verify/confirm", {
+    method: "POST",
+  });
+  return { adultVerified: raw.adult_verified, kycStatus: raw.kyc_status };
+}
+
+// --- 게이트 기능(R3): 계정 수정 ----------------------------------------------
+/** 내 프로필 수정 — nickname만(이메일/전화는 재인증 게이트). 세션 무효화는 호출측(useUpdateMe). */
+export async function apiUpdateMe(nickname: string): Promise<void> {
+  await apiFetch("/fan/me", { method: "PATCH", body: JSON.stringify({ nickname }) });
+}
+
+// --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기(오너 스코프) ---------------------
+/** 오너 상품 목록 — 관리 필드 포함(draft/hidden·19+ 포함). 401/403(크리에이터 아님)은 빈 목록. */
+export async function getStudioProducts(): Promise<StudioProduct[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawStudioProduct[]>("/studio/products")).map(mapStudioProduct);
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return [];
+      throw e;
+    }
+  }
+  return STUDIO_PRODUCTS;
+}
+/** 상품 생성 입력(가격은 크리에이터 표시가 — 정산가 아님). */
+export interface StudioProductCreate {
+  type: StudioProduct["type"];
+  title: string;
+  price: number;
+  description?: string;
+  status?: ProductStatus;
+}
+/** 상품 수정 입력 — 제공한 필드만 반영(PATCH). */
+export interface StudioProductUpdate {
+  type?: StudioProduct["type"];
+  title?: string;
+  price?: number;
+  status?: ProductStatus;
+  stock?: number | null;
+}
+export async function apiCreateStudioProduct(input: StudioProductCreate): Promise<StudioProduct> {
+  const raw = await apiFetch<RawStudioProduct>("/studio/products", {
+    method: "POST",
+    body: JSON.stringify({
+      type: input.type,
+      title: input.title,
+      price: input.price,
+      description: input.description ?? "",
+      status: input.status ?? "draft",
+    }),
+  });
+  return mapStudioProduct(raw);
+}
+export async function apiUpdateStudioProduct(id: string, patch: StudioProductUpdate): Promise<StudioProduct> {
+  const raw = await apiFetch<RawStudioProduct>(`/studio/products/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    // undefined 필드는 JSON.stringify가 제거 → 미제공 필드는 서버에서 무변경.
+    body: JSON.stringify({ type: patch.type, title: patch.title, price: patch.price, status: patch.status, stock: patch.stock }),
+  });
+  return mapStudioProduct(raw);
+}
+export async function apiDeleteStudioProduct(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/studio/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** 오너 티어 목록 — active/비활성 모두 포함. 401/403은 빈 목록. */
+export async function getStudioTiers(): Promise<StudioTier[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawStudioTier[]>("/studio/tiers")).map(mapStudioTier);
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return [];
+      throw e;
+    }
+  }
+  return STUDIO_TIERS;
+}
+export interface StudioTierCreate {
+  name: string;
+  price: number;
+  benefits: string[];
+}
+export interface StudioTierUpdate {
+  name?: string;
+  price?: number;
+  benefits?: string[];
+  active?: boolean;
+}
+export async function apiCreateStudioTier(input: StudioTierCreate): Promise<StudioTier> {
+  const raw = await apiFetch<RawStudioTier>("/studio/tiers", {
+    method: "POST",
+    body: JSON.stringify({ name: input.name, price: input.price, benefits: input.benefits }),
+  });
+  return mapStudioTier(raw);
+}
+export async function apiUpdateStudioTier(id: string, patch: StudioTierUpdate): Promise<StudioTier> {
+  const raw = await apiFetch<RawStudioTier>(`/studio/tiers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name: patch.name, price: patch.price, benefits: patch.benefits, active: patch.active }),
+  });
+  return mapStudioTier(raw);
+}
+export async function apiDeleteStudioTier(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/studio/tiers/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** 스튜디오 프로필 수정(오너 스코프) → 갱신된 Creator. */
+export interface StudioProfileUpdate {
+  name?: string;
+  bio?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  accentColor?: string;
+  category?: string;
+}
+export async function apiUpdateStudioProfile(input: StudioProfileUpdate): Promise<Creator> {
+  const raw = await apiFetch<RawCreator>("/studio/profile", {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: input.name,
+      bio: input.bio,
+      avatar_url: input.avatarUrl,
+      cover_url: input.coverUrl,
+      accent_color: input.accentColor,
+      category: input.category,
+    }),
+  });
+  return mapCreator(raw);
+}
+
+// --- 게이트 기능(R3): 결제수단(mock PG) --------------------------------------
+/**
+ * mock PG 토큰 — 실 PG SDK가 카드번호를 클라에서 토큰화하는 자리(자리표시).
+ * ★PCI(R4): raw 카드번호(PAN)/CVC는 이 경로로 서버에 절대 전송되지 않는다. 서버는 토큰
+ * 끝 4자리로 last4만 파생하고 나머지는 폐기한다.
+ */
+function mockPgToken(): string {
+  const last4 = String(1000 + Math.floor(Math.random() * 9000));
+  return `pg_mock_tok_${last4}`;
+}
+/** 내 결제수단 목록(최신순). 401(비로그인)은 빈 목록. */
+export async function getPaymentMethods(): Promise<SavedPaymentMethod[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawPaymentMethod[]>("/fan/payment-methods")).map(mapPaymentMethod);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return PAYMENT_METHODS;
+}
+/** 결제수단 등록 — brand + mock PG 토큰만 전송(raw PAN/CVC 미전송·PCI). */
+export async function apiAddPaymentMethod(input: { brand: string; makePrimary?: boolean }): Promise<SavedPaymentMethod> {
+  const raw = await apiFetch<RawPaymentMethod>("/fan/payment-methods", {
+    method: "POST",
+    body: JSON.stringify({ brand: input.brand, card_number: mockPgToken(), make_primary: input.makePrimary ?? false }),
+  });
+  return mapPaymentMethod(raw);
+}
+/** 기본 결제수단 지정 → 갱신된 결제수단. */
+export async function apiSetPrimaryPaymentMethod(id: string): Promise<SavedPaymentMethod> {
+  return mapPaymentMethod(
+    await apiFetch<RawPaymentMethod>(`/fan/payment-methods/${encodeURIComponent(id)}/primary`, { method: "POST" }),
+  );
+}
+/** 결제수단 삭제. */
+export async function apiRemovePaymentMethod(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/fan/payment-methods/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

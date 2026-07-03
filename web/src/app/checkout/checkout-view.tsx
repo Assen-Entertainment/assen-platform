@@ -19,10 +19,12 @@ import {
   TermsLinkFooter,
   type PaymentMethod,
 } from "@/components/ui";
+import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError } from "@/lib/api";
 import { useCreateOrder, useSubscribe } from "@/lib/api/queries";
+import { useSession } from "@/lib/session";
 import { mockOrderId, won, type OrderSummary } from "@/lib/checkout";
 
 /** 결제 대상 식별자 — 실 주문/구독 호출용. 없으면 mock 결제로 폴백. */
@@ -44,6 +46,8 @@ const METHODS: PaymentMethod[] = ["card", "bank", "pay"];
 export function CheckoutView({ summary, target }: { summary: OrderSummary; target?: CheckoutTarget }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useSession();
+  const adultVerified = user?.adultVerified === true;
   const createOrder = useCreateOrder();
   const subscribe = useSubscribe();
   const live = Boolean(config.apiUrl);
@@ -179,7 +183,14 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
             summary={`${won(summary.total)} · 매월 자동결제`}
           />
         ) : null}
-        <IdentityVerifyBanner />
+        <IdentityVerifyBanner
+          verified={adultVerified}
+          action={
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/age-gate">본인인증</Link>
+            </Button>
+          }
+        />
         <RefundPolicyNotice />
 
         <label className="flex items-center gap-2 px-1 text-body-s text-on-surface-variant">

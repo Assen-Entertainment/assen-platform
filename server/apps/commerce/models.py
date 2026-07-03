@@ -27,6 +27,20 @@ class ProductType(models.TextChoices):
     COUPON = "coupon", "coupon"
 
 
+class ProductStatus(models.TextChoices):
+    """Studio-managed catalog lifecycle state (owner view; R3).
+
+    ``selling`` / ``soldout`` are public; ``draft`` / ``hidden`` are owner-only and
+    excluded from the consumer ``list_products``. Distinct from the ``sold_out``
+    order-flow boolean (which blocks ordering) — ``status`` drives *visibility*.
+    """
+
+    SELLING = "selling", "selling"
+    SOLDOUT = "soldout", "soldout"
+    DRAFT = "draft", "draft"
+    HIDDEN = "hidden", "hidden"
+
+
 class Product(models.Model):
     """A catalog listing (maps to the frontend ``Product`` type)."""
 
@@ -52,6 +66,14 @@ class Product(models.Model):
     sold_out = models.BooleanField(default=False)
     # Locked = membership/subscription-gated listing (LockedOverlay on the web).
     locked = models.BooleanField(default=False)
+    # Studio visibility lifecycle (R3): public list shows selling/soldout only;
+    # draft/hidden are owner-only. Separate from the ``sold_out`` order-flow flag.
+    status = models.CharField(
+        max_length=16, choices=ProductStatus.choices, default=ProductStatus.SELLING
+    )
+    # 19+ 성인 등급. 공개 read는 ENABLE_ADULT_CONTENT + adult_verified 뷰어에게만
+    # 노출(플래그 off면 전원 숨김 — R3 정본 §55). 저장은 등급 플래그뿐.
+    adult_only = models.BooleanField(default=False)
     # Selectable option labels (frontend ``options: string[]``), e.g. ["A타입"].
     options = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)

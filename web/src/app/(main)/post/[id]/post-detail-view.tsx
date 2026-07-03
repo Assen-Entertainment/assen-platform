@@ -1,8 +1,10 @@
 "use client";
 import * as React from "react";
-import { PostCard, TextField, Button, Avatar, MediaViewer } from "@/components/ui";
+import Link from "next/link";
+import { PostCard, TextField, Button, Avatar, MediaViewer, LockedOverlay } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
+import { useSession } from "@/lib/session";
 import { usePost, useComments, useToggleLike, useAddComment } from "@/lib/api/queries";
 import type { Post, Comment } from "@/lib/api";
 
@@ -13,11 +15,15 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
   const toggleLike = useToggleLike();
   const addComment = useAddComment(initialPost.id);
   const { toast } = useToast();
+  const { user } = useSession();
+  const adultVerified = user?.adultVerified === true;
   const [text, setText] = React.useState("");
   const [viewerOpen, setViewerOpen] = React.useState(false);
 
   const p = post ?? initialPost;
   const list = comments ?? initialComments;
+  // 19+ 방어 게이트 — 서버가 미인증 뷰어에게 이미 숨기지만, 도달 시 미디어를 블러 처리.
+  const adultBlocked = Boolean(p.isAdult) && !adultVerified;
 
   const onShare = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -45,13 +51,27 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
           avatarTone={p.creatorId}
           body={p.body}
           media={
-            <button
-              type="button"
-              onClick={() => setViewerOpen(true)}
-              aria-label="미디어 크게 보기"
-              className="block aspect-video w-full transition-opacity hover:opacity-95"
-              style={gradientStyle(p.id)}
-            />
+            adultBlocked ? (
+              <div className="relative aspect-video w-full" style={gradientStyle(p.id)}>
+                <LockedOverlay
+                  title="성인(19+) 콘텐츠"
+                  description="본인인증 후 볼 수 있어요."
+                  cta={
+                    <Button size="sm" asChild>
+                      <Link href="/age-gate">성인 인증하기</Link>
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setViewerOpen(true)}
+                aria-label="미디어 크게 보기"
+                className="block aspect-video w-full transition-opacity hover:opacity-95"
+                style={gradientStyle(p.id)}
+              />
+            )
           }
           likeCount={p.likeCount}
           commentCount={p.commentCount}

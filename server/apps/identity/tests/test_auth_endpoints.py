@@ -258,6 +258,9 @@ def test_me_returns_identity_summary(client: Client) -> None:
         "role": Role.FAN.value,
         "handle": None,
         "avatar_url": None,
+        # R3: derived 인증 flags added to the session bootstrap (fail-closed default).
+        "adult_verified": False,
+        "kyc_status": "unverified",
     }
 
 

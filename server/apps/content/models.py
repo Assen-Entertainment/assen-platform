@@ -30,6 +30,10 @@ class Post(models.Model):
     )
     body = models.TextField(blank=True, default="")
     media_url = models.CharField(max_length=500, blank=True, default="")
+    # 19+ 성인 등급 토글. 읽기 API는 ENABLE_ADULT_CONTENT=True + adult_verified 뷰어에게만
+    # 노출한다(config.settings; 플래그 off면 전원 숨김 — 법무 사인 전 안전). 저장은
+    # 등급 플래그뿐 — 실 성인 노출 활성화는 대표·법무 게이트(R3 정본 §55).
+    adult_only = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

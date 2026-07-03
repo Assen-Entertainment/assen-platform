@@ -16,6 +16,7 @@ import urllib.request
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 PHONE = "010-0000-0001"
+CREATOR_PHONE = "010-0000-0002"  # 데모 크리에이터(stellar 소유자) — 스튜디오 쓰기용
 
 
 def otp_for(phone: str) -> str:
@@ -49,11 +50,16 @@ def expect(cond: bool, label: str, detail: object = "") -> None:
         sys.exit(1)
 
 
+def _login(phone: str) -> str:
+    """OTP 로그인해 bearer access token 반환(스모크 헬퍼)."""
+    status, out = call("POST", "/api/fan/login", {"phone": phone, "otp_code": otp_for(phone), "web": False})
+    expect(status == 200 and bool(out.get("access_token")), f"login {phone}", (status, out))
+    return out["access_token"]
+
+
 def main() -> None:
     # 1. 로그인 (기존 시드 계정)
-    status, out = call("POST", "/api/fan/login", {"phone": PHONE, "otp_code": otp_for(PHONE), "web": False})
-    expect(status == 200 and bool(out.get("access_token")), "login", (status, out))
-    token = out["access_token"]
+    token = _login(PHONE)
 
     # 2. me
     status, me = call("GET", "/api/fan/me", token=token)
@@ -123,11 +129,75 @@ def main() -> None:
     )
     expect(status == 201, "fan report", (status, report))
 
+    # 8.6 계정 수정 (PATCH /fan/me nickname) — R3
+    status, patched = call("PATCH", "/api/fan/me", {"nickname": "데모팬2"}, token=token)
+    expect(status == 200 and patched.get("nickname") == "데모팬2", "patch me nickname", (status, patched))
+
+    # 8.7 본인인증(KYC) mock — start → confirm → adult_verified 반영 (dev ENABLE_MOCK_KYC=True)
+    status, vstart = call("POST", "/api/fan/verify/start", {}, token=token)
+    expect(status == 200, "verify start", (status, vstart))
+    status, vconfirm = call("POST", "/api/fan/verify/confirm", {}, token=token)
+    expect(
+        status == 200 and vconfirm.get("adult_verified") is True and vconfirm.get("kyc_status") == "verified",
+        "verify confirm → adult_verified",
+        (status, vconfirm),
+    )
+    status, me2 = call("GET", "/api/fan/me", token=token)
+    expect(status == 200 and me2.get("adult_verified") is True, "me reflects adult_verified", (status, me2))
+
+    # 8.8 결제수단 등록(mock) — 카드 PAN 미전송, brand만. 목록·기본설정·삭제 (dev ENABLE_MOCK_PAYMENT=True)
+    # mock 카드번호(가짜) — 서버가 last4만 남기고 PAN 폐기(응답에 card_number 없음 확인).
+    status, pm = call(
+        "POST", "/api/fan/payment-methods", {"brand": "국민카드", "card_number": "4242424242424242"}, token=token
+    )
+    expect(
+        status in (200, 201) and pm.get("last4") == "4242" and "card_number" not in pm,
+        "add payment method (PAN 폐기)",
+        (status, pm),
+    )
+    pm_id = pm.get("id")
+    status, pmlist = call("GET", "/api/fan/payment-methods", token=token)
+    _pms = pmlist.get("items", pmlist) if isinstance(pmlist, dict) else pmlist
+    expect(status == 200 and len(_pms) >= 1, "list payment methods", (status, pmlist))
+    status, _ = call("POST", f"/api/fan/payment-methods/{pm_id}/primary", {}, token=token)
+    expect(status == 200, "set primary", (status,))
+    status, _ = call("DELETE", f"/api/fan/payment-methods/{pm_id}", token=token)
+    expect(status in (200, 204), "delete payment method", (status,))
+
     # 9. 로그아웃 → me 401
     status, _ = call("POST", "/api/fan/logout", {}, token=token)
     expect(status == 200, "logout", (status,))
     status, _ = call("GET", "/api/fan/me", token=token)
     expect(status == 401, "me after logout = 401", (status,))
+
+    # 10. 스튜디오 카탈로그 쓰기 (데모 크리에이터 = stellar 소유자, phone 010-0000-0002) — R3
+    ctoken = _login(CREATOR_PHONE)
+    status, sp = call("GET", "/api/studio/products", token=ctoken)
+    _sp = sp.get("items", sp) if isinstance(sp, dict) else sp
+    expect(status == 200 and len(_sp) >= 1, "studio product list (owner)", (status,))
+    status, created = call(
+        "POST",
+        "/api/studio/products",
+        {"type": "goods", "title": "스모크 신상품", "price": 12000, "status": "draft"},
+        token=ctoken,
+    )
+    expect(status in (200, 201) and created.get("id"), "studio product create", (status, created))
+    prod_id = created["id"]
+    status, upd = call("PATCH", f"/api/studio/products/{prod_id}", {"status": "selling"}, token=ctoken)
+    expect(status == 200 and upd.get("status") == "selling", "studio product update", (status, upd))
+    status, _ = call("DELETE", f"/api/studio/products/{prod_id}", token=ctoken)
+    expect(status in (200, 204), "studio product delete", (status,))
+    status, tiers = call("GET", "/api/studio/tiers", token=ctoken)
+    expect(status == 200, "studio tier list", (status,))
+    status, prof = call("PATCH", "/api/studio/profile", {"bio": "스모크 소개"}, token=ctoken)
+    expect(status == 200, "studio profile update", (status,))
+
+    # 10.5 비오너 스튜디오 쓰기 = 403 (일반 팬 재로그인)
+    ftoken = _login(PHONE)
+    status, _ = call(
+        "POST", "/api/studio/products", {"type": "goods", "title": "무단", "price": 1}, token=ftoken
+    )
+    expect(status == 403, "non-owner studio write = 403", (status,))
 
     print("JOURNEY SMOKE: ALL PASS")
 

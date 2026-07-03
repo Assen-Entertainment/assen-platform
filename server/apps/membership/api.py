@@ -9,18 +9,21 @@ end-of-period cancellation. Filter the catalog to a creator via ``?creator_id=``
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import cast
 
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
+from pydantic import Field
 
+from apps.creator.models import Creator
 from apps.identity.auth import fan_auth
 from apps.identity.models import Account
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
 from config.api import api
+from config.throttle import user_write_throttle
 
 # Mock billing cycle length; there is no real recurring billing (B7 gated).
 _BILLING_CYCLE = timedelta(days=30)
@@ -68,9 +71,13 @@ def _tier_out(tier: MembershipTier) -> TierOut:
 def list_tiers(
     request: HttpRequest, creator_id: uuid.UUID | None = None
 ) -> list[TierOut]:
-    """List membership tiers, optionally filtered to one creator."""
+    """List *active* membership tiers, optionally filtered to one creator.
+
+    Inactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from
+    this consumer surface, mirroring draft/hidden products in the catalog.
+    """
     del request
-    queryset = MembershipTier.objects.order_by("sort_order", "price")
+    queryset = MembershipTier.objects.filter(active=True).order_by("sort_order", "price")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
     return [_tier_out(t) for t in queryset[:_MAX_TIERS]]
@@ -79,15 +86,197 @@ def list_tiers(
 api.add_router("/tiers", tiers_router)
 
 
-# --------------------------------------------------------------------------- #
-# Subscriptions (fan surface — mock payment, no money moves; B7 gated)
-# --------------------------------------------------------------------------- #
 class SubscriptionError(Schema):
-    """Stable error shape for subscription endpoints."""
+    """Stable error shape for subscription and studio-tier endpoints."""
 
     detail: str
 
 
+# --------------------------------------------------------------------------- #
+# Studio (owner tier write; R3 — pure engineering, 법무 무관).
+# Owner guard mirrors the commerce studio: only the account operating a Creator may
+# manage that creator's tiers, scope is always that creator (never from the body),
+# and the price is the creator's own display input (NOT a settlement figure).
+# --------------------------------------------------------------------------- #
+studio_tiers_router = Router(auth=fan_auth, tags=["studio-membership"])
+
+
+class StudioTierOut(Schema):
+    """Owner-view membership tier (adds the ``active`` management flag + timestamp)."""
+
+    id: uuid.UUID
+    creator_id: uuid.UUID | None = None
+    name: str
+    price: int
+    period: str
+    benefits: list[str]
+    badge: str
+    featured: bool
+    active: bool
+    sort_order: int
+    created_at: datetime
+
+
+class StudioTierIn(Schema):
+    """Owner payload to create a membership tier (display price, not settlement)."""
+
+    name: str = Field(min_length=1, max_length=40)
+    price: int = Field(default=0, ge=0)
+    period: str = Field(default="월", max_length=8)
+    benefits: list[str] = Field(default_factory=list)
+    badge: str = Field(default="", max_length=20)
+    featured: bool = False
+    active: bool = True
+    sort_order: int = Field(default=0, ge=0)
+
+
+class StudioTierPatch(Schema):
+    """Owner payload to update a tier; only the provided fields are applied."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+    price: int | None = Field(default=None, ge=0)
+    period: str | None = Field(default=None, max_length=8)
+    benefits: list[str] | None = None
+    badge: str | None = Field(default=None, max_length=20)
+    featured: bool | None = None
+    active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+
+
+class StudioTierAck(Schema):
+    """Bare status ack for studio mutations that return no body (delete)."""
+
+    status: str
+
+
+def _owner_creator(account: Account) -> Creator | None:
+    """The creator profile operated by ``account`` (owner guard for studio writes)."""
+    return Creator.objects.filter(owner=account).first()
+
+
+def _studio_tier_out(tier: MembershipTier) -> StudioTierOut:
+    """Build the owner-view tier response (includes the ``active`` flag)."""
+    return StudioTierOut(
+        id=tier.id,
+        creator_id=tier.creator_id,
+        name=tier.name,
+        price=tier.price,
+        period=tier.period,
+        benefits=[str(b) for b in tier.benefits] if isinstance(tier.benefits, list) else [],
+        badge=tier.badge,
+        featured=tier.featured,
+        active=tier.active,
+        sort_order=tier.sort_order,
+        created_at=tier.created_at,
+    )
+
+
+@studio_tiers_router.get("", response={200: list[StudioTierOut], 403: SubscriptionError})
+def studio_list_tiers(
+    request: HttpRequest,
+) -> tuple[int, list[StudioTierOut] | SubscriptionError]:
+    """List the caller's own creator's tiers, including inactive ones."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+    tiers = MembershipTier.objects.filter(creator=creator).order_by("sort_order", "price")
+    return 200, [_studio_tier_out(t) for t in tiers]
+
+
+@studio_tiers_router.post(
+    "",
+    response={201: StudioTierOut, 403: SubscriptionError},
+    throttle=user_write_throttle("30/min"),
+)
+def studio_create_tier(
+    request: HttpRequest, payload: StudioTierIn
+) -> tuple[int, StudioTierOut | SubscriptionError]:
+    """Create a membership tier owned by the caller's creator; 403 if they operate none."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+    tier = MembershipTier.objects.create(
+        creator=creator,
+        name=payload.name,
+        price=payload.price,
+        period=payload.period,
+        benefits=payload.benefits,
+        badge=payload.badge,
+        featured=payload.featured,
+        active=payload.active,
+        sort_order=payload.sort_order,
+    )
+    return 201, _studio_tier_out(tier)
+
+
+@studio_tiers_router.patch(
+    "/{tier_id}",
+    response={200: StudioTierOut, 403: SubscriptionError, 404: SubscriptionError},
+    throttle=user_write_throttle("30/min"),
+)
+def studio_update_tier(
+    request: HttpRequest, tier_id: uuid.UUID, payload: StudioTierPatch
+) -> tuple[int, StudioTierOut | SubscriptionError]:
+    """Update fields on the caller's own tier; 403 (no creator) / 404 (not theirs)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+    tier = MembershipTier.objects.filter(id=tier_id, creator=creator).first()
+    if tier is None:
+        return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
+    if payload.name is not None:
+        tier.name = payload.name
+    if payload.price is not None:
+        tier.price = payload.price
+    if payload.period is not None:
+        tier.period = payload.period
+    if payload.benefits is not None:
+        tier.benefits = payload.benefits
+    if payload.badge is not None:
+        tier.badge = payload.badge
+    if payload.featured is not None:
+        tier.featured = payload.featured
+    if payload.active is not None:
+        tier.active = payload.active
+    if payload.sort_order is not None:
+        tier.sort_order = payload.sort_order
+    tier.save()
+    return 200, _studio_tier_out(tier)
+
+
+@studio_tiers_router.delete(
+    "/{tier_id}",
+    response={200: StudioTierAck, 403: SubscriptionError, 404: SubscriptionError},
+    throttle=user_write_throttle("30/min"),
+)
+def studio_delete_tier(
+    request: HttpRequest, tier_id: uuid.UUID
+) -> tuple[int, StudioTierAck | SubscriptionError]:
+    """Delete the caller's own tier; 403 (no creator) / 404 (not theirs).
+
+    Existing subscriptions cascade with the tier (``Subscription.tier`` is CASCADE);
+    an owner who only wants to stop new signups should set ``active=False`` instead.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+    tier = MembershipTier.objects.filter(id=tier_id, creator=creator).first()
+    if tier is None:
+        return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
+    tier.delete()
+    return 200, StudioTierAck(status="deleted")
+
+
+api.add_router("/studio/tiers", studio_tiers_router)
+
+
+# --------------------------------------------------------------------------- #
+# Subscriptions (fan surface — mock payment, no money moves; B7 gated)
+# --------------------------------------------------------------------------- #
 class SubscriptionOut(Schema):
     """A fan's subscription (maps to the frontend ``Subscription`` type).
 

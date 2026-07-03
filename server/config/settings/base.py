@@ -36,11 +36,36 @@ ALLOWED_HOSTS: list[str] = env("DJANGO_ALLOWED_HOSTS")
 # behind a later infra/PII gate.
 ENABLE_MOCK_FAN_OTP: bool = False
 
+# Gated feature flags for the R3 round (KYC / 19+ / payment methods). Each mirrors
+# the ENABLE_MOCK_FAN_OTP contract: hardcoded False here (NOT env-driven) so no
+# stray production env var can flip them on; only the dev/test settings modules
+# opt in. Every real integration behind them is a mock/skeleton — the real
+# provider/PG/adult-content activation is a separate 대표·법무 gate (R3 계획
+# 법무 경계 정본). Fail-closed: with the flag off the surface refuses (503) or
+# hides gated data rather than trust an unverifiable path.
+#
+# - ENABLE_MOCK_KYC: the deterministic mock identity verifier (config.identity_verify).
+#   Off → /fan/verify/* fails closed (503); no real NICE/PASS/KCB/아이핀 provider is
+#   ever wired, and no 주민번호/CI/DI/생년월일 원본 is stored (only a derived
+#   adult_verified flag + kyc_status).
+# - ENABLE_ADULT_CONTENT: gates 19+ read exposure. Off → adult_only posts/products
+#   are hidden from EVERYONE (§55: live activation = 법무 사인). On (dev/test) they
+#   are shown only to an adult_verified viewer.
+# - ENABLE_MOCK_PAYMENT: the deterministic mock payment tokenizer (config.payment).
+#   Off → payment-method registration fails closed (503); no real PG tokenization,
+#   and no card PAN/expiry/cvc is ever received-and-stored (only brand + last4 +
+#   a mock token).
+ENABLE_MOCK_KYC: bool = False
+ENABLE_ADULT_CONTENT: bool = False
+ENABLE_MOCK_PAYMENT: bool = False
+
 # Per-user rate limiting on the fan write endpoints (follow/like/comment/post,
 # SDLC 09 §4, E11/B4). On by default so dev/prod throttle real traffic; the test
 # suite turns it off (config/settings/test.py) to stay deterministic across the
-# many writes it fires for one fixture account. See config.throttle.
-FAN_WRITE_THROTTLE_ENABLED: bool = True
+# many writes it fires for one fixture account. Env-overridable (default True, so
+# prod stays throttled) for rapid smoke/load runs that fire many writes at once.
+# See config.throttle.
+FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", default=True)
 
 # Django contrib + third-party apps.
 DJANGO_APPS = [
@@ -86,6 +111,9 @@ LOCAL_APPS = [
     "apps.content",
     "apps.commerce",
     "apps.membership",
+    # Saved payment methods (R3): brand + last4 + mock PG token only — never a card
+    # PAN/expiry/cvc. Migration-less like the rest (`migrate --run-syncdb`).
+    "apps.payments",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

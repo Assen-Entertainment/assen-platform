@@ -29,6 +29,8 @@ export interface Post {
   liked?: boolean;
   /** 멤버십 전용 잠금 포스트(LockedOverlay 노출·루브릭 #16). mock 전용(실 API 시 undefined). */
   locked?: boolean;
+  /** 19+ 성인 등급(서버 PostOut.is_adult). 미인증 뷰어에겐 서버가 이미 숨기나 UI도 방어적으로 블러. */
+  isAdult?: boolean;
 }
 
 export interface Comment {
@@ -63,6 +65,10 @@ export interface Product {
   soldOut?: boolean;
   /** 잠금 상품(멤버십/구독 전용) — LockedOverlay 노출. */
   locked?: boolean;
+  /** 19+ 성인 등급(서버 ProductOut.is_adult). 게이팅 UI 방어용. */
+  isAdult?: boolean;
+  /** 판매 상태 — 오너 스코프(StudioProductOut.status). 공개 카탈로그 응답엔 없어 있을 때만 채워짐. */
+  status?: string;
 }
 
 export interface MembershipTier {
@@ -127,6 +133,19 @@ export interface Order {
   tracking?: { carrier: string; number: string };
   /** 환불 신청 상태(있으면 환불 흐름 진행 중). */
   refund?: { status: RefundStatus; reason?: string; amount?: number };
+}
+
+/**
+ * 저장된 결제수단 — 서버 SavedPaymentMethod 계약.
+ * ※PCI(R4): brand+last4만 보관 — 실 카드번호(PAN)/CVC는 저장·전송하지 않는다.
+ */
+export interface SavedPaymentMethod {
+  id: string;
+  brand: string;
+  last4: string;
+  isPrimary: boolean;
+  /** 등록 시각(ISO). */
+  createdAt: string;
 }
 
 /** 알림 종류 — 아이콘/라우트 파생. */
