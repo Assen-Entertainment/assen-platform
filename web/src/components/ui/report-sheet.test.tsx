@@ -13,12 +13,12 @@ describe("ReportSheet", () => {
     const submit = screen.getByRole("button", { name: "신고 제출" });
     expect(submit).toBeDisabled();
 
-    // 사유 라디오 선택(스팸/도배·홍보).
-    await user.click(screen.getByLabelText("스팸/도배·홍보"));
+    // 사유 라디오 선택(서버 FAN_REPORTABLE_TYPES 정렬 — unwanted_request).
+    await user.click(screen.getByLabelText("원치 않는 요구·부담"));
     expect(submit).toBeEnabled();
 
     await user.click(submit);
-    expect(onSubmit).toHaveBeenCalledWith({ reason: "spam", detail: "" });
+    expect(onSubmit).toHaveBeenCalledWith({ reason: "unwanted_request", detail: "" });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

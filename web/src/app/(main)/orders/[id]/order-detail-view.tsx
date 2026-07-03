@@ -21,10 +21,11 @@ import {
   DialogClose,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { useOrder, useCancelOrder, useRequestRefund } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
 import { PRODUCT_TYPE_LABEL } from "@/lib/product-labels";
 import { orderStatusMeta, refundStatusMeta } from "../status";
-import type { Order, OrderStatus, RefundStatus } from "@/lib/api";
+import { ApiError, type Order } from "@/lib/api";
 
 const REFUND_REASONS = ["단순 변심", "상품 불량·파손", "배송 지연", "상품 정보와 다름", "기타"];
 
@@ -41,25 +42,43 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 
 export function OrderDetailView({ order }: { order: Order }) {
   const { toast } = useToast();
-  const [status, setStatus] = React.useState<OrderStatus>(order.status);
-  const [refund, setRefund] = React.useState<{ status: RefundStatus; reason?: string; amount?: number } | null>(
-    order.refund ?? null,
-  );
+  // USE_API면 실 조회/취소/환불, 아니면 mock — 낙관적 상태 전환은 캐시로 반영.
+  const { data } = useOrder(order.id, order);
+  const o = data ?? order;
+  const cancelMut = useCancelOrder(order.id);
+  const refundMut = useRequestRefund(order.id);
   const [reason, setReason] = React.useState(REFUND_REASONS[0]);
 
+  const status = o.status;
+  const refund = o.refund ?? null;
   const s = orderStatusMeta(status);
   const canCancel = status === "paid" || status === "shipping";
   const canRefund = (status === "completed" || status === "shipping") && !refund;
 
+  // 실패 안내(서버 detail 활용). 401은 전역 세션 가드가 처리 → 그 외만 토스트.
+  const failToast = (title: string, e: unknown) => {
+    if (e instanceof ApiError && e.status === 401) return;
+    toast({
+      title,
+      description: e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.",
+    });
+  };
+
   const doCancel = () => {
-    setStatus("cancelled");
-    toast({ title: "주문이 취소됐어요", description: `${order.id} · ${won(order.total)} 환불 예정` });
+    cancelMut.mutate(undefined, {
+      onSuccess: () => toast({ title: "주문이 취소됐어요", description: `${o.id} · ${won(o.total)} 환불 예정` }),
+      onError: (e) => failToast("주문을 취소하지 못했어요", e),
+    });
   };
 
   const doRefund = () => {
-    setStatus("refunding");
-    setRefund({ status: "requested", reason, amount: order.total });
-    toast({ title: "환불 신청이 접수됐어요", description: `사유: ${reason}` });
+    refundMut.mutate(
+      { reason },
+      {
+        onSuccess: () => toast({ title: "환불 신청이 접수됐어요", description: `사유: ${reason}` }),
+        onError: (e) => failToast("환불 신청을 접수하지 못했어요", e),
+      },
+    );
   };
 
   return (
@@ -73,7 +92,7 @@ export function OrderDetailView({ order }: { order: Order }) {
           <StatusChip variant={s.variant}>{s.label}</StatusChip>
         </div>
         <p className="text-caption text-on-surface-variant">
-          {order.id} · {order.createdAt}
+          {o.id} · {o.createdAt}
         </p>
       </div>
 
@@ -81,15 +100,18 @@ export function OrderDetailView({ order }: { order: Order }) {
       <Card>
         <CardBody className="flex flex-col gap-3">
           <span className="text-title-m text-on-surface">주문 항목</span>
-          {order.items.map((it, i) => (
+          {o.items.map((it, i) => (
             <div key={`${it.productId}-${i}`}>
               {i > 0 ? <Divider className="mb-3" /> : null}
               <div className="flex items-center gap-3">
                 <div className="size-14 shrink-0 rounded-md" style={{ backgroundImage: "var(--gradient-brand)" }} />
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="line-clamp-1 text-body-l text-on-surface">{it.title}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge>{PRODUCT_TYPE_LABEL[it.type]}</Badge>
+                    {it.option ? (
+                      <span className="text-caption text-on-surface-variant">{it.option}</span>
+                    ) : null}
                     <span className="text-caption text-on-surface-variant">수량 {it.qty}개</span>
                   </div>
                 </div>
@@ -104,20 +126,20 @@ export function OrderDetailView({ order }: { order: Order }) {
       <Card>
         <CardBody className="flex flex-col gap-2">
           <span className="text-title-m text-on-surface">결제 정보</span>
-          <Row label="상품 금액" value={won(order.subtotal)} />
-          {order.shipping > 0 ? <Row label="배송비" value={won(order.shipping)} /> : null}
+          <Row label="상품 금액" value={won(o.subtotal)} />
+          {o.shipping > 0 ? <Row label="배송비" value={won(o.shipping)} /> : null}
           <Divider className="my-1" />
-          <Row label="총 결제금액" value={won(order.total)} strong />
+          <Row label="총 결제금액" value={won(o.total)} strong />
         </CardBody>
       </Card>
 
       {/* 배송 추적(placeholder) */}
-      {order.tracking ? (
+      {o.tracking ? (
         <Card>
           <CardBody className="flex flex-col gap-2">
             <span className="text-title-m text-on-surface">배송 조회</span>
-            <Row label="택배사" value={order.tracking.carrier} />
-            <Row label="송장번호" value={order.tracking.number} />
+            <Row label="택배사" value={o.tracking.carrier} />
+            <Row label="송장번호" value={o.tracking.number} />
             <Button variant="outline" size="sm" className="mt-1 self-start" disabled>
               배송 추적 (준비 중)
             </Button>
@@ -166,8 +188,8 @@ export function OrderDetailView({ order }: { order: Order }) {
                 </SelectContent>
               </Select>
             </div>
-            <Row label="환불 예정 금액" value={won(order.total)} strong />
-            <Button variant="outline" onClick={doRefund}>
+            <Row label="환불 예정 금액" value={won(o.total)} strong />
+            <Button variant="outline" onClick={doRefund} disabled={refundMut.isPending}>
               환불 신청하기
             </Button>
           </CardBody>
@@ -185,7 +207,7 @@ export function OrderDetailView({ order }: { order: Order }) {
           <DialogContent>
             <DialogTitle>주문을 취소할까요?</DialogTitle>
             <DialogDescription>
-              {order.id} 주문을 취소합니다. 결제 금액 {won(order.total)}은 결제수단으로 환불될 예정입니다. (mock)
+              {o.id} 주문을 취소하시겠어요? 결제 환급은 데모 환경에서는 실제로 발생하지 않아요.
             </DialogDescription>
             <div className="mt-2 flex justify-end gap-2">
               <DialogClose asChild>

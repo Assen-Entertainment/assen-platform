@@ -29,7 +29,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth
 from apps.identity.models import Account, Role
 from apps.visit_guide.models import GuideSection, GuideStatus
 from apps.visit_guide.services import (

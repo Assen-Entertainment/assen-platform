@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 
 /**
  * ReportSheet — Figma DS ReportSheet(42:24). 신고 사유 라디오 + 상세 TextArea + 제출.
- * 제출은 onSubmit 콜백으로 위임(소비자가 mock 처리·토스트). 사유 미선택 시 제출 비활성.
- * ※실 신고 접수(모더레이션 백엔드) 미연동 — UI 종단만.
+ * 제출은 onSubmit 콜백으로 위임(소비자가 토스트·라우팅). 사유 미선택 시 제출 비활성.
+ * ※기본 사유 value는 서버 FAN_REPORTABLE_TYPES와 정렬 — /safety/fan-reports로 실 접수된다(feed-view).
  */
 export interface ReportReason {
   value: string;
@@ -24,13 +24,15 @@ export interface ReportSheetProps {
   description?: string;
 }
 
+// value는 서버 FAN_REPORTABLE_TYPES(apps/safety/services.py) enum 값 — 서버가 그대로
+// 소비하므로 변경 시 서버 enum과 함께 유지한다. label만 자연스러운 한국어.
 const DEFAULT_REASONS: ReportReason[] = [
-  { value: "spam", label: "스팸/도배·홍보" },
-  { value: "abuse", label: "욕설·비방·혐오" },
-  { value: "sexual", label: "음란·부적절한 콘텐츠" },
-  { value: "fraud", label: "사기·불법 거래" },
-  { value: "copyright", label: "저작권·초상권 침해" },
-  { value: "etc", label: "기타" },
+  { value: "unwanted_request", label: "원치 않는 요구·부담" },
+  { value: "verbal_abuse", label: "욕설·폭언·비방" },
+  { value: "photo_violation", label: "사진·영상 무단 촬영·유포" },
+  { value: "stalking_concern", label: "스토킹·과도한 접근" },
+  { value: "privacy_portrait_concern", label: "개인정보·초상권 침해" },
+  { value: "other", label: "기타" },
 ];
 
 export function ReportSheet({

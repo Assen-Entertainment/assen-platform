@@ -25,7 +25,23 @@ class OtpError(Exception):
 
 
 class OtpSender(ABC):
-    """Boundary for sending and verifying a phone one-time passcode."""
+    """Boundary for sending and verifying a phone one-time passcode.
+
+    TODO (real SMS adapter — HUMAN-REVIEW-REQUIRED, infra/PII gate): the mock is
+    stateless and deterministic, but a production adapter MUST enforce these
+    controls before it can be trusted to back a real signup/login — they are the
+    security contract, not optional hardening:
+
+    - **Code expiry.** A code is valid only for a short TTL (e.g. 3–5 min); an
+      expired code verifies as false. Stateless HMAC codes (as in the mock) never
+      expire and must never ship to production.
+    - **Single use.** A code is consumed on first successful verify and cannot be
+      replayed; a verified code is burned even on a retried request.
+    - **Attempt lockout.** Bounded verify attempts per code/number, then a
+      temporary lock, so the 6-digit space cannot be brute-forced. This is defence
+      in depth *beneath* the per-IP request throttle on the endpoints (config.throttle),
+      which limits how fast codes can be requested but not guessed.
+    """
 
     @abstractmethod
     def send(self, *, phone: str) -> None:

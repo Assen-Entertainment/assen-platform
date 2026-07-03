@@ -2,20 +2,26 @@
 
 All endpoints are anonymous reads (discovery/profile are public; 19+ gating is
 B3). Follower/post counts are annotated so the list stays a single query. The
-``following`` flag is always ``False`` here — it becomes per-user once auth
-lands (B3), read from the social graph.
+``following`` flag is per-user (E11/B4): anonymous callers always see ``False``,
+while an authenticated one gets their real follow state derived from the social
+graph via a single ``Exists`` subquery (no N+1, and the anonymous read is never
+broken). Auth is resolved silently with
+:func:`~apps.identity.auth.resolve_optional_account`.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Exists, OuterRef, QuerySet
 from django.http import HttpRequest
 from ninja import Router, Schema
 
 from apps.commerce.models import Product
 from apps.creator.models import Creator
+from apps.identity.auth import resolve_optional_account
+from apps.identity.models import Account
+from apps.social.models import Follow
 from config.api import api
 from config.pagination import paginate
 
@@ -73,17 +79,28 @@ class SearchOut(Schema):
     products: list[ProductBrief]
 
 
-def _annotated() -> QuerySet[Creator]:
+def _annotated(account: Account | None = None) -> QuerySet[Creator]:
     """Creators with derived follower/post counts (distinct to avoid join fan-out).
 
     ``distinct=True`` keeps both counts correct despite the two-relation join
     fan-out. At scale the intermediate row explosion is a perf cost — move to
     subquery counts or denormalised counters then (tracked, non-blocking for B2).
+
+    When ``account`` is given, a per-user ``is_following`` flag is annotated via a
+    single ``Exists`` subquery — no extra per-row query. Anonymous callers pass
+    ``None`` and get no annotation (``following`` False).
     """
-    return Creator.objects.annotate(
+    queryset = Creator.objects.annotate(
         followers_count=Count("followers", distinct=True),
         posts_count=Count("posts", distinct=True),
     )
+    if account is not None:
+        queryset = queryset.annotate(
+            is_following=Exists(
+                Follow.objects.filter(creator=OuterRef("pk"), follower=account)
+            )
+        )
+    return queryset
 
 
 def _creator_out(creator: Creator) -> CreatorOut:
@@ -100,7 +117,7 @@ def _creator_out(creator: Creator) -> CreatorOut:
         verified=creator.verified,
         followers=getattr(creator, "followers_count", 0),
         posts=getattr(creator, "posts_count", 0),
-        following=False,
+        following=bool(getattr(creator, "is_following", False)),
     )
 
 
@@ -112,8 +129,8 @@ def list_creators(
     category: str | None = None,
 ) -> CreatorPage:
     """List creators (optionally filtered by category), cursor-paginated."""
-    del request
-    queryset = _annotated().order_by("handle")
+    account = resolve_optional_account(request)
+    queryset = _annotated(account).order_by("handle")
     if category:
         queryset = queryset.filter(category=category)
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
@@ -125,8 +142,7 @@ def get_creator(
     request: HttpRequest, handle: str
 ) -> tuple[int, CreatorOut | ErrorOut]:
     """Fetch a single creator by handle; 404 if unknown (no existence leak)."""
-    del request
-    creator = _annotated().filter(handle=handle).first()
+    creator = _annotated(resolve_optional_account(request)).filter(handle=handle).first()
     if creator is None:
         return 404, ErrorOut(detail="creator not found")
     return 200, _creator_out(creator)
@@ -135,17 +151,17 @@ def get_creator(
 @search_router.get("", response=SearchOut)
 def search(request: HttpRequest, q: str = "") -> SearchOut:
     """Search creators (name/handle) and products (title) by a query string."""
-    del request
+    account = resolve_optional_account(request)
     # Bound the term so an oversized query can't drive an unbounded LIKE scan.
     term = q.strip()[:_SEARCH_TERM_MAX]
     if not term:
         return SearchOut(creators=[], products=[])
     creators = list(
-        _annotated()
+        _annotated(account)
         .filter(name__icontains=term)
         .order_by("handle")[:_SEARCH_LIMIT]
     ) + list(
-        _annotated()
+        _annotated(account)
         .filter(handle__icontains=term)
         .exclude(name__icontains=term)
         .order_by("handle")[:_SEARCH_LIMIT]

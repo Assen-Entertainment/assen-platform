@@ -16,13 +16,13 @@ export default async function CheckoutPage({
 }) {
   const sp = await searchParams;
   const hasTarget = Boolean(sp.item || sp.tier);
+  const qtyParam = Math.max(1, parseInt(sp.qty ?? "1", 10) || 1);
   let summary: OrderSummary | null = null;
 
   if (sp.item) {
     const product = await getProduct(sp.item);
     if (product) {
-      const qty = Math.max(1, parseInt(sp.qty ?? "1", 10) || 1);
-      summary = summarizeProduct(product, qty, sp.opt);
+      summary = summarizeProduct(product, qtyParam, sp.opt);
     }
   } else if (sp.tier) {
     const tiers = await getMembershipTiers();
@@ -57,5 +57,13 @@ export default async function CheckoutPage({
     );
   }
 
-  return <CheckoutView summary={summary} />;
+  // 결제 대상 식별자 — 실 주문/구독 호출용(파라미터 해결 성공 시에만). 없으면 mock 결제.
+  const target =
+    summary && sp.item
+      ? ({ kind: "product", productId: sp.item, qty: qtyParam, option: sp.opt } as const)
+      : summary && sp.tier
+        ? ({ kind: "membership", tierId: sp.tier } as const)
+        : undefined;
+
+  return <CheckoutView summary={summary} target={target} />;
 }

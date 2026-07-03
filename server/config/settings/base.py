@@ -36,6 +36,12 @@ ALLOWED_HOSTS: list[str] = env("DJANGO_ALLOWED_HOSTS")
 # behind a later infra/PII gate.
 ENABLE_MOCK_FAN_OTP: bool = False
 
+# Per-user rate limiting on the fan write endpoints (follow/like/comment/post,
+# SDLC 09 §4, E11/B4). On by default so dev/prod throttle real traffic; the test
+# suite turns it off (config/settings/test.py) to stay deterministic across the
+# many writes it fires for one fixture account. See config.throttle.
+FAN_WRITE_THROTTLE_ENABLED: bool = True
+
 # Django contrib + third-party apps.
 DJANGO_APPS = [
     "django.contrib.admin",

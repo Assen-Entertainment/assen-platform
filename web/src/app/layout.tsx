@@ -6,6 +6,7 @@ import { config } from "@/lib/config";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme-provider";
 import { SessionProvider } from "@/lib/session";
+import { SessionGuard } from "@/components/session-guard";
 import { Toaster } from "@/components/ui/use-toast";
 
 /** Pretendard Variable — 자체 호스팅(next/font/local, FOIT 방지 display:swap). CSS 변수로 노출. */
@@ -33,11 +34,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <ThemeProvider>
-          <SessionProvider>
-            <QueryProvider>
-              <Toaster>{children}</Toaster>
-            </QueryProvider>
-          </SessionProvider>
+          {/* QueryProvider가 SessionProvider 바깥 — 세션이 React Query(['auth','me'])를 사용. */}
+          <QueryProvider>
+            <SessionProvider>
+              <Toaster>
+                <SessionGuard />
+                {children}
+              </Toaster>
+            </SessionProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -34,7 +34,7 @@ from apps.coupon.services import (
     point_balance,
     redeem_coupon,
 )
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth
 from apps.identity.models import Account, Role
 from config.api import api
 

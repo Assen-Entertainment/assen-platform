@@ -1,11 +1,147 @@
 "use client";
+import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TextField, Button, Divider } from "@/components/ui";
+import { TextField, Button, Divider, OTPInput } from "@/components/ui";
+import { useToast } from "@/components/ui/use-toast";
+import { config } from "@/lib/config";
+import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
-/** Login — E6 UI 목업. ※실제 인증/본인인증 미연동(대표·법무 게이트). mock 세션만 기록. */
+/**
+ * Login — 라이브 백엔드면 전화번호 OTP 2단계 재인증, 아니면 mock 즉시 로그인(오프라인·데모).
+ * ※본인인증/실 크리덴셜은 게이트. OTP는 dev에서 문자 대신 고정 인증번호를 사용한다.
+ */
 export default function LoginPage() {
+  const { useApi } = useSession();
+  return useApi ? <OtpLogin /> : <MockLogin />;
+}
+
+/** OTP 로그인(라이브). 전화번호 → 인증번호 받기 → 인증번호 입력 → 로그인. */
+function OtpLogin() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { requestOtp, loginWithOtp } = useSession();
+  const [phone, setPhone] = React.useState("");
+  const [otp, setOtp] = React.useState("");
+  const [step, setStep] = React.useState<"phone" | "otp">("phone");
+  const [busy, setBusy] = React.useState(false);
+  const [notice, setNotice] = React.useState<string | null>(null);
+
+  const sendOtp = async () => {
+    if (!phone.trim() || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await requestOtp(phone.trim());
+      setStep("otp");
+      toast({ title: "인증번호를 보냈어요", description: "문자로 받은 인증번호를 입력해 주세요." });
+    } catch {
+      toast({ title: "인증번호 발송에 실패했어요", description: "전화번호를 확인하고 다시 시도해 주세요." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    if (otp.length < 6 || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await loginWithOtp(phone.trim(), otp);
+      router.push("/discovery");
+    } catch (e) {
+      // 422는 미가입·인증번호 오류가 섞여 온다 — 서버 detail로 구분한다.
+      //  · detail에 "가입"이 포함될 때만 회원가입 유도(미가입 번호).
+      //  · 그 외 422는 인증번호 오류로 안내.
+      // ※문자열 부분일치 분기는 취약 — 서버 error code 도입 시 교체(백로그).
+      if (e instanceof ApiError && e.status === 422) {
+        if (e.detail?.includes("가입")) {
+          setNotice("가입되지 않은 번호예요. 아래에서 회원가입을 진행해 주세요.");
+        } else {
+          setNotice("인증번호가 올바르지 않아요. 다시 확인해 주세요.");
+        }
+      } else {
+        toast({ title: "로그인에 실패했어요", description: "인증번호를 확인하고 다시 시도해 주세요." });
+      }
+      setBusy(false);
+    }
+  };
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
+        <h1 className="text-center text-display-m text-primary">Assen</h1>
+        <p className="text-center text-body-s text-on-surface-variant">크리에이터의 세계관을 팬과 잇는 무대</p>
+
+        {step === "phone" ? (
+          <>
+            <TextField
+              label="휴대폰 번호"
+              type="tel"
+              inputMode="numeric"
+              placeholder="01012345678"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <Button size="lg" className="w-full" disabled={!phone.trim() || busy} onClick={sendOtp}>
+              인증번호 받기
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-center text-body-s text-on-surface-variant">
+              <span className="text-on-surface">{phone}</span> 로 보낸 인증번호를 입력하세요
+            </p>
+            <div className="flex justify-center">
+              <OTPInput value={otp} onChange={setOtp} />
+            </div>
+            {config.env !== "production" ? (
+              <p className="text-center text-caption text-on-surface-variant">
+                개발 환경에서는 문자 대신 고정 인증번호가 사용됩니다.
+              </p>
+            ) : null}
+            {notice ? (
+              <p className="text-center text-caption text-error">{notice}</p>
+            ) : null}
+            <Button size="lg" className="w-full" disabled={otp.length < 6 || busy} onClick={submit}>
+              로그인
+            </Button>
+            <button
+              type="button"
+              className="text-center text-caption text-primary underline underline-offset-2 hover:opacity-80"
+              onClick={() => {
+                setStep("phone");
+                setOtp("");
+                setNotice(null);
+              }}
+            >
+              전화번호 다시 입력
+            </button>
+          </>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Divider className="flex-1" />
+          <span className="shrink-0 text-caption text-on-surface-variant">또는</span>
+          <Divider className="flex-1" />
+        </div>
+        <Link
+          href={`/signup${phone.trim() ? `?phone=${encodeURIComponent(phone.trim())}` : ""}`}
+          className="text-center text-caption text-primary underline underline-offset-2 hover:opacity-80"
+        >
+          처음이신가요? 회원가입
+        </Link>
+        <p className="text-center text-caption text-on-surface-variant">
+          ※ 소셜·이메일 로그인은 준비 중이에요.
+        </p>
+      </div>
+    </main>
+  );
+}
+
+/** mock 로그인(오프라인·데모) — 기존 UI 목업 유지. ※실 인증 미연동(게이트). */
+function MockLogin() {
   const router = useRouter();
   const { login } = useSession();
 

@@ -50,16 +50,16 @@ export interface Product {
   price: number;
   meta?: string;
   mediaUrl?: string;
-  /** 크리에이터 표시명(상세/체크아웃 요약). mock 편의 필드. */
+  /** 크리에이터 표시명(상세/체크아웃 요약). 서버 ProductOut(creator_name) 계약. */
   creatorName?: string;
-  // --- 이하 W2 상세용 확장 필드 (openapi.json 미제공 → mock 전용, 실 API 시 undefined) ---
+  // --- 이하 상세용 확장 필드 — 서버 ProductOut(B4) 계약. 값 없으면 undefined. ---
   /** 상세 설명 문단(상품 상세). */
   description?: string;
   /** 선택 옵션(OptionSwatch). 예: ["A타입", "B타입"]. */
   options?: string[];
   /** 재고 수량. 0 이하 또는 soldOut=true 면 품절 처리. */
   stock?: number;
-  /** 품절 플래그(mock). */
+  /** 품절 플래그. */
   soldOut?: boolean;
   /** 잠금 상품(멤버십/구독 전용) — LockedOverlay 노출. */
   locked?: boolean;
@@ -89,7 +89,7 @@ export interface SearchResult {
   products: Product[];
 }
 
-// --- 커머스 상태/주문 (W2, openapi.json 미제공 → mock 전용) ------------------
+// --- 커머스 상태/주문 — 서버 wire 계약(B4). OrderStatus/RefundStatus는 서버 상태 매핑. ---
 
 /** 주문 상태 — StatusChip 매핑. paid/shipping/completed=진행·완료, cancelled/refunding/refunded=취소·환불. */
 export type OrderStatus =
@@ -107,6 +107,8 @@ export interface OrderItem {
   productId: string;
   title: string;
   type: MonetizableItemType;
+  /** 선택한 옵션(예: "A타입") — 있을 때만 표기. 서버 OrderItemOut(option) 계약. */
+  option?: string;
   price: number;
   qty: number;
 }
@@ -152,7 +154,9 @@ export interface Subscription {
   tierName: string;
   price: number;
   period: string;
-  /** 다음 결제일(YYYY-MM-DD, mock). */
+  /** 다음 결제일(YYYY-MM-DD). */
   nextBillingDate: string;
   status: "active" | "cancelled";
+  /** 해지 예정 — 서버 계약: status=active 유지 + cancel_scheduled=true(말일 해지). */
+  cancelScheduled?: boolean;
 }

@@ -1,12 +1,13 @@
 "use client";
-import * as React from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ListItem, EmptyState, Divider, Button } from "@/components/ui";
 import { HeartFilledIcon, CommentIcon, PersonIcon, StoreIcon, BellIcon } from "@/lib/icons";
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/lib/api/queries";
 import type { Notification, NotificationKind } from "@/lib/api";
 
-const ICON: Record<NotificationKind, React.ReactNode> = {
+const ICON: Record<NotificationKind, ReactNode> = {
   like: <HeartFilledIcon className="size-5 text-error" />,
   comment: <CommentIcon className="size-5 text-primary" />,
   follow: <PersonIcon className="size-5 text-primary" />,
@@ -21,20 +22,22 @@ const GROUPS: { key: Notification["group"]; label: string }[] = [
 
 export function NotificationsView({ notifications }: { notifications: Notification[] }) {
   const router = useRouter();
-  const [readIds, setReadIds] = React.useState<Set<string>>(
-    () => new Set(notifications.filter((n) => n.read).map((n) => n.id)),
-  );
-  const isRead = (n: Notification) => readIds.has(n.id);
-  const markRead = (id: string) => setReadIds((prev) => new Set(prev).add(id));
-  const markAll = () => setReadIds(new Set(notifications.map((n) => n.id)));
+  // USE_API면 실 목록/읽음, 아니면 mock(sleep) — 낙관적 read=true 반영.
+  const { data } = useNotifications(notifications);
+  const list = data ?? notifications;
+  const markReadMut = useMarkNotificationRead();
+  const markAllMut = useMarkAllNotificationsRead();
+
+  const isRead = (n: Notification) => !!n.read;
   const open = (n: Notification) => {
-    markRead(n.id);
+    if (!n.read) markReadMut.mutate(n.id);
     // 내부 경로("/…")만 허용 — 외부 절대 URL·프로토콜은 오픈 리다이렉트 방지 위해 무시.
     if (n.href && n.href.startsWith("/")) router.push(n.href);
   };
-  const unread = notifications.filter((n) => !isRead(n)).length;
+  const markAll = () => markAllMut.mutate();
+  const unread = list.filter((n) => !n.read).length;
 
-  if (!notifications.length) {
+  if (!list.length) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <h1 className="text-headline text-on-surface">알림</h1>
@@ -54,7 +57,7 @@ export function NotificationsView({ notifications }: { notifications: Notificati
         ) : null}
       </div>
       {GROUPS.map((g) => {
-        const items = notifications.filter((n) => n.group === g.key);
+        const items = list.filter((n) => n.group === g.key);
         if (!items.length) return null;
         return (
           <section key={g.key} className="flex flex-col gap-2">

@@ -1,5 +1,4 @@
 "use client";
-import * as React from "react";
 import Link from "next/link";
 import {
   Card,
@@ -16,30 +15,42 @@ import {
   SheetClose,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { useSubscriptions, useCancelSubscription } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
-import type { Subscription } from "@/lib/api";
+import { ApiError, type Subscription } from "@/lib/api";
 
 export function SubscriptionsView({ subscriptions }: { subscriptions: Subscription[] }) {
   const { toast } = useToast();
-  const [cancelled, setCancelled] = React.useState<Set<string>>(
-    () => new Set(subscriptions.filter((s) => s.status === "cancelled").map((s) => s.id)),
-  );
-  const isCancelled = (sub: Subscription) => cancelled.has(sub.id);
+  // USE_API면 실 목록/해지, 아니면 mock — 해지 시 낙관적 cancelScheduled=true("해지 예정").
+  const { data } = useSubscriptions(subscriptions);
+  const subs = data ?? subscriptions;
+  const cancelMut = useCancelSubscription();
+  const isCancelled = (sub: Subscription) => Boolean(sub.cancelScheduled) || sub.status === "cancelled";
 
   const cancel = (sub: Subscription) => {
-    setCancelled((prev) => new Set(prev).add(sub.id));
-    toast({
-      title: "구독을 해지했어요",
-      description: `${sub.creatorName} · ${sub.tierName} — 다음 결제일부터 중단됩니다.`,
+    cancelMut.mutate(sub.id, {
+      onSuccess: () =>
+        toast({
+          title: "구독을 해지했어요",
+          description: `${sub.creatorName} · ${sub.tierName} — 다음 결제일부터 중단됩니다.`,
+        }),
+      onError: (e) => {
+        // 401은 전역 세션 가드가 처리 → 그 외 오류만 안내(서버 detail 활용).
+        if (e instanceof ApiError && e.status === 401) return;
+        toast({
+          title: "구독 해지를 처리하지 못했어요",
+          description: e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.",
+        });
+      },
     });
   };
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <h1 className="text-headline text-on-surface">구독 관리</h1>
-      {subscriptions.length ? (
+      {subs.length ? (
         <div className="flex flex-col gap-3">
-          {subscriptions.map((sub) => {
+          {subs.map((sub) => {
             const done = isCancelled(sub);
             return (
               <Card key={sub.id}>

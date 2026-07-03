@@ -14,8 +14,8 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
-import { useFeed, useToggleLike } from "@/lib/api/queries";
-import type { Post } from "@/lib/api";
+import { useFeed, useToggleLike, useReport } from "@/lib/api/queries";
+import { ApiError, type Post } from "@/lib/api";
 
 /** 팔로잉 피드 뷰(클라). 좋아요=낙관적, 공유=클립보드, 더보기=신고 등 액션. */
 export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
@@ -23,6 +23,7 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
   const { toast } = useToast();
   const { data, isError, refetch } = useFeed(initialPosts);
   const toggleLike = useToggleLike();
+  const report = useReport();
   const posts = data ?? initialPosts;
 
   // 더보기 액션 메뉴 대상 / 신고 시트 대상 포스트 id.
@@ -128,13 +129,24 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
         </SheetContent>
       </Sheet>
 
-      {/* 신고 시트. */}
+      {/* 신고 시트. USE_API면 /safety/fan-reports 실 접수, 아니면 mock(sleep). */}
       <ReportSheet
         open={reportPostId !== null}
         onOpenChange={(o) => !o && setReportPostId(null)}
-        onSubmit={() => {
-          // mock 접수 — 실 모더레이션 백엔드 미연동(게이트).
-          toast({ title: "신고가 접수되었어요", description: "운영팀이 검토 후 조치할게요." });
+        onSubmit={(payload) => {
+          report.mutate(
+            { reportType: payload.reason, narrative: payload.detail || undefined },
+            {
+              onSuccess: () =>
+                toast({ title: "신고가 접수되었어요", description: "운영팀이 검토 후 조치할게요." }),
+              onError: (e) => {
+                // 401은 전역 세션 가드가 처리 → 그 외 오류만 안내.
+                if (!(e instanceof ApiError && e.status === 401)) {
+                  toast({ title: "신고를 접수하지 못했어요", description: "잠시 후 다시 시도해 주세요." });
+                }
+              },
+            },
+          );
           setReportPostId(null);
         }}
       />

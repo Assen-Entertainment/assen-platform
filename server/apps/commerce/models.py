@@ -1,9 +1,11 @@
-"""Commerce catalog model — Product (SDLC 09 §3 — commerce context, E11/B1).
+"""Commerce models — Product catalog + mock Order flow (SDLC 09 §3, E11/B1·B4).
 
-Only the *catalog* lands in B1/B2: a ``Product`` is a display listing with a
-catalog ``price`` (integer KRW, a display value — NOT a settlement figure).
-Orders, payment, and settlement are **gated** (B7, 대표·법무·PG) and are
-deliberately absent here — this app stores nothing that decides money owed.
+The *catalog* (``Product``) is a display listing with a catalog ``price``
+(integer KRW, a display value — NOT a settlement figure). B4 adds a **mock**
+order flow (``Order``/``OrderItem``/``RefundRequest``): placing an order records
+a paid order and snapshots the line items, but **no real payment is taken and no
+money moves** — real PG, amounts, and settlement are gated (B7, 대표·법무·PG).
+Every stored monetary value is a display snapshot, never a settlement figure.
 
 Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
 """
@@ -42,6 +44,16 @@ class Product(models.Model):
     price = models.PositiveIntegerField(default=0)
     meta = models.CharField(max_length=120, blank=True, default="")
     media_url = models.CharField(max_length=500, blank=True, default="")
+    # Long-form description shown on the product detail page.
+    description = models.TextField(blank=True, default="")
+    # Nullable stock: None = untracked/unlimited; an int caps availability. 0 (or
+    # sold_out) means the listing cannot be ordered.
+    stock = models.PositiveIntegerField(null=True, blank=True)
+    sold_out = models.BooleanField(default=False)
+    # Locked = membership/subscription-gated listing (LockedOverlay on the web).
+    locked = models.BooleanField(default=False)
+    # Selectable option labels (frontend ``options: string[]``), e.g. ["A타입"].
+    options = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -54,3 +66,141 @@ class Product(models.Model):
     def __str__(self) -> str:
         """Identify the product."""
         return f"{self.type}:{self.title}"
+
+
+class OrderStatus(models.TextChoices):
+    """Order lifecycle states surfaced to the fan (StatusChip on the web)."""
+
+    PAID = "paid", "paid"
+    SHIPPING = "shipping", "shipping"
+    COMPLETED = "completed", "completed"
+    CANCELLED = "cancelled", "cancelled"
+
+
+class RefundStatus(models.TextChoices):
+    """Refund-request review states (operator-driven; mock in B4)."""
+
+    REQUESTED = "requested", "requested"
+    REVIEWING = "reviewing", "reviewing"
+    ACCEPTED = "accepted", "accepted"
+    REJECTED = "rejected", "rejected"
+
+
+def _order_code() -> str:
+    """Generate a human-readable order code (e.g. ``ASN-1A2B3C4D5E6F``).
+
+    Used as the ``Order`` primary key so it is safe to show to fans and put in
+    URLs. Uniqueness is enforced by the PK; collisions are astronomically
+    unlikely for the 12 hex chars (B1 — widened from 8 to shrink the birthday-
+    collision window) and would surface as an insert error.
+    """
+    return f"ASN-{uuid.uuid4().hex[:12].upper()}"
+
+
+class Order(models.Model):
+    """A fan's mock order. MOCK: no real payment is taken and no money moves.
+
+    ``total`` is a display snapshot (sum of item ``price`` × ``qty``) captured at
+    purchase — real PG, amounts, and settlement are gated (B7), so nothing here
+    decides money owed.
+    """
+
+    id = models.CharField(
+        primary_key=True, max_length=20, default=_order_code, editable=False
+    )
+    buyer = models.ForeignKey(
+        "identity.Account", on_delete=models.CASCADE, related_name="orders"
+    )
+    status = models.CharField(
+        max_length=16, choices=OrderStatus.choices, default=OrderStatus.PAID
+    )
+    # Display snapshot of the order total (KRW). NOT a settlement figure.
+    total = models.PositiveIntegerField(default=0)
+    # Optional client-supplied idempotency key (B1). When set, a retried POST with
+    # the same (buyer, key) returns the existing order instead of duplicating it;
+    # the partial unique constraint below makes that race-safe. NULL = not supplied.
+    idempotency_key = models.CharField(max_length=64, null=True, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["buyer", "-created_at"]),
+        ]
+        ordering = ["-created_at"]
+        constraints = [
+            # One order per (buyer, idempotency_key), but only when a key is
+            # supplied — keyless orders (key IS NULL) are never deduped. Migration-
+            # less app: materialised by ``migrate --run-syncdb``.
+            models.UniqueConstraint(
+                fields=["buyer", "idempotency_key"],
+                condition=models.Q(idempotency_key__isnull=False),
+                name="uniq_order_buyer_idempotency_key",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """Identify the order by its human-readable code."""
+        return f"order:{self.id}"
+
+
+class OrderItem(models.Model):
+    """One line of an order, snapshotting the product at purchase time.
+
+    ``product`` is nullable (``SET_NULL``) so deleting a catalog product keeps the
+    historical order line intact; ``title``/``item_type``/``price`` are snapshots
+    so the line renders stably even if the catalog later changes.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(
+        "commerce.Product",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="order_items",
+    )
+    title = models.CharField(max_length=120)
+    item_type = models.CharField(max_length=16, choices=ProductType.choices)
+    option = models.CharField(max_length=120, blank=True, default="")
+    qty = models.PositiveIntegerField(default=1)
+    # Snapshot of the unit price at purchase (KRW). NOT a settlement figure.
+    price = models.PositiveIntegerField(default=0)
+
+    def __str__(self) -> str:
+        """Identify the order line."""
+        return f"order_item:{self.id}"
+
+
+class RefundRequest(models.Model):
+    """A fan's refund request against an order (mock review workflow, B4)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="refund_requests"
+    )
+    reason = models.CharField(max_length=120)
+    detail = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16, choices=RefundStatus.choices, default=RefundStatus.REQUESTED
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["order", "-created_at"]),
+        ]
+        ordering = ["-created_at"]
+        constraints = [
+            # 열린 환불(requested/reviewing)은 주문당 1건 — check-then-create 경합을
+            # DB 불변식으로 봉인(동시 신청 시 IntegrityError → API가 422로 변환).
+            models.UniqueConstraint(
+                fields=["order"],
+                condition=models.Q(status__in=("requested", "reviewing")),
+                name="uniq_open_refund_per_order",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """Identify the refund request and its state."""
+        return f"refund:{self.id}:{self.status}"
