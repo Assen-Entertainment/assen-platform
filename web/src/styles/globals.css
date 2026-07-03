@@ -52,7 +52,7 @@
 
 /* 정적 스케일 (radius·타이포·폰트·elevation) — tokens.v2.json 일치 */
 @theme {
-  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", sans-serif;
+  --font-sans: var(--font-pretendard, "Pretendard Variable", Pretendard), "Apple SD Gothic Neo", sans-serif;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -100,6 +100,35 @@
   --shadow-2: 0 8px 24px rgba(25, 25, 25, 0.12);
   --shadow-3: 0 6px 16px rgba(25, 25, 25, 0.12);
   --shadow-4: 0 12px 32px rgba(25, 25, 25, 0.16);
+
+  /* 모션 일관화(루브릭 #39·#42) — 전 transition-* 유틸의 기본 = 200ms ease-out.
+     hover/focus/press 트랜지션을 단일 지속·이징으로 통일(과도한 개별 duration 제거). */
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* 딜라이트 모먼트 키프레임(루브릭 #41) — 좋아요 하트 팝 / 성취 체크 드로우 / 성취 팝.
+   전부 아래 prefers-reduced-motion 가드로 축소된다(#43). */
+@keyframes heart-pop {
+  0% { transform: scale(0.6); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@keyframes check-draw {
+  from { stroke-dashoffset: var(--check-dash, 32); }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes success-pop {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 가로 스크롤 선반 레일용 — 스크롤바 숨김(레이아웃 시프트 없이). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
 @layer base {
@@ -120,5 +149,17 @@
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
+  }
+
+  /* 모션 민감 사용자 존중(루브릭 #43) — 애니메이션/트랜지션/스무스 스크롤 전역 축소. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

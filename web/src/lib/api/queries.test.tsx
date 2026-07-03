@@ -56,6 +56,54 @@ describe("useToggleLike (optimistic)", () => {
       expect(p?.likeCount).toBe(10);
     });
   });
+
+  it("이미 같은 상태면 카운트를 중복 반영하지 않는다(멱등)", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.post("po1"), { ...basePost, liked: true, likeCount: 11 });
+
+    const { result } = renderHook(() => useToggleLike(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ id: "po1", next: true });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const p = qc.getQueryData<Post>(qk.post("po1"));
+    expect(p?.liked).toBe(true);
+    expect(p?.likeCount).toBe(11);
+  });
+
+  it("likeCount를 0 미만으로 내리지 않는다(클램프)", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.post("po1"), { ...basePost, liked: true, likeCount: 0 });
+
+    const { result } = renderHook(() => useToggleLike(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ id: "po1", next: false });
+    });
+
+    await waitFor(() => {
+      const p = qc.getQueryData<Post>(qk.post("po1"));
+      expect(p?.liked).toBe(false);
+      expect(p?.likeCount).toBe(0);
+    });
+  });
+
+  it("포스트 목록(['posts', …]) 캐시도 함께 갱신한다(프로필 통일)", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.post("po1"), basePost);
+    qc.setQueryData(qk.posts("c1"), [basePost]);
+
+    const { result } = renderHook(() => useToggleLike(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ id: "po1", next: true });
+    });
+
+    await waitFor(() => {
+      const list = qc.getQueryData<Post[]>(qk.posts("c1"));
+      expect(list?.[0].liked).toBe(true);
+      expect(list?.[0].likeCount).toBe(11);
+    });
+  });
 });
 
 describe("useAddComment (optimistic)", () => {

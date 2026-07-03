@@ -1,87 +1,61 @@
-"use client";
-import * as React from "react";
-import { Card, CardBody, QuantityStepper, RadioGroup, RadioGroupItem, Checkbox, Button, Divider } from "@/components/ui";
+// ※ 실결제/PG 연동은 대표·법무 게이트, 본 플로우는 UI mock입니다.
+import Link from "next/link";
+import { getProduct, getMembershipTiers, getCreator } from "@/lib/api";
+import { summarizeProduct, summarizeTier, type OrderSummary } from "@/lib/checkout";
+import { Button } from "@/components/ui";
+import { CheckoutView } from "./checkout-view";
 
-/** Checkout — 주문/결제 UI 데모(목업). ※실제 결제/IAP 미연동(결제코드 게이트). */
-function won(v: number) {
-  return "₩" + v.toLocaleString("ko-KR");
-}
-function Row({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between text-body-m">
-      <span className="text-on-surface-variant">{label}</span>
-      <span className="tabular-nums text-on-surface">{won(value)}</span>
-    </div>
-  );
-}
+/**
+ * Checkout — `?item={id}&qty=&opt=` 또는 `?tier={id}&creator=` 쿼리로 주문 요약을 구성.
+ * 서버에서 대상 fetch + 요약 계산 → 클라 뷰(결제수단·정책·mock 처리).
+ */
+export default async function CheckoutPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ item?: string; qty?: string; opt?: string; tier?: string; creator?: string }>;
+}) {
+  const sp = await searchParams;
+  const hasTarget = Boolean(sp.item || sp.tier);
+  let summary: OrderSummary | null = null;
 
-export default function CheckoutPage() {
-  const [qty, setQty] = React.useState(1);
-  const [pay, setPay] = React.useState("card");
-  const [agree, setAgree] = React.useState(false);
-  const unit = 18000;
-  const shipping = 3000;
-  const total = unit * qty + shipping;
+  if (sp.item) {
+    const product = await getProduct(sp.item);
+    if (product) {
+      const qty = Math.max(1, parseInt(sp.qty ?? "1", 10) || 1);
+      summary = summarizeProduct(product, qty, sp.opt);
+    }
+  } else if (sp.tier) {
+    const tiers = await getMembershipTiers();
+    const tier = tiers.find((t) => t.id === sp.tier);
+    if (tier) {
+      const creatorName = sp.creator ? (await getCreator(sp.creator))?.name : undefined;
+      summary = summarizeTier(tier, creatorName);
+    }
+  }
 
-  return (
-    <main className="min-h-screen bg-surface-container-high py-10">
-      <div className="mx-auto flex max-w-lg flex-col gap-4 px-4">
-        <h1 className="text-headline text-on-surface">주문 / 결제</h1>
-
-        <Card>
-          <CardBody className="flex gap-3">
-            <div className="size-20 shrink-0 rounded-md bg-surface-container-high" />
-            <div className="flex flex-1 flex-col gap-1">
-              <span className="text-title-m text-on-surface">아크릴 스탠드</span>
-              <span className="text-body-s text-on-surface-variant">별빛 일러스트</span>
-              <div className="mt-1 flex items-center justify-between">
-                <QuantityStepper value={qty} onChange={setQty} />
-                <span className="text-title-m tabular-nums text-on-surface">{won(unit)}</span>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardBody className="flex flex-col gap-3">
-            <span className="text-title-m text-on-surface">결제 수단</span>
-            <RadioGroup value={pay} onValueChange={setPay}>
-              {[
-                ["card", "신용/체크카드"],
-                ["bank", "계좌이체"],
-                ["pay", "간편결제"],
-              ].map(([v, l]) => (
-                <div key={v} className="flex items-center gap-2 text-body-m text-on-surface">
-                  <RadioGroupItem value={v} id={`pay-${v}`} />
-                  <label htmlFor={`pay-${v}`}>{l}</label>
-                </div>
-              ))}
-            </RadioGroup>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardBody className="flex flex-col gap-2">
-            <Row label="상품금액" value={unit * qty} />
-            <Row label="배송비" value={shipping} />
-            <Divider className="my-1" />
-            <div className="flex items-center justify-between">
-              <span className="text-title-m text-on-surface">합계</span>
-              <span className="text-title-l tabular-nums text-primary">{won(total)}</span>
-            </div>
-          </CardBody>
-        </Card>
-
-        <label className="flex items-center gap-2 px-1 text-body-s text-on-surface-variant">
-          <Checkbox checked={agree} onCheckedChange={(v) => setAgree(v === true)} />
-          주문 내용을 확인했으며 결제에 동의합니다
-        </label>
-
-        <Button size="lg" disabled={!agree} className="w-full">
-          {won(total)} 결제하기
+  // 대상 파라미터는 있으나 해결 실패(없는 상품/티어) → 데모 폴백 대신 명시적 안내.
+  if (!summary && hasTarget) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface-container-high px-4 text-center">
+        <h1 className="text-headline text-on-surface">상품을 찾을 수 없어요</h1>
+        <p className="max-w-sm text-body-m text-on-surface-variant">
+          요청하신 상품이 존재하지 않거나 판매가 종료되었어요. 스토어에서 다른 상품을 둘러보세요.
+        </p>
+        <Button asChild>
+          <Link href="/store">스토어로 이동</Link>
         </Button>
-        <p className="text-center text-caption text-on-surface-variant">※ 데모 화면 — 실제 결제 미연동</p>
-      </div>
-    </main>
-  );
+      </main>
+    );
+  }
+
+  // 파라미터가 전혀 없을 때만 데모 폴백(스탠드얼론 /checkout 방문 대비).
+  if (!summary) {
+    const fallback = await getProduct("p1");
+    summary = fallback ? summarizeProduct(fallback, 1) : summarizeProduct(
+      { id: "demo", type: "goods", title: "데모 상품", price: 18000 },
+      1,
+    );
+  }
+
+  return <CheckoutView summary={summary} />;
 }

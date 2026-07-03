@@ -1,7 +1,8 @@
 "use client";
 import * as React from "react";
-import { PostCard, TextField, Button, Avatar } from "@/components/ui";
+import { PostCard, TextField, Button, Avatar, MediaViewer } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { gradientStyle } from "@/lib/placeholder";
 import { usePost, useComments, useToggleLike, useAddComment } from "@/lib/api/queries";
 import type { Post, Comment } from "@/lib/api";
 
@@ -13,6 +14,7 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
   const addComment = useAddComment(initialPost.id);
   const { toast } = useToast();
   const [text, setText] = React.useState("");
+  const [viewerOpen, setViewerOpen] = React.useState(false);
 
   const p = post ?? initialPost;
   const list = comments ?? initialComments;
@@ -40,8 +42,17 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
           creatorMeta={p.creatorMeta}
           verified={p.verified}
           avatarFallback={p.creatorName.slice(0, 1)}
+          avatarTone={p.creatorId}
           body={p.body}
-          media={<div className="aspect-video w-full bg-surface-container-high" />}
+          media={
+            <button
+              type="button"
+              onClick={() => setViewerOpen(true)}
+              aria-label="미디어 크게 보기"
+              className="block aspect-video w-full transition-opacity hover:opacity-95"
+              style={gradientStyle(p.id)}
+            />
+          }
           likeCount={p.likeCount}
           commentCount={p.commentCount}
           liked={p.liked}
@@ -49,6 +60,14 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
           onShare={onShare}
         />
       </div>
+
+      <MediaViewer
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        seed={p.id}
+        alt={`${p.creatorName}의 포스트 미디어`}
+        caption={p.body}
+      />
 
       <h2 className="text-title-m text-on-surface">댓글 {p.commentCount}</h2>
       <ul className="flex flex-col gap-4">

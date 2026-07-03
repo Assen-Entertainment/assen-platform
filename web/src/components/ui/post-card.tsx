@@ -9,6 +9,8 @@ export interface PostCardProps extends React.HTMLAttributes<HTMLElement> {
   creatorMeta?: string;
   avatarSrc?: string;
   avatarFallback?: string;
+  /** 아바타 파생색 seed(이미지 없을 때 회색 대신 파생색). */
+  avatarTone?: string;
   verified?: boolean;
   body?: string;
   media?: React.ReactNode;
@@ -25,19 +27,21 @@ const ico = "size-5 shrink-0";
 
 export const PostCard = React.forwardRef<HTMLElement, PostCardProps>(
   (
-    { creatorName, creatorMeta, avatarSrc, avatarFallback, verified, body, media, likeCount, commentCount, liked, onLike, onComment, onShare, onMore, className, ...props },
+    { creatorName, creatorMeta, avatarSrc, avatarFallback, avatarTone, verified, body, media, likeCount, commentCount, liked, onLike, onComment, onShare, onMore, className, ...props },
     ref,
   ) => (
     <article ref={ref} className={cn("flex w-full flex-col gap-3 border-b border-outline bg-surface p-4", className)} {...props}>
       <header className="flex items-center gap-3">
-        <Avatar src={avatarSrc} fallback={avatarFallback} size="md" verified={verified} />
+        <Avatar src={avatarSrc} fallback={avatarFallback} tone={avatarTone} size="md" verified={verified} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="line-clamp-1 text-label text-on-surface">{creatorName}</span>
           {creatorMeta ? <span className="line-clamp-1 text-caption text-on-surface-variant">{creatorMeta}</span> : null}
         </div>
-        <button type="button" aria-label="더보기" onClick={onMore} className="flex size-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high [&>svg]:size-5">
-          <MoreIcon />
-        </button>
+        {onMore ? (
+          <button type="button" aria-label="더보기" onClick={onMore} className="flex size-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high [&>svg]:size-5">
+            <MoreIcon />
+          </button>
+        ) : null}
       </header>
       {body ? <p className="whitespace-pre-wrap text-body-m text-on-surface">{body}</p> : null}
       {media ? <div className="overflow-hidden rounded-md">{media}</div> : null}
@@ -49,7 +53,13 @@ export const PostCard = React.forwardRef<HTMLElement, PostCardProps>(
           aria-label={`좋아요 ${likeCount ?? 0}개`}
           className={cn("inline-flex items-center gap-1.5 text-body-s transition-colors hover:text-on-surface", liked && "text-error")}
         >
-          {liked ? <HeartFilledIcon className={ico} /> : <HeartIcon className={ico} />} {likeCount ?? 0}
+          {liked ? (
+            // 좋아요 딜라이트(루브릭 #41) — 채워진 하트 팝. prefers-reduced-motion 전역 가드로 축소(#43).
+            <HeartFilledIcon className={cn(ico, "[animation:heart-pop_250ms_ease-out]")} />
+          ) : (
+            <HeartIcon className={ico} />
+          )}{" "}
+          {likeCount ?? 0}
         </button>
         <button
           type="button"

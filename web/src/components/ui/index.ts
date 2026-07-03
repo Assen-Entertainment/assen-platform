@@ -19,6 +19,7 @@ export { MonetizableItem, type MonetizableItemProps, type MonetizableItemType } 
 export { CreatorThumbCard, type CreatorThumbCardProps } from "./creator-thumb-card";
 export { MembershipTierCard, type MembershipTierCardProps } from "./membership-tier-card";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
+export { ErrorState, type ErrorStateProps } from "./error-state";
 export { SearchField, type SearchFieldProps } from "./search-field";
 export { PostCard, type PostCardProps } from "./post-card";
 export { ListItem, type ListItemProps } from "./list-item";
@@ -59,3 +60,36 @@ export { Sidebar, type SidebarProps, type SidebarNavItem } from "./sidebar";
 export { TopBar, type TopBarProps } from "./topbar";
 export { AppBar, type AppBarProps } from "./appbar";
 export { BottomNav, type BottomNavProps, type BottomNavItem } from "./bottom-nav";
+
+// [W2] 커머스 종단 — 상품상세/체크아웃/주문/구독/정책 컴포넌트 (Wave 2 소유 블록 — 기존 줄 무수정 append)
+export { StatusChip, statusChipVariants, type StatusChipProps, type StatusChipVariant } from "./status-chip";
+export { BottomCTA, type BottomCTAProps } from "./bottom-cta";
+export { OptionSwatch, type OptionSwatchProps } from "./option-swatch";
+export { PaymentIcon, type PaymentIconProps, type PaymentMethod } from "./payment-icon";
+export { LockedOverlay, type LockedOverlayProps } from "./locked-overlay";
+export { RefundPolicyNotice, type RefundPolicyNoticeProps } from "./refund-policy-notice";
+export { AutoPayConsentSheet, type AutoPayConsentSheetProps } from "./auto-pay-consent-sheet";
+export { TermsLinkFooter, type TermsLinkFooterProps } from "./terms-link-footer";
+export { IdentityVerifyBanner, type IdentityVerifyBannerProps } from "./identity-verify-banner";
+export { CountLabel, type CountLabelProps } from "./count-label";
+export { TimeLabel, type TimeLabelProps } from "./time-label";
+
+// [W3] 스튜디오·계정·정책 라운드 신규 컴포넌트 (Wave 3 소유 블록 — 기존 줄 무수정 append)
+export { TextArea, type TextAreaProps } from "./text-area";
+export { DataTable, type DataTableProps, type DataTableColumn } from "./data-table";
+export { ReportSheet, type ReportSheetProps, type ReportReason } from "./report-sheet";
+export { StatItem, type StatItemProps } from "./stat-item";
+export { SectionHeader, type SectionHeaderProps } from "./section-header";
+export { VerifiedMark, type VerifiedMarkProps } from "./verified-mark";
+export { TextLink, type TextLinkProps } from "./text-link";
+export { ProgressBar, type ProgressBarProps } from "./progress-bar";
+export { DisclaimerNotice, type DisclaimerNoticeProps } from "./disclaimer-notice";
+export { SafetyGuideNotice, type SafetyGuideNoticeProps } from "./safety-guide-notice";
+
+// [W4] 레퍼런스 폴리시 — 디스커버리/크리에이터 히어로/후원/라이트박스/딜라이트 (Wave 4 소유 블록)
+export { CategoryIconRow, type CategoryIconRowProps, type CategoryItem } from "./category-icon-row";
+export { Shelf, type ShelfProps } from "./shelf";
+export { CreatorHomeHeader, type CreatorHomeHeaderProps } from "./creator-home-header";
+export { GiftSheet, type GiftSheetProps } from "./gift-sheet";
+export { MediaViewer, type MediaViewerProps } from "./media-viewer";
+export { SuccessCheck, type SuccessCheckProps } from "./success-check";

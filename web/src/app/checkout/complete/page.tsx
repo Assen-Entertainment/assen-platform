@@ -1,15 +1,22 @@
 import Link from "next/link";
-import { Button } from "@/components/ui";
-import { CheckIcon } from "@/lib/icons";
+import { Button, SuccessCheck } from "@/components/ui";
 
-/** 결제 완료 — E5 딜라이트 목업(gradient.brand + 축하). ※실제 결제 미연동(게이트). */
-export default function CheckoutComplete() {
+/** 결제 완료 — E5 딜라이트 목업(gradient.brand + 성취 체크 애니메이션). ※실제 결제 미연동(게이트). */
+export default async function CheckoutComplete({
+  searchParams,
+}: {
+  searchParams: Promise<{ order?: string }>;
+}) {
+  const { order } = await searchParams;
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface p-8 text-center">
-      <div className="flex size-20 items-center justify-center rounded-full text-white" style={{ backgroundImage: "var(--gradient-brand)" }}>
-        <CheckIcon className="size-10" />
-      </div>
+      <SuccessCheck label="주문 완료" />
       <h1 className="text-headline text-on-surface">주문이 완료됐어요!</h1>
+      {order ? (
+        <p className="text-body-m text-on-surface-variant">
+          주문번호 <span className="font-medium tabular-nums text-on-surface">{order}</span>
+        </p>
+      ) : null}
       <p className="text-body-m text-on-surface-variant">주문 내역은 마이페이지에서 확인할 수 있어요.</p>
       <div className="mt-2 flex gap-2">
         <Button variant="outline" asChild>

@@ -8,6 +8,7 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent, TooltipProvider, Tooltip, TooltipTrigger, TooltipContent,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   OTPInput, StepIndicator, ConsentGroup, Breadcrumb, Pagination, RightRail,
+  TimeLabel, CountLabel,
 } from "@/components/ui";
 import { creatorAccentVars } from "@/lib/creator-accent";
 
@@ -71,6 +72,13 @@ export default function Gallery() {
               <Spinner /><Skeleton className="h-10 w-40" />
               <SegmentedControl options={[{ label: "전체", value: "all" }, { label: "포스트", value: "post" }]} value={seg} onValueChange={setSeg} />
               <Divider className="w-full" />
+            </Section>
+
+            <Section title="Atoms — Time / Count">
+              <TimeLabel dateTime="2026-07-03T09:00:00+09:00">3시간 전</TimeLabel>
+              <TimeLabel>방금</TimeLabel>
+              <CountLabel count={12400} label="팔로워" compact />
+              <CountLabel count={842} label="좋아요" />
             </Section>
 
             <Section title="Commerce — MonetizableItem">

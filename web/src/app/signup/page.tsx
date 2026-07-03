@@ -1,10 +1,23 @@
 "use client";
 import * as React from "react";
-import { TextField, Button, ConsentGroup } from "@/components/ui";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { TextField, Button, ConsentGroup, TextLink } from "@/components/ui";
+import { useSession } from "@/lib/session";
 
-/** Signup — E6 UI 목업. ※실제 인증·약관 미연동(게이트). */
+/** Signup — E6 UI 목업. ※실제 인증·약관 미연동(게이트). mock 세션만 기록. */
 export default function SignupPage() {
+  const router = useRouter();
+  const { signup } = useSession();
   const [consent, setConsent] = React.useState<string[]>([]);
+  const required = consent.includes("tos") && consent.includes("priv");
+
+  const onSignup = () => {
+    if (!required) return; // 필수 약관 미동의 시 진행 불가
+    signup(); // mock — 실 인증 미연동(게이트)
+    router.push("/discovery");
+  };
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
@@ -21,7 +34,18 @@ export default function SignupPage() {
           value={consent}
           onChange={setConsent}
         />
-        <Button size="lg" className="w-full">가입하기</Button>
+        {/* 동의 항목 전문 링크 — 체크 로직과 분리(라벨 클릭=토글 보존). */}
+        <p className="text-caption text-on-surface-variant">
+          전문 보기:{" "}
+          <TextLink asChild className="text-caption">
+            <Link href="/policy/terms">이용약관</Link>
+          </TextLink>
+          {" · "}
+          <TextLink asChild className="text-caption">
+            <Link href="/policy/privacy">개인정보 처리방침</Link>
+          </TextLink>
+        </p>
+        <Button size="lg" className="w-full" disabled={!required} onClick={onSignup}>가입하기</Button>
         <p className="text-center text-caption text-on-surface-variant">※ 데모 — 실제 인증·약관 미연동(게이트)</p>
       </div>
     </main>

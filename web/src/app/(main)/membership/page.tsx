@@ -1,26 +1,15 @@
-import { MembershipTierCard } from "@/components/ui";
+import type { Metadata } from "next";
 import { getMembershipTiers } from "@/lib/api";
+import { MembershipView } from "./membership-view";
 
-/** Membership — 멤버십 티어 둘러보기. 서버 fetch(tiers). */
+export const metadata: Metadata = {
+  title: "멤버십",
+  description: "크리에이터를 정기 후원하고 전용 혜택을 받는 멤버십 티어를 둘러보세요.",
+  openGraph: { title: "멤버십 · Assen", description: "크리에이터를 정기 후원하고 전용 혜택을 받아보세요.", type: "website" },
+};
+
+/** Membership — 멤버십 티어 둘러보기. 서버 fetch(tiers) → 클라 뷰(구독 CTA→체크아웃). */
 export default async function MembershipPage() {
   const tiers = await getMembershipTiers();
-  return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <h1 className="text-headline text-on-surface">멤버십</h1>
-      <p className="text-body-m text-on-surface-variant">크리에이터를 정기 후원하고 전용 혜택을 받아보세요.</p>
-      <div className="grid gap-4 sm:grid-cols-3">
-        {tiers.map((t) => (
-          <MembershipTierCard
-            key={t.id}
-            name={t.name}
-            price={t.price}
-            period={t.period}
-            benefits={t.benefits}
-            badge={t.badge}
-            featured={t.featured}
-          />
-        ))}
-      </div>
-    </div>
-  );
+  return <MembershipView tiers={tiers} />;
 }

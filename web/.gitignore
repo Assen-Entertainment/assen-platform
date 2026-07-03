@@ -38,6 +38,7 @@ next-env.d.ts
 /playwright-report/
 /.playwright-mcp/
 /.screenshots/
+/.smoke/
 
 # ad-hoc dev logs & one-off probe scripts (not source)
 *.log
