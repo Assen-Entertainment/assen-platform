@@ -249,16 +249,24 @@ def studio_update_tier(
 
 @studio_tiers_router.delete(
     "/{tier_id}",
-    response={200: StudioTierAck, 403: SubscriptionError, 404: SubscriptionError},
+    response={
+        200: StudioTierAck,
+        403: SubscriptionError,
+        404: SubscriptionError,
+        422: SubscriptionError,
+    },
     throttle=user_write_throttle("30/min"),
 )
 def studio_delete_tier(
     request: HttpRequest, tier_id: uuid.UUID
 ) -> tuple[int, StudioTierAck | SubscriptionError]:
-    """Delete the caller's own tier; 403 (no creator) / 404 (not theirs).
+    """Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).
 
-    Existing subscriptions cascade with the tier (``Subscription.tier`` is CASCADE);
-    an owner who only wants to stop new signups should set ``active=False`` instead.
+    Deleting a tier CASCADEs its subscriptions (``Subscription.tier`` is CASCADE) —
+    unlike a product delete, which SET_NULLs order lines to preserve history. To keep
+    that asymmetry from silently destroying a live membership, a tier with any active
+    subscription can't be deleted (422); the owner should set ``active=False`` (soft
+    archive) to stop new signups while keeping existing subscriptions intact.
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
@@ -267,6 +275,12 @@ def studio_delete_tier(
     tier = MembershipTier.objects.filter(id=tier_id, creator=creator).first()
     if tier is None:
         return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
+    if Subscription.objects.filter(
+        tier=tier, status=SubscriptionStatus.ACTIVE.value
+    ).exists():
+        return 422, SubscriptionError(
+            detail="활성 구독이 있는 등급은 삭제할 수 없어요. 먼저 비활성화(active=False)하세요."
+        )
     tier.delete()
     return 200, StudioTierAck(status="deleted")
 
@@ -336,7 +350,13 @@ def subscribe(
     creator (one active membership per creator).
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    tier = MembershipTier.objects.select_related("creator").filter(id=payload.tier_id).first()
+    # Only an active (publicly listed) tier is subscribable; an inactive/archived or
+    # unknown tier 404s (no existence leak), mirroring ``list_tiers``' active filter.
+    tier = (
+        MembershipTier.objects.select_related("creator")
+        .filter(id=payload.tier_id, active=True)
+        .first()
+    )
     if tier is None:
         return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
     active = Subscription.objects.filter(fan=account, status=SubscriptionStatus.ACTIVE)

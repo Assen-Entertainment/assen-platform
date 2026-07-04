@@ -488,7 +488,7 @@ export interface paths {
         };
         /**
          * List Comments
-         * @description List a post's comments, oldest first; 404 if the post is unknown.
+         * @description List a post's comments, oldest first; 404 if the post is unknown or gated.
          */
         get: operations["apps_content_api_list_comments"];
         put?: never;
@@ -1404,10 +1404,13 @@ export interface paths {
         post?: never;
         /**
          * Studio Delete Tier
-         * @description Delete the caller's own tier; 403 (no creator) / 404 (not theirs).
+         * @description Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).
          *
-         *     Existing subscriptions cascade with the tier (``Subscription.tier`` is CASCADE);
-         *     an owner who only wants to stop new signups should set ``active=False`` instead.
+         *     Deleting a tier CASCADEs its subscriptions (``Subscription.tier`` is CASCADE) —
+         *     unlike a product delete, which SET_NULLs order lines to preserve history. To keep
+         *     that asymmetry from silently destroying a live membership, a tier with any active
+         *     subscription can't be deleted (422); the owner should set ``active=False`` (soft
+         *     archive) to stop new signups while keeping existing subscriptions intact.
          */
         delete: operations["apps_membership_api_studio_delete_tier"];
         options?: never;
@@ -1613,7 +1616,12 @@ export interface paths {
          * @description Make one of the fan's own methods primary (404 if not theirs).
          *
          *     Demotes the current primary and promotes the target in one transaction so the
-         *     per-owner single-primary constraint is never transiently violated.
+         *     per-owner single-primary constraint is never transiently violated. The owner's
+         *     method rows are locked (``select_for_update``) for the swap so two concurrent
+         *     promotions (or one racing a ``make_primary`` registration) serialise instead of
+         *     both inserting/updating a primary and tripping the partial-unique constraint; an
+         *     ``IntegrityError`` from a lost race is caught and the current state re-read rather
+         *     than surfaced as a 500.
          */
         post: operations["apps_payments_api_set_primary_payment_method"];
         delete?: never;
@@ -7721,6 +7729,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

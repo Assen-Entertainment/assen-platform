@@ -153,7 +153,7 @@ describe("결제수단 PCI(R4) — raw 카드 미전송", () => {
 });
 
 describe("스튜디오 카탈로그 쓰기 매핑", () => {
-  it("apiCreateStudioProduct: StudioProductOut snake→StudioProduct(sold=0·updatedAt 파생)", async () => {
+  it("apiCreateStudioProduct: StudioProductOut snake→StudioProduct(sold=undefined·updatedAt 파생)", async () => {
     const f = mockJson(201, {
       id: "sp1",
       creator_id: "c1",
@@ -176,7 +176,8 @@ describe("스튜디오 카탈로그 쓰기 매핑", () => {
     const p = await apiCreateStudioProduct({ type: "goods", title: "굿즈", price: 10000 });
     expect(p.id).toBe("sp1");
     expect(p.status).toBe("draft");
-    expect(p.sold).toBe(0);
+    // 집계 게이트 미도입: 서버 계약에 판매수 없음 → undefined("—" 표기). 0을 실수치인 척 금지.
+    expect(p.sold).toBeUndefined();
     expect(p.stock).toBe(50);
     expect(typeof p.updatedAt).toBe("string");
 
@@ -185,7 +186,7 @@ describe("스튜디오 카탈로그 쓰기 매핑", () => {
     expect(JSON.parse(init.body)).toMatchObject({ type: "goods", title: "굿즈", price: 10000, status: "draft" });
   });
 
-  it("apiUpdateStudioTier: 제공 필드만 PATCH 전송 + StudioTier(subscribers=0) 매핑", async () => {
+  it("apiUpdateStudioTier: 제공 필드만 PATCH 전송 + StudioTier(subscribers=undefined) 매핑", async () => {
     const f = mockJson(200, {
       id: "t1",
       creator_id: "c1",
@@ -203,7 +204,8 @@ describe("스튜디오 카탈로그 쓰기 매핑", () => {
 
     const t = await apiUpdateStudioTier("t1", { active: false });
     expect(t.active).toBe(false);
-    expect(t.subscribers).toBe(0);
+    // 집계 게이트 미도입: 서버 계약에 구독자수 없음 → undefined("—" 표기).
+    expect(t.subscribers).toBeUndefined();
     expect(t.name).toBe("베이직");
 
     const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];

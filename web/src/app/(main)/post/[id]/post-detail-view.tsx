@@ -15,7 +15,7 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
   const toggleLike = useToggleLike();
   const addComment = useAddComment(initialPost.id);
   const { toast } = useToast();
-  const { user } = useSession();
+  const { user, mounted } = useSession();
   const adultVerified = user?.adultVerified === true;
   const [text, setText] = React.useState("");
   const [viewerOpen, setViewerOpen] = React.useState(false);
@@ -23,7 +23,8 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
   const p = post ?? initialPost;
   const list = comments ?? initialComments;
   // 19+ 방어 게이트 — 서버가 미인증 뷰어에게 이미 숨기지만, 도달 시 미디어를 블러 처리.
-  const adultBlocked = Boolean(p.isAdult) && !adultVerified;
+  // 세션 복원 전(mounted=false)엔 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지(실누출 0, 시각 개선).
+  const adultBlocked = mounted && Boolean(p.isAdult) && !adultVerified;
 
   const onShare = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {

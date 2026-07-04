@@ -363,24 +363,27 @@ const mapNotification = (n: RawNotification): Notification => {
 };
 
 const PRODUCT_STATUSES: readonly ProductStatus[] = ["selling", "soldout", "draft", "hidden"];
-/** 오너 상품 매핑 — 서버 계약엔 판매수(sold)가 없어 0(정산·분석은 별도 게이트). updatedAt은 생성 시각 파생. */
+/**
+ * 오너 상품 매핑 — 서버 계약엔 판매수(sold)가 없어 undefined(관리표에서 "—", 집계 게이트 도입 전까지
+ * 0을 실수치인 척 노출 금지). updatedAt은 생성 시각 파생.
+ */
 const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
   id: p.id,
   type: p.type as StudioProduct["type"],
   title: p.title,
   price: p.price,
   status: (PRODUCT_STATUSES as readonly string[]).includes(p.status) ? (p.status as ProductStatus) : "draft",
-  sold: 0,
+  sold: undefined,
   stock: p.stock ?? null,
   updatedAt: relativeTime(p.created_at),
 });
-/** 오너 티어 매핑 — 서버 계약엔 구독자수가 없어 0(분석은 별도 게이트). */
+/** 오너 티어 매핑 — 서버 계약엔 구독자수가 없어 undefined(카드에서 "—", 집계 게이트 전까지 0 노출 금지). */
 const mapStudioTier = (t: RawStudioTier): StudioTier => ({
   id: t.id,
   name: t.name,
   price: t.price,
   benefits: t.benefits,
-  subscribers: 0,
+  subscribers: undefined,
   active: t.active,
 });
 const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({

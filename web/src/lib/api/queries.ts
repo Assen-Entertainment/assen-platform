@@ -580,7 +580,7 @@ export function useCreateProduct() {
         title: input.title || "새 상품",
         price: input.price,
         status: input.status ?? "draft",
-        sold: 0,
+        // sold는 미집계(undefined→"—") — 실 API 경로와 동일하게 0을 실수치인 척 표기하지 않는다.
         stock: null,
         updatedAt: "방금",
       };
@@ -605,9 +605,9 @@ export function useUpdateProduct() {
     onSuccess: (result) => {
       qc.setQueryData<StudioProduct[]>(qk.studioProducts, (list) =>
         list?.map((p) => {
-          if ("sold" in result) return p.id === result.id ? result : p; // 실 경로: 전체 교체
-          // mock: 제공 필드만 병합(null stock=무제한 유지).
-          return p.id === result.id ? { ...p, ...result.patch } : p;
+          // mock 낙관적 갱신은 { id, patch } 형태(patch 키로 판별) — 제공 필드만 병합(null stock=무제한 유지).
+          if ("patch" in result) return p.id === result.id ? { ...p, ...result.patch } : p;
+          return p.id === result.id ? result : p; // 실 경로: 전체 교체
         }),
       );
       if (USE_API) qc.invalidateQueries({ queryKey: qk.studioProducts });
@@ -646,7 +646,7 @@ export function useCreateTier() {
         name: input.name || "새 티어",
         price: input.price,
         benefits: input.benefits,
-        subscribers: 0,
+        // subscribers는 미집계(undefined→"—") — 실 API 경로와 동일하게 0을 실수치인 척 표기하지 않는다.
         active: true,
       };
       return row;
@@ -670,8 +670,9 @@ export function useUpdateTier() {
     onSuccess: (result) => {
       qc.setQueryData<StudioTier[]>(qk.studioTiers, (list) =>
         list?.map((t) => {
-          if ("subscribers" in result) return t.id === result.id ? result : t; // 실 경로: 전체 교체
-          return t.id === result.id ? { ...t, ...result.patch } : t; // mock: 병합
+          // mock 낙관적 갱신은 { id, patch } 형태(patch 키로 판별).
+          if ("patch" in result) return t.id === result.id ? { ...t, ...result.patch } : t; // mock: 병합
+          return t.id === result.id ? result : t; // 실 경로: 전체 교체
         }),
       );
       if (USE_API) qc.invalidateQueries({ queryKey: qk.studioTiers });

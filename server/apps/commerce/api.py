@@ -570,9 +570,16 @@ def create_order(
         existing = _load_order_by_key(account, payload.idempotency_key)
         if existing is not None:
             return 200, _order_out(existing)
-    product = Product.objects.select_related("creator").filter(id=payload.product_id).first()
+    # Gate through the consumer queryset (draft/hidden and gated-adult excluded), so a
+    # draft/hidden/gated-adult product 404s just like an unknown id — the order flow
+    # can't be used to buy (or probe the existence of) a listing the fan can't see.
+    product = _public_product_qs(account).filter(id=payload.product_id).first()
     if product is None:
         return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+    # Only a live 'selling' listing is orderable; a 'soldout'-status listing stays
+    # publicly visible but cannot be purchased.
+    if product.status != ProductStatus.SELLING.value:
+        return 422, CommerceError(detail="판매 중인 상품이 아니에요.")
     if product.locked:
         return 422, CommerceError(detail="멤버십 전용 상품이에요.")
     if product.sold_out or (product.stock is not None and product.stock <= 0):

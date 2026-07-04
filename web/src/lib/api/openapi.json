@@ -1750,7 +1750,7 @@
             }
           }
         },
-        "description": "List a post's comments, oldest first; 404 if the post is unknown.",
+        "description": "List a post's comments, oldest first; 404 if the post is unknown or gated.",
         "tags": [
           "content"
         ]
@@ -4054,9 +4054,19 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
           }
         },
-        "description": "Delete the caller's own tier; 403 (no creator) / 404 (not theirs).\n\nExisting subscriptions cascade with the tier (``Subscription.tier`` is CASCADE);\nan owner who only wants to stop new signups should set ``active=False`` instead.",
+        "description": "Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).\n\nDeleting a tier CASCADEs its subscriptions (``Subscription.tier`` is CASCADE) —\nunlike a product delete, which SET_NULLs order lines to preserve history. To keep\nthat asymmetry from silently destroying a live membership, a tier with any active\nsubscription can't be deleted (422); the owner should set ``active=False`` (soft\narchive) to stop new signups while keeping existing subscriptions intact.",
         "tags": [
           "studio-membership"
         ],
@@ -4571,7 +4581,7 @@
             }
           }
         },
-        "description": "Make one of the fan's own methods primary (404 if not theirs).\n\nDemotes the current primary and promotes the target in one transaction so the\nper-owner single-primary constraint is never transiently violated.",
+        "description": "Make one of the fan's own methods primary (404 if not theirs).\n\nDemotes the current primary and promotes the target in one transaction so the\nper-owner single-primary constraint is never transiently violated. The owner's\nmethod rows are locked (``select_for_update``) for the swap so two concurrent\npromotions (or one racing a ``make_primary`` registration) serialise instead of\nboth inserting/updating a primary and tripping the partial-unique constraint; an\n``IntegrityError`` from a lost race is caught and the current state re-read rather\nthan surfaced as a 500.",
         "tags": [
           "payment-methods"
         ],

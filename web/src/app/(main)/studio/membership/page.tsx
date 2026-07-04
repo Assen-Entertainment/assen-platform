@@ -111,7 +111,13 @@ export default function StudioMembershipPage() {
                       <Badge variant={t.active ? "success" : "neutral"}>{t.active ? "활성" : "비활성"}</Badge>
                     </div>
                     <span className="text-body-s text-on-surface-variant">
-                      {won(t.price)}/월 · 구독자 {t.subscribers.toLocaleString("ko-KR")}명
+                      {won(t.price)}/월 · 구독자{" "}
+                      {/* 집계 게이트 미도입: undefined면 "—"(집계 예정). 0/날조 수치 노출 금지. */}
+                      {t.subscribers === undefined ? (
+                        <span title="집계 예정">—</span>
+                      ) : (
+                        `${t.subscribers.toLocaleString("ko-KR")}명`
+                      )}
                     </span>
                   </div>
                   <Switch

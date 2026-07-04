@@ -23,7 +23,7 @@ import { ApiError, type Post } from "@/lib/api";
 export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
   const router = useRouter();
   const { toast } = useToast();
-  const { user } = useSession();
+  const { user, mounted } = useSession();
   const adultVerified = user?.adultVerified === true;
   const { data, isError, refetch } = useFeed(initialPosts);
   const toggleLike = useToggleLike();
@@ -67,7 +67,9 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
               avatarTone={p.creatorId}
               body={p.body}
               media={
-                p.isAdult && !adultVerified ? (
+                // 세션 복원 전(mounted=false)엔 게이트 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지
+                // (서버가 이미 미인증 뷰어에게 adult를 미반환하므로 실누출 0, 순수 시각 개선).
+                mounted && p.isAdult && !adultVerified ? (
                   // 19+ 성인 콘텐츠 방어 게이트 — 서버가 이미 미인증 뷰어에게 숨기지만 UI도 블러 처리.
                   // 링크 대신 성인 인증 CTA(/age-gate)로 유도(포스트로 새지 않도록 비링크).
                   <div className="relative aspect-video w-full" style={gradientStyle(p.id)}>

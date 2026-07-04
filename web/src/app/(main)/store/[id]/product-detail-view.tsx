@@ -35,7 +35,7 @@ const QTY_TYPES: MonetizableItemType[] = ["goods", "ticket", "experience"];
 
 export function ProductDetailView({ product }: { product: Product }) {
   const router = useRouter();
-  const { user } = useSession();
+  const { user, mounted } = useSession();
   const adultVerified = user?.adultVerified === true;
   const { data } = useProduct(product.id, product);
   const p = data ?? product;
@@ -43,7 +43,8 @@ export function ProductDetailView({ product }: { product: Product }) {
   const label = PRODUCT_TYPE_LABEL[p.type];
   const soldOut = Boolean(p.soldOut) || p.stock === 0;
   // 19+ 방어 게이트 — 서버가 이미 미인증 뷰어에게 숨기지만 UI도 구매·미디어를 잠근다.
-  const adultBlocked = Boolean(p.isAdult) && !adultVerified;
+  // 세션 복원 전(mounted=false)엔 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지(실누출 0, 시각 개선).
+  const adultBlocked = mounted && Boolean(p.isAdult) && !adultVerified;
   const allowQty = QTY_TYPES.includes(p.type) && !soldOut;
   const [qty, setQty] = React.useState(1);
   const [option, setOption] = React.useState<string | null>(p.options?.[0] ?? null);

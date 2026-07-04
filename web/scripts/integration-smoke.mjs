@@ -225,17 +225,19 @@ async function main() {
 
   // 7.7 본인인증(KYC) — age-gate: 동의 → 성인 인증하기 → 입장(성공) — R3
   await page.goto(BASE + "/age-gate", { waitUntil: "networkidle" });
-  const boxes = page.getByRole("checkbox");
-  const bn = await boxes.count();
-  for (let i = 0; i < bn; i++) {
-    const b = boxes.nth(i);
-    if ((await b.getAttribute("aria-checked")) !== "true") await b.click();
-  }
-  await page.getByRole("button", { name: "성인 인증하기" }).click({ timeout: 10000 })
+  // "전체 동의" 마스터 하나로 필수 3종 일괄 체크(개별 루프의 상태전파 경합 회피).
+  await page.getByText("전체 동의").click();
+  // Playwright는 click 시 버튼 활성(동의 반영)까지 자동 대기 — 별도 폴링 불요.
+  await page.getByRole("button", { name: "성인 인증하기" }).click({ timeout: 15000 })
     .catch(() => fail(page, "성인 인증하기 버튼"));
-  await page.getByRole("link", { name: "입장" }).waitFor({ timeout: 10000 })
-    .catch(() => fail(page, "KYC 인증 성공(입장) 상태"));
-  pass("본인인증(KYC mock)");
+  // 성공 시 /discovery로 이동(router.push). 이동 대기.
+  await page.waitForURL("**/discovery", { timeout: 15000 })
+    .catch(() => fail(page, "KYC 인증 후 /discovery 이동"));
+  // 재방문 시 세션 adult_verified 반영("이미 본인인증") 확인 → 서버 영속 + /fan/me 재조회 검증.
+  await page.goto(BASE + "/age-gate", { waitUntil: "networkidle" });
+  await page.getByText("이미 본인인증이 완료되었어요").first().waitFor({ timeout: 10000 })
+    .catch(() => fail(page, "KYC 세션 반영(이미 인증)"));
+  pass("본인인증(KYC mock) — 세션 반영");
   await shot(page, "kyc");
 
   // 8. 로그아웃 → 세션 소거

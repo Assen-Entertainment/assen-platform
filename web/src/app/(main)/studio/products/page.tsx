@@ -103,7 +103,20 @@ export default function StudioProductsPage() {
       { key: "title", header: "상품명", render: (r) => <span className="line-clamp-1 text-on-surface">{r.title}</span> },
       { key: "type", header: "유형", render: (r) => PRODUCT_TYPE_LABEL[r.type] },
       { key: "price", header: "가격", align: "right", render: (r) => <span className="tabular-nums">{won(r.price)}</span> },
-      { key: "sold", header: "판매", align: "right", render: (r) => <span className="tabular-nums">{r.sold.toLocaleString("ko-KR")}</span> },
+      {
+        key: "sold",
+        header: "판매",
+        align: "right",
+        // 집계 게이트 미도입: sold가 undefined면 "—"(집계 예정). 0을 실수치인 척 표기하지 않는다.
+        render: (r) =>
+          r.sold === undefined ? (
+            <span className="text-on-surface-variant" title="집계 예정">
+              —
+            </span>
+          ) : (
+            <span className="tabular-nums">{r.sold.toLocaleString("ko-KR")}</span>
+          ),
+      },
       {
         key: "stock",
         header: "재고",

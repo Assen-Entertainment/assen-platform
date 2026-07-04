@@ -28,19 +28,22 @@ export interface StudioProduct {
   title: string;
   price: number;
   status: ProductStatus;
-  sold: number;
+  /** 누적 판매수 — 집계 게이트 미도입 상태에선 undefined(관리표에서 "—"). 0을 실수치인 척 노출 금지. */
+  sold?: number;
   /** 재고(디지털/무제한형은 null). */
   stock: number | null;
   updatedAt: string;
 }
 
+// sold/subscribers는 mock에서도 미집계(undefined) — 실 API 경로(서버 계약에 집계 필드 없음)와 동일하게
+// 관리표에서 "—"로 표기(일관). 집계 게이트 도입 시 실 수치 배선.
 export const STUDIO_PRODUCTS: StudioProduct[] = [
-  { id: "p1", type: "goods", title: "아크릴 스탠드 (블루)", price: 18000, status: "selling", sold: 124, stock: 76, updatedAt: "2일 전" },
-  { id: "p2", type: "digital", title: "고해상도 일러스트 팩 vol.3", price: 9000, status: "selling", sold: 342, stock: null, updatedAt: "5일 전" },
-  { id: "p3", type: "ticket", title: "온라인 팬미팅 티켓", price: 25000, status: "soldout", sold: 200, stock: 0, updatedAt: "1주 전" },
-  { id: "p4", type: "experience", title: "1:1 화상 스케치 클래스", price: 55000, status: "selling", sold: 12, stock: 8, updatedAt: "3일 전" },
-  { id: "p5", type: "coupon", title: "굿즈 10% 할인 쿠폰", price: 0, status: "hidden", sold: 88, stock: null, updatedAt: "2주 전" },
-  { id: "p6", type: "goods", title: "홀로그램 스티커 세트", price: 6000, status: "draft", sold: 0, stock: 300, updatedAt: "방금" },
+  { id: "p1", type: "goods", title: "아크릴 스탠드 (블루)", price: 18000, status: "selling", stock: 76, updatedAt: "2일 전" },
+  { id: "p2", type: "digital", title: "고해상도 일러스트 팩 vol.3", price: 9000, status: "selling", stock: null, updatedAt: "5일 전" },
+  { id: "p3", type: "ticket", title: "온라인 팬미팅 티켓", price: 25000, status: "soldout", stock: 0, updatedAt: "1주 전" },
+  { id: "p4", type: "experience", title: "1:1 화상 스케치 클래스", price: 55000, status: "selling", stock: 8, updatedAt: "3일 전" },
+  { id: "p5", type: "coupon", title: "굿즈 10% 할인 쿠폰", price: 0, status: "hidden", stock: null, updatedAt: "2주 전" },
+  { id: "p6", type: "goods", title: "홀로그램 스티커 세트", price: 6000, status: "draft", stock: 300, updatedAt: "방금" },
 ];
 
 export interface StudioTier {
@@ -48,17 +51,18 @@ export interface StudioTier {
   name: string;
   price: number;
   benefits: string[];
-  subscribers: number;
+  /** 구독자수 — 집계 게이트 미도입 상태에선 undefined(카드에서 "—"). 0을 실수치인 척 노출 금지. */
+  subscribers?: number;
   active: boolean;
 }
 
+// subscribers는 mock에서도 미집계(undefined) — 실 API 경로와 동일하게 "—" 표기(일관).
 export const STUDIO_TIERS: StudioTier[] = [
   {
     id: "t1",
     name: "베이직",
     price: 5000,
     benefits: ["멤버 전용 포스트", "월 1회 라이브"],
-    subscribers: 512,
     active: true,
   },
   {
@@ -66,7 +70,6 @@ export const STUDIO_TIERS: StudioTier[] = [
     name: "스탠다드",
     price: 12000,
     benefits: ["베이직 혜택 포함", "고해상도 원본", "월 2회 라이브", "굿즈 5% 할인"],
-    subscribers: 286,
     active: true,
   },
   {
@@ -74,7 +77,6 @@ export const STUDIO_TIERS: StudioTier[] = [
     name: "프리미엄",
     price: 30000,
     benefits: ["스탠다드 혜택 포함", "1:1 팬레터 답장", "한정 굿즈 우선권", "이름 크레딧"],
-    subscribers: 74,
     active: true,
   },
 ];

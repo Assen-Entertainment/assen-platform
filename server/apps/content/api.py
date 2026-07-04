@@ -265,7 +265,9 @@ def like_post(
 ) -> tuple[int, LikeOut | ErrorOut]:
     """Like a post; idempotent (a second like is a no-op, still 200)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    post = Post.objects.filter(id=post_id).first()
+    # 19+ gate (same funnel as reads): an adult post the caller may not see 404s here
+    # too, so the like endpoint can't be used to touch or probe a gated post.
+    post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     # No notification is emitted on a like (B6): likes are high-volume and would
@@ -292,7 +294,8 @@ def unlike_post(
 ) -> tuple[int, LikeOut | ErrorOut]:
     """Unlike a post; idempotent (unliking a non-liked post is a no-op)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    post = Post.objects.filter(id=post_id).first()
+    # 19+ gate (same funnel as reads): a gated adult post 404s here too.
+    post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     Like.objects.filter(post=post, user=account).delete()
@@ -306,9 +309,11 @@ def list_comments(
     cursor: str | None = None,
     limit: int | None = None,
 ) -> tuple[int, CommentPage | ErrorOut]:
-    """List a post's comments, oldest first; 404 if the post is unknown."""
-    del request
-    if not Post.objects.filter(id=post_id).exists():
+    """List a post's comments, oldest first; 404 if the post is unknown or gated."""
+    # Anonymous-readable, but 19+ gated through the same funnel as the post reads: a
+    # gated adult post 404s (no existence leak) so its comment thread can't be read
+    # past the gate by an anonymous or unverified viewer.
+    if not _post_qs(resolve_optional_account(request)).filter(id=post_id).exists():
         return 404, ErrorOut(detail="post not found")
     queryset = (
         Comment.objects.filter(post_id=post_id)
@@ -337,7 +342,9 @@ def create_comment(
     the internal fan_id).
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    post = Post.objects.filter(id=post_id).select_related("creator__owner").first()
+    # 19+ gate (same funnel as reads): a gated adult post 404s so a non-permitted
+    # viewer can neither read nor comment on it.
+    post = _post_qs(account).select_related("creator__owner").filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     comment = Comment.objects.create(
