@@ -15,17 +15,20 @@ import uuid
 from typing import cast
 
 from django.conf import settings
-from django.db.models import Count, Exists, OuterRef, QuerySet
+from django.db.models import Count, Exists, OuterRef, Q, QuerySet
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field
 
-from apps.commerce.models import Product, ProductStatus
+from apps.commerce.models import OrderItem, OrderStatus, Product, ProductStatus
+from apps.content.models import Post
 from apps.creator.models import Creator
 from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
+from apps.membership.models import Subscription, SubscriptionStatus
 from apps.social.models import CreatorBlock, Follow, blocked_creator_ids
 from config.api import api
+from config.errors import ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -270,3 +273,98 @@ def studio_update_profile(
 
 
 api.add_router("/studio/profile", studio_profile_router)
+
+
+# --------------------------------------------------------------------------- #
+# Studio dashboard stats (owner real counts; R4-W5 — pure engineering).
+# COUNTS ONLY. No revenue/settlement/amount ever appears here — 수익·매출·정산 금액은
+# 재무·법무 게이트(ASS-229) 소관이라 이 집계에서 전면 배제한다. Every figure is scoped to
+# the caller's OWN creator (``owner=account``), so another creator's stats cannot
+# leak. The web dashboard replaces its placeholder STATS with these.
+# --------------------------------------------------------------------------- #
+studio_stats_router = Router(auth=fan_auth, tags=["studio-creator"])
+
+
+class StudioError(Schema):
+    """Coded error for studio-owner endpoints (``detail`` + machine ``code``).
+
+    Mirrors the commerce/membership coded-error shape so the web branches on the
+    stable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather
+    than the localized ``detail`` copy.
+    """
+
+    detail: str
+    code: str
+
+
+class StudioStatsOut(Schema):
+    """Owner dashboard real counts (maps to the studio dashboard summary).
+
+    Every field is a pure count scoped to the caller's own creator. There is NO
+    revenue/settlement/amount field by design — money figures are gated (ASS-229),
+    so this endpoint carries counts only.
+
+    - ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).
+    - ``posts``: the creator's feed posts.
+    - ``products``: catalog products the creator owns (all statuses).
+    - ``products_selling``: the subset currently ``selling`` (public on-sale).
+    - ``orders``: distinct **non-cancelled** orders that contain at least one of
+      the creator's products (order **count**, never an amount). A cancelled
+      order never happened commercially, so it is excluded from the dashboard
+      "order count" the same way a cancelled order is excluded everywhere else.
+    - ``subscribers``: the creator's active subscribers (``status = active``).
+    """
+
+    followers: int
+    posts: int
+    products: int
+    products_selling: int
+    orders: int
+    subscribers: int
+
+
+@studio_stats_router.get("", response={200: StudioStatsOut, 403: StudioError})
+def studio_stats(request: HttpRequest) -> tuple[int, StudioStatsOut | StudioError]:
+    """Real per-creator dashboard counts for the caller's own creator.
+
+    Owner-scoped: every figure is filtered to the creator this account operates, so
+    another creator's stats never leak. 403 (OwnerRequired) if the caller operates
+    no creator. Counts only — no revenue/settlement (ASS-229 gated).
+
+    A handful of owner-scoped scalar aggregates (no per-row query → no N+1): the
+    product total + selling counts collapse into one conditional aggregate, the
+    rest are single indexed ``COUNT``s.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = Creator.objects.filter(owner=account).first()
+    if creator is None:
+        return 403, StudioError(
+            detail="크리에이터만 스튜디오 통계를 볼 수 있어요.",
+            code=ErrorCode.OWNER_REQUIRED.value,
+        )
+    product_counts = Product.objects.filter(creator=creator).aggregate(
+        total=Count("id"),
+        selling=Count("id", filter=Q(status=ProductStatus.SELLING.value)),
+    )
+    return 200, StudioStatsOut(
+        followers=Follow.objects.filter(creator=creator).count(),
+        posts=Post.objects.filter(creator=creator).count(),
+        products=product_counts["total"],
+        products_selling=product_counts["selling"],
+        # OrderItem → distinct Order: how many non-cancelled orders include this
+        # creator's products (a count, never a sum of amounts). Cancelled orders
+        # are excluded — they never happened commercially.
+        orders=(
+            OrderItem.objects.filter(product__creator=creator)
+            .exclude(order__status=OrderStatus.CANCELLED.value)
+            .values("order_id")
+            .distinct()
+            .count()
+        ),
+        subscribers=Subscription.objects.filter(
+            creator=creator, status=SubscriptionStatus.ACTIVE.value
+        ).count(),
+    )
+
+
+api.add_router("/studio/stats", studio_stats_router)

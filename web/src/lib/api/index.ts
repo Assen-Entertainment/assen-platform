@@ -23,6 +23,7 @@ import type {
   Product,
   RefundStatus,
   SavedPaymentMethod,
+  StudioStats,
   Subscription,
   SearchResult,
 } from "./types";
@@ -203,6 +204,15 @@ interface RawPaymentMethod {
   last4: string;
   is_primary: boolean;
   created_at: string;
+}
+/** 스튜디오 대시보드 실 카운트 wire(StudioStatsOut) — 전부 정수 카운트(금액 필드 없음·정산 게이트). */
+interface RawStudioStats {
+  followers: number;
+  posts: number;
+  products: number;
+  products_selling: number;
+  orders: number;
+  subscribers: number;
 }
 /** 소셜 토글 응답(카운트 정정용). */
 export interface FollowResult {
@@ -414,6 +424,15 @@ const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({
   isPrimary: m.is_primary,
   createdAt: m.created_at,
 });
+/** 스튜디오 스탯 매핑 — snake→camel(products_selling→productsSelling). 전부 정수 카운트(금액 없음). */
+const mapStudioStats = (s: RawStudioStats): StudioStats => ({
+  followers: s.followers,
+  posts: s.posts,
+  products: s.products,
+  productsSelling: s.products_selling,
+  orders: s.orders,
+  subscribers: s.subscribers,
+});
 
 // --- mock 폴백 데이터 (apiUrl 미설정 시) ------------------------------------
 const CREATORS: Creator[] = [
@@ -514,6 +533,22 @@ const PAYMENT_METHODS: SavedPaymentMethod[] = [
   { id: "m1", brand: "신한카드", last4: "4321", isPrimary: true, createdAt: "2026-06-01T00:00:00Z" },
   { id: "m2", brand: "카카오페이", last4: "8890", isPrimary: false, createdAt: "2026-06-10T00:00:00Z" },
 ];
+
+/**
+ * 스튜디오 대시보드 실 카운트 mock 폴백 — 기존 mock 대시보드 수치와 일관(회귀 0).
+ * followers 12,400은 기존 하드코딩 대시보드 카드 및 데모 오너(별빛 일러스트) 값과 일치,
+ * products/productsSelling은 STUDIO_PRODUCTS(스튜디오 상품 mock)에서 파생, subscribers 872는
+ * 애널리틱스 시계열 최근월(6월) 활성 구독자와 일치, orders 124는 최근 항목 "판매 124"와 일치.
+ * ※금액 필드는 없다(정산 게이트) — mock도 금액을 날조하지 않는다.
+ */
+const STUDIO_STATS: StudioStats = {
+  followers: 12400,
+  posts: 320,
+  products: STUDIO_PRODUCTS.length,
+  productsSelling: STUDIO_PRODUCTS.filter((p) => p.status === "selling").length,
+  orders: 124,
+  subscribers: 872,
+};
 
 // mock 차단 상태(USE_API=false 로컬 시뮬 — 실 경로는 서버가 권위). getBlocks/getCreator 코히어런스.
 const MOCK_BLOCKED = new Set<string>();
@@ -891,6 +926,25 @@ export async function apiConfirmVerify(): Promise<{ adultVerified: boolean; kycS
 /** 내 프로필 수정 — nickname만(이메일/전화는 재인증 게이트). 세션 무효화는 호출측(useUpdateMe). */
 export async function apiUpdateMe(nickname: string): Promise<void> {
   await apiFetch("/fan/me", { method: "PATCH", body: JSON.stringify({ nickname }) });
+}
+
+// --- R4-W5: 스튜디오 대시보드 실 카운트(오너 스코프) -------------------------
+/**
+ * 스튜디오 대시보드 실 카운트 — USE_API면 GET /studio/stats(StudioStatsOut) 소비.
+ * 401(비로그인)/403(OwnerRequired, 비크리에이터)은 null(방어적 — 호출측이 빈 상태/안내 렌더).
+ * mock 폴백은 결정적 카운트(STUDIO_STATS). 서버 계약에 수익/금액은 없다(정산 게이트).
+ */
+export async function getStudioStats(): Promise<StudioStats | null> {
+  if (USE_API) {
+    try {
+      return mapStudioStats(await apiFetch<RawStudioStats>("/studio/stats"));
+    } catch (e) {
+      // 비크리에이터(403)·비로그인(401)은 통계 없음 → null(카운트를 0으로 날조하지 않는다).
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
+      throw e;
+    }
+  }
+  return STUDIO_STATS;
 }
 
 // --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기(오너 스코프) ---------------------

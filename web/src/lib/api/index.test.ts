@@ -12,6 +12,7 @@ import {
   getSubscriptions,
   getBlocks,
   getCreator,
+  getStudioStats,
   mockSetBlocked,
 } from "./index";
 
@@ -75,6 +76,29 @@ describe("커머스 mock (W2)", () => {
     const subs = await getSubscriptions();
     expect(subs.length).toBeGreaterThan(0);
     expect(subs[0]).toHaveProperty("nextBillingDate");
+  });
+});
+
+describe("스튜디오 대시보드 스탯 mock (R4-W5)", () => {
+  it("getStudioStats는 결정적 실 카운트를 camelCase로 반환한다(수익/금액 필드 없음)", async () => {
+    const stats = await getStudioStats();
+    expect(stats).not.toBeNull();
+    // camelCase 계약 키(products_selling→productsSelling) — 전부 정수 카운트.
+    expect(Object.keys(stats!).sort()).toEqual([
+      "followers",
+      "orders",
+      "posts",
+      "products",
+      "productsSelling",
+      "subscribers",
+    ]);
+    expect(Object.values(stats!).every((v) => Number.isInteger(v))).toBe(true);
+    // 기존 mock 대시보드 수치와 일관(회귀 0) — 팔로워 12,400은 구 하드코딩 카드와 일치.
+    expect(stats!.followers).toBe(12400);
+    // 판매중은 전체 상품 수의 부분집합.
+    expect(stats!.productsSelling).toBeLessThanOrEqual(stats!.products);
+    // 서버 계약에 수익/금액 없음(정산 게이트) — mock도 금액을 날조하지 않는다.
+    expect(stats).not.toHaveProperty("revenue");
   });
 });
 

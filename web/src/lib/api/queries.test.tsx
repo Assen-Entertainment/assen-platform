@@ -2,8 +2,8 @@ import * as React from "react";
 import { describe, it, expect } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, qk } from "./queries";
-import type { Post, Comment, Creator, BlockedCreator } from "./types";
+import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, useStudioStats, qk } from "./queries";
+import type { Post, Comment, Creator, BlockedCreator, StudioStats } from "./types";
 
 function makeWrapper(qc: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -151,6 +151,27 @@ describe("useUnblockCreator (optimistic)", () => {
       expect(c?.blocked).toBe(false);
       expect(qc.getQueryData<BlockedCreator[]>(qk.blocks)).toEqual([]);
     });
+  });
+});
+
+describe("useStudioStats", () => {
+  it("스튜디오 실 카운트를 노출한다(mock 폴백)", async () => {
+    const qc = new QueryClient();
+    const { result } = renderHook(() => useStudioStats(), { wrapper: makeWrapper(qc) });
+    await waitFor(() => expect(result.current.data).toBeTruthy());
+    const stats = result.current.data as StudioStats;
+    // 팔로워는 기존 대시보드 수치와 일관, 판매중은 전체 상품의 부분집합.
+    expect(stats.followers).toBe(12400);
+    expect(stats.productsSelling).toBeLessThanOrEqual(stats.products);
+    // 금액/수익 필드는 없다(정산 게이트).
+    expect(stats).not.toHaveProperty("revenue");
+  });
+
+  it("시드된 null(비크리에이터/비로그인)을 그대로 노출한다(카운트 날조 안 함)", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    qc.setQueryData<StudioStats | null>(qk.studioStats, null);
+    const { result } = renderHook(() => useStudioStats(), { wrapper: makeWrapper(qc) });
+    expect(result.current.data).toBeNull();
   });
 });
 

@@ -173,6 +173,26 @@ export interface Notification {
   read?: boolean;
 }
 
+/**
+ * 스튜디오 대시보드 실 카운트 — 서버 StudioStatsOut(오너 스코프) 계약.
+ * ※전부 정수 카운트다. 설계상 수익/정산/금액 필드는 없다(금액은 정산 게이트 ASS-229 —
+ *   대시보드는 카운트만 소비하고 금액은 절대 날조하지 않는다).
+ */
+export interface StudioStats {
+  /** 팔로워 수. */
+  followers: number;
+  /** 크리에이터 포스트 수. */
+  posts: number;
+  /** 보유 상품 수(전체 상태 포함). */
+  products: number;
+  /** 현재 판매중(공개 판매) 상품 수. */
+  productsSelling: number;
+  /** 유효 주문 건수(취소 제외 — 금액 아님). */
+  orders: number;
+  /** 활성 구독자 수(status=active). */
+  subscribers: number;
+}
+
 /** 구독(멤버십) — 마이페이지 구독 관리. */
 export interface Subscription {
   id: string;

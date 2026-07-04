@@ -429,16 +429,20 @@ def studio_update_product(
 
 @studio_products_router.delete(
     "/{product_id}",
-    response={200: StudioAck, 403: CommerceError, 404: CommerceError},
+    response={200: StudioAck, 403: CommerceError, 404: CommerceError, 422: CommerceError},
     throttle=user_write_throttle("30/min"),
 )
 def studio_delete_product(
     request: HttpRequest, product_id: uuid.UUID
 ) -> tuple[int, StudioAck | CommerceError]:
-    """Delete the caller's own product; 403 (no creator) / 404 (not theirs).
+    """Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).
 
-    Historical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),
-    so removing a catalog listing never rewrites a fan's order history.
+    A product with order history can't be hard-deleted: ``OrderItem.product`` is
+    SET_NULL, so deleting it would sever the historical order lines' attribution
+    back to this creator (breaking dashboard/stats counts and order provenance).
+    Instead of deleting, the owner should archive it (``status="hidden"``), which
+    removes it from public listings while keeping order history intact. A product
+    with no order history has nothing to preserve, so it deletes as before.
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
@@ -450,6 +454,11 @@ def studio_delete_product(
     if product is None:
         return 404, CommerceError(
             detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
+    if product.order_items.exists():
+        return 422, CommerceError(
+            detail="판매 이력이 있는 상품은 삭제할 수 없어요. 숨김(hidden) 처리해 주세요.",
+            code=ErrorCode.PRODUCT_HAS_ORDERS.value,
         )
     product.delete()
     return 200, StudioAck(status="deleted")

@@ -1080,9 +1080,19 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
           }
         },
-        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs).\n\nHistorical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),\nso removing a catalog listing never rewrites a fan's order history.",
+        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).\n\nA product with order history can't be hard-deleted: ``OrderItem.product`` is\nSET_NULL, so deleting it would sever the historical order lines' attribution\nback to this creator (breaking dashboard/stats counts and order provenance).\nInstead of deleting, the owner should archive it (``status=\"hidden\"``), which\nremoves it from public listings while keeping order history intact. A product\nwith no order history has nothing to preserve, so it deletes as before.",
         "tags": [
           "studio-commerce"
         ],
@@ -2616,6 +2626,47 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/studio/stats": {
+      "get": {
+        "operationId": "apps_creator_api_studio_stats",
+        "summary": "Studio Stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioStatsOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Real per-creator dashboard counts for the caller's own creator.\n\nOwner-scoped: every figure is filtered to the creator this account operates, so\nanother creator's stats never leak. 403 (OwnerRequired) if the caller operates\nno creator. Counts only — no revenue/settlement (ASS-229 gated).\n\nA handful of owner-scoped scalar aggregates (no per-row query → no N+1): the\nproduct total + selling counts collapse into one conditional aggregate, the\nrest are single indexed ``COUNT``s.",
+        "tags": [
+          "studio-creator"
+        ],
         "security": [
           {
             "FanBearerAuth": []
@@ -9587,6 +9638,64 @@
           }
         },
         "title": "StudioProfilePatch",
+        "type": "object"
+      },
+      "StudioStatsOut": {
+        "description": "Owner dashboard real counts (maps to the studio dashboard summary).\n\nEvery field is a pure count scoped to the caller's own creator. There is NO\nrevenue/settlement/amount field by design — money figures are gated (ASS-229),\nso this endpoint carries counts only.\n\n- ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).\n- ``posts``: the creator's feed posts.\n- ``products``: catalog products the creator owns (all statuses).\n- ``products_selling``: the subset currently ``selling`` (public on-sale).\n- ``orders``: distinct **non-cancelled** orders that contain at least one of\n  the creator's products (order **count**, never an amount). A cancelled\n  order never happened commercially, so it is excluded from the dashboard\n  \"order count\" the same way a cancelled order is excluded everywhere else.\n- ``subscribers``: the creator's active subscribers (``status = active``).",
+        "properties": {
+          "followers": {
+            "title": "Followers",
+            "type": "integer"
+          },
+          "posts": {
+            "title": "Posts",
+            "type": "integer"
+          },
+          "products": {
+            "title": "Products",
+            "type": "integer"
+          },
+          "products_selling": {
+            "title": "Products Selling",
+            "type": "integer"
+          },
+          "orders": {
+            "title": "Orders",
+            "type": "integer"
+          },
+          "subscribers": {
+            "title": "Subscribers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "followers",
+          "posts",
+          "products",
+          "products_selling",
+          "orders",
+          "subscribers"
+        ],
+        "title": "StudioStatsOut",
+        "type": "object"
+      },
+      "StudioError": {
+        "description": "Coded error for studio-owner endpoints (``detail`` + machine ``code``).\n\nMirrors the commerce/membership coded-error shape so the web branches on the\nstable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather\nthan the localized ``detail`` copy.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "StudioError",
         "type": "object"
       },
       "DashboardOut": {

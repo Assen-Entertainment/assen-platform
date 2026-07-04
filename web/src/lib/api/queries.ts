@@ -43,6 +43,7 @@ import {
   apiStartVerify,
   apiConfirmVerify,
   apiUpdateMe,
+  getStudioStats,
   getStudioProducts,
   apiCreateStudioProduct,
   apiUpdateStudioProduct,
@@ -62,7 +63,7 @@ import {
   type StudioTierUpdate,
   type StudioProfileUpdate,
 } from "./index";
-import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, BlockedCreator } from "./types";
+import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, BlockedCreator, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
 
 /** 라이브 백엔드 연동 여부 — false면 뮤테이션은 낙관 로직만(sleep) 유지(오프라인·테스트). */
@@ -147,6 +148,7 @@ export const qk = {
   subscriptions: ["subscriptions"] as const,
   blocks: ["blocks"] as const,
   paymentMethods: ["payment-methods"] as const,
+  studioStats: ["studio-stats"] as const,
   studioProducts: ["studio-products"] as const,
   studioTiers: ["studio-tiers"] as const,
 };
@@ -794,6 +796,12 @@ export function useUpdateStudioProfile() {
       }
     },
   });
+}
+
+// --- R4-W5: 스튜디오 대시보드 실 카운트 --------------------------------------
+/** 스튜디오 대시보드 실 카운트 — data가 null이면 비크리에이터/비로그인(호출측 빈 상태 안내). */
+export function useStudioStats(initialData?: StudioStats | null) {
+  return useQuery({ queryKey: qk.studioStats, queryFn: getStudioStats, initialData });
 }
 
 // --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기 ---------------------------------

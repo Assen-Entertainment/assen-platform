@@ -813,6 +813,34 @@ export interface paths {
         patch: operations["apps_creator_api_studio_update_profile"];
         trace?: never;
     };
+    "/api/studio/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio Stats
+         * @description Real per-creator dashboard counts for the caller's own creator.
+         *
+         *     Owner-scoped: every figure is filtered to the creator this account operates, so
+         *     another creator's stats never leak. 403 (OwnerRequired) if the caller operates
+         *     no creator. Counts only — no revenue/settlement (ASS-229 gated).
+         *
+         *     A handful of owner-scoped scalar aggregates (no per-row query → no N+1): the
+         *     product total + selling counts collapse into one conditional aggregate, the
+         *     rest are single indexed ``COUNT``s.
+         */
+        get: operations["apps_creator_api_studio_stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/dashboard/": {
         parameters: {
             query?: never;
@@ -3556,6 +3584,50 @@ export interface components {
             accent_color?: string | null;
             /** Category */
             category?: string | null;
+        };
+        /**
+         * StudioStatsOut
+         * @description Owner dashboard real counts (maps to the studio dashboard summary).
+         *
+         *     Every field is a pure count scoped to the caller's own creator. There is NO
+         *     revenue/settlement/amount field by design — money figures are gated (ASS-229),
+         *     so this endpoint carries counts only.
+         *
+         *     - ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).
+         *     - ``posts``: the creator's feed posts.
+         *     - ``products``: catalog products the creator owns (all statuses).
+         *     - ``products_selling``: the subset currently ``selling`` (public on-sale).
+         *     - ``orders``: distinct orders that contain at least one of the creator's
+         *       products (order **count**, never an amount).
+         *     - ``subscribers``: the creator's active subscribers (``status = active``).
+         */
+        StudioStatsOut: {
+            /** Followers */
+            followers: number;
+            /** Posts */
+            posts: number;
+            /** Products */
+            products: number;
+            /** Products Selling */
+            products_selling: number;
+            /** Orders */
+            orders: number;
+            /** Subscribers */
+            subscribers: number;
+        };
+        /**
+         * StudioError
+         * @description Coded error for studio-owner endpoints (``detail`` + machine ``code``).
+         *
+         *     Mirrors the commerce/membership coded-error shape so the web branches on the
+         *     stable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather
+         *     than the localized ``detail`` copy.
+         */
+        StudioError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * DashboardOut
@@ -6950,6 +7022,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_creator_api_studio_stats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioStatsOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioError"];
                 };
             };
         };

@@ -58,6 +58,10 @@ class ErrorCode(StrEnum):
     PRODUCT_NOT_FOUND = "ProductNotFound"
     PRODUCT_TYPE_INVALID = "ProductTypeInvalid"
     PRODUCT_STATUS_INVALID = "ProductStatusInvalid"
+    # A product with order history can't be hard-deleted (would SET_NULL the
+    # historical OrderItem.product FK, breaking stats attribution) — the owner
+    # must archive it (status=hidden) instead. Mirrors TIER_IN_USE below.
+    PRODUCT_HAS_ORDERS = "ProductHasOrders"
 
     # --- commerce (orders) --------------------------------------------------
     PRODUCT_NOT_ORDERABLE = "ProductNotOrderable"
