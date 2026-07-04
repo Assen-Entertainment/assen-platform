@@ -35,6 +35,7 @@ from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
 from config.api import api
+from config.errors import ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -73,9 +74,14 @@ _OPEN_REFUND = {RefundStatus.REQUESTED.value, RefundStatus.REVIEWING.value}
 
 
 class CommerceError(Schema):
-    """Stable error shape for commerce endpoints."""
+    """Stable error shape for commerce endpoints.
+
+    ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+    reason the web branches on (see :class:`~config.errors.ErrorCode`).
+    """
 
     detail: str
+    code: str
 
 
 class ProductOut(Schema):
@@ -180,7 +186,9 @@ def get_product(
         id=product_id
     ).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
     return 200, _product_out(product)
 
 
@@ -303,7 +311,9 @@ def studio_list_products(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     products = Product.objects.filter(creator=creator).order_by("-created_at", "id")
     return 200, [_studio_product_out(p) for p in products]
 
@@ -320,11 +330,17 @@ def studio_create_product(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     if payload.type not in ProductType.values:
-        return 422, CommerceError(detail="상품 유형이 올바르지 않아요.")
+        return 422, CommerceError(
+            detail="상품 유형이 올바르지 않아요.", code=ErrorCode.PRODUCT_TYPE_INVALID.value
+        )
     if payload.status not in ProductStatus.values:
-        return 422, CommerceError(detail="상품 상태가 올바르지 않아요.")
+        return 422, CommerceError(
+            detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
+        )
     product = Product.objects.create(
         creator=creator,
         type=payload.type,
@@ -355,17 +371,25 @@ def studio_update_product(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     product = Product.objects.filter(id=product_id, creator=creator).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
     if payload.type is not None:
         if payload.type not in ProductType.values:
-            return 422, CommerceError(detail="상품 유형이 올바르지 않아요.")
+            return 422, CommerceError(
+                detail="상품 유형이 올바르지 않아요.", code=ErrorCode.PRODUCT_TYPE_INVALID.value
+            )
         product.type = payload.type
     if payload.status is not None:
         if payload.status not in ProductStatus.values:
-            return 422, CommerceError(detail="상품 상태가 올바르지 않아요.")
+            return 422, CommerceError(
+                detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
+            )
         product.status = payload.status
     if payload.title is not None:
         product.title = payload.title
@@ -410,10 +434,14 @@ def studio_delete_product(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     product = Product.objects.filter(id=product_id, creator=creator).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
     product.delete()
     return 200, StudioAck(status="deleted")
 
@@ -575,17 +603,27 @@ def create_order(
     # can't be used to buy (or probe the existence of) a listing the fan can't see.
     product = _public_product_qs(account).filter(id=payload.product_id).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
     # Only a live 'selling' listing is orderable; a 'soldout'-status listing stays
     # publicly visible but cannot be purchased.
     if product.status != ProductStatus.SELLING.value:
-        return 422, CommerceError(detail="판매 중인 상품이 아니에요.")
+        return 422, CommerceError(
+            detail="판매 중인 상품이 아니에요.", code=ErrorCode.PRODUCT_NOT_ORDERABLE.value
+        )
     if product.locked:
-        return 422, CommerceError(detail="멤버십 전용 상품이에요.")
+        return 422, CommerceError(
+            detail="멤버십 전용 상품이에요.", code=ErrorCode.MEMBERSHIP_ONLY_PRODUCT.value
+        )
     if product.sold_out or (product.stock is not None and product.stock <= 0):
-        return 422, CommerceError(detail="품절된 상품이에요.")
+        return 422, CommerceError(
+            detail="품절된 상품이에요.", code=ErrorCode.OUT_OF_STOCK.value
+        )
     if product.stock is not None and payload.qty > product.stock:
-        return 422, CommerceError(detail="재고가 부족해요.")
+        return 422, CommerceError(
+            detail="재고가 부족해요.", code=ErrorCode.INSUFFICIENT_STOCK.value
+        )
 
     try:
         with transaction.atomic():
@@ -647,7 +685,9 @@ def get_order(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
-        return 404, CommerceError(detail="주문을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
     return 200, _order_out(order)
 
 
@@ -661,9 +701,13 @@ def cancel_order(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
-        return 404, CommerceError(detail="주문을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
     if order.status not in _CANCELLABLE:
-        return 422, CommerceError(detail="취소할 수 없는 주문 상태예요.")
+        return 422, CommerceError(
+            detail="취소할 수 없는 주문 상태예요.", code=ErrorCode.ORDER_NOT_CANCELLABLE.value
+        )
     order.status = OrderStatus.CANCELLED.value
     order.save(update_fields=["status"])
     return 200, _order_out(order)
@@ -679,15 +723,22 @@ def request_refund(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
-        return 404, CommerceError(detail="주문을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
     if order.status not in _REFUNDABLE:
-        return 422, CommerceError(detail="환불 신청할 수 없는 주문 상태예요.")
+        return 422, CommerceError(
+            detail="환불 신청할 수 없는 주문 상태예요.", code=ErrorCode.ORDER_NOT_REFUNDABLE.value
+        )
     # 열린 환불 1건 불변식은 DB 조건부 유니크 제약(uniq_open_refund_per_order)이 봉인 —
     # exists() 선확인은 친절한 메시지용이고, 동시 신청의 패자는 IntegrityError로 잡는다.
     try:
         with transaction.atomic():
             if order.refund_requests.filter(status__in=_OPEN_REFUND).exists():
-                return 422, CommerceError(detail="이미 환불 신청이 접수된 주문이에요.")
+                return 422, CommerceError(
+                    detail="이미 환불 신청이 접수된 주문이에요.",
+                    code=ErrorCode.OPEN_REFUND_EXISTS.value,
+                )
             RefundRequest.objects.create(
                 order=order,
                 reason=payload.reason,
@@ -695,7 +746,9 @@ def request_refund(
                 status=RefundStatus.REQUESTED,
             )
     except IntegrityError:
-        return 422, CommerceError(detail="이미 환불 신청이 접수된 주문이에요.")
+        return 422, CommerceError(
+            detail="이미 환불 신청이 접수된 주문이에요.", code=ErrorCode.OPEN_REFUND_EXISTS.value
+        )
     refreshed = _load_order(order_id, account)
     assert refreshed is not None  # owned above
     return 200, _order_out(refreshed)

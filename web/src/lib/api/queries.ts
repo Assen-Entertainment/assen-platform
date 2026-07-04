@@ -1,21 +1,29 @@
 "use client";
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import {
   getCreators,
   getCreator,
-  getProducts,
   getProduct,
+  getProductsPage,
   getMembershipTiers,
-  getPosts,
+  getPostsPage,
   getPost,
-  getComments,
-  getFeed,
+  getCommentsPage,
+  getFeedPage,
   getSearch,
-  getOrders,
+  getOrdersPage,
   getOrder,
-  getNotifications,
+  getNotificationsPage,
   getSubscriptions,
+  type Page,
   apiToggleFollow,
   apiToggleLike,
   apiAddComment,
@@ -59,6 +67,54 @@ const USE_API = Boolean(config.apiUrl);
 /** 네트워크 지연 시뮬레이션(목업 경로 전용). */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// --- 커서 페이지네이션(R4-W1) 유틸 --------------------------------------------
+/**
+ * 리스트 캐시 형태 — 테스트/레거시는 배열, 실사용(무한 쿼리)은 커서 페이지(InfiniteData).
+ * 낙관적 뮤테이션이 양쪽을 모두 안전하게 갱신하도록 공용 헬퍼로 다룬다(회귀 0).
+ */
+type ListCache<T> = T[] | InfiniteData<Page<T>, string | undefined>;
+
+/** SSR 배열 → 무한 쿼리 initialData(첫 페이지 시드). nextCursor는 마운트 refetch가 채운다. */
+function seedInfinite<T>(items?: T[]): InfiniteData<Page<T>, string | undefined> | undefined {
+  return items ? { pages: [{ items }], pageParams: [undefined] } : undefined;
+}
+
+/** 무한 페이지 → 평탄화 배열(뷰는 배열만 소비 — data 접근부 무변경). */
+function flattenPages<T>(data: InfiniteData<Page<T>, string | undefined>): T[] {
+  return data.pages.flatMap((pg) => pg.items);
+}
+
+/** 다음 페이지 커서(없으면 undefined → hasNextPage=false). */
+function nextPageParam<T>(last: Page<T>): string | undefined {
+  return last.nextCursor ?? undefined;
+}
+
+/** 리스트 캐시의 각 항목에 fn 적용(배열/InfiniteData 공용). */
+function mapListCache<T>(data: ListCache<T> | undefined, fn: (item: T) => T): ListCache<T> | undefined {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.map(fn);
+  return { ...data, pages: data.pages.map((pg) => ({ ...pg, items: pg.items.map(fn) })) };
+}
+
+/** 리스트 캐시 끝에 항목 추가(배열/InfiniteData 공용). 빈 캐시는 배열로 시드. */
+function appendListCache<T>(data: ListCache<T> | undefined, item: T): ListCache<T> {
+  if (!data) return [item];
+  if (Array.isArray(data)) return [...data, item];
+  const pages = data.pages.length ? data.pages : [{ items: [] as T[], nextCursor: undefined }];
+  const lastIdx = pages.length - 1;
+  return {
+    ...data,
+    pages: pages.map((pg, i) => (i === lastIdx ? { ...pg, items: [...pg.items, item] } : pg)),
+  };
+}
+
+/** 리스트 캐시 항목 수(tmp id 생성용 — 배열/InfiniteData 공용). */
+function countListCache<T>(data: ListCache<T> | undefined): number {
+  if (!data) return 0;
+  if (Array.isArray(data)) return data.length;
+  return data.pages.reduce((n, pg) => n + pg.items.length, 0);
+}
+
 /** 쿼리 키 */
 export const qk = {
   creators: ["creators"] as const,
@@ -86,18 +142,47 @@ export function useCreators(initialData?: Creator[]) {
 export function useCreator(handle: string, initialData?: Creator) {
   return useQuery({ queryKey: qk.creator(handle), queryFn: () => getCreator(handle), initialData });
 }
+/**
+ * 상품 목록 — 커서 무한 쿼리(스토어·디스커버리). select로 평탄화해 뷰는 배열만 소비하고
+ * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
+ */
 export function useProducts(creatorId?: string, initialData?: Product[]) {
-  return useQuery({ queryKey: qk.products(creatorId), queryFn: () => getProducts(creatorId), initialData });
+  return useInfiniteQuery({
+    queryKey: qk.products(creatorId),
+    queryFn: ({ pageParam }) => getProductsPage(creatorId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    select: flattenPages,
+  });
 }
 export function useMembershipTiers(id?: string) {
   return useQuery({ queryKey: qk.tiers(id), queryFn: () => getMembershipTiers(id) });
 }
+/** 크리에이터 포스트 — 커서 무한 쿼리. select 평탄화(뷰 무변경). mock=단일 페이지. */
 export function usePosts(id?: string, initialData?: Post[]) {
-  return useQuery({ queryKey: qk.posts(id), queryFn: () => getPosts(id), initialData });
+  return useInfiniteQuery({
+    queryKey: qk.posts(id),
+    queryFn: ({ pageParam }) => getPostsPage(id, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    select: flattenPages,
+  });
 }
-/** 피드 — B2 `/feed` 소비(B3 개인화 배선 지점). 서버 initialData 하이드레이션. */
+/**
+ * 피드 — B2 `/feed` 커서 무한 쿼리(B3 개인화 배선 지점). 서버 initialData 하이드레이션 +
+ * 마운트 refetch로 첫 페이지 nextCursor 확보 → 더보기. mock=단일 페이지.
+ */
 export function useFeed(initialData?: Post[]) {
-  return useQuery({ queryKey: qk.feed, queryFn: getFeed, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.feed,
+    queryFn: ({ pageParam }) => getFeedPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    select: flattenPages,
+  });
 }
 /** 검색 — B2 `/search?q=` 소비. 빈 질의는 비활성, 타이핑 중 직전 결과 유지. */
 export function useSearch(q: string) {
@@ -111,24 +196,46 @@ export function useSearch(q: string) {
 export function usePost(id: string, initialData?: Post) {
   return useQuery({ queryKey: qk.post(id), queryFn: () => getPost(id), initialData });
 }
+/** 댓글 — 커서 무한 쿼리(포스트 상세). select 평탄화(뷰 무변경). mock=단일 페이지. */
 export function useComments(postId: string, initialData?: Comment[]) {
-  return useQuery({ queryKey: qk.comments(postId), queryFn: () => getComments(postId), initialData });
+  return useInfiniteQuery({
+    queryKey: qk.comments(postId),
+    queryFn: ({ pageParam }) => getCommentsPage(postId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    select: flattenPages,
+  });
 }
 /** 단일 상품(스토어 상세). 인자 있는 fetcher → 화살표로 감싼다. */
 export function useProduct(id: string, initialData?: Product) {
   return useQuery({ queryKey: qk.product(id), queryFn: () => getProduct(id), initialData });
 }
-/** 주문 목록 — USE_API면 실 조회. 서버 initialData 하이드레이션. */
+/** 주문 목록 — 커서 무한 쿼리. select 평탄화. 서버 initialData 하이드레이션. mock=단일 페이지. */
 export function useOrders(initialData?: Order[]) {
-  return useQuery({ queryKey: qk.orders, queryFn: getOrders, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.orders,
+    queryFn: ({ pageParam }) => getOrdersPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    select: flattenPages,
+  });
 }
 /** 단일 주문 — USE_API면 실 조회. */
 export function useOrder(id: string, initialData?: Order) {
   return useQuery({ queryKey: qk.order(id), queryFn: () => getOrder(id), initialData });
 }
-/** 알림 목록 — USE_API면 실 조회. */
+/** 알림 목록 — 커서 무한 쿼리. select 평탄화. 서버 initialData 하이드레이션. mock=단일 페이지. */
 export function useNotifications(initialData?: Notification[]) {
-  return useQuery({ queryKey: qk.notifications, queryFn: getNotifications, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.notifications,
+    queryFn: ({ pageParam }) => getNotificationsPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    select: flattenPages,
+  });
 }
 /** 구독 목록 — USE_API면 실 조회. */
 export function useSubscriptions(initialData?: Subscription[]) {
@@ -192,16 +299,17 @@ export function useToggleLike() {
       await qc.cancelQueries({ queryKey: qk.feed });
       await qc.cancelQueries({ queryKey: ["posts"] });
       const prevPost = qc.getQueryData<Post>(qk.post(id));
-      const prevFeed = qc.getQueryData<Post[]>(qk.feed);
-      const prevLists = qc.getQueriesData<Post[]>({ queryKey: ["posts"] });
+      const prevFeed = qc.getQueryData<ListCache<Post>>(qk.feed);
+      const prevLists = qc.getQueriesData<ListCache<Post>>({ queryKey: ["posts"] });
       const apply = (p: Post): Post => {
         // 멱등: 대상이 아니거나 이미 같은 liked 상태면 그대로. count는 0 미만 방지.
         if (p.id !== id || p.liked === next) return p;
         return { ...p, liked: next, likeCount: Math.max(0, p.likeCount + (next ? 1 : -1)) };
       };
+      // post(id)는 단건, feed·["posts"]는 리스트 캐시(배열/무한 페이지 공용) — 대칭 갱신.
       qc.setQueryData<Post | undefined>(qk.post(id), (p) => (p ? apply(p) : p));
-      qc.setQueryData<Post[] | undefined>(qk.feed, (list) => list?.map(apply));
-      qc.setQueriesData<Post[]>({ queryKey: ["posts"] }, (list) => list?.map(apply));
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => mapListCache(d, apply));
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => mapListCache(d, apply));
       return { prevPost, prevFeed, prevLists, id };
     },
     onError: (_e, _v, ctx) => {
@@ -216,8 +324,8 @@ export function useToggleLike() {
       const fix = (p: Post): Post =>
         p.id === id ? { ...p, liked: result.liked, likeCount: result.like_count } : p;
       qc.setQueryData<Post | undefined>(qk.post(id), (p) => (p ? fix(p) : p));
-      qc.setQueryData<Post[] | undefined>(qk.feed, (list) => list?.map(fix));
-      qc.setQueriesData<Post[]>({ queryKey: ["posts"] }, (list) => list?.map(fix));
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => mapListCache(d, fix));
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => mapListCache(d, fix));
     },
     onSettled: (data) => {
       if (USE_API && data) qc.invalidateQueries({ queryKey: qk.post(data.id) });
@@ -240,9 +348,9 @@ export function useAddComment(postId: string) {
     onMutate: async (body: string) => {
       await qc.cancelQueries({ queryKey: qk.comments(postId) });
       await qc.cancelQueries({ queryKey: qk.post(postId) });
-      const prev = qc.getQueryData<Comment[]>(qk.comments(postId));
+      const prev = qc.getQueryData<ListCache<Comment>>(qk.comments(postId));
       const prevPost = qc.getQueryData<Post>(qk.post(postId));
-      const tmpId = `tmp-${prev?.length ?? 0}`;
+      const tmpId = `tmp-${countListCache(prev)}`;
       const optimistic: Comment = {
         id: tmpId,
         postId,
@@ -251,7 +359,7 @@ export function useAddComment(postId: string) {
         body,
         createdAt: "방금",
       };
-      qc.setQueryData<Comment[]>(qk.comments(postId), (list) => [...(list ?? []), optimistic]);
+      qc.setQueryData<ListCache<Comment>>(qk.comments(postId), (d) => appendListCache(d, optimistic));
       qc.setQueryData<Post | undefined>(qk.post(postId), (p) =>
         p ? { ...p, commentCount: p.commentCount + 1 } : p,
       );
@@ -266,8 +374,8 @@ export function useAddComment(postId: string) {
       // 임시 댓글(tmp-…)을 서버 실 댓글로 치환(id·작성자·시각 정정).
       if (USE_API && typeof data === "object" && ctx?.tmpId) {
         const real = data as Comment;
-        qc.setQueryData<Comment[]>(qk.comments(postId), (list) =>
-          list?.map((c) => (c.id === ctx.tmpId ? real : c)),
+        qc.setQueryData<ListCache<Comment>>(qk.comments(postId), (d) =>
+          mapListCache(d, (c) => (c.id === ctx.tmpId ? real : c)),
         );
       }
     },
@@ -420,9 +528,9 @@ export function useMarkNotificationRead() {
     },
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: qk.notifications });
-      const prev = qc.getQueryData<Notification[]>(qk.notifications);
-      qc.setQueryData<Notification[] | undefined>(qk.notifications, (list) =>
-        list?.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      const prev = qc.getQueryData<ListCache<Notification>>(qk.notifications);
+      qc.setQueryData<ListCache<Notification>>(qk.notifications, (d) =>
+        mapListCache(d, (n) => (n.id === id ? { ...n, read: true } : n)),
       );
       return { prev };
     },
@@ -446,9 +554,9 @@ export function useMarkAllNotificationsRead() {
     },
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: qk.notifications });
-      const prev = qc.getQueryData<Notification[]>(qk.notifications);
-      qc.setQueryData<Notification[] | undefined>(qk.notifications, (list) =>
-        list?.map((n) => ({ ...n, read: true })),
+      const prev = qc.getQueryData<ListCache<Notification>>(qk.notifications);
+      qc.setQueryData<ListCache<Notification>>(qk.notifications, (d) =>
+        mapListCache(d, (n) => ({ ...n, read: true })),
       );
       return { prev };
     },

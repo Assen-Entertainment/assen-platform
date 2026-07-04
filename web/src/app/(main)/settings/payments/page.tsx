@@ -23,7 +23,7 @@ import {
   SafetyGuideNotice,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiErrorMessage } from "@/lib/api";
 import {
   usePaymentMethods,
   useAddPaymentMethod,
@@ -65,8 +65,8 @@ export default function PaymentsSettingsPage() {
 
   const onError = (e: unknown, fallback: string) => {
     if (e instanceof ApiError && e.status === 401) return;
-    const description = e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.";
-    toast({ title: fallback, description });
+    // error code(PaymentCardInvalid·PaymentMethodNotFound 등) → apiErrorMessage(detail 표시 폴백).
+    toast({ title: fallback, description: apiErrorMessage(e) });
   };
 
   const remove = (id: string) =>

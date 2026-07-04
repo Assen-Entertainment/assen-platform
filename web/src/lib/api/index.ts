@@ -36,6 +36,7 @@ import {
 
 export * from "./types";
 export { apiFetch, ApiError } from "./client";
+export { apiErrorMessage, ERROR_CODE_MESSAGES } from "./error-messages";
 
 const USE_API = Boolean(config.apiUrl);
 interface RawCreator {
@@ -494,6 +495,29 @@ const PAYMENT_METHODS: SavedPaymentMethod[] = [
   { id: "m2", brand: "카카오페이", last4: "8890", isPrimary: false, createdAt: "2026-06-10T00:00:00Z" },
 ];
 
+// --- 커서 페이지네이션(R4-W1): 커서 인지 fetcher --------------------------------
+/**
+ * 커서 페이지 — 뷰/훅이 소비하는 언랩 형태(camelCase). 서버 `Paginated<T>`(next_cursor)에서
+ * items를 매핑하고 next_cursor→nextCursor로 좁힌다. 마지막 페이지·mock 폴백은 nextCursor=undefined.
+ */
+export interface Page<T> {
+  items: T[];
+  nextCursor?: string;
+}
+
+/** cursor + 추가 파라미터(creator_id 등)를 병합해 쿼리스트링 구성(빈 값은 생략). */
+function pageQuery(cursor?: string, ...extra: (string | false | undefined)[]): string {
+  const parts = [...extra, cursor ? `cursor=${encodeURIComponent(cursor)}` : undefined].filter(
+    (p): p is string => Boolean(p),
+  );
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+/** 서버 Paginated 응답 → Page(매퍼 적용 + next_cursor 정규화). */
+function toPage<R, T>(raw: Paginated<R>, map: (r: R) => T): Page<T> {
+  return { items: raw.items.map(map), nextCursor: raw.next_cursor ?? undefined };
+}
+
 // --- 도메인 함수 (apiUrl 설정 시 실 B2 API, 아니면 mock 폴백) ----------------
 export async function getCreators(): Promise<Creator[]> {
   if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);
@@ -518,6 +542,14 @@ export async function getProducts(creatorId?: string): Promise<Product[]> {
   }
   return creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS;
 }
+/** 상품 커서 페이지 — 스토어·디스커버리 무한 로드. mock은 단일 페이지(nextCursor 없음). */
+export async function getProductsPage(creatorId?: string, cursor?: string): Promise<Page<Product>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, creatorId && `creator_id=${encodeURIComponent(creatorId)}`);
+    return toPage(await apiFetch<Paginated<RawProduct>>(`/products${q}`), mapProduct);
+  }
+  return { items: creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS };
+}
 export async function getMembershipTiers(creatorId?: string): Promise<MembershipTier[]> {
   if (USE_API) {
     const q = creatorId ? `?creator_id=${encodeURIComponent(creatorId)}` : "";
@@ -533,10 +565,23 @@ export async function getPosts(creatorId?: string): Promise<Post[]> {
   }
   return creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS;
 }
+/** 포스트 커서 페이지 — 크리에이터 포스트 무한 로드. mock은 단일 페이지. */
+export async function getPostsPage(creatorId?: string, cursor?: string): Promise<Page<Post>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, creatorId && `creator_id=${encodeURIComponent(creatorId)}`);
+    return toPage(await apiFetch<Paginated<RawPost>>(`/posts${q}`), mapPost);
+  }
+  return { items: creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS };
+}
 /** 피드 — B2 `/feed` 소비(익명=최신 전체). B3 개인화(팔로잉) 피드의 배선 지점. */
 export async function getFeed(): Promise<Post[]> {
   if (USE_API) return (await apiFetch<Paginated<RawPost>>("/feed")).items.map(mapPost);
   return POSTS;
+}
+/** 피드 커서 페이지 — 무한 로드. mock은 단일 페이지. */
+export async function getFeedPage(cursor?: string): Promise<Page<Post>> {
+  if (USE_API) return toPage(await apiFetch<Paginated<RawPost>>(`/feed${pageQuery(cursor)}`), mapPost);
+  return { items: POSTS };
 }
 /** 검색 — B2 `/search?q=` 소비. mock 폴백은 서버 의미론(name/handle·title 부분일치, 10건)을 미러. */
 export async function getSearch(q: string): Promise<SearchResult> {
@@ -577,6 +622,14 @@ export async function getComments(postId: string): Promise<Comment[]> {
   }
   return COMMENTS.filter((c) => c.postId === postId);
 }
+/** 댓글 커서 페이지 — 포스트 상세 무한 로드. mock은 단일 페이지. */
+export async function getCommentsPage(postId: string, cursor?: string): Promise<Page<Comment>> {
+  if (USE_API) {
+    const path = `/posts/${encodeURIComponent(postId)}/comments${pageQuery(cursor)}`;
+    return toPage(await apiFetch<Paginated<RawComment>>(path), mapComment);
+  }
+  return { items: COMMENTS.filter((c) => c.postId === postId) };
+}
 
 /**
  * 단일 상품 — USE_API면 `GET /products/{id}`(ProductOut) 단건 조회(404/422→undefined),
@@ -609,6 +662,18 @@ export async function getOrders(): Promise<Order[]> {
   }
   return ORDERS;
 }
+/** 주문 커서 페이지 — 무한 로드. 401(비로그인)은 빈 단일 페이지. mock은 단일 페이지. */
+export async function getOrdersPage(cursor?: string): Promise<Page<Order>> {
+  if (USE_API) {
+    try {
+      return toPage(await apiFetch<Paginated<RawOrder>>(`/orders${pageQuery(cursor)}`), mapOrder);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: ORDERS };
+}
 /** 단일 주문 — USE_API면 실 조회. 미지의 id/비로그인은 undefined(notFound 계약). */
 export async function getOrder(id: string): Promise<Order | undefined> {
   if (USE_API) {
@@ -632,6 +697,19 @@ export async function getNotifications(): Promise<Notification[]> {
     }
   }
   return NOTIFICATIONS;
+}
+/** 알림 커서 페이지 — 무한 로드. 401(비로그인)은 빈 단일 페이지. mock은 단일 페이지. */
+export async function getNotificationsPage(cursor?: string): Promise<Page<Notification>> {
+  if (USE_API) {
+    try {
+      const raw = await apiFetch<Paginated<RawNotification>>(`/notifications${pageQuery(cursor)}`);
+      return toPage(raw, mapNotification);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: NOTIFICATIONS };
 }
 /** 구독 목록 — USE_API면 실 조회(배열 응답), 아니면 mock. SSR 401(비로그인)은 빈 목록. */
 export async function getSubscriptions(): Promise<Subscription[]> {

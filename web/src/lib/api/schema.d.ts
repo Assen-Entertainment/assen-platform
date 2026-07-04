@@ -2852,10 +2852,15 @@ export interface components {
         /**
          * CommerceError
          * @description Stable error shape for commerce endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
          */
         CommerceError: {
             /** Detail */
             detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * StudioProductOut
@@ -3941,10 +3946,15 @@ export interface components {
         /**
          * SubscriptionError
          * @description Stable error shape for subscription and studio-tier endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
          */
         SubscriptionError: {
             /** Detail */
             detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * StudioTierIn
@@ -4201,10 +4211,15 @@ export interface components {
         /**
          * PaymentMethodError
          * @description Stable error shape for payment-method endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
          */
         PaymentMethodError: {
             /** Detail */
             detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * PaymentMethodIn

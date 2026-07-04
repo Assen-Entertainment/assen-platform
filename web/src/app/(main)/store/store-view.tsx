@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Chip, MonetizableItem, EmptyState } from "@/components/ui";
+import { Chip, MonetizableItem, EmptyState, Button } from "@/components/ui";
 import { useProducts } from "@/lib/api/queries";
 import type { Product } from "@/lib/api";
 
@@ -17,7 +17,7 @@ const FILTERS = [
 
 export function StoreView({ products }: { products: Product[] }) {
   const router = useRouter();
-  const { data } = useProducts(undefined, products);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useProducts(undefined, products);
   const list = data ?? products;
   const [f, setF] = React.useState<string>("all");
   const items = f === "all" ? list : list.filter((p) => p.type === f);
@@ -48,6 +48,14 @@ export function StoreView({ products }: { products: Product[] }) {
       ) : (
         <EmptyState title="상품이 없어요" description="다른 카테고리를 선택해 보세요." />
       )}
+      {/* 더보기 — 커서 다음 페이지가 있을 때만(필터는 클라이언트, 로드는 전체 상품 커서). */}
+      {hasNextPage ? (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

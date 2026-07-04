@@ -31,6 +31,7 @@ from apps.identity.services import (
     issue_token_pair,
     merge_anonymous_into_account,
 )
+from config.errors import ErrorCode
 from config.otp import OtpSender
 
 # Consent wording version recorded at signup. The final copy is human-approved;
@@ -39,7 +40,20 @@ SIGNUP_CONSENT_VERSION = "1.0"
 
 
 class SignupError(Exception):
-    """Raised when a signup is rejected (bad OTP or missing mandatory consent)."""
+    """Raised when a signup is rejected (bad OTP or missing mandatory consent).
+
+    Carries a stable :class:`~config.errors.ErrorCode` so the API layer can surface a
+    machine-readable ``code`` alongside ``detail`` (the web branches on the code, not
+    the message). Defaults to :attr:`ErrorCode.PHONE_INVALID` for the phone-format
+    guard in :func:`normalize_phone`; callers set a more specific code at each raise.
+    """
+
+    def __init__(
+        self, message: str, *, code: ErrorCode = ErrorCode.PHONE_INVALID
+    ) -> None:
+        """Bind the human ``detail`` message and the stable error ``code``."""
+        self.code = code
+        super().__init__(message)
 
 
 # Minimum digit count for a plausible phone number. KR mobile numbers are 10-11
@@ -70,7 +84,9 @@ def normalize_phone(phone: str) -> str:
     else:
         core = digits  # bare country-coded or foreign digits
     if len(core) < _MIN_PHONE_DIGITS:
-        raise SignupError("A valid phone number is required.")
+        raise SignupError(
+            "A valid phone number is required.", code=ErrorCode.PHONE_INVALID
+        )
     return "+" + core
 
 
@@ -112,10 +128,13 @@ def register_fan(
     from the unchanged token core.
     """
     if not (consent_terms and consent_privacy):
-        raise SignupError("Both terms and privacy consent are required.")
+        raise SignupError(
+            "Both terms and privacy consent are required.",
+            code=ErrorCode.CONSENT_REQUIRED,
+        )
     phone = normalize_phone(phone)
     if not otp_sender.verify(phone=phone, code=otp_code):
-        raise SignupError("Invalid OTP.")
+        raise SignupError("Invalid OTP.", code=ErrorCode.OTP_INVALID)
 
     subject_hash = hash_phone(phone)
     # get_or_create wraps the INSERT in a savepoint, so a concurrent signup that

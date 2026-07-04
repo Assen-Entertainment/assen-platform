@@ -13,6 +13,9 @@ dependencies = [
     "psycopg[binary]>=3.2,<4.0",
     "gunicorn>=23.0,<24.0",
     "django-linear-migrations>=2.3,<3.0",
+    # Error tracking. No-op unless SENTRY_DSN is set (config.observability); the
+    # Django integration ships in the base package, so no extra is needed.
+    "sentry-sdk>=2.0,<3.0",
 ]
 
 [dependency-groups]

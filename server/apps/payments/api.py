@@ -21,13 +21,13 @@ from typing import cast
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
 from ninja import Router, Schema
-from ninja.errors import HttpError
 from pydantic import Field
 
 from apps.identity.auth import fan_auth
 from apps.identity.models import Account
 from apps.payments.models import SavedPaymentMethod
 from config.api import api
+from config.errors import ApiError, ErrorCode
 from config.payment import PaymentError, payment_tokenizer
 from config.throttle import user_write_throttle
 
@@ -35,9 +35,14 @@ payment_methods_router = Router(auth=fan_auth, tags=["payment-methods"])
 
 
 class PaymentMethodError(Schema):
-    """Stable error shape for payment-method endpoints."""
+    """Stable error shape for payment-method endpoints.
+
+    ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+    reason the web branches on (see :class:`~config.errors.ErrorCode`).
+    """
 
     detail: str
+    code: str
 
 
 class PaymentAck(Schema):
@@ -106,11 +111,17 @@ def register_payment_method(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     tokenizer = payment_tokenizer()
     if tokenizer is None:
-        raise HttpError(503, "결제수단 등록을 사용할 수 없어요.")
+        raise ApiError(
+            503,
+            "결제수단 등록을 사용할 수 없어요.",
+            code=ErrorCode.PAYMENTS_UNAVAILABLE,
+        )
     try:
         card = tokenizer.tokenize(card_number=payload.card_number, brand=payload.brand)
     except PaymentError:
-        return 422, PaymentMethodError(detail="카드 정보가 올바르지 않아요.")
+        return 422, PaymentMethodError(
+            detail="카드 정보가 올바르지 않아요.", code=ErrorCode.PAYMENT_CARD_INVALID.value
+        )
     # First method is primary by default; else honour make_primary. Decided before
     # insert; the DB constraint is the race-safe backstop in the except below.
     has_existing = SavedPaymentMethod.objects.filter(owner=account).exists()
@@ -162,7 +173,9 @@ def set_primary_payment_method(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     method = SavedPaymentMethod.objects.filter(id=method_id, owner=account).first()
     if method is None:
-        return 404, PaymentMethodError(detail="결제수단을 찾을 수 없어요.")
+        return 404, PaymentMethodError(
+            detail="결제수단을 찾을 수 없어요.", code=ErrorCode.PAYMENT_METHOD_NOT_FOUND.value
+        )
     if not method.is_primary:
         try:
             with transaction.atomic():
@@ -197,7 +210,9 @@ def delete_payment_method(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     method = SavedPaymentMethod.objects.filter(id=method_id, owner=account).first()
     if method is None:
-        return 404, PaymentMethodError(detail="결제수단을 찾을 수 없어요.")
+        return 404, PaymentMethodError(
+            detail="결제수단을 찾을 수 없어요.", code=ErrorCode.PAYMENT_METHOD_NOT_FOUND.value
+        )
     method.delete()
     return 200, PaymentAck(status="deleted")
 

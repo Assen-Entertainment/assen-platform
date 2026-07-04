@@ -11,7 +11,12 @@ import type { Post, Comment } from "@/lib/api";
 /** Post 상세 뷰(클라). 좋아요·댓글=낙관적 뮤테이션, 공유=토스트. */
 export function PostDetailView({ post: initialPost, comments: initialComments }: { post: Post; comments: Comment[] }) {
   const { data: post } = usePost(initialPost.id, initialPost);
-  const { data: comments } = useComments(initialPost.id, initialComments);
+  const {
+    data: comments,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useComments(initialPost.id, initialComments);
   const toggleLike = useToggleLike();
   const addComment = useAddComment(initialPost.id);
   const { toast } = useToast();
@@ -108,6 +113,15 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
           ))
         )}
       </ul>
+
+      {/* 더보기 — 댓글 커서 다음 페이지가 있을 때만(무한 쿼리). */}
+      {hasNextPage ? (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "불러오는 중…" : "댓글 더보기"}
+          </Button>
+        </div>
+      ) : null}
 
       <form onSubmit={submit} className="flex items-center gap-2">
         <TextField

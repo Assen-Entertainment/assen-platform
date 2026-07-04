@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import environ
 
+from config.observability import init_sentry
 from config.settings.base import *  # noqa: F403
-from config.settings.base import env
+from config.settings.base import build_logging, env
 
 DEBUG = False
 
@@ -28,10 +29,10 @@ ALLOWED_HOSTS = _required.list("DJANGO_ALLOWED_HOSTS")
 # the original request was HTTPS (required for secure-cookie/redirect logic).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
-# ALB target health checks probe /healthz over plain HTTP without
+# ALB target health checks probe /healthz and /readyz over plain HTTP without
 # X-Forwarded-Proto — a blanket redirect would 301 the probe and keep every
-# task "unhealthy" forever. Exempt exactly that path (SDLC 11 §6).
-SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
+# task "unhealthy" forever. Exempt exactly those paths (SDLC 11 §6).
+SECURE_REDIRECT_EXEMPT = [r"^healthz$", r"^readyz$"]
 
 # HSTS — start modest; raise to a year once the domain set is stable.
 SECURE_HSTS_SECONDS = env.int("DJANGO_HSTS_SECONDS", default=3600)
@@ -48,15 +49,13 @@ CSRF_TRUSTED_ORIGINS: list[str] = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", defaul
 # ALB/CDN (SDLC 11 §4 option B), leave this unset.
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 
-# Structured-ish console logging; the container runtime (CloudWatch) collects stdout.
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "console": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
-    },
-    "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "console"},
-    },
-    "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO")},
-}
+# Structured JSON logging to stdout; the container runtime (CloudWatch) collects
+# it. Same dictConfig as base, with the JSON formatter selected — each line is a
+# machine-parseable object carrying the request-id correlation field.
+LOGGING = build_logging(json_format=True)
+
+# Error tracking. No-op unless SENTRY_DSN is set (config.observability.init_sentry),
+# so an unconfigured deploy stays silent; when wired it reports with PII scrubbed
+# and send_default_pii=False. Called at settings import — Sentry's Django
+# integration hooks lazily, so the app registry need not be ready yet.
+init_sentry()

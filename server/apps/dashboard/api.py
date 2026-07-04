@@ -16,7 +16,6 @@ from typing import cast
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
-from ninja.errors import HttpError
 
 from apps.admin_rbac.permissions import operator_required
 from apps.audit.models import AuditAction
@@ -25,6 +24,7 @@ from apps.dashboard.metrics import month_bounds, operator_kpi_metrics
 from apps.event_log.services import daily_metrics
 from apps.identity.models import Account
 from config.api import api
+from config.errors import ApiError, ErrorCode
 
 router = Router(auth=operator_required, tags=["operator-dashboard"])
 
@@ -128,7 +128,9 @@ def get_metrics(
         else month_end
     )
     if period_end <= period_start:
-        raise HttpError(422, "end must be after start.")
+        raise ApiError(
+            422, "end must be after start.", code=ErrorCode.DATE_RANGE_INVALID
+        )
 
     metrics = operator_kpi_metrics(period_start=period_start, period_end=period_end)
     record_audit(

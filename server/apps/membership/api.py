@@ -23,6 +23,7 @@ from apps.identity.auth import fan_auth
 from apps.identity.models import Account
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
 from config.api import api
+from config.errors import ErrorCode
 from config.throttle import user_write_throttle
 
 # Mock billing cycle length; there is no real recurring billing (B7 gated).
@@ -87,9 +88,14 @@ api.add_router("/tiers", tiers_router)
 
 
 class SubscriptionError(Schema):
-    """Stable error shape for subscription and studio-tier endpoints."""
+    """Stable error shape for subscription and studio-tier endpoints.
+
+    ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+    reason the web branches on (see :class:`~config.errors.ErrorCode`).
+    """
 
     detail: str
+    code: str
 
 
 # --------------------------------------------------------------------------- #
@@ -179,7 +185,9 @@ def studio_list_tiers(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+        return 403, SubscriptionError(
+            detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     tiers = MembershipTier.objects.filter(creator=creator).order_by("sort_order", "price")
     return 200, [_studio_tier_out(t) for t in tiers]
 
@@ -196,7 +204,9 @@ def studio_create_tier(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+        return 403, SubscriptionError(
+            detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     tier = MembershipTier.objects.create(
         creator=creator,
         name=payload.name,
@@ -223,10 +233,14 @@ def studio_update_tier(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+        return 403, SubscriptionError(
+            detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     tier = MembershipTier.objects.filter(id=tier_id, creator=creator).first()
     if tier is None:
-        return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
+        return 404, SubscriptionError(
+            detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
+        )
     if payload.name is not None:
         tier.name = payload.name
     if payload.price is not None:
@@ -271,15 +285,20 @@ def studio_delete_tier(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, SubscriptionError(detail="크리에이터만 멤버십을 관리할 수 있어요.")
+        return 403, SubscriptionError(
+            detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     tier = MembershipTier.objects.filter(id=tier_id, creator=creator).first()
     if tier is None:
-        return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
+        return 404, SubscriptionError(
+            detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
+        )
     if Subscription.objects.filter(
         tier=tier, status=SubscriptionStatus.ACTIVE.value
     ).exists():
         return 422, SubscriptionError(
-            detail="활성 구독이 있는 등급은 삭제할 수 없어요. 먼저 비활성화(active=False)하세요."
+            detail="활성 구독이 있는 등급은 삭제할 수 없어요. 먼저 비활성화(active=False)하세요.",
+            code=ErrorCode.TIER_IN_USE.value,
         )
     tier.delete()
     return 200, StudioTierAck(status="deleted")
@@ -358,7 +377,9 @@ def subscribe(
         .first()
     )
     if tier is None:
-        return 404, SubscriptionError(detail="멤버십 등급을 찾을 수 없어요.")
+        return 404, SubscriptionError(
+            detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
+        )
     active = Subscription.objects.filter(fan=account, status=SubscriptionStatus.ACTIVE)
     # Dedup by creator when the tier belongs to one; otherwise by the exact tier.
     if tier.creator is not None:
@@ -366,7 +387,9 @@ def subscribe(
     else:
         active = active.filter(tier=tier)
     if active.exists():
-        return 422, SubscriptionError(detail="이미 구독 중인 크리에이터예요.")
+        return 422, SubscriptionError(
+            detail="이미 구독 중인 크리에이터예요.", code=ErrorCode.DUPLICATE_SUBSCRIPTION.value
+        )
     # The exists() check above is the fast path; the (fan, creator) partial-unique
     # constraint is the race-safe backstop (B2). Two concurrent subscribes can both
     # pass the check — the DB rejects the second insert, which we surface as 422.
@@ -379,7 +402,9 @@ def subscribe(
                 next_billing_date=timezone.localdate() + _BILLING_CYCLE,
             )
     except IntegrityError:
-        return 422, SubscriptionError(detail="이미 구독 중인 크리에이터예요.")
+        return 422, SubscriptionError(
+            detail="이미 구독 중인 크리에이터예요.", code=ErrorCode.DUPLICATE_SUBSCRIPTION.value
+        )
     return 201, _subscription_out(sub)
 
 
@@ -415,9 +440,14 @@ def cancel_subscription(
         .first()
     )
     if sub is None:
-        return 404, SubscriptionError(detail="구독을 찾을 수 없어요.")
+        return 404, SubscriptionError(
+            detail="구독을 찾을 수 없어요.", code=ErrorCode.SUBSCRIPTION_NOT_FOUND.value
+        )
     if sub.status != SubscriptionStatus.ACTIVE.value or sub.cancelled_at is not None:
-        return 422, SubscriptionError(detail="이미 해지 예정이거나 해지된 구독이에요.")
+        return 422, SubscriptionError(
+            detail="이미 해지 예정이거나 해지된 구독이에요.",
+            code=ErrorCode.SUBSCRIPTION_NOT_CANCELLABLE.value,
+        )
     sub.cancelled_at = timezone.now()
     sub.save(update_fields=["cancelled_at"])
     return 200, _subscription_out(sub)

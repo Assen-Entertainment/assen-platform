@@ -25,7 +25,7 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
   const { toast } = useToast();
   const { user, mounted } = useSession();
   const adultVerified = user?.adultVerified === true;
-  const { data, isError, refetch } = useFeed(initialPosts);
+  const { data, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useFeed(initialPosts);
   const toggleLike = useToggleLike();
   const report = useReport();
   const posts = data ?? initialPosts;
@@ -56,6 +56,7 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
       ) : posts.length === 0 ? (
         <EmptyState title="아직 피드가 비어 있어요" description="관심 있는 크리에이터를 팔로우해 보세요." />
       ) : (
+        <>
         <div className="overflow-hidden rounded-lg border border-outline">
           {posts.map((p) => (
             <PostCard
@@ -118,6 +119,15 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
             />
           ))}
         </div>
+        {/* 더보기 — 커서 다음 페이지가 있을 때만 노출(무한 쿼리 fetchNextPage). */}
+        {hasNextPage ? (
+          <div className="mt-4 flex justify-center">
+            <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+            </Button>
+          </div>
+        ) : null}
+        </>
       )}
 
       {/* 더보기 액션 메뉴(bottom sheet). */}

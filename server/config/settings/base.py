@@ -8,6 +8,7 @@ never live in source; only `.env.example` is committed (CONSTRAINTS #27).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import environ
 from celery.schedules import crontab
@@ -66,6 +67,12 @@ ENABLE_MOCK_PAYMENT: bool = False
 # prod stays throttled) for rapid smoke/load runs that fire many writes at once.
 # See config.throttle.
 FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", default=True)
+
+# Rate-limiter backend for the cross-cutting middleware limiter (config.ratelimit).
+# "memory" (default) is the per-process in-memory limiter; "redis" selects the
+# shared cross-worker limiter once it is wired (deployment-bound). An unwired value
+# fails safe to in-memory rather than crash the request path — see get_rate_limiter.
+RATELIMIT_BACKEND: str = env("RATELIMIT_BACKEND", default="memory")
 
 # Django contrib + third-party apps.
 DJANGO_APPS = [
@@ -207,3 +214,54 @@ CELERY_BEAT_SCHEDULE: dict[str, object] = {
         "schedule": crontab(minute=0),
     },
 }
+
+# Structured logging (R4-W2, ASS-242). One dictConfig shared by every
+# environment; the only axis that varies is the console formatter — dev/test keep
+# the human-readable line, prod switches to the JSON formatter (see prod.py). Every
+# record is stamped with the per-request correlation id via the request_id filter
+# (config.observability.RequestIDLogFilter), so a log line traces back to the
+# request that produced it. Handlers write to stdout only — the container runtime
+# (CloudWatch) collects it; no file/socket sinks that could smuggle PII off-box.
+LOG_LEVEL: str = env("DJANGO_LOG_LEVEL", default="INFO")
+
+
+def build_logging(*, json_format: bool) -> dict[str, Any]:
+    """Return the dictConfig ``LOGGING`` mapping.
+
+    ``json_format`` selects the structured JSON formatter (prod) over the
+    human-readable console formatter (dev/test). Both attach the request_id filter
+    so the correlation id is available to whichever formatter renders the record.
+    """
+    formatter = "json" if json_format else "console"
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "filters": {
+            "request_id": {"()": "config.observability.RequestIDLogFilter"},
+        },
+        "formatters": {
+            "console": {
+                "format": "%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
+            },
+            "json": {"()": "config.observability.JsonLogFormatter"},
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": formatter,
+                "filters": ["request_id"],
+            },
+        },
+        "root": {"handlers": ["console"], "level": LOG_LEVEL},
+        "loggers": {
+            # Standard hierarchy: framework noise and our own app tree both flow
+            # through the single console handler. propagate=False so a record is
+            # emitted once (by the logger's own handler), not re-emitted at root.
+            "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+            "apps": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        },
+    }
+
+
+# dev/test inherit this human-readable config; prod overrides with json_format=True.
+LOGGING: dict[str, Any] = build_logging(json_format=False)

@@ -16,13 +16,8 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { useSession } from "@/lib/session";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useCreator, useUpdateMe, useUpdateStudioProfile } from "@/lib/api/queries";
-
-/** 실패 토스트 — ApiError.detail 우선(401은 전역 세션 가드가 처리). */
-function apiErrorDescription(e: unknown): string {
-  return e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.";
-}
 
 /**
  * 계정 설정 — 닉네임은 PATCH /fan/me(실 저장·세션 무효화), 크리에이터 프로필(소개)은
@@ -55,7 +50,7 @@ export default function AccountSettingsPage() {
       onSuccess: () => toast({ title: "저장되었어요", description: "닉네임이 업데이트되었습니다." }),
       onError: (e) => {
         if (e instanceof ApiError && e.status === 401) return;
-        toast({ title: "저장하지 못했어요", description: apiErrorDescription(e) });
+        toast({ title: "저장하지 못했어요", description: apiErrorMessage(e) });
       },
     });
   };
@@ -161,7 +156,7 @@ function CreatorProfileSection({ handle }: { handle: string }) {
         onSuccess: () => toast({ title: "프로필이 저장되었어요", description: "크리에이터 소개가 업데이트되었습니다." }),
         onError: (e) => {
           if (e instanceof ApiError && e.status === 401) return;
-          toast({ title: "저장하지 못했어요", description: apiErrorDescription(e) });
+          toast({ title: "저장하지 못했어요", description: apiErrorMessage(e) });
         },
       },
     );

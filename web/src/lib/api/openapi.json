@@ -8107,15 +8107,20 @@
         "type": "object"
       },
       "CommerceError": {
-        "description": "Stable error shape for commerce endpoints.",
+        "description": "Stable error shape for commerce endpoints.\n\n``detail`` is human-facing copy (display); ``code`` is the stable machine-readable\nreason the web branches on (see :class:`~config.errors.ErrorCode`).",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code"
         ],
         "title": "CommerceError",
         "type": "object"
@@ -10346,15 +10351,20 @@
         "type": "object"
       },
       "SubscriptionError": {
-        "description": "Stable error shape for subscription and studio-tier endpoints.",
+        "description": "Stable error shape for subscription and studio-tier endpoints.\n\n``detail`` is human-facing copy (display); ``code`` is the stable machine-readable\nreason the web branches on (see :class:`~config.errors.ErrorCode`).",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code"
         ],
         "title": "SubscriptionError",
         "type": "object"
@@ -10903,15 +10913,20 @@
         "type": "object"
       },
       "PaymentMethodError": {
-        "description": "Stable error shape for payment-method endpoints.",
+        "description": "Stable error shape for payment-method endpoints.\n\n``detail`` is human-facing copy (display); ``code`` is the stable machine-readable\nreason the web branches on (see :class:`~config.errors.ErrorCode`).",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code"
         ],
         "title": "PaymentMethodError",
         "type": "object"

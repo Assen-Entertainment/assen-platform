@@ -20,16 +20,15 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { won, type StudioTier } from "@/lib/studio-mock";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useStudioTiers, useCreateTier, useUpdateTier, useDeleteTier } from "@/lib/api/queries";
 
-/** 실패 토스트 — ApiError.detail 우선(401은 전역 세션 가드가 처리). */
+/** 실패 토스트 — 서버 error code→apiErrorMessage(TierInUse·TierNotFound 등, detail 폴백). 401은 전역 세션 가드가 처리. */
 function useApiErrorToast() {
   const { toast } = useToast();
   return (e: unknown, fallback: string) => {
     if (e instanceof ApiError && e.status === 401) return;
-    const description = e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.";
-    toast({ title: fallback, description });
+    toast({ title: fallback, description: apiErrorMessage(e) });
   };
 }
 

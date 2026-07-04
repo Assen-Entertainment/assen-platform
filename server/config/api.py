@@ -13,7 +13,13 @@ import subprocess
 from django.http import HttpRequest
 from ninja import NinjaAPI, Schema
 
+from config.errors import register_error_handlers
+
 api = NinjaAPI(title="Assen Platform API", version="0.1.0")
+
+# Render coded errors as {detail, code} (ASS-257). Additive: the default ninja
+# HttpError handler ({detail} only) stays for raise sites without a code yet.
+register_error_handlers(api)
 
 
 class HealthResponse(Schema):

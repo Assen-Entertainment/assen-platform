@@ -42,6 +42,39 @@ describe("ApiError detail 보존", () => {
     expect(err.status).toBe(500);
     expect(err.detail).toBeUndefined();
   });
+
+  it("본문 {detail, code}에서 code도 함께 파싱한다(안정 분기용)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        text: async () => JSON.stringify({ detail: "품절된 상품이에요.", code: "OutOfStock" }),
+      })),
+    );
+
+    const err = await apiFetch("/orders").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(422);
+    expect(err.detail).toBe("품절된 상품이에요.");
+    expect(err.code).toBe("OutOfStock");
+  });
+
+  it("code가 없는 본문은 code=undefined로 둔다(하위호환)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        text: async () => JSON.stringify({ detail: "옛 계약(코드 없음)" }),
+      })),
+    );
+
+    const err = await apiFetch("/orders").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.detail).toBe("옛 계약(코드 없음)");
+    expect(err.code).toBeUndefined();
+  });
 });
 
 describe("401 refresh-and-retry", () => {

@@ -22,7 +22,7 @@ import {
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useCreateOrder, useSubscribe } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { mockOrderId, won, type OrderSummary } from "@/lib/checkout";
@@ -67,18 +67,19 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
 
   const canPay = agree && (!isMembership || autoPay) && !processing;
 
-  // 422(품절/재고/중복)·기타 실패 안내. 401은 전역 세션 가드가 처리.
+  // 422(주문 불가/품절/재고/멤버십 전용/중복 구독)는 서버 error code로 안내(문자열 매칭 제거,
+  // ProductNotOrderable·OutOfStock·InsufficientStock·MembershipOnlyProduct·DuplicateSubscription 등).
+  // 코드가 없으면 서버 detail(표시용) → 일반 폴백. 401은 전역 세션 가드가 처리.
   const onCheckoutError = (e: unknown) => {
     setProcessing(false);
     if (e instanceof ApiError) {
       if (e.status === 422) {
-        // 서버 detail(멤버십 전용/품절/재고 부족 등)을 그대로 노출 — 없으면 일반 안내.
         const fallback = isMembership
           ? "이 멤버십은 이미 구독하고 있어요."
           : "품절이거나 재고가 부족하거나 판매가 마감됐어요.";
         toast({
           title: isMembership ? "구독할 수 없어요" : "주문할 수 없어요",
-          description: e.detail ?? fallback,
+          description: apiErrorMessage(e, undefined, fallback),
         });
         return;
       }
