@@ -16,6 +16,7 @@ callers and reviewed under the UI/UX copy constraints — out of v0.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import date
 
@@ -29,6 +30,8 @@ from apps.notification.policy import (
     assert_no_realtime_presence,
     assert_no_reserved_data_keys,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def send_notification(
@@ -68,14 +71,62 @@ def send_notification(
     return adapter.send(message)
 
 
+def account_group_name(account_pk: object) -> str:
+    """Channel-layer group carrying one account's realtime notifications (ASS-240).
+
+    Shared by :func:`notify` (the fan-out source) and
+    :class:`apps.notification.consumers.NotificationConsumer` (the socket that
+    joins it) so the two can never drift. ``account_pk`` is the recipient
+    Account's primary key.
+    """
+    return f"notifications_{account_pk}"
+
+
 def notify(recipient: Account, kind: str, title: str, href: str = "") -> Notification:
-    """Append one notification to a recipient's in-app feed (B4).
+    """Append one notification to a recipient's in-app feed (B4), then push it (B6).
 
     Domain triggers (order placed, follow, comment, …) call this to add to the
     fan's durable notification feed (:class:`~apps.notification.models.Notification`).
     This is separate from :func:`send_notification`, the policy-guarded push
-    transport — notify only records the in-app row; a later stitch step wires push.
+    transport — notify records the in-app row and, best-effort, fans it out over
+    the realtime WebSocket (ASS-240) so an open web client updates without polling.
     """
-    return Notification.objects.create(
+    notification = Notification.objects.create(
         recipient=recipient, kind=kind, title=title, href=href
     )
+    _push_realtime(notification)
+    return notification
+
+
+def _push_realtime(notification: Notification) -> None:
+    """Best-effort realtime fan-out of a just-created notification (ASS-240).
+
+    The durable feed row is already committed; this WebSocket push is a courtesy.
+    Every failure — no channel layer configured, backend unreachable, a
+    serialisation error — is swallowed so the channel layer can NEVER break the
+    feed write or the domain trigger that called :func:`notify`. A ``None`` layer
+    (none configured) is a silent skip. No notification content is logged (the log
+    line is static and PII-free; ``exc_info`` carries only channel-layer internals).
+    """
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    try:
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        async_to_sync(layer.group_send)(
+            account_group_name(notification.recipient_id),
+            {
+                "type": "notify.message",
+                "notification": {
+                    "id": str(notification.id),
+                    "kind": notification.kind,
+                    "title": notification.title,
+                    "href": notification.href,
+                    "created_at": notification.created_at.isoformat(),
+                },
+            },
+        )
+    except Exception:
+        logger.debug("realtime notification fan-out failed (feed row persisted)", exc_info=True)

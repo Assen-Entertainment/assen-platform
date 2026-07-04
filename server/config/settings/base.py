@@ -123,7 +123,10 @@ LOCAL_APPS = [
     "apps.payments",
 ]
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+# daphne must precede django.contrib.staticfiles so Channels' ASGI runserver
+# override wins; channels provides the routing/consumer layer (ASS-240). Both are
+# migration-less (no models).
+INSTALLED_APPS = ["daphne", *DJANGO_APPS, "channels", *THIRD_PARTY_APPS, *LOCAL_APPS]
 
 # Ordering follows Technical Architecture §3.5 #1. Only the outer cross-cutting
 # concerns are Django middleware: request_id -> security headers -> rate limit.
@@ -170,6 +173,42 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
+
+# Channels realtime (ASS-240). Realtime is a courtesy rail — it must never be a
+# single point of failure — so the layer selection fails safe exactly like the
+# rate limiter (config.ratelimit.get_rate_limiter): the single-process
+# InMemoryChannelLayer by default (dev/test/one worker, no broker), and the shared
+# cross-worker channels-redis layer ONLY when CHANNEL_LAYERS_BACKEND=redis AND
+# channels-redis is installed AND CHANNEL_LAYERS_REDIS_URL is set. Anything short
+# of that falls back to in-memory rather than crash boot. channels-redis is an
+# optional extra (pyproject [project.optional-dependencies] realtime-redis) and is
+# never installed in dev/test. Migration-less: channels/daphne ship no models.
+CHANNEL_LAYERS_BACKEND: str = env("CHANNEL_LAYERS_BACKEND", default="memory")
+
+
+def _build_channel_layers() -> dict[str, Any]:
+    """Return the ``CHANNEL_LAYERS`` mapping, failing safe to the in-memory layer."""
+    in_memory: dict[str, Any] = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+    }
+    if CHANNEL_LAYERS_BACKEND.lower() != "redis":
+        return in_memory
+    redis_url = env("CHANNEL_LAYERS_REDIS_URL", default="")
+    if not redis_url:
+        return in_memory
+    try:
+        import channels_redis  # noqa: F401
+    except ImportError:
+        return in_memory
+    return {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [redis_url]},
+        },
+    }
+
+
+CHANNEL_LAYERS: dict[str, Any] = _build_channel_layers()
 
 # PostgreSQL in dev/prod (CONSTRAINTS #14). The test environment overrides this
 # with sqlite so the suite runs without a database server.

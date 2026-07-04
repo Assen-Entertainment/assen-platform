@@ -9,5 +9,9 @@
 export const config = {
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
   apiUrl: process.env.NEXT_PUBLIC_API_URL || "",
+  // 실시간 알림 WebSocket 오리진(R4-W4, 예: wss://api.assen.example/ws/notifications).
+  // ⚠️ WS는 Next rewrites(next.config)로 프록시되지 않으므로 API와 별도 오리진 env가 필요하다.
+  //    미설정("")이면 실시간 소켓은 완전 비활성 — 기존 폴백/invalidate 동작 그대로(회귀 0).
+  wsUrl: process.env.NEXT_PUBLIC_WS_URL || "",
   env: process.env.NODE_ENV || "development",
 } as const;
