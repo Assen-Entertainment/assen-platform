@@ -14,11 +14,17 @@ Endpoints (``/api/fan``):
 - ``POST /logout``      — revoke the current token family and clear cookies.
 - ``POST /refresh``     — rotate the refresh token (reserved refresh-cookie path).
 - ``GET  /me``          — the authenticated fan's identity summary.
+- ``PATCH /me``         — update the fan's own profile (nickname).
+- ``POST /verify/start``   — begin (mock) 본인인증/성인 인증; fails closed (503) if unwired.
+- ``POST /verify/confirm`` — confirm (mock) 본인인증; sets adult_verified / kyc_status.
 - ``GET  /csrf``        — issue the ``csrftoken`` cookie for the web double-submit.
 - ``GET  /membership-card`` — the authenticated fan's digital membership card.
 
-HUMAN-REVIEW-REQUIRED: auth (CONSTRAINTS #26) — this module issues, rotates, and
-revokes tokens. Raw phone numbers and token plaintext are never logged.
+HUMAN-REVIEW-REQUIRED: auth/identity (CONSTRAINTS #26) — this module issues,
+rotates, and revokes tokens, and drives 본인인증(KYC). Raw phone numbers and token
+plaintext are never logged; the KYC surface stores only a derived adult flag +
+status, never 주민번호/CI/DI/생년월일 원본 (real provider is a 대표·법무 gate —
+see :mod:`config.identity_verify`).
 """
 
 from __future__ import annotations
@@ -29,11 +35,14 @@ from typing import cast
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.middleware.csrf import get_token
+from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
 from ninja.utils import check_csrf
 from pydantic import Field
 
+from apps.consent.models import ConsentKind
+from apps.consent.services import record_consent
 from apps.identity.auth import access_token_from_request, fan_auth
 from apps.identity.cookies import (
     ACCESS_COOKIE_NAME,
@@ -41,7 +50,7 @@ from apps.identity.cookies import (
     clear_auth_cookie,
     set_auth_cookie,
 )
-from apps.identity.models import Account, Role
+from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import (
     IssuedTokenPair,
     TokenError,
@@ -58,8 +67,14 @@ from apps.identity.signup_services import (
     register_fan,
 )
 from config.api import api
+from config.identity_verify import identity_verifier
 from config.otp import MockOtpSender, OtpSender
-from config.throttle import anon_throttle
+from config.throttle import anon_throttle, user_write_throttle
+
+# Consent wording version recorded when the fan confirms 성인/본인 인증. Like
+# SIGNUP_CONSENT_VERSION, storing the version lets the gate require re-consent when
+# the wording changes. Only the consent fact + version persist — never 생년월일.
+_KYC_CONSENT_VERSION = "1.0"
 
 # The refresh cookie is scoped to the fan surface. It is deliberately broadened
 # from the refresh endpoint alone to the whole ``/api/fan`` prefix (A2): logout
@@ -152,6 +167,8 @@ class FanMeOut(Schema):
 
     ``handle`` and ``avatar_url`` are populated only when the account operates a
     creator profile (else ``None``); nickname is the sole display PII.
+    ``adult_verified`` / ``kyc_status`` are derived 인증 flags (never PII) the web
+    session reads to drive 19+ gating and the KYC banner (fail-closed defaults).
     """
 
     id: str
@@ -159,6 +176,25 @@ class FanMeOut(Schema):
     role: str
     handle: str | None = None
     avatar_url: str | None = None
+    adult_verified: bool = False
+    kyc_status: str = KycStatus.UNVERIFIED.value
+
+
+class FanMeUpdateIn(Schema):
+    """Request body for updating the fan's own profile (nickname only for now).
+
+    Email/phone change is out of this round: both are behind a 본인인증 re-verify
+    gate (they key the account's auth), so they are deliberately not editable here.
+    """
+
+    nickname: str = Field(min_length=1, max_length=40)
+
+
+class VerifyConfirmOut(Schema):
+    """Result of confirming (mock) 본인인증 — derived flags only, no PII."""
+
+    adult_verified: bool
+    kyc_status: str
 
 
 class MembershipCardOut(Schema):
@@ -355,10 +391,8 @@ def refresh(
     return _deliver_token_pair(pair, response, web=web)
 
 
-@router.get("/me", response=FanMeOut, auth=fan_auth)
-def get_me(request: HttpRequest) -> FanMeOut:
-    """Return the authenticated fan's identity summary (either surface)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+def _fan_me_out(account: Account) -> FanMeOut:
+    """Build the fan identity summary (shared by GET and PATCH ``/me``)."""
     # Lazy import: apps.creator depends on identity, so importing it at module load
     # would create an import cycle. Resolved here per request instead.
     from apps.creator.models import Creator
@@ -370,6 +404,86 @@ def get_me(request: HttpRequest) -> FanMeOut:
         role=account.role,
         handle=creator.handle if creator is not None else None,
         avatar_url=creator.avatar_url if creator is not None else None,
+        adult_verified=account.adult_verified,
+        kyc_status=account.kyc_status,
+    )
+
+
+@router.get("/me", response=FanMeOut, auth=fan_auth)
+def get_me(request: HttpRequest) -> FanMeOut:
+    """Return the authenticated fan's identity summary (either surface)."""
+    return _fan_me_out(cast(Account, request.auth))  # type: ignore[attr-defined]
+
+
+@router.patch(
+    "/me", response=FanMeOut, auth=fan_auth, throttle=user_write_throttle("6/min")
+)
+def update_me(request: HttpRequest, data: FanMeUpdateIn) -> FanMeOut:
+    """Update the caller's own profile (nickname). Scope is always ``request.auth``.
+
+    The account is taken from the authenticated token, never from the body, so a
+    fan can only edit their own profile. nickname is display-only PII (already the
+    sole one stored); no new PII is introduced.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account.nickname = data.nickname
+    account.save(update_fields=["nickname"])
+    return _fan_me_out(account)
+
+
+@router.post(
+    "/verify/start", auth=fan_auth, throttle=user_write_throttle("6/min")
+)
+def verify_start(request: HttpRequest) -> dict[str, str]:
+    """Begin (mock) 본인인증/성인 인증 for the authenticated fan.
+
+    Fail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)
+    this returns 503 rather than pretend a challenge started — mirroring the signup
+    OTP surface. On success the mock records a ``pending`` transition and returns a
+    bare ack (no PII is sent to or received from the mock).
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    verifier = identity_verifier()
+    if verifier is None:
+        raise HttpError(503, "본인인증을 사용할 수 없어요.")
+    verifier.start(account=account)
+    # Move an unconfirmed account into 'pending' so the state machine reflects an
+    # in-flight challenge; an already-verified account is left as-is (no downgrade).
+    if account.kyc_status != KycStatus.VERIFIED.value:
+        account.kyc_status = KycStatus.PENDING.value
+        account.save(update_fields=["kyc_status"])
+    return {"status": KycStatus.PENDING.value}
+
+
+@router.post(
+    "/verify/confirm",
+    response=VerifyConfirmOut,
+    auth=fan_auth,
+    throttle=user_write_throttle("6/min"),
+)
+def verify_confirm(request: HttpRequest) -> VerifyConfirmOut:
+    """Confirm (mock) 본인인증 and persist the derived adult flag + status.
+
+    Fail-closed (503) when no verifier is wired. On success the mock returns a
+    deterministic adult result; only the derived ``adult_verified`` / ``kyc_status``
+    / ``kyc_verified_at`` are written (never 주민번호/CI/DI/생년월일), and the age
+    consent is recorded (``ConsentKind.AGE``) so the age-gate has a durable grant.
+    No domain event is emitted (AGE consent is not the RULE kind — closed registry).
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    verifier = identity_verifier()
+    if verifier is None:
+        raise HttpError(503, "본인인증을 사용할 수 없어요.")
+    result = verifier.confirm(account=account)
+    account.adult_verified = result.adult
+    account.kyc_status = KycStatus.VERIFIED.value
+    account.kyc_verified_at = timezone.now()
+    account.save(update_fields=["adult_verified", "kyc_status", "kyc_verified_at"])
+    record_consent(
+        account=account, kind=ConsentKind.AGE.value, version=_KYC_CONSENT_VERSION
+    )
+    return VerifyConfirmOut(
+        adult_verified=account.adult_verified, kyc_status=account.kyc_status
     )
 
 

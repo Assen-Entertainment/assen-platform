@@ -36,6 +36,21 @@ class Role(models.TextChoices):
     SYSTEM = "system", "system"
 
 
+class KycStatus(models.TextChoices):
+    """Identity-verification (KYC / 성인인증) state on an :class:`Account`.
+
+    A derived *status* only — never the underlying PII. The mock verifier
+    (``config.identity_verify``) transitions ``unverified → verified``; ``pending``
+    and ``failed`` exist for a real provider's async/negative outcomes so the enum
+    is stable when the mock is replaced behind the 대표·법무 gate.
+    """
+
+    UNVERIFIED = "unverified", "unverified"
+    PENDING = "pending", "pending"
+    VERIFIED = "verified", "verified"
+    FAILED = "failed", "failed"
+
+
 class AnonymousSession(models.Model):
     """A pre-signup identity used to record activity before a fan account exists.
 
@@ -83,6 +98,15 @@ class Account(models.Model):
     auth_method = models.CharField(max_length=16, blank=True, default="")
     auth_subject_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
     is_active = models.BooleanField(default=True)
+    # KYC / 성인(19+) 인증 결과 — 파생/최소 데이터만. birth_date 원본·주민번호·CI/DI는
+    # 저장하지 않는다(법무 경계 §2): 실 인증기관은 성인 여부(bool)만 돌려주고, 여기엔
+    # 그 파생 플래그와 상태만 남는다. 실 provider(NICE/PASS/KCB/아이핀) 연동은
+    # config.identity_verify 뒤의 대표·법무 게이트. (PII 아님 — Account 직접 필드 OK.)
+    adult_verified = models.BooleanField(default=False)
+    kyc_status = models.CharField(
+        max_length=16, choices=KycStatus.choices, default=KycStatus.UNVERIFIED
+    )
+    kyc_verified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -10,6 +10,14 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 # Fan signup uses the deterministic mock OTP locally (no SMS provider wired).
 ENABLE_MOCK_FAN_OTP = True
 
+# R3 gated features opt in locally: the mock KYC verifier + mock payment tokenizer
+# are wired, and 19+ read exposure is on so the age-gate/blur flows can be exercised
+# against seeded adult items. All three are mock/skeleton — no real provider, PG, or
+# real adult content is involved (production keeps these False; see base.py).
+ENABLE_MOCK_KYC = True
+ENABLE_ADULT_CONTENT = True
+ENABLE_MOCK_PAYMENT = True
+
 # Local web dev server origins (Next.js) — override via env when ports differ.
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",

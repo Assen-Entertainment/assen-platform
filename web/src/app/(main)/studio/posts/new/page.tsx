@@ -43,10 +43,11 @@ export default function PostComposerPage() {
   const publish = () => {
     setSubmitted(true);
     if (!validation.valid || publishPost.isPending) return;
-    // 제목은 본문 상단에 합성(서버 계약 PostIn={body, media_url?} — 제목 필드 없음).
+    // 제목은 본문 상단에 합성(서버 계약 PostIn={body, media_url?, is_adult} — 제목 필드 없음).
     const composed = title.trim() ? `${title.trim()}\n\n${body}` : body;
+    // 19+ 등급은 실 전송하되, 실제 노출은 서버 ENABLE_ADULT_CONTENT=False가 통제(등급만 기록).
     publishPost.mutate(
-      { body: composed },
+      { body: composed, isAdult: adult },
       {
         onSuccess: () => {
           toast({
@@ -160,17 +161,13 @@ export default function PostComposerPage() {
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-label text-on-surface">19+ 성인 콘텐츠</span>
           <span className="text-caption text-on-surface-variant">
-            켜면 만 19세 이상 인증 이용자에게만 노출되고, 목록에서 블러 처리됩니다.
-            {live ? " (서버 지원 예정 — 게이트)" : ""}
+            켜면 성인 등급으로 발행돼요. 노출은 서버 정책에 따라 만 19세 이상 인증 이용자에게만
+            허용되며, 목록·상세에서 블러 처리됩니다.
           </span>
         </div>
-        {/* 라이브면 서버 PostIn에 19+ 필드가 없어 조용히 소실 → 비활성 게이트(mock은 기존 유지). */}
-        <Switch
-          aria-label="19세 이상 성인 콘텐츠"
-          checked={live ? false : adult}
-          onCheckedChange={setAdult}
-          disabled={live}
-        />
+        {/* 19+ 등급은 서버 PostIn.is_adult로 실 전송. 실제 노출 활성화는 서버 ENABLE_ADULT_CONTENT
+            플래그(base=False)가 통제하므로, 켜도 정책 사인 전까지는 노출되지 않는다(방어적). */}
+        <Switch aria-label="19세 이상 성인 콘텐츠" checked={adult} onCheckedChange={setAdult} />
       </div>
 
       {adult ? (

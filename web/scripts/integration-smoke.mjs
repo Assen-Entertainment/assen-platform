@@ -73,10 +73,10 @@ async function main() {
   await page.waitForURL("**/discovery", { timeout: 25000 }).catch(() => fail(page, "로그인 후 /discovery 이동"));
   pass("OTP 로그인");
 
-  // 2. 세션 반영 (mypage에 시드 닉네임)
+  // 2. 세션 반영 (mypage에 시드 닉네임) — 재실행 내성: 데모팬 또는 편집된 닉네임 허용.
   await page.goto(BASE + "/mypage", { waitUntil: "networkidle" });
-  const nick = await page.getByText("데모팬").first().count();
-  if (!nick) await fail(page, "세션 유저(데모팬) 표시");
+  const nick = await page.getByText(/데모팬|스모크수정/).first().count();
+  if (!nick) await fail(page, "세션 유저(닉네임) 표시");
   pass("세션 me 반영");
   await shot(page, "mypage");
 
@@ -195,12 +195,57 @@ async function main() {
   pass("알림 화면");
   await shot(page, "notifications");
 
+  // 7.5 계정 수정 (PATCH /fan/me nickname) — R3. 닉네임을 고유값으로 바꿔 영속 확인.
+  const NEWNICK = "스모크수정";
+  await page.goto(BASE + "/settings/account", { waitUntil: "networkidle" });
+  const nickField = page.getByLabel("닉네임");
+  await nickField.waitFor({ timeout: 10000 }).catch(() => fail(page, "계정 닉네임 필드"));
+  await nickField.fill(NEWNICK);
+  await page.getByRole("button", { name: "저장" }).first().click();
+  await page.getByText("저장되었어요").first().waitFor({ timeout: 10000 })
+    .catch(() => fail(page, "계정 저장 토스트"));
+  await page.goto(BASE + "/settings/account", { waitUntil: "networkidle" });
+  const persisted = await page.getByLabel("닉네임").inputValue().catch(() => "");
+  if (persisted !== NEWNICK) await fail(page, "닉네임 영속(PATCH /fan/me)", persisted);
+  pass("계정 수정 (닉네임 영속)");
+  await shot(page, "account-edit");
+
+  // 7.6 결제수단 등록(mock PG 토큰 — raw PAN 미전송) — R3
+  await page.goto(BASE + "/settings/payments", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "카드 등록" }).first().click();
+  // 다이얼로그 확인 버튼 = "등록"("결제 수단 등록"은 제목). 브랜드 기본값으로 등록.
+  await page.getByRole("button", { name: "등록", exact: true }).click({ timeout: 10000 })
+    .catch(() => fail(page, "결제수단 등록 확인 버튼"));
+  await page.getByText("결제 수단이 등록되었어요").first().waitFor({ timeout: 10000 })
+    .catch(() => fail(page, "결제수단 등록 토스트"));
+  await page.waitForTimeout(600);
+  if (!(await page.getByText(/••••/).first().count())) await fail(page, "결제수단 목록 반영(••••)");
+  pass("결제수단 등록");
+  await shot(page, "payment-method");
+
+  // 7.7 본인인증(KYC) — age-gate: 동의 → 성인 인증하기 → 입장(성공) — R3
+  await page.goto(BASE + "/age-gate", { waitUntil: "networkidle" });
+  // "전체 동의" 마스터 하나로 필수 3종 일괄 체크(개별 루프의 상태전파 경합 회피).
+  await page.getByText("전체 동의").click();
+  // Playwright는 click 시 버튼 활성(동의 반영)까지 자동 대기 — 별도 폴링 불요.
+  await page.getByRole("button", { name: "성인 인증하기" }).click({ timeout: 15000 })
+    .catch(() => fail(page, "성인 인증하기 버튼"));
+  // 성공 시 /discovery로 이동(router.push). 이동 대기.
+  await page.waitForURL("**/discovery", { timeout: 15000 })
+    .catch(() => fail(page, "KYC 인증 후 /discovery 이동"));
+  // 재방문 시 세션 adult_verified 반영("이미 본인인증") 확인 → 서버 영속 + /fan/me 재조회 검증.
+  await page.goto(BASE + "/age-gate", { waitUntil: "networkidle" });
+  await page.getByText("이미 본인인증이 완료되었어요").first().waitFor({ timeout: 10000 })
+    .catch(() => fail(page, "KYC 세션 반영(이미 인증)"));
+  pass("본인인증(KYC mock) — 세션 반영");
+  await shot(page, "kyc");
+
   // 8. 로그아웃 → 세션 소거
   await page.goto(BASE + "/settings", { waitUntil: "networkidle" });
   await page.getByText("로그아웃").first().click();
   await page.waitForTimeout(1500);
   await page.goto(BASE + "/mypage", { waitUntil: "networkidle" });
-  if (await page.getByText("데모팬").first().count()) await fail(page, "로그아웃 후 세션 소거");
+  if (await page.getByText(NEWNICK).first().count()) await fail(page, "로그아웃 후 세션 소거");
   pass("로그아웃");
   await shot(page, "logged-out");
 

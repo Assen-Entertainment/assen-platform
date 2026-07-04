@@ -12,25 +12,55 @@ import uuid
 from datetime import datetime
 from typing import cast
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import QuerySet
 from django.http import HttpRequest
 from ninja import Router, Schema
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from apps.commerce.models import (
     Order,
     OrderItem,
     OrderStatus,
     Product,
+    ProductStatus,
+    ProductType,
     RefundRequest,
     RefundStatus,
 )
-from apps.identity.auth import fan_auth
+from apps.creator.models import Creator
+from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
 from config.api import api
 from config.pagination import paginate
+from config.throttle import user_write_throttle
+
+
+def _validated_media_url(value: str) -> str:
+    """Reject non-http(s) / non-relative media URLs (mirrors content.PostIn, A5).
+
+    A product's ``media_url`` is echoed into the catalog/detail views, so an
+    attacker-supplied ``javascript:``/``data:`` scheme could drive XSS. Accept only
+    an absolute http(s) URL or a site-relative path; empty stays allowed (no media).
+    """
+    if value == "" or value.startswith(("/", "http://", "https://")):
+        return value
+    raise ValueError("media_url must be an http(s) URL or a site-relative path.")
+
+
+def _adult_allowed(viewer: Account | None) -> bool:
+    """Whether 19+ (``adult_only``) products may be shown to ``viewer``.
+
+    Fail-closed, identical to the content gate: ``ENABLE_ADULT_CONTENT`` is False by
+    default so every adult item is hidden from EVERYONE (R3 정본 §55); when on, an
+    item is shown only to an ``adult_verified`` viewer.
+    """
+    return bool(
+        settings.ENABLE_ADULT_CONTENT and viewer is not None and viewer.adult_verified
+    )
 
 products_router = Router(tags=["commerce"])
 orders_router = Router(auth=fan_auth, tags=["commerce-orders"])
@@ -64,6 +94,7 @@ class ProductOut(Schema):
     stock: int | None = None
     sold_out: bool
     locked: bool
+    is_adult: bool = False
 
 
 class ProductPage(Schema):
@@ -91,7 +122,24 @@ def _product_out(product: Product) -> ProductOut:
         stock=product.stock,
         sold_out=product.sold_out,
         locked=product.locked,
+        is_adult=product.adult_only,
     )
+
+
+def _public_product_qs(viewer: Account | None) -> QuerySet[Product]:
+    """Consumer-facing catalog queryset: draft/hidden and gated 19+ excluded.
+
+    draft/hidden are owner-only (studio); adult_only follows the 19+ gate
+    (:func:`_adult_allowed`). This is the single funnel for both the public list and
+    the single fetch, so a direct GET of a draft/hidden/gated-adult product 404s
+    (no existence leak) instead of slipping past the list filter.
+    """
+    queryset = Product.objects.select_related("creator").exclude(
+        status__in=(ProductStatus.DRAFT.value, ProductStatus.HIDDEN.value)
+    )
+    if not _adult_allowed(viewer):
+        queryset = queryset.exclude(adult_only=True)
+    return queryset
 
 
 @products_router.get("", response=ProductPage)
@@ -102,9 +150,14 @@ def list_products(
     cursor: str | None = None,
     limit: int | None = None,
 ) -> ProductPage:
-    """List catalog products; filter by creator and/or type, cursor-paginated."""
-    del request
-    queryset = Product.objects.select_related("creator").order_by("-created_at", "id")
+    """List catalog products; filter by creator and/or type, cursor-paginated.
+
+    Consumer surface: draft/hidden listings and gated 19+ items are excluded
+    (:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.
+    """
+    queryset = _public_product_qs(resolve_optional_account(request)).order_by(
+        "-created_at", "id"
+    )
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
     if product_type:
@@ -117,19 +170,255 @@ def list_products(
 def get_product(
     request: HttpRequest, product_id: uuid.UUID
 ) -> tuple[int, ProductOut | CommerceError]:
-    """Return one catalog product by id; 404 if unknown (B5).
+    """Return one catalog product by id; 404 if unknown or not publicly visible.
 
-    The web product-detail page consumes this contract. ``creator`` is
-    ``select_related`` so the owning creator name is served without an extra query.
+    The web product-detail page consumes this contract. Gating goes through
+    :func:`_public_product_qs`, so a draft/hidden/gated-adult product 404s to a
+    consumer just like an unknown id (no existence leak).
     """
-    del request
-    product = Product.objects.select_related("creator").filter(id=product_id).first()
+    product = _public_product_qs(resolve_optional_account(request)).filter(
+        id=product_id
+    ).first()
     if product is None:
         return 404, CommerceError(detail="상품을 찾을 수 없어요.")
     return 200, _product_out(product)
 
 
 api.add_router("/products", products_router)
+
+
+# --------------------------------------------------------------------------- #
+# Studio (owner catalog write; R3 — pure engineering, 법무 무관).
+# Owner guard mirrors content.create_post: only the account that operates a
+# Creator may manage that creator's catalog, and the scope is always that creator
+# (never taken from the body), so a fan cannot touch someone else's products. The
+# price is the creator's own display input (NOT a settlement figure — R3 정본).
+# --------------------------------------------------------------------------- #
+studio_products_router = Router(auth=fan_auth, tags=["studio-commerce"])
+
+
+class StudioProductOut(Schema):
+    """Owner-view product: adds the management fields (status, 19+, timestamps)."""
+
+    id: uuid.UUID
+    creator_id: uuid.UUID | None = None
+    type: str
+    title: str
+    price: int
+    meta: str
+    media_url: str
+    description: str
+    options: list[str]
+    stock: int | None = None
+    sold_out: bool
+    locked: bool
+    status: str
+    is_adult: bool
+    created_at: datetime
+
+
+class StudioProductIn(Schema):
+    """Owner payload to create a catalog product (display price, not settlement)."""
+
+    type: str
+    title: str = Field(min_length=1, max_length=120)
+    price: int = Field(default=0, ge=0)
+    meta: str = Field(default="", max_length=120)
+    media_url: str = Field(default="", max_length=500)
+    description: str = Field(default="", max_length=2000)
+    options: list[str] = Field(default_factory=list)
+    stock: int | None = Field(default=None, ge=0)
+    sold_out: bool = False
+    locked: bool = False
+    status: str = ProductStatus.SELLING.value
+    is_adult: bool = False
+
+    @field_validator("media_url")
+    @classmethod
+    def _check_media_url(cls, value: str) -> str:
+        """Reject non-http(s) / non-relative media URLs (A5, mirrors content)."""
+        return _validated_media_url(value)
+
+
+class StudioProductPatch(Schema):
+    """Owner payload to update a product; only the provided fields are applied."""
+
+    type: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    price: int | None = Field(default=None, ge=0)
+    meta: str | None = Field(default=None, max_length=120)
+    media_url: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=2000)
+    options: list[str] | None = None
+    stock: int | None = Field(default=None, ge=0)
+    sold_out: bool | None = None
+    locked: bool | None = None
+    status: str | None = None
+    is_adult: bool | None = None
+
+    @field_validator("media_url")
+    @classmethod
+    def _check_media_url(cls, value: str | None) -> str | None:
+        """Validate media_url only when provided (A5, mirrors content)."""
+        return None if value is None else _validated_media_url(value)
+
+
+class StudioAck(Schema):
+    """Bare status ack for studio mutations that return no body (delete)."""
+
+    status: str
+
+
+def _owner_creator(account: Account) -> Creator | None:
+    """The creator profile operated by ``account`` (owner guard for studio writes)."""
+    return Creator.objects.filter(owner=account).first()
+
+
+def _studio_product_out(product: Product) -> StudioProductOut:
+    """Build the owner-view product response (includes management fields)."""
+    return StudioProductOut(
+        id=product.id,
+        creator_id=product.creator_id,
+        type=product.type,
+        title=product.title,
+        price=product.price,
+        meta=product.meta,
+        media_url=product.media_url,
+        description=product.description,
+        options=[str(o) for o in product.options] if isinstance(product.options, list) else [],
+        stock=product.stock,
+        sold_out=product.sold_out,
+        locked=product.locked,
+        status=product.status,
+        is_adult=product.adult_only,
+        created_at=product.created_at,
+    )
+
+
+@studio_products_router.get("", response={200: list[StudioProductOut], 403: CommerceError})
+def studio_list_products(
+    request: HttpRequest,
+) -> tuple[int, list[StudioProductOut] | CommerceError]:
+    """List the caller's own creator's products, including draft/hidden and 19+."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+    products = Product.objects.filter(creator=creator).order_by("-created_at", "id")
+    return 200, [_studio_product_out(p) for p in products]
+
+
+@studio_products_router.post(
+    "",
+    response={201: StudioProductOut, 403: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("30/min"),
+)
+def studio_create_product(
+    request: HttpRequest, payload: StudioProductIn
+) -> tuple[int, StudioProductOut | CommerceError]:
+    """Create a product owned by the caller's creator profile; 403 if they operate none."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+    if payload.type not in ProductType.values:
+        return 422, CommerceError(detail="상품 유형이 올바르지 않아요.")
+    if payload.status not in ProductStatus.values:
+        return 422, CommerceError(detail="상품 상태가 올바르지 않아요.")
+    product = Product.objects.create(
+        creator=creator,
+        type=payload.type,
+        title=payload.title,
+        price=payload.price,
+        meta=payload.meta,
+        media_url=payload.media_url,
+        description=payload.description,
+        options=payload.options,
+        stock=payload.stock,
+        sold_out=payload.sold_out,
+        locked=payload.locked,
+        status=payload.status,
+        adult_only=payload.is_adult,
+    )
+    return 201, _studio_product_out(product)
+
+
+@studio_products_router.patch(
+    "/{product_id}",
+    response={200: StudioProductOut, 403: CommerceError, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("30/min"),
+)
+def studio_update_product(
+    request: HttpRequest, product_id: uuid.UUID, payload: StudioProductPatch
+) -> tuple[int, StudioProductOut | CommerceError]:
+    """Update fields on the caller's own product; 403 (no creator) / 404 (not theirs)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+    product = Product.objects.filter(id=product_id, creator=creator).first()
+    if product is None:
+        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+    if payload.type is not None:
+        if payload.type not in ProductType.values:
+            return 422, CommerceError(detail="상품 유형이 올바르지 않아요.")
+        product.type = payload.type
+    if payload.status is not None:
+        if payload.status not in ProductStatus.values:
+            return 422, CommerceError(detail="상품 상태가 올바르지 않아요.")
+        product.status = payload.status
+    if payload.title is not None:
+        product.title = payload.title
+    if payload.price is not None:
+        product.price = payload.price
+    if payload.meta is not None:
+        product.meta = payload.meta
+    if payload.media_url is not None:
+        product.media_url = payload.media_url
+    if payload.description is not None:
+        product.description = payload.description
+    if payload.options is not None:
+        product.options = payload.options
+    if payload.sold_out is not None:
+        product.sold_out = payload.sold_out
+    if payload.locked is not None:
+        product.locked = payload.locked
+    if payload.is_adult is not None:
+        product.adult_only = payload.is_adult
+    # ``stock`` is nullable (None = untracked), so "omitted" and "set to null" both
+    # arrive as None; use the pydantic set-fields marker to patch it only when the
+    # client actually sent it.
+    if "stock" in payload.model_fields_set:
+        product.stock = payload.stock
+    product.save()
+    return 200, _studio_product_out(product)
+
+
+@studio_products_router.delete(
+    "/{product_id}",
+    response={200: StudioAck, 403: CommerceError, 404: CommerceError},
+    throttle=user_write_throttle("30/min"),
+)
+def studio_delete_product(
+    request: HttpRequest, product_id: uuid.UUID
+) -> tuple[int, StudioAck | CommerceError]:
+    """Delete the caller's own product; 403 (no creator) / 404 (not theirs).
+
+    Historical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),
+    so removing a catalog listing never rewrites a fan's order history.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+    product = Product.objects.filter(id=product_id, creator=creator).first()
+    if product is None:
+        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+    product.delete()
+    return 200, StudioAck(status="deleted")
+
+
+api.add_router("/studio/products", studio_products_router)
 
 
 # --------------------------------------------------------------------------- #
@@ -281,9 +570,16 @@ def create_order(
         existing = _load_order_by_key(account, payload.idempotency_key)
         if existing is not None:
             return 200, _order_out(existing)
-    product = Product.objects.select_related("creator").filter(id=payload.product_id).first()
+    # Gate through the consumer queryset (draft/hidden and gated-adult excluded), so a
+    # draft/hidden/gated-adult product 404s just like an unknown id — the order flow
+    # can't be used to buy (or probe the existence of) a listing the fan can't see.
+    product = _public_product_qs(account).filter(id=payload.product_id).first()
     if product is None:
         return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+    # Only a live 'selling' listing is orderable; a 'soldout'-status listing stays
+    # publicly visible but cannot be purchased.
+    if product.status != ProductStatus.SELLING.value:
+        return 422, CommerceError(detail="판매 중인 상품이 아니에요.")
     if product.locked:
         return 422, CommerceError(detail="멤버십 전용 상품이에요.")
     if product.sold_out or (product.stock is not None and product.stock <= 0):

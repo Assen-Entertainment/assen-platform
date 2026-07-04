@@ -12,12 +12,28 @@ import { apiFetch, ApiError } from "@/lib/api/client";
 
 const USE_API = Boolean(config.apiUrl);
 
+/** KYC(본인인증) 상태 — 서버 kyc_status enum 미러. 미확정 값은 fail-closed로 "unverified". */
+export type KycStatus = "unverified" | "pending" | "verified" | "failed";
+
+const KYC_STATUSES: readonly KycStatus[] = ["unverified", "pending", "verified", "failed"];
+
+/** 서버 kyc_status 문자열을 안전한 enum으로 강제(미지의 값 → unverified, fail-closed). */
+export function coerceKycStatus(raw: unknown): KycStatus {
+  return typeof raw === "string" && (KYC_STATUSES as readonly string[]).includes(raw)
+    ? (raw as KycStatus)
+    : "unverified";
+}
+
 export interface SessionUser {
   id: string;
   name: string;
   handle: string;
   role: "fan" | "creator";
   avatarUrl?: string;
+  /** 성인(19+) 인증 여부 — 파생 플래그(원본 PII 아님). 기본 fail-closed=false. */
+  adultVerified: boolean;
+  /** 본인인증 상태 — KYC 배너·게이팅 분기. 기본 fail-closed="unverified". */
+  kycStatus: KycStatus;
 }
 
 /** OTP 가입 입력. */
@@ -45,9 +61,22 @@ interface SessionContextValue {
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
   /** OTP 가입(신규 계정). */
   signupWithOtp: (input: SignupInput) => Promise<void>;
+  /**
+   * 본인인증 완료 결과를 세션에 반영 — mock은 로컬 persist, 실 경로는 ['auth','me'] 갱신.
+   * age-gate/KYC 확인 성공 후 호출(파생 플래그만 — 원본 PII 미보관).
+   */
+  markAdultVerified: (result: { adultVerified: boolean; kycStatus: string }) => void;
 }
 
-const DEFAULT_USER: SessionUser = { id: "mock-me", name: "데모 유저", handle: "me", role: "fan" };
+// mock 기본값은 fail-closed — 성인 인증 미완료(adultVerified:false·kycStatus:"unverified").
+const DEFAULT_USER: SessionUser = {
+  id: "mock-me",
+  name: "데모 유저",
+  handle: "me",
+  role: "fan",
+  adultVerified: false,
+  kycStatus: "unverified",
+};
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
@@ -66,6 +95,9 @@ function readStored(): SessionUser | null {
         handle: parsed.handle,
         role: parsed.role === "creator" ? "creator" : "fan",
         avatarUrl: typeof parsed.avatarUrl === "string" ? parsed.avatarUrl : undefined,
+        // 인증 플래그는 fail-closed 복원 — 저장값이 참일 때만 유지.
+        adultVerified: parsed.adultVerified === true,
+        kycStatus: coerceKycStatus(parsed.kycStatus),
       };
     }
   } catch {
@@ -110,10 +142,20 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
     async (input: SignupInput) => persist({ ...DEFAULT_USER, name: input.nickname }),
     [persist],
   );
+  // mock: 인증 완료 플래그를 로컬 세션에 반영(로그인 상태가 없으면 DEFAULT_USER를 기준으로 합성).
+  const markAdultVerified = React.useCallback(
+    (result: { adultVerified: boolean; kycStatus: string }) =>
+      persist({
+        ...(user ?? DEFAULT_USER),
+        adultVerified: result.adultVerified,
+        kycStatus: coerceKycStatus(result.kycStatus),
+      }),
+    [persist, user],
+  );
 
   const value = React.useMemo<SessionContextValue>(
-    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp }),
-    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp],
+    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, markAdultVerified }),
+    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, markAdultVerified],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -126,18 +168,26 @@ interface RawMe {
   role: string;
   handle?: string | null;
   avatar_url?: string | null;
+  adult_verified?: boolean;
+  kyc_status?: string;
+}
+
+/** /fan/me(FanMeOut) → SessionUser 매핑. 인증 플래그는 fail-closed(누락/미지값→false·unverified). */
+export function mapMe(raw: RawMe): SessionUser {
+  return {
+    id: raw.id,
+    name: raw.nickname,
+    handle: raw.handle ?? raw.id,
+    role: raw.role === "creator" ? "creator" : "fan",
+    avatarUrl: raw.avatar_url ?? undefined,
+    adultVerified: raw.adult_verified === true,
+    kycStatus: coerceKycStatus(raw.kyc_status),
+  };
 }
 
 async function fetchMe(): Promise<SessionUser | null> {
   try {
-    const raw = await apiFetch<RawMe>("/fan/me");
-    return {
-      id: raw.id,
-      name: raw.nickname,
-      handle: raw.handle ?? raw.id,
-      role: raw.role === "creator" ? "creator" : "fan",
-      avatarUrl: raw.avatar_url ?? undefined,
-    };
+    return mapMe(await apiFetch<RawMe>("/fan/me"));
   } catch (e) {
     // 401 = 비로그인(정상 상태) → null. 그 외는 전파.
     if (e instanceof ApiError && e.status === 401) return null;
@@ -199,6 +249,17 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [qc]);
 
+  // 실 경로: 인증 결과를 ['auth','me'] 캐시에 즉시 반영 후 재조회로 정정.
+  const markAdultVerified = React.useCallback(
+    (result: { adultVerified: boolean; kycStatus: string }) => {
+      qc.setQueryData<SessionUser | null>(["auth", "me"], (u) =>
+        u ? { ...u, adultVerified: result.adultVerified, kycStatus: coerceKycStatus(result.kycStatus) } : u,
+      );
+      void qc.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
+    [qc],
+  );
+
   const value = React.useMemo<SessionContextValue>(
     () => ({
       user: meQuery.data ?? null,
@@ -211,8 +272,9 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
       requestOtp,
       loginWithOtp,
       signupWithOtp,
+      markAdultVerified,
     }),
-    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp],
+    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, markAdultVerified],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -241,6 +303,7 @@ export function useSession(): SessionContextValue {
       requestOtp: async () => {},
       loginWithOtp: async () => {},
       signupWithOtp: async () => {},
+      markAdultVerified: () => {},
     };
   }
   return ctx;

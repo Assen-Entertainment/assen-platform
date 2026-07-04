@@ -18,6 +18,7 @@ import uuid
 from datetime import datetime
 from typing import cast
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, OuterRef, QuerySet
 from django.http import HttpRequest
@@ -56,6 +57,7 @@ class PostOut(Schema):
     like_count: int
     comment_count: int
     liked: bool = False
+    is_adult: bool = False
     created_at: datetime
 
 
@@ -101,6 +103,9 @@ class PostIn(Schema):
 
     body: str = Field(max_length=2000)
     media_url: str = Field(default="", max_length=500)
+    # 19+ 성인 등급 토글 → Post.adult_only. 노출은 서버 게이트(ENABLE_ADULT_CONTENT +
+    # adult_verified 뷰어)가 최종 결정 — 작성은 라이브에서도 허용하되 기본 노출은 숨김.
+    is_adult: bool = False
 
     @field_validator("media_url")
     @classmethod
@@ -118,12 +123,31 @@ class PostIn(Schema):
         raise ValueError("media_url must be an http(s) URL or a site-relative path.")
 
 
+def _adult_allowed(viewer: Account | None) -> bool:
+    """Whether 19+ (``adult_only``) items may be shown to ``viewer``.
+
+    Fail-closed: ``ENABLE_ADULT_CONTENT`` is False by default, so every adult item
+    is hidden from EVERYONE — the age-gate has no live content to leak before the
+    법무 사인 (R3 정본 §55). When the flag is on (dev/test) an item is shown only to
+    an ``adult_verified`` viewer; an anonymous or unverified viewer still gets none.
+    """
+    return bool(
+        settings.ENABLE_ADULT_CONTENT and viewer is not None and viewer.adult_verified
+    )
+
+
 def _post_qs(account: Account | None = None) -> QuerySet[Post]:
     """Posts with annotated like/comment counts and their creator preloaded.
 
     When ``account`` is given, a per-user ``is_liked`` flag is annotated via a
     single ``Exists`` subquery — no extra per-row query — so a list stays one
     query. Anonymous callers pass ``None`` and get no annotation (``liked`` False).
+
+    19+ gating is applied here (the single funnel for every public post read —
+    list/feed/single): ``adult_only`` posts are excluded unless
+    :func:`_adult_allowed`, so a direct single fetch of an adult post by a
+    non-permitted viewer 404s (no existence leak) rather than slipping past the list
+    filter.
     """
     queryset = Post.objects.select_related("creator").annotate(
         like_count=Count("likes", distinct=True),
@@ -133,6 +157,8 @@ def _post_qs(account: Account | None = None) -> QuerySet[Post]:
         queryset = queryset.annotate(
             is_liked=Exists(Like.objects.filter(post=OuterRef("pk"), user=account))
         )
+    if not _adult_allowed(account):
+        queryset = queryset.exclude(adult_only=True)
     return queryset
 
 
@@ -149,6 +175,7 @@ def _post_out(post: Post) -> PostOut:
         like_count=getattr(post, "like_count", 0),
         comment_count=getattr(post, "comment_count", 0),
         liked=bool(getattr(post, "is_liked", False)),
+        is_adult=post.adult_only,
         created_at=post.created_at,
     )
 
@@ -216,7 +243,10 @@ def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | Erro
     if creator is None:
         return 403, ErrorOut(detail="크리에이터만 게시물을 작성할 수 있어요.")
     post = Post.objects.create(
-        creator=creator, body=data.body, media_url=data.media_url
+        creator=creator,
+        body=data.body,
+        media_url=data.media_url,
+        adult_only=data.is_adult,
     )
     # A fresh post carries no count annotations; _post_out defaults them to 0 and
     # liked to False, which is correct for a just-created post. ``post.creator`` is
@@ -235,7 +265,9 @@ def like_post(
 ) -> tuple[int, LikeOut | ErrorOut]:
     """Like a post; idempotent (a second like is a no-op, still 200)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    post = Post.objects.filter(id=post_id).first()
+    # 19+ gate (same funnel as reads): an adult post the caller may not see 404s here
+    # too, so the like endpoint can't be used to touch or probe a gated post.
+    post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     # No notification is emitted on a like (B6): likes are high-volume and would
@@ -262,7 +294,8 @@ def unlike_post(
 ) -> tuple[int, LikeOut | ErrorOut]:
     """Unlike a post; idempotent (unliking a non-liked post is a no-op)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    post = Post.objects.filter(id=post_id).first()
+    # 19+ gate (same funnel as reads): a gated adult post 404s here too.
+    post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     Like.objects.filter(post=post, user=account).delete()
@@ -276,9 +309,11 @@ def list_comments(
     cursor: str | None = None,
     limit: int | None = None,
 ) -> tuple[int, CommentPage | ErrorOut]:
-    """List a post's comments, oldest first; 404 if the post is unknown."""
-    del request
-    if not Post.objects.filter(id=post_id).exists():
+    """List a post's comments, oldest first; 404 if the post is unknown or gated."""
+    # Anonymous-readable, but 19+ gated through the same funnel as the post reads: a
+    # gated adult post 404s (no existence leak) so its comment thread can't be read
+    # past the gate by an anonymous or unverified viewer.
+    if not _post_qs(resolve_optional_account(request)).filter(id=post_id).exists():
         return 404, ErrorOut(detail="post not found")
     queryset = (
         Comment.objects.filter(post_id=post_id)
@@ -307,7 +342,9 @@ def create_comment(
     the internal fan_id).
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
-    post = Post.objects.filter(id=post_id).select_related("creator__owner").first()
+    # 19+ gate (same funnel as reads): a gated adult post 404s so a non-permitted
+    # viewer can neither read nor comment on it.
+    post = _post_qs(account).select_related("creator__owner").filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
     comment = Comment.objects.create(

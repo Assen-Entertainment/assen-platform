@@ -15,6 +15,7 @@ import {
   type MonetizableItemType,
 } from "@/components/ui";
 import { useProduct } from "@/lib/api/queries";
+import { useSession } from "@/lib/session";
 import { won } from "@/lib/checkout";
 import { PRODUCT_TYPE_LABEL } from "@/lib/product-labels";
 import type { Product } from "@/lib/api";
@@ -34,11 +35,16 @@ const QTY_TYPES: MonetizableItemType[] = ["goods", "ticket", "experience"];
 
 export function ProductDetailView({ product }: { product: Product }) {
   const router = useRouter();
+  const { user, mounted } = useSession();
+  const adultVerified = user?.adultVerified === true;
   const { data } = useProduct(product.id, product);
   const p = data ?? product;
   const meta = TYPE_META[p.type];
   const label = PRODUCT_TYPE_LABEL[p.type];
   const soldOut = Boolean(p.soldOut) || p.stock === 0;
+  // 19+ 방어 게이트 — 서버가 이미 미인증 뷰어에게 숨기지만 UI도 구매·미디어를 잠근다.
+  // 세션 복원 전(mounted=false)엔 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지(실누출 0, 시각 개선).
+  const adultBlocked = mounted && Boolean(p.isAdult) && !adultVerified;
   const allowQty = QTY_TYPES.includes(p.type) && !soldOut;
   const [qty, setQty] = React.useState(1);
   const [option, setOption] = React.useState<string | null>(p.options?.[0] ?? null);
@@ -46,13 +52,17 @@ export function ProductDetailView({ product }: { product: Product }) {
   const total = p.price * (allowQty ? qty : 1);
 
   const buy = () => {
-    if (soldOut || p.locked) return;
+    if (soldOut || p.locked || adultBlocked) return;
     const optParam = option ? `&opt=${encodeURIComponent(option)}` : "";
     router.push(`/checkout?item=${encodeURIComponent(p.id)}&qty=${qty}${optParam}`);
   };
 
-  /** 잠금=구독 유도 / 품절=비활성 / 그 외=구매 CTA. */
-  const primaryCta = p.locked ? (
+  /** 성인 미인증=인증 유도 / 잠금=구독 유도 / 품절=비활성 / 그 외=구매 CTA. */
+  const primaryCta = adultBlocked ? (
+    <Button size="lg" className="w-full" asChild>
+      <Link href="/age-gate">성인 인증하고 보기</Link>
+    </Button>
+  ) : p.locked ? (
     <Button size="lg" className="w-full" asChild>
       <Link href="/membership">멤버십 구독하고 보기</Link>
     </Button>
@@ -85,7 +95,17 @@ export function ProductDetailView({ product }: { product: Product }) {
               품절
             </span>
           ) : null}
-          {p.locked ? (
+          {adultBlocked ? (
+            <LockedOverlay
+              title="성인(19+) 콘텐츠"
+              description="본인인증 후 볼 수 있어요."
+              cta={
+                <Button size="sm" asChild>
+                  <Link href="/age-gate">성인 인증하기</Link>
+                </Button>
+              }
+            />
+          ) : p.locked ? (
             <LockedOverlay
               description="이 콘텐츠는 멤버십 구독자에게만 공개됩니다."
               cta={

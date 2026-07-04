@@ -100,6 +100,8 @@ _TIERS = [
 # it can log in through the mock-OTP fan login flow with this number.
 _DEMO_FAN_PHONE = "010-0000-0001"
 _DEMO_FAN_NICKNAME = "데모팬"
+_DEMO_CREATOR_PHONE = "010-0000-0002"
+_DEMO_CREATOR_NICKNAME = "데모크리에이터"
 
 
 class Command(BaseCommand):
@@ -158,6 +160,9 @@ class Command(BaseCommand):
                     "stock": stock,
                     "sold_out": sold_out,
                     "locked": locked,
+                    # Studio visibility (R3): a sold-out seed lists as 'soldout',
+                    # everything else 'selling'. No seed item is draft/hidden/adult.
+                    "status": "soldout" if sold_out else "selling",
                 },
             )
 
@@ -176,6 +181,22 @@ class Command(BaseCommand):
                 },
             )
 
+        # A demo creator login (phone-keyed so OTP login is deterministic), set as
+        # stellar's owner — lets the studio catalog/profile write flows be exercised
+        # end-to-end (the auto-created owner_* accounts have no phone, so cannot log in).
+        creator_phone_hash = hash_phone(normalize_phone(_DEMO_CREATOR_PHONE))
+        demo_creator_account, _ = Account.objects.get_or_create(
+            auth_subject_hash=creator_phone_hash,
+            defaults={
+                "role": Role.FAN.value,
+                "nickname": _DEMO_CREATOR_NICKNAME,
+                "auth_method": "phone",
+            },
+        )
+        stellar_creator = creators["stellar"]
+        stellar_creator.owner = demo_creator_account
+        stellar_creator.save(update_fields=["owner"])
+
         # The primary demo fan, keyed on the phone-hash so login is deterministic.
         phone_hash = hash_phone(normalize_phone(_DEMO_FAN_PHONE))
         demo_fan, _ = Account.objects.get_or_create(
@@ -184,6 +205,10 @@ class Command(BaseCommand):
                 "role": Role.FAN.value,
                 "nickname": _DEMO_FAN_NICKNAME,
                 "auth_method": "phone",
+                # R3: the demo fan starts un-verified (fail-closed) — the 19+ gate
+                # hides adult items until they run the (mock) 본인인증 flow.
+                "adult_verified": False,
+                "kyc_status": "unverified",
             },
         )
         for handle in ("stellar", "rabbit"):

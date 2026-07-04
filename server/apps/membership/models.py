@@ -36,6 +36,9 @@ class MembershipTier(models.Model):
     benefits = models.JSONField(default=list)
     badge = models.CharField(max_length=20, blank=True, default="")
     featured = models.BooleanField(default=False)
+    # Studio toggle (R3): an inactive tier is hidden from the public catalog but kept
+    # for the owner to re-activate (soft archive), so existing subscriptions survive.
+    active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

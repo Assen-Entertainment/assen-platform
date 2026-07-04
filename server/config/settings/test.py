@@ -26,6 +26,14 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # Fan signup tests + live API E2E use the deterministic mock OTP sender.
 ENABLE_MOCK_FAN_OTP = True
 
+# R3 gated features on for tests: the mock KYC verifier + mock payment tokenizer are
+# wired, and 19+ read exposure is on so the gating tests can assert both the
+# hidden-when-off and shown-when-verified paths. All mock/skeleton (see base.py); the
+# off-by-default (base) behaviour is asserted explicitly with override_settings.
+ENABLE_MOCK_KYC = True
+ENABLE_ADULT_CONTENT = True
+ENABLE_MOCK_PAYMENT = True
+
 # Disable per-user write throttling: the suite fires many writes for one fixture
 # account, and the shared LocMem throttle cache would otherwise leak state across
 # tests and trip 429s. Throttle behaviour itself is exercised in dev/prod config.
