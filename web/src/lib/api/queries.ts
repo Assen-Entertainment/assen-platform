@@ -23,8 +23,12 @@ import {
   getOrder,
   getNotificationsPage,
   getSubscriptions,
+  getBlocks,
+  mockSetBlocked,
   type Page,
   apiToggleFollow,
+  apiBlockCreator,
+  apiUnblockCreator,
   apiToggleLike,
   apiAddComment,
   apiCreateOrder,
@@ -58,7 +62,7 @@ import {
   type StudioTierUpdate,
   type StudioProfileUpdate,
 } from "./index";
-import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod } from "./types";
+import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, BlockedCreator } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
 
 /** 라이브 백엔드 연동 여부 — false면 뮤테이션은 낙관 로직만(sleep) 유지(오프라인·테스트). */
@@ -96,6 +100,16 @@ function mapListCache<T>(data: ListCache<T> | undefined, fn: (item: T) => T): Li
   return { ...data, pages: data.pages.map((pg) => ({ ...pg, items: pg.items.map(fn) })) };
 }
 
+/** 리스트 캐시에서 keep=false 항목 제거(배열/InfiniteData 공용) — 차단 시 해당 크리에이터 포스트 제거. */
+function filterListCache<T>(
+  data: ListCache<T> | undefined,
+  keep: (item: T) => boolean,
+): ListCache<T> | undefined {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.filter(keep);
+  return { ...data, pages: data.pages.map((pg) => ({ ...pg, items: pg.items.filter(keep) })) };
+}
+
 /** 리스트 캐시 끝에 항목 추가(배열/InfiniteData 공용). 빈 캐시는 배열로 시드. */
 function appendListCache<T>(data: ListCache<T> | undefined, item: T): ListCache<T> {
   if (!data) return [item];
@@ -131,6 +145,7 @@ export const qk = {
   order: (id: string) => ["order", id] as const,
   notifications: ["notifications"] as const,
   subscriptions: ["subscriptions"] as const,
+  blocks: ["blocks"] as const,
   paymentMethods: ["payment-methods"] as const,
   studioProducts: ["studio-products"] as const,
   studioTiers: ["studio-tiers"] as const,
@@ -576,6 +591,118 @@ export function useReport() {
       if (USE_API) return apiReport(input);
       await sleep(200);
       return null;
+    },
+  });
+}
+
+// --- 안전(R4-W3): 팬 개인 차단(CreatorBlock) --------------------------------
+/** 내 차단 목록(설정 차단 화면). */
+export function useBlocks() {
+  return useQuery({ queryKey: qk.blocks, queryFn: getBlocks });
+}
+
+/**
+ * 크리에이터 차단 — 낙관적. 프로필(핸들 알 때) blocked=true + 자동 언팔로우(following=false),
+ * 피드·포스트 목록에서 해당 크리에이터 포스트 즉시 제거(차단이 피드/디스커버리/검색/팔로우에 영향).
+ * USE_API면 서버 상태로 정정 후 관련 쿼리(feed·creators·search·posts·해당 creator·blocks) 무효화 —
+ * 자동 언팔 반영. mock은 로컬 상태(mockSetBlocked)로 설정 목록 코히어런스 유지. 실패 시 롤백.
+ */
+export function useBlockCreator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorId: string; handle?: string }) => {
+      if (USE_API) return apiBlockCreator(input.creatorId);
+      await sleep(200);
+      mockSetBlocked(input.creatorId, true);
+      return null;
+    },
+    onMutate: async ({ creatorId, handle }: { creatorId: string; handle?: string }) => {
+      // 프로필 크리에이터 캐시(핸들 알 때): blocked=true + 자동 언팔로우.
+      let prevCreator: Creator | undefined;
+      if (handle) {
+        await qc.cancelQueries({ queryKey: qk.creator(handle) });
+        prevCreator = qc.getQueryData<Creator>(qk.creator(handle));
+        qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
+          c ? { ...c, blocked: true, following: false } : c,
+        );
+      }
+      // 피드·포스트 목록에서 차단 크리에이터 포스트 제거(즉시 사라짐).
+      await qc.cancelQueries({ queryKey: qk.feed });
+      await qc.cancelQueries({ queryKey: ["posts"] });
+      const prevFeed = qc.getQueryData<ListCache<Post>>(qk.feed);
+      const prevLists = qc.getQueriesData<ListCache<Post>>({ queryKey: ["posts"] });
+      const keep = (p: Post) => p.creatorId !== creatorId;
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => filterListCache(d, keep));
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => filterListCache(d, keep));
+      return { prevCreator, prevFeed, prevLists, handle };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.handle && ctx.prevCreator) qc.setQueryData(qk.creator(ctx.handle), ctx.prevCreator);
+      if (ctx?.prevFeed) qc.setQueryData(qk.feed, ctx.prevFeed);
+      ctx?.prevLists?.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSuccess: (result, { handle }) => {
+      // 서버 응답(BlockResult)으로 정정 — blocked 반영 + 자동 언팔 유지.
+      if (USE_API && result && handle) {
+        qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
+          c ? { ...c, blocked: result.blocked, following: false } : c,
+        );
+      }
+    },
+    onSettled: (_d, _e, { handle }) => {
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: qk.feed });
+        qc.invalidateQueries({ queryKey: qk.creators });
+        qc.invalidateQueries({ queryKey: ["posts"] });
+        qc.invalidateQueries({ queryKey: ["search"] });
+        qc.invalidateQueries({ queryKey: qk.blocks });
+        if (handle) qc.invalidateQueries({ queryKey: qk.creator(handle) });
+      }
+    },
+  });
+}
+
+/**
+ * 크리에이터 차단 해제 — 낙관적. 프로필 blocked=false(자동 재팔로우 없음), 설정 차단 목록에서 즉시 제거.
+ * USE_API면 관련 쿼리 무효화. mock은 mockSetBlocked(false)로 설정 목록 코히어런스 유지. 실패 시 롤백.
+ */
+export function useUnblockCreator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorId: string; handle?: string }) => {
+      if (USE_API) return apiUnblockCreator(input.creatorId);
+      await sleep(200);
+      mockSetBlocked(input.creatorId, false);
+      return null;
+    },
+    onMutate: async ({ creatorId, handle }: { creatorId: string; handle?: string }) => {
+      let prevCreator: Creator | undefined;
+      if (handle) {
+        await qc.cancelQueries({ queryKey: qk.creator(handle) });
+        prevCreator = qc.getQueryData<Creator>(qk.creator(handle));
+        qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) => (c ? { ...c, blocked: false } : c));
+      }
+      // 설정 차단 목록에서 즉시 제거.
+      await qc.cancelQueries({ queryKey: qk.blocks });
+      const prevBlocks = qc.getQueryData<BlockedCreator[]>(qk.blocks);
+      qc.setQueryData<BlockedCreator[] | undefined>(qk.blocks, (list) =>
+        list?.filter((b) => b.creatorId !== creatorId),
+      );
+      return { prevCreator, prevBlocks, handle };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.handle && ctx.prevCreator) qc.setQueryData(qk.creator(ctx.handle), ctx.prevCreator);
+      if (ctx?.prevBlocks) qc.setQueryData(qk.blocks, ctx.prevBlocks);
+    },
+    onSettled: (_d, _e, { handle }) => {
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: qk.feed });
+        qc.invalidateQueries({ queryKey: qk.creators });
+        qc.invalidateQueries({ queryKey: ["posts"] });
+        qc.invalidateQueries({ queryKey: ["search"] });
+        qc.invalidateQueries({ queryKey: qk.blocks });
+        if (handle) qc.invalidateQueries({ queryKey: qk.creator(handle) });
+      }
     },
   });
 }

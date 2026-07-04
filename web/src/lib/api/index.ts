@@ -9,6 +9,7 @@
 import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "./client";
 import type {
+  BlockedCreator,
   Comment,
   Creator,
   MembershipTier,
@@ -52,6 +53,8 @@ interface RawCreator {
   followers: number;
   posts: number;
   following: boolean;
+  // 서버 CreatorOut.blocked(default false) — 단건 조회에서만 신뢰값. 목록엔 없을 수 있어 옵셔널.
+  blocked?: boolean;
 }
 interface RawPost {
   id: string;
@@ -216,6 +219,22 @@ export interface ReportResult {
   status: string;
   createdAt: string;
 }
+/** 차단 토글 응답(서버 BlockOut — 클라 상태 정정용). */
+export interface BlockResult {
+  blocked: boolean;
+  creatorId: string;
+}
+/** 설정 차단 목록 wire(BlockedCreatorOut). */
+interface RawBlockedCreator {
+  creator_id: string;
+  name: string;
+  handle: string;
+}
+const mapBlockedCreator = (b: RawBlockedCreator): BlockedCreator => ({
+  creatorId: b.creator_id,
+  name: b.name,
+  handle: b.handle,
+});
 
 /** ISO 시각 → 상대 라벨(방금 / N분·시간·일 전 / 날짜). */
 function relativeTime(iso: string): string {
@@ -245,6 +264,7 @@ const mapCreator = (c: RawCreator): Creator => ({
   verified: c.verified,
   category: c.category || undefined,
   following: c.following,
+  blocked: c.blocked,
 });
 const mapPost = (p: RawPost): Post => ({
   id: p.id,
@@ -495,6 +515,14 @@ const PAYMENT_METHODS: SavedPaymentMethod[] = [
   { id: "m2", brand: "카카오페이", last4: "8890", isPrimary: false, createdAt: "2026-06-10T00:00:00Z" },
 ];
 
+// mock 차단 상태(USE_API=false 로컬 시뮬 — 실 경로는 서버가 권위). getBlocks/getCreator 코히어런스.
+const MOCK_BLOCKED = new Set<string>();
+/** mock 차단/해제 반영(설정 목록·프로필 blocked 일관성). 뮤테이션 훅의 mock 분기에서 호출. */
+export function mockSetBlocked(creatorId: string, blocked: boolean): void {
+  if (blocked) MOCK_BLOCKED.add(creatorId);
+  else MOCK_BLOCKED.delete(creatorId);
+}
+
 // --- 커서 페이지네이션(R4-W1): 커서 인지 fetcher --------------------------------
 /**
  * 커서 페이지 — 뷰/훅이 소비하는 언랩 형태(camelCase). 서버 `Paginated<T>`(next_cursor)에서
@@ -533,7 +561,9 @@ export async function getCreator(handle: string): Promise<Creator | undefined> {
       throw e;
     }
   }
-  return CREATORS.find((c) => c.handle === handle);
+  // mock: 로컬 차단 상태를 반영(단건 blocked 코히어런스 — 정적 CREATORS는 불변 유지).
+  const found = CREATORS.find((c) => c.handle === handle);
+  return found ? { ...found, blocked: MOCK_BLOCKED.has(found.id) } : undefined;
 }
 export async function getProducts(creatorId?: string): Promise<Product[]> {
   if (USE_API) {
@@ -723,6 +753,22 @@ export async function getSubscriptions(): Promise<Subscription[]> {
   }
   return SUBSCRIPTIONS;
 }
+/** 내 차단 목록 — USE_API면 GET /fan/blocks, 아니면 mock 로컬 상태. 401(비로그인)은 빈 목록. */
+export async function getBlocks(): Promise<BlockedCreator[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawBlockedCreator[]>("/fan/blocks")).map(mapBlockedCreator);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return CREATORS.filter((c) => MOCK_BLOCKED.has(c.id)).map((c) => ({
+    creatorId: c.id,
+    name: c.name,
+    handle: c.handle,
+  }));
+}
 
 // --- 뮤테이션 API(실 호출 전용 — queries.ts가 USE_API로 분기해 호출) ----------
 /** 팔로우 토글 — next=true PUT, false DELETE → {following, followers}. */
@@ -796,6 +842,25 @@ export async function apiReport(input: { reportType: string; narrative?: string 
     { method: "POST", body: JSON.stringify({ report_type: input.reportType, narrative: input.narrative }) },
   );
   return { safetyReportId: raw.safety_report_id, status: raw.status, createdAt: raw.created_at };
+}
+/**
+ * 크리에이터 차단 — POST /fan/blocks {creator_id} → {blocked, creator_id}(멱등).
+ * 부수효과: 서버가 자동 언팔로우(팔로우 파생 노출 제거). 404=BlockTargetNotFound.
+ */
+export async function apiBlockCreator(creatorId: string): Promise<BlockResult> {
+  const raw = await apiFetch<{ blocked: boolean; creator_id: string }>("/fan/blocks", {
+    method: "POST",
+    body: JSON.stringify({ creator_id: creatorId }),
+  });
+  return { blocked: raw.blocked, creatorId: raw.creator_id };
+}
+/** 크리에이터 차단 해제 — DELETE /fan/blocks/{creator_id} → {blocked, creator_id}(멱등). */
+export async function apiUnblockCreator(creatorId: string): Promise<BlockResult> {
+  const raw = await apiFetch<{ blocked: boolean; creator_id: string }>(
+    `/fan/blocks/${encodeURIComponent(creatorId)}`,
+    { method: "DELETE" },
+  );
+  return { blocked: raw.blocked, creatorId: raw.creator_id };
 }
 /** 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. is_adult=19+ 성인 등급(서버가 노출 통제). */
 export async function apiPublishPost(input: { body: string; mediaUrl?: string; isAdult?: boolean }): Promise<Post> {

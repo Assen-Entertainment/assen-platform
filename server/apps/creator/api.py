@@ -24,7 +24,7 @@ from apps.commerce.models import Product, ProductStatus
 from apps.creator.models import Creator
 from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
-from apps.social.models import Follow
+from apps.social.models import CreatorBlock, Follow, blocked_creator_ids
 from config.api import api
 from config.pagination import paginate
 from config.throttle import user_write_throttle
@@ -57,6 +57,11 @@ class CreatorOut(Schema):
     followers: int
     posts: int
     following: bool = False
+    # True only when the authenticated caller has *personally* blocked this creator
+    # (apps.social.CreatorBlock). Discovery/search already exclude blocked creators,
+    # so this is meaningful on explicit single navigation (get_creator) where the
+    # creator is returned and the web renders a "blocked" state. Anonymous → False.
+    blocked: bool = False
 
 
 class CreatorPage(Schema):
@@ -90,9 +95,9 @@ def _annotated(account: Account | None = None) -> QuerySet[Creator]:
     fan-out. At scale the intermediate row explosion is a perf cost — move to
     subquery counts or denormalised counters then (tracked, non-blocking for B2).
 
-    When ``account`` is given, a per-user ``is_following`` flag is annotated via a
-    single ``Exists`` subquery — no extra per-row query. Anonymous callers pass
-    ``None`` and get no annotation (``following`` False).
+    When ``account`` is given, per-user ``is_following`` / ``is_blocked`` flags are
+    annotated via single ``Exists`` subqueries — no extra per-row query. Anonymous
+    callers pass ``None`` and get no annotation (``following`` / ``blocked`` False).
     """
     queryset = Creator.objects.annotate(
         followers_count=Count("followers", distinct=True),
@@ -102,7 +107,10 @@ def _annotated(account: Account | None = None) -> QuerySet[Creator]:
         queryset = queryset.annotate(
             is_following=Exists(
                 Follow.objects.filter(creator=OuterRef("pk"), follower=account)
-            )
+            ),
+            is_blocked=Exists(
+                CreatorBlock.objects.filter(creator=OuterRef("pk"), blocker=account)
+            ),
         )
     return queryset
 
@@ -122,6 +130,7 @@ def _creator_out(creator: Creator) -> CreatorOut:
         followers=getattr(creator, "followers_count", 0),
         posts=getattr(creator, "posts_count", 0),
         following=bool(getattr(creator, "is_following", False)),
+        blocked=bool(getattr(creator, "is_blocked", False)),
     )
 
 
@@ -132,9 +141,17 @@ def list_creators(
     limit: int | None = None,
     category: str | None = None,
 ) -> CreatorPage:
-    """List creators (optionally filtered by category), cursor-paginated."""
+    """List creators (optionally filtered by category), cursor-paginated.
+
+    Discovery is an aggregate surface, so creators the authenticated caller has
+    personally blocked are excluded (anonymous callers block nothing).
+    """
     account = resolve_optional_account(request)
-    queryset = _annotated(account).order_by("handle")
+    queryset = (
+        _annotated(account)
+        .exclude(id__in=blocked_creator_ids(account))
+        .order_by("handle")
+    )
     if category:
         queryset = queryset.filter(category=category)
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
@@ -160,21 +177,28 @@ def search(request: HttpRequest, q: str = "") -> SearchOut:
     term = q.strip()[:_SEARCH_TERM_MAX]
     if not term:
         return SearchOut(creators=[], products=[])
+    # Search is an aggregate surface: personally blocked creators AND their products
+    # are excluded for the authenticated caller (anonymous blocks nothing).
+    blocked = blocked_creator_ids(account)
     creators = list(
         _annotated(account)
         .filter(name__icontains=term)
+        .exclude(id__in=blocked)
         .order_by("handle")[:_SEARCH_LIMIT]
     ) + list(
         _annotated(account)
         .filter(handle__icontains=term)
         .exclude(name__icontains=term)
+        .exclude(id__in=blocked)
         .order_by("handle")[:_SEARCH_LIMIT]
     )
     # 19+ / visibility gate on product results (same invariant as list_products):
     # draft/hidden are owner-only, and adult_only follows the ENABLE_ADULT_CONTENT +
     # adult_verified gate (off → hidden from everyone), so search cannot leak them.
-    product_qs = Product.objects.filter(title__icontains=term).exclude(
-        status__in=(ProductStatus.DRAFT.value, ProductStatus.HIDDEN.value)
+    product_qs = (
+        Product.objects.filter(title__icontains=term)
+        .exclude(status__in=(ProductStatus.DRAFT.value, ProductStatus.HIDDEN.value))
+        .exclude(creator_id__in=blocked)
     )
     if not (
         settings.ENABLE_ADULT_CONTENT and account is not None and account.adult_verified

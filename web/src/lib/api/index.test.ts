@@ -10,6 +10,9 @@ import {
   getOrder,
   getNotifications,
   getSubscriptions,
+  getBlocks,
+  getCreator,
+  mockSetBlocked,
 } from "./index";
 
 // NEXT_PUBLIC_API_URL 미설정(테스트 환경) → mock 폴백 경로를 검증한다.
@@ -72,5 +75,21 @@ describe("커머스 mock (W2)", () => {
     const subs = await getSubscriptions();
     expect(subs.length).toBeGreaterThan(0);
     expect(subs[0]).toHaveProperty("nextBillingDate");
+  });
+});
+
+describe("차단 mock (R4-W3)", () => {
+  it("mockSetBlocked로 차단하면 getBlocks·getCreator(blocked)에 반영되고, 해제하면 사라진다", async () => {
+    expect(await getBlocks()).toEqual([]);
+
+    mockSetBlocked("c1", true);
+    const list = await getBlocks();
+    expect(list.map((b) => b.handle)).toContain("stellar");
+    expect((await getCreator("stellar"))?.blocked).toBe(true);
+
+    // 해제 → 목록에서 사라지고 blocked=false.
+    mockSetBlocked("c1", false);
+    expect(await getBlocks()).toEqual([]);
+    expect((await getCreator("stellar"))?.blocked).toBe(false);
   });
 });

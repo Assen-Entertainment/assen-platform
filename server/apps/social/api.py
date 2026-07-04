@@ -16,6 +16,7 @@ access cookie) and rate-limited per user (:func:`config.throttle.user_write_thro
 
 from __future__ import annotations
 
+import uuid
 from typing import cast
 
 from django.db import IntegrityError, transaction
@@ -26,8 +27,9 @@ from apps.creator.models import Creator
 from apps.identity.auth import fan_auth
 from apps.identity.models import Account
 from apps.notification.services import notify
-from apps.social.models import Follow
+from apps.social.models import CreatorBlock, Follow
 from config.api import api
+from config.errors import ErrorCode
 from config.throttle import user_write_throttle
 
 router = Router(tags=["social"])
@@ -103,3 +105,108 @@ def unfollow_creator(
 
 
 api.add_router("/creators", router)
+
+
+# --------------------------------------------------------------------------- #
+# Personal creator block (ASS-226). A fan hides a creator from their OWN
+# aggregate surfaces (feed/discovery/search). This is NOT operator moderation
+# (apps.safety.UserBlock) — it is fan-controlled, carries no reason code, and is a
+# plain create/delete edge. The read-side gating lives at each aggregate call site
+# via ``apps.social.models.blocked_creator_ids``; this router owns the mutations +
+# the settings-screen list.
+# --------------------------------------------------------------------------- #
+blocks_router = Router(auth=fan_auth, tags=["social-blocks"])
+
+
+class BlockError(Schema):
+    """Coded error shape for block endpoints (``detail`` copy + stable ``code``)."""
+
+    detail: str
+    code: str
+
+
+class BlockIn(Schema):
+    """Request body to block a creator (by id)."""
+
+    creator_id: uuid.UUID
+
+
+class BlockOut(Schema):
+    """Block-edge state after a mutation (lets the client reconcile its state)."""
+
+    blocked: bool
+    creator_id: uuid.UUID
+
+
+class BlockedCreatorOut(Schema):
+    """One blocked creator, for the fan's block-list settings screen."""
+
+    creator_id: uuid.UUID
+    name: str
+    handle: str
+
+
+@blocks_router.post(
+    "",
+    response={200: BlockOut, 404: BlockError},
+    throttle=user_write_throttle("30/min"),
+)
+def block_creator(request: HttpRequest, payload: BlockIn) -> tuple[int, BlockOut | BlockError]:
+    """Block a creator; idempotent (a second block is a no-op, still 200).
+
+    Blocking auto-unfollows (standard mute/block UX): a fan who blocks a creator
+    they follow should not keep receiving that creator's follow-derived surfaces.
+    An unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,
+    a personal block does not hide the target's existence.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = Creator.objects.filter(id=payload.creator_id).first()
+    if creator is None:
+        return 404, BlockError(
+            detail="크리에이터를 찾을 수 없어요.",
+            code=ErrorCode.BLOCK_TARGET_NOT_FOUND.value,
+        )
+    try:
+        # Idempotent under concurrency: the unique (blocker, creator) constraint
+        # collapses a double-block race into a single edge rather than an error.
+        with transaction.atomic():
+            CreatorBlock.objects.get_or_create(blocker=account, creator=creator)
+    except IntegrityError:
+        pass
+    # 차단 시 팔로우 중이면 자동 언팔로우 (표준 UX). 미팔로우면 무해한 no-op.
+    Follow.objects.filter(follower=account, creator=creator).delete()
+    return 200, BlockOut(blocked=True, creator_id=creator.id)
+
+
+@blocks_router.delete(
+    "/{creator_id}",
+    response={200: BlockOut},
+    throttle=user_write_throttle("30/min"),
+)
+def unblock_creator(request: HttpRequest, creator_id: uuid.UUID) -> tuple[int, BlockOut]:
+    """Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    CreatorBlock.objects.filter(blocker=account, creator_id=creator_id).delete()
+    return 200, BlockOut(blocked=False, creator_id=creator_id)
+
+
+@blocks_router.get("", response=list[BlockedCreatorOut])
+def list_blocks(request: HttpRequest) -> list[BlockedCreatorOut]:
+    """List the creators the requesting fan has blocked (settings screen)."""
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    blocks = (
+        CreatorBlock.objects.filter(blocker=account)
+        .select_related("creator")
+        .order_by("-created_at")
+    )
+    return [
+        BlockedCreatorOut(
+            creator_id=block.creator_id,
+            name=block.creator.name,
+            handle=block.creator.handle,
+        )
+        for block in blocks
+    ]
+
+
+api.add_router("/fan/blocks", blocks_router)

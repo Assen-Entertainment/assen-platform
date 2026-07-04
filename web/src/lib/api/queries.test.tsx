@@ -2,8 +2,8 @@ import * as React from "react";
 import { describe, it, expect } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useToggleLike, useAddComment, qk } from "./queries";
-import type { Post, Comment } from "./types";
+import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, qk } from "./queries";
+import type { Post, Comment, Creator, BlockedCreator } from "./types";
 
 function makeWrapper(qc: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -102,6 +102,54 @@ describe("useToggleLike (optimistic)", () => {
       const list = qc.getQueryData<Post[]>(qk.posts("c1"));
       expect(list?.[0].liked).toBe(true);
       expect(list?.[0].likeCount).toBe(11);
+    });
+  });
+});
+
+describe("useBlockCreator (optimistic)", () => {
+  it("차단 시 크리에이터 blocked=true·following=false로 갱신하고 피드에서 해당 크리에이터 포스트를 제거한다", async () => {
+    const qc = new QueryClient();
+    const creator: Creator = { id: "c1", name: "별빛", handle: "stellar", followers: 10, following: true };
+    qc.setQueryData(qk.creator("stellar"), creator);
+    // 피드: c1 포스트 + c2 포스트 → 차단 후 c1만 사라져야 한다.
+    qc.setQueryData(qk.feed, [basePost, { ...basePost, id: "po2", creatorId: "c2" }]);
+
+    const { result } = renderHook(() => useBlockCreator(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ creatorId: "c1", handle: "stellar" });
+    });
+
+    await waitFor(() => {
+      const c = qc.getQueryData<Creator>(qk.creator("stellar"));
+      expect(c?.blocked).toBe(true);
+      expect(c?.following).toBe(false); // 자동 언팔로우
+      const feed = qc.getQueryData<Post[]>(qk.feed);
+      expect(feed?.map((p) => p.id)).toEqual(["po2"]);
+    });
+  });
+});
+
+describe("useUnblockCreator (optimistic)", () => {
+  it("해제 시 차단 목록에서 제거하고 크리에이터 blocked=false로 갱신한다", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData<Creator>(qk.creator("stellar"), {
+      id: "c1",
+      name: "별빛",
+      handle: "stellar",
+      followers: 10,
+      blocked: true,
+    });
+    qc.setQueryData<BlockedCreator[]>(qk.blocks, [{ creatorId: "c1", name: "별빛", handle: "stellar" }]);
+
+    const { result } = renderHook(() => useUnblockCreator(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ creatorId: "c1", handle: "stellar" });
+    });
+
+    await waitFor(() => {
+      const c = qc.getQueryData<Creator>(qk.creator("stellar"));
+      expect(c?.blocked).toBe(false);
+      expect(qc.getQueryData<BlockedCreator[]>(qk.blocks)).toEqual([]);
     });
   });
 });

@@ -225,6 +225,13 @@ export interface paths {
          *
          *     Consumer surface: draft/hidden listings and gated 19+ items are excluded
          *     (:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.
+         *
+         *     Personal-block gating (mirrors ``content.list_posts``): the global (unfiltered)
+         *     browse is an aggregate surface, so products from creators the authenticated
+         *     caller has personally blocked are excluded. A ``?creator_id=`` request is
+         *     explicit creator-scoped navigation (a store visit), so it is returned even for
+         *     a blocked creator — the web renders the block state; a personal block is not
+         *     existence hiding, unlike the 19+ gate.
          */
         get: operations["apps_commerce_api_list_products"];
         put?: never;
@@ -417,6 +424,11 @@ export interface paths {
         /**
          * List Posts
          * @description List posts, newest first; filter to one creator via ``?creator_id=``.
+         *
+         *     Personal-block gating: the global (unfiltered) list is an aggregate surface, so
+         *     personally blocked creators are excluded. A ``?creator_id=`` request is explicit
+         *     creator-scoped navigation (a profile visit), so it is returned even for a blocked
+         *     creator — the web renders the block state; a personal block is not existence hiding.
          */
         get: operations["apps_content_api_list_posts"];
         put?: never;
@@ -521,6 +533,9 @@ export interface paths {
          *     Personalised (following-only) feed needs a richer ranking and lands later; for
          *     now this returns the same recent-posts page as ``/posts``, but with the
          *     per-user ``liked`` flag filled in when the caller is authenticated.
+         *
+         *     The feed is an aggregate surface, so posts from creators the caller has
+         *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_content_api_feed"];
         put?: never;
@@ -725,6 +740,9 @@ export interface paths {
         /**
          * List Creators
          * @description List creators (optionally filtered by category), cursor-paginated.
+         *
+         *     Discovery is an aggregate surface, so creators the authenticated caller has
+         *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_creator_api_list_creators"];
         put?: never;
@@ -2244,6 +2262,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fan/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Blocks
+         * @description List the creators the requesting fan has blocked (settings screen).
+         */
+        get: operations["apps_social_api_list_blocks"];
+        put?: never;
+        /**
+         * Block Creator
+         * @description Block a creator; idempotent (a second block is a no-op, still 200).
+         *
+         *     Blocking auto-unfollows (standard mute/block UX): a fan who blocks a creator
+         *     they follow should not keep receiving that creator's follow-derived surfaces.
+         *     An unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,
+         *     a personal block does not hide the target's existence.
+         */
+        post: operations["apps_social_api_block_creator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/blocks/{creator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unblock Creator
+         * @description Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200).
+         */
+        delete: operations["apps_social_api_unblock_creator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/visits/": {
         parameters: {
             query?: never;
@@ -3427,6 +3494,11 @@ export interface components {
              * @default false
              */
             following: boolean;
+            /**
+             * Blocked
+             * @default false
+             */
+            blocked: boolean;
         };
         /**
          * CreatorPage
@@ -4770,32 +4842,16 @@ export interface components {
         };
         /**
          * BlockOut
-         * @description Block row exposed to managers.
+         * @description Block-edge state after a mutation (lets the client reconcile its state).
          */
         BlockOut: {
+            /** Blocked */
+            blocked: boolean;
             /**
-             * Id
+             * Creator Id
              * Format: uuid
              */
-            id: string;
-            /**
-             * Target Id
-             * Format: uuid
-             */
-            target_id: string;
-            /** Block Scope */
-            block_scope: string;
-            /** Block Reason */
-            block_reason: string;
-            /** Is Risk Flag */
-            is_risk_flag: boolean;
-            /** Status */
-            status: string;
-            /**
-             * Effective From
-             * Format: date-time
-             */
-            effective_from: string;
+            creator_id: string;
         };
         /**
          * BlockCreateIn
@@ -5004,6 +5060,42 @@ export interface components {
             following: boolean;
             /** Followers */
             followers: number;
+        };
+        /**
+         * BlockError
+         * @description Coded error shape for block endpoints (``detail`` copy + stable ``code``).
+         */
+        BlockError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * BlockIn
+         * @description Request body to block a creator (by id).
+         */
+        BlockIn: {
+            /**
+             * Creator Id
+             * Format: uuid
+             */
+            creator_id: string;
+        };
+        /**
+         * BlockedCreatorOut
+         * @description One blocked creator, for the fan's block-list settings screen.
+         */
+        BlockedCreatorOut: {
+            /**
+             * Creator Id
+             * Format: uuid
+             */
+            creator_id: string;
+            /** Name */
+            name: string;
+            /** Handle */
+            handle: string;
         };
         /**
          * VisitRecordOut
@@ -9377,6 +9469,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_social_api_list_blocks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedCreatorOut"][];
+                };
+            };
+        };
+    };
+    apps_social_api_block_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockError"];
+                };
+            };
+        };
+    };
+    apps_social_api_unblock_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creator_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockOut"];
                 };
             };
         };

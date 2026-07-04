@@ -84,6 +84,12 @@ class ErrorCode(StrEnum):
     # --- dashboard ----------------------------------------------------------
     DATE_RANGE_INVALID = "DateRangeInvalid"
 
+    # --- social (personal block) --------------------------------------------
+    # A fan's *personal* block of a creator (apps.social.CreatorBlock) — distinct
+    # from operator moderation (apps.safety.UserBlock). Raised only when the block
+    # target creator does not exist; blocking is otherwise idempotent.
+    BLOCK_TARGET_NOT_FOUND = "BlockTargetNotFound"
+
     # --- gating (adult 19+) -------------------------------------------------
     # Reserved: the 19+ gate currently *hides* gated items (404 / filtered out) so
     # existence never leaks, rather than raising an explicit block. This code exists

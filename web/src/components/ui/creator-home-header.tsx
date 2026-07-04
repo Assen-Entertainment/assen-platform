@@ -30,6 +30,8 @@ export interface CreatorHomeHeaderProps {
   followersHref?: string;
   /** 목표 진행(ProgressBar 소비, 루브릭 #10) — placeholder 수치. */
   goal?: { label: string; value: number; max: number };
+  /** 액션 행 끝에 배치할 더보기 메뉴 슬롯(차단 등) — 미지정 시 렌더 안 함. */
+  menu?: React.ReactNode;
 }
 
 function compact(n: number): string {
@@ -51,6 +53,7 @@ export function CreatorHomeHeader({
   onGift,
   followersHref,
   goal,
+  menu,
 }: CreatorHomeHeaderProps) {
   const followers_ = (
     <span className="tabular-nums text-on-surface">{followers.toLocaleString("ko-KR")}</span>
@@ -90,6 +93,7 @@ export function CreatorHomeHeader({
             >
               {following ? "팔로잉" : "팔로우"}
             </Button>
+            {menu}
           </div>
         </div>
       </div>

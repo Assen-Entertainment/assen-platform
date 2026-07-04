@@ -8,7 +8,7 @@ from django.db import IntegrityError
 
 from apps.creator.models import Creator
 from apps.identity.models import Account, Role
-from apps.social.models import Follow
+from apps.social.models import CreatorBlock, Follow
 
 pytestmark = pytest.mark.django_db
 
@@ -25,3 +25,12 @@ def test_follow_is_unique_per_pair() -> None:
     Follow.objects.create(follower=fan, creator=creator)
     with pytest.raises(IntegrityError):
         Follow.objects.create(follower=fan, creator=creator)
+
+
+def test_creator_block_is_unique_per_pair() -> None:
+    """A fan cannot block the same creator twice (DB-level uniqueness)."""
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    fan = Account.objects.create(role=Role.FAN.value)
+    CreatorBlock.objects.create(blocker=fan, creator=creator)
+    with pytest.raises(IntegrityError):
+        CreatorBlock.objects.create(blocker=fan, creator=creator)

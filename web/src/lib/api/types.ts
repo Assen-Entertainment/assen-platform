@@ -14,6 +14,15 @@ export interface Creator {
   verified?: boolean;
   category?: string;
   following?: boolean;
+  /** 팬 개인 차단 여부(서버 CreatorOut.blocked) — 단건 조회에서 인증 팬이 차단 시 true. */
+  blocked?: boolean;
+}
+
+/** 내가 차단한 크리에이터 1건(설정 차단 목록 — 서버 BlockedCreatorOut). */
+export interface BlockedCreator {
+  creatorId: string;
+  name: string;
+  handle: string;
 }
 
 export interface Post {

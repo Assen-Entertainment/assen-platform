@@ -30,6 +30,7 @@ from apps.creator.models import Creator
 from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.services import notify
+from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.pagination import paginate
 from config.throttle import user_write_throttle
@@ -206,10 +207,19 @@ def list_posts(
     cursor: str | None = None,
     limit: int | None = None,
 ) -> PostPage:
-    """List posts, newest first; filter to one creator via ``?creator_id=``."""
-    queryset = _post_qs(resolve_optional_account(request)).order_by("-created_at", "id")
+    """List posts, newest first; filter to one creator via ``?creator_id=``.
+
+    Personal-block gating: the global (unfiltered) list is an aggregate surface, so
+    personally blocked creators are excluded. A ``?creator_id=`` request is explicit
+    creator-scoped navigation (a profile visit), so it is returned even for a blocked
+    creator — the web renders the block state; a personal block is not existence hiding.
+    """
+    account = resolve_optional_account(request)
+    queryset = _post_qs(account).order_by("-created_at", "id")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
+    else:
+        queryset = queryset.exclude(creator_id__in=blocked_creator_ids(account))
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
     return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
 
@@ -371,8 +381,16 @@ def feed(
     Personalised (following-only) feed needs a richer ranking and lands later; for
     now this returns the same recent-posts page as ``/posts``, but with the
     per-user ``liked`` flag filled in when the caller is authenticated.
+
+    The feed is an aggregate surface, so posts from creators the caller has
+    personally blocked are excluded (anonymous callers block nothing).
     """
-    queryset = _post_qs(resolve_optional_account(request)).order_by("-created_at", "id")
+    account = resolve_optional_account(request)
+    queryset = (
+        _post_qs(account)
+        .exclude(creator_id__in=blocked_creator_ids(account))
+        .order_by("-created_at", "id")
+    )
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
     return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
 

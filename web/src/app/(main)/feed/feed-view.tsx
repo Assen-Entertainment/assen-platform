@@ -12,12 +12,17 @@ import {
   Sheet,
   SheetContent,
   SheetTitle,
+  Dialog,
+  DialogContent,
+  DialogClose,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
 import { useSession } from "@/lib/session";
-import { useFeed, useToggleLike, useReport } from "@/lib/api/queries";
-import { ApiError, type Post } from "@/lib/api";
+import { useFeed, useToggleLike, useReport, useBlockCreator } from "@/lib/api/queries";
+import { ApiError, apiErrorMessage, type Post } from "@/lib/api";
 
 /** 팔로잉 피드 뷰(클라). 좋아요=낙관적, 공유=클립보드, 더보기=신고 등 액션. */
 export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
@@ -28,11 +33,31 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
   const { data, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useFeed(initialPosts);
   const toggleLike = useToggleLike();
   const report = useReport();
+  const blockCreator = useBlockCreator();
   const posts = data ?? initialPosts;
 
-  // 더보기 액션 메뉴 대상 / 신고 시트 대상 포스트 id.
+  // 더보기 액션 메뉴 대상 / 신고 시트 대상 포스트 id / 차단 확인 대상(크리에이터).
   const [menuPostId, setMenuPostId] = React.useState<string | null>(null);
   const [reportPostId, setReportPostId] = React.useState<string | null>(null);
+  const [blockTarget, setBlockTarget] = React.useState<{ creatorId: string; creatorName: string } | null>(null);
+
+  // 차단 확정 — 낙관적 필터로 피드에서 해당 크리에이터 포스트 즉시 사라짐(+자동 언팔). 401은 세션 가드.
+  const onConfirmBlock = () => {
+    if (!blockTarget) return;
+    const { creatorId, creatorName } = blockTarget;
+    blockCreator.mutate(
+      { creatorId },
+      {
+        onSuccess: () =>
+          toast({ title: "차단했어요", description: `${creatorName}님의 포스트가 더 이상 보이지 않아요.` }),
+        onError: (e) => {
+          if (e instanceof ApiError && e.status === 401) return;
+          toast({ title: "차단하지 못했어요", description: apiErrorMessage(e) });
+        },
+      },
+    );
+    setBlockTarget(null);
+  };
 
   const postUrl = (id: string) =>
     typeof window !== "undefined" ? `${window.location.origin}/post/${id}` : `/post/${id}`;
@@ -147,6 +172,17 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
             </button>
             <button
               type="button"
+              className="rounded-md px-3 py-3 text-left text-body-m text-on-surface transition-colors hover:bg-surface-container-high"
+              onClick={() => {
+                const post = posts.find((p) => p.id === menuPostId);
+                if (post) setBlockTarget({ creatorId: post.creatorId, creatorName: post.creatorName });
+                setMenuPostId(null);
+              }}
+            >
+              이 크리에이터 차단
+            </button>
+            <button
+              type="button"
               className="rounded-md px-3 py-3 text-left text-body-m text-error transition-colors hover:bg-surface-container-high"
               onClick={() => {
                 setReportPostId(menuPostId);
@@ -158,6 +194,33 @@ export function FeedView({ initialPosts }: { initialPosts: Post[] }) {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* 차단 확인 — 파괴적 UX(자동 언팔로우 안내). 기존 Dialog 패턴 재사용. */}
+      <Dialog open={blockTarget !== null} onOpenChange={(o) => !o && setBlockTarget(null)}>
+        <DialogContent>
+          <DialogTitle>
+            {blockTarget ? `${blockTarget.creatorName}님을 차단할까요?` : "이 크리에이터를 차단할까요?"}
+          </DialogTitle>
+          <DialogDescription>
+            차단하면 이 크리에이터의 포스트가 피드에서 사라지고, 팔로우가 자동으로 해제돼요. 설정 &gt;
+            차단 목록에서 언제든 해제할 수 있어요.
+          </DialogDescription>
+          <div className="mt-1 flex gap-2">
+            <DialogClose asChild>
+              <Button variant="outline" className="flex-1">
+                취소
+              </Button>
+            </DialogClose>
+            <Button
+              className="flex-1 bg-error text-on-error hover:opacity-90"
+              onClick={onConfirmBlock}
+              disabled={blockCreator.isPending}
+            >
+              차단하기
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 신고 시트. USE_API면 /safety/fan-reports 실 접수, 아니면 mock(sleep). */}
       <ReportSheet

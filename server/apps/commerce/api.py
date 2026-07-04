@@ -34,6 +34,7 @@ from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
+from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.pagination import paginate
@@ -160,12 +161,20 @@ def list_products(
 
     Consumer surface: draft/hidden listings and gated 19+ items are excluded
     (:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.
+
+    Personal-block gating (mirrors ``content.list_posts``): the global (unfiltered)
+    browse is an aggregate surface, so products from creators the authenticated
+    caller has personally blocked are excluded. A ``?creator_id=`` request is
+    explicit creator-scoped navigation (a store visit), so it is returned even for
+    a blocked creator — the web renders the block state; a personal block is not
+    existence hiding, unlike the 19+ gate.
     """
-    queryset = _public_product_qs(resolve_optional_account(request)).order_by(
-        "-created_at", "id"
-    )
+    account = resolve_optional_account(request)
+    queryset = _public_product_qs(account).order_by("-created_at", "id")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
+    else:
+        queryset = queryset.exclude(creator_id__in=blocked_creator_ids(account))
     if product_type:
         queryset = queryset.filter(type=product_type)
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)

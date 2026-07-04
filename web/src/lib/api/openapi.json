@@ -800,7 +800,7 @@
             }
           }
         },
-        "description": "List catalog products; filter by creator and/or type, cursor-paginated.\n\nConsumer surface: draft/hidden listings and gated 19+ items are excluded\n(:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.",
+        "description": "List catalog products; filter by creator and/or type, cursor-paginated.\n\nConsumer surface: draft/hidden listings and gated 19+ items are excluded\n(:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.\n\nPersonal-block gating (mirrors ``content.list_posts``): the global (unfiltered)\nbrowse is an aggregate surface, so products from creators the authenticated\ncaller has personally blocked are excluded. A ``?creator_id=`` request is\nexplicit creator-scoped navigation (a store visit), so it is returned even for\na blocked creator — the web renders the block state; a personal block is not\nexistence hiding, unlike the 19+ gate.",
         "tags": [
           "commerce"
         ]
@@ -1479,7 +1479,7 @@
             }
           }
         },
-        "description": "List posts, newest first; filter to one creator via ``?creator_id=``.",
+        "description": "List posts, newest first; filter to one creator via ``?creator_id=``.\n\nPersonal-block gating: the global (unfiltered) list is an aggregate surface, so\npersonally blocked creators are excluded. A ``?creator_id=`` request is explicit\ncreator-scoped navigation (a profile visit), so it is returned even for a blocked\ncreator — the web renders the block state; a personal block is not existence hiding.",
         "tags": [
           "content"
         ]
@@ -1866,7 +1866,7 @@
             }
           }
         },
-        "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs a richer ranking and lands later; for\nnow this returns the same recent-posts page as ``/posts``, but with the\nper-user ``liked`` flag filled in when the caller is authenticated.",
+        "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs a richer ranking and lands later; for\nnow this returns the same recent-posts page as ``/posts``, but with the\nper-user ``liked`` flag filled in when the caller is authenticated.\n\nThe feed is an aggregate surface, so posts from creators the caller has\npersonally blocked are excluded (anonymous callers block nothing).",
         "tags": [
           "content"
         ]
@@ -2492,7 +2492,7 @@
             }
           }
         },
-        "description": "List creators (optionally filtered by category), cursor-paginated.",
+        "description": "List creators (optionally filtered by category), cursor-paginated.\n\nDiscovery is an aggregate surface, so creators the authenticated caller has\npersonally blocked are excluded (anonymous callers block nothing).",
         "tags": [
           "creator"
         ]
@@ -6620,6 +6620,132 @@
         ]
       }
     },
+    "/api/fan/blocks": {
+      "post": {
+        "operationId": "apps_social_api_block_creator",
+        "summary": "Block Creator",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Block a creator; idempotent (a second block is a no-op, still 200).\n\nBlocking auto-unfollows (standard mute/block UX): a fan who blocks a creator\nthey follow should not keep receiving that creator's follow-derived surfaces.\nAn unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,\na personal block does not hide the target's existence.",
+        "tags": [
+          "social-blocks"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "apps_social_api_list_blocks",
+        "summary": "List Blocks",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedCreatorOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the creators the requesting fan has blocked (settings screen).",
+        "tags": [
+          "social-blocks"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/blocks/{creator_id}": {
+      "delete": {
+        "operationId": "apps_social_api_unblock_creator",
+        "summary": "Unblock Creator",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "creator_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Creator Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200).",
+        "tags": [
+          "social-blocks"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/operator/visits/": {
       "post": {
         "operationId": "apps_visit_api_create_visit",
@@ -9272,6 +9398,11 @@
             "default": false,
             "title": "Following",
             "type": "boolean"
+          },
+          "blocked": {
+            "default": false,
+            "title": "Blocked",
+            "type": "boolean"
           }
         },
         "required": [
@@ -11908,48 +12039,21 @@
         "type": "object"
       },
       "BlockOut": {
-        "description": "Block row exposed to managers.",
+        "description": "Block-edge state after a mutation (lets the client reconcile its state).",
         "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "target_id": {
-            "format": "uuid",
-            "title": "Target Id",
-            "type": "string"
-          },
-          "block_scope": {
-            "title": "Block Scope",
-            "type": "string"
-          },
-          "block_reason": {
-            "title": "Block Reason",
-            "type": "string"
-          },
-          "is_risk_flag": {
-            "title": "Is Risk Flag",
+          "blocked": {
+            "title": "Blocked",
             "type": "boolean"
           },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "effective_from": {
-            "format": "date-time",
-            "title": "Effective From",
+          "creator_id": {
+            "format": "uuid",
+            "title": "Creator Id",
             "type": "string"
           }
         },
         "required": [
-          "id",
-          "target_id",
-          "block_scope",
-          "block_reason",
-          "is_risk_flag",
-          "status",
-          "effective_from"
+          "blocked",
+          "creator_id"
         ],
         "title": "BlockOut",
         "type": "object"
@@ -12321,6 +12425,65 @@
           "followers"
         ],
         "title": "FollowOut",
+        "type": "object"
+      },
+      "BlockError": {
+        "description": "Coded error shape for block endpoints (``detail`` copy + stable ``code``).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "BlockError",
+        "type": "object"
+      },
+      "BlockIn": {
+        "description": "Request body to block a creator (by id).",
+        "properties": {
+          "creator_id": {
+            "format": "uuid",
+            "title": "Creator Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "creator_id"
+        ],
+        "title": "BlockIn",
+        "type": "object"
+      },
+      "BlockedCreatorOut": {
+        "description": "One blocked creator, for the fan's block-list settings screen.",
+        "properties": {
+          "creator_id": {
+            "format": "uuid",
+            "title": "Creator Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          }
+        },
+        "required": [
+          "creator_id",
+          "name",
+          "handle"
+        ],
+        "title": "BlockedCreatorOut",
         "type": "object"
       },
       "VisitRecordOut": {
