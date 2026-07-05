@@ -2,8 +2,8 @@ import * as React from "react";
 import { describe, it, expect } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, useStudioStats, qk } from "./queries";
-import type { Post, Comment, Creator, BlockedCreator, StudioStats } from "./types";
+import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, useStudioStats, useChangeSubscriptionTier, useUpdatePost, useDeletePost, useStudioPosts, qk } from "./queries";
+import type { Post, Comment, Creator, BlockedCreator, StudioStats, Subscription } from "./types";
 
 function makeWrapper(qc: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -172,6 +172,128 @@ describe("useStudioStats", () => {
     qc.setQueryData<StudioStats | null>(qk.studioStats, null);
     const { result } = renderHook(() => useStudioStats(), { wrapper: makeWrapper(qc) });
     expect(result.current.data).toBeNull();
+  });
+});
+
+describe("useChangeSubscriptionTier (optimistic)", () => {
+  it("티어 전환 시 해당 구독의 tierId를 즉시 갱신한다(낙관)", async () => {
+    const qc = new QueryClient();
+    const sub: Subscription = {
+      id: "s1",
+      creatorId: "c1",
+      creatorName: "별빛",
+      creatorHandle: "stellar",
+      tierId: "t2",
+      tierName: "스탠다드",
+      price: 9900,
+      period: "월",
+      nextBillingDate: "2026-08-01",
+      status: "active",
+    };
+    qc.setQueryData<Subscription[]>(qk.subscriptions, [sub]);
+
+    const { result } = renderHook(() => useChangeSubscriptionTier(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ id: "s1", tierId: "t3" });
+    });
+
+    await waitFor(() => {
+      const list = qc.getQueryData<Subscription[]>(qk.subscriptions);
+      expect(list?.[0].tierId).toBe("t3");
+      // 다른 필드는 유지(낙관 갱신은 tierId만 건드린다).
+      expect(list?.[0].id).toBe("s1");
+      expect(list?.[0].creatorHandle).toBe("stellar");
+    });
+  });
+});
+
+describe("useUpdatePost (mock 병합)", () => {
+  it("본문·19+ 수정 시 포스트 목록·피드·상세 캐시의 해당 항목을 갱신한다", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.posts("c1"), [basePost]);
+    qc.setQueryData(qk.feed, [basePost, { ...basePost, id: "po2", creatorId: "c2" }]);
+    qc.setQueryData(qk.post("po1"), basePost);
+
+    const { result } = renderHook(() => useUpdatePost(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ id: "po1", body: "수정된 본문", isAdult: true });
+    });
+
+    await waitFor(() => {
+      const list = qc.getQueryData<Post[]>(qk.posts("c1"));
+      expect(list?.[0].body).toBe("수정된 본문");
+      expect(list?.[0].isAdult).toBe(true);
+      // 피드에서도 대상만 갱신(다른 크리에이터 포스트는 무변경).
+      const feed = qc.getQueryData<Post[]>(qk.feed);
+      expect(feed?.find((p) => p.id === "po1")?.body).toBe("수정된 본문");
+      expect(feed?.find((p) => p.id === "po2")?.body).toBeUndefined();
+      // 상세 캐시도 갱신.
+      expect(qc.getQueryData<Post>(qk.post("po1"))?.body).toBe("수정된 본문");
+    });
+  });
+});
+
+describe("useDeletePost (optimistic)", () => {
+  it("삭제 시 포스트 목록·피드에서 해당 포스트를 즉시 제거한다", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.posts("c1"), [basePost, { ...basePost, id: "po2" }]);
+    qc.setQueryData(qk.feed, [basePost, { ...basePost, id: "po2", creatorId: "c2" }]);
+
+    const { result } = renderHook(() => useDeletePost(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate("po1");
+    });
+
+    await waitFor(() => {
+      expect(qc.getQueryData<Post[]>(qk.posts("c1"))?.map((p) => p.id)).toEqual(["po2"]);
+      expect(qc.getQueryData<Post[]>(qk.feed)?.map((p) => p.id)).toEqual(["po2"]);
+    });
+  });
+});
+
+describe("useStudioPosts (오너 스코프)", () => {
+  it("mock 폴백은 데모 오너(c1) 포스트를 노출한다(fan_id 오용 빈 목록 회귀 방지)", async () => {
+    const qc = new QueryClient();
+    const { result } = renderHook(() => useStudioPosts(), { wrapper: makeWrapper(qc) });
+    await waitFor(() => expect((result.current.data?.length ?? 0) > 0).toBe(true));
+    // 전부 데모 오너(c1) 포스트 — 오너 스코프.
+    expect(result.current.data?.every((p) => p.creatorId === "c1")).toBe(true);
+  });
+
+  it("삭제 뮤테이션이 오너 목록(studioPosts) 캐시도 제거한다(공용 posts prefix)", async () => {
+    const qc = new QueryClient();
+    // 오너 목록은 무한 쿼리(InfiniteData) 형태로 캐시된다.
+    qc.setQueryData(qk.studioPosts, {
+      pages: [{ items: [basePost, { ...basePost, id: "po2" }] }],
+      pageParams: [undefined],
+    });
+
+    const { result } = renderHook(() => useDeletePost(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate("po1");
+    });
+
+    await waitFor(() => {
+      const cache = qc.getQueryData<{ pages: { items: Post[] }[] }>(qk.studioPosts);
+      expect(cache?.pages.flatMap((pg) => pg.items).map((p) => p.id)).toEqual(["po2"]);
+    });
+  });
+
+  it("수정 뮤테이션이 오너 목록(studioPosts) 캐시도 갱신한다(공용 posts prefix)", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.studioPosts, { pages: [{ items: [basePost] }], pageParams: [undefined] });
+
+    const { result } = renderHook(() => useUpdatePost(), { wrapper: makeWrapper(qc) });
+    act(() => {
+      result.current.mutate({ id: "po1", body: "수정된 본문", isAdult: true });
+    });
+
+    await waitFor(() => {
+      const cache = qc.getQueryData<{ pages: { items: Post[] }[] }>(qk.studioPosts);
+      const item = cache?.pages.flatMap((pg) => pg.items).find((p) => p.id === "po1");
+      expect(item?.body).toBe("수정된 본문");
+      expect(item?.isAdult).toBe(true);
+    });
   });
 });
 

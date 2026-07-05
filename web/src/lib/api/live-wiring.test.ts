@@ -3,6 +3,7 @@ import {
   apiToggleLike,
   apiCreateOrder,
   apiCancelSubscription,
+  apiChangeSubscriptionTier,
   apiMarkNotificationRead,
   apiReport,
   apiAddPaymentMethod,
@@ -70,6 +71,86 @@ describe("커머스/구독/알림 매핑", () => {
     expect(order.items[0]).toEqual({ productId: "p1", title: "아크릴 스탠드", type: "goods", price: 18000, qty: 2 });
     expect(order.creatorName).toBe("별빛 일러스트");
     expect(order.refund?.status).toBe("approved");
+  });
+
+  it("apiCreateOrder(배송): shipping 배송지를 snake로 전송 + shipping_fee·shipping_address 매핑", async () => {
+    const f = mockJson(201, {
+      id: "o2",
+      status: "paid",
+      created_at: "2026-07-05T10:00:00Z",
+      items: [{ product_id: "p1", title: "아크릴 스탠드", type: "goods", option: "", price: 18000, qty: 1 }],
+      subtotal: 18000,
+      shipping: 0,
+      shipping_fee: 0,
+      total: 18000,
+      creator_name: "별빛 일러스트",
+      shipping_address: {
+        recipient_name: "홍길동",
+        recipient_phone: "010-1234-5678",
+        postal_code: "04524",
+        address1: "서울 중구 세종대로 110",
+        address2: "1203호",
+      },
+      refund: null,
+    });
+    vi.stubGlobal("fetch", f);
+
+    const order = await apiCreateOrder({
+      productId: "p1",
+      qty: 1,
+      shipping: {
+        recipientName: "홍길동",
+        recipientPhone: "010-1234-5678",
+        postalCode: "04524",
+        address1: "서울 중구 세종대로 110",
+        address2: "1203호",
+      },
+    });
+    // 응답 매핑: shipping_fee 우선 소비 + 배송지 스냅샷 camelCase.
+    expect(order.shipping).toBe(0);
+    expect(order.shippingAddress).toEqual({
+      recipientName: "홍길동",
+      recipientPhone: "010-1234-5678",
+      postalCode: "04524",
+      address1: "서울 중구 세종대로 110",
+      address2: "1203호",
+    });
+    // 요청 페이로드는 snake — raw camel 필드는 전송하지 않는다.
+    const [, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body).shipping).toEqual({
+      recipient_name: "홍길동",
+      recipient_phone: "010-1234-5678",
+      postal_code: "04524",
+      address1: "서울 중구 세종대로 110",
+      address2: "1203호",
+    });
+  });
+
+  it("apiChangeSubscriptionTier: PATCH /subscriptions/{id} {tier_id} 전송 + SubscriptionOut 매핑", async () => {
+    const f = mockJson(200, {
+      id: "s1",
+      creator_id: "c1",
+      creator_name: "별빛 일러스트",
+      creator_handle: "stellar",
+      tier_id: "t3",
+      tier_name: "프리미엄",
+      price: 19900,
+      period: "월",
+      status: "active",
+      next_billing_date: "2026-08-01",
+      cancel_scheduled: false,
+    });
+    vi.stubGlobal("fetch", f);
+
+    const sub = await apiChangeSubscriptionTier("s1", "t3");
+    expect(sub.tierId).toBe("t3");
+    expect(sub.tierName).toBe("프리미엄");
+    expect(sub.price).toBe(19900);
+
+    const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain("/subscriptions/s1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body)).toEqual({ tier_id: "t3" });
   });
 
   it("apiCancelSubscription: cancel_scheduled→cancelScheduled 매핑", async () => {

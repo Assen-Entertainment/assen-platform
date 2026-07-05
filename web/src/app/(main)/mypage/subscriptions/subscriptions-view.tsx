@@ -76,12 +76,17 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
                     </span>
                   </div>
                   {!done ? (
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <Button variant="outline" size="sm" className="self-start">
-                          구독 해지
-                        </Button>
-                      </SheetTrigger>
+                    <div className="flex flex-wrap gap-2">
+                      {/* 티어 변경은 크리에이터 프로필(멤버십 탭)에서 — 대상 크리에이터 컨텍스트 유지. */}
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/creator/${sub.creatorHandle}`}>티어 변경</Link>
+                      </Button>
+                      <Sheet>
+                        <SheetTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            구독 해지
+                          </Button>
+                        </SheetTrigger>
                       <SheetContent side="bottom">
                         <SheetTitle>구독을 해지할까요?</SheetTitle>
                         <SheetDescription>
@@ -105,7 +110,8 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
                           </SheetClose>
                         </div>
                       </SheetContent>
-                    </Sheet>
+                      </Sheet>
+                    </div>
                   ) : null}
                 </CardBody>
               </Card>

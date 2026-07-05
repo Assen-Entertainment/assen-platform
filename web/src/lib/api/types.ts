@@ -63,6 +63,12 @@ export interface Product {
   mediaUrl?: string;
   /** 크리에이터 표시명(상세/체크아웃 요약). 서버 ProductOut(creator_name) 계약. */
   creatorName?: string;
+  /**
+   * 소유 크리에이터 핸들 — 스토어/PDP에서 크리에이터 프로필(/creator/[handle]) 링크용.
+   * 서버 ProductOut(creator_handle) 계약. 검색 브리프(ProductBrief)엔 없고 빈 문자열일 수
+   * 있어 옵셔널 — 없으면 링크 없이 이름만 표기(끊긴 링크 방지).
+   */
+  creatorHandle?: string;
   // --- 이하 상세용 확장 필드 — 서버 ProductOut(B4) 계약. 값 없으면 undefined. ---
   /** 상세 설명 문단(상품 상세). */
   description?: string;
@@ -128,6 +134,18 @@ export interface OrderItem {
   qty: number;
 }
 
+/**
+ * 배송지 스냅샷 — 물리 굿즈 주문의 배송 정보.
+ * 서버 wire: ShippingIn(주문 생성 입력)·OrderShippingOut(주문 조회 스냅샷) 계약.
+ */
+export interface ShippingAddress {
+  recipientName: string;
+  recipientPhone: string;
+  postalCode: string;
+  address1: string;
+  address2: string;
+}
+
 export interface Order {
   id: string;
   /** 표시용 주문 일자(YYYY-MM-DD). */
@@ -135,9 +153,12 @@ export interface Order {
   status: OrderStatus;
   items: OrderItem[];
   subtotal: number;
+  /** 배송비 — 서버 산출(shipping_fee). 정책 확정 전 0원 고정(날조 금액 금지). */
   shipping: number;
   total: number;
   creatorName?: string;
+  /** 배송지 스냅샷 — 배송 상품(굿즈) 주문에만(서버 OrderShippingOut). 있으면 주문 상세에 배송지 블록. */
+  shippingAddress?: ShippingAddress;
   /** 배송 추적(placeholder) — 물리 굿즈 주문에만. */
   tracking?: { carrier: string; number: string };
   /** 환불 신청 상태(있으면 환불 흐름 진행 중). */
@@ -199,6 +220,8 @@ export interface Subscription {
   creatorId: string;
   creatorName: string;
   creatorHandle: string;
+  /** 현재 티어 식별자(서버 SubscriptionOut.tier_id) — 프로필 멤버십 탭의 "구독 중" 판정·티어 전환용. */
+  tierId?: string;
   tierName: string;
   price: number;
   period: string;

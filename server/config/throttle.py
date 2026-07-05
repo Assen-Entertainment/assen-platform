@@ -30,7 +30,33 @@ onto the live (bound) operation object; see
 from __future__ import annotations
 
 from django.conf import settings
+from django.http import HttpRequest
 from ninja.throttling import AnonRateThrottle, AuthRateThrottle, BaseThrottle
+
+from config.clientip import client_ip
+
+
+class _ClientIPIdentMixin:
+    """Key IP-based throttling on :func:`~config.clientip.client_ip`.
+
+    Ninja's ``get_ident`` reads XFF via its own ``NUM_PROXIES`` setting; overriding
+    it makes the ninja throttles and the middleware limiter share one trusted-proxy
+    policy (``TRUSTED_PROXY_HOPS``). With the default 0 hops this returns
+    ``REMOTE_ADDR`` — identical to the previous behaviour — but behind an ALB it
+    keys on the real client instead of the shared balancer address.
+    """
+
+    def get_ident(self, request: HttpRequest) -> str:
+        """Identify the client via the shared trusted-proxy-aware extractor."""
+        return client_ip(request)
+
+
+class XFFAnonRateThrottle(_ClientIPIdentMixin, AnonRateThrottle):
+    """Per-client anonymous throttle keyed on the trusted-proxy-aware client IP."""
+
+
+class XFFAuthRateThrottle(_ClientIPIdentMixin, AuthRateThrottle):
+    """Per-user throttle; anonymous fallback keys on the trusted-proxy-aware IP."""
 
 
 def user_write_throttle(rate: str) -> list[BaseThrottle]:
@@ -41,7 +67,7 @@ def user_write_throttle(rate: str) -> list[BaseThrottle]:
     """
     if not getattr(settings, "FAN_WRITE_THROTTLE_ENABLED", True):
         return []
-    return [AuthRateThrottle(rate)]
+    return [XFFAuthRateThrottle(rate)]
 
 
 def anon_throttle(rate: str) -> list[BaseThrottle]:
@@ -55,4 +81,4 @@ def anon_throttle(rate: str) -> list[BaseThrottle]:
     """
     if not getattr(settings, "FAN_WRITE_THROTTLE_ENABLED", True):
         return []
-    return [AnonRateThrottle(rate)]
+    return [XFFAnonRateThrottle(rate)]

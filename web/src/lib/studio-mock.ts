@@ -131,7 +131,7 @@ export interface StudioRecentItem {
 }
 
 export const STUDIO_RECENT: StudioRecentItem[] = [
-  { title: "신작 일러스트 공개", meta: "포스트 · 좋아요 842", href: "/studio/posts/new" },
+  { title: "신작 일러스트 공개", meta: "포스트 · 좋아요 842", href: "/studio/posts" },
   { title: "아크릴 스탠드 (블루)", meta: "상품 · 판매 124", href: "/studio/products" },
   { title: "스탠다드 멤버십", meta: "멤버십 · 구독 286", href: "/studio/membership" },
 ];

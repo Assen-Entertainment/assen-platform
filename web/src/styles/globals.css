@@ -124,6 +124,31 @@
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* 오버레이 enter/exit 모션(R5-W3 #1) — Radix data-[state=open|closed] 기반. shadcn 표준을
+   tailwindcss-animate 의존 없이 재현. enter 200ms ease-out(스냅·즉각 반응), exit 150ms ease-in.
+   Radix Presence가 exit 애니메이션 종료(animationend)까지 언마운트를 지연한다.
+   전부 아래 prefers-reduced-motion 가드(#43)로 0.01ms 축소된다(모션 억제). */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+}
+@keyframes popover-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes popover-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+@keyframes sheet-in-bottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-out-bottom { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes sheet-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes sheet-out-right { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes sheet-in-left { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes sheet-out-left { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes toast-in { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
+
 /* 가로 스크롤 선반 레일용 — 스크롤바 숨김(레이아웃 시프트 없이). */
 @utility no-scrollbar {
   scrollbar-width: none;

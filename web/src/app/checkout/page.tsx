@@ -28,8 +28,9 @@ export default async function CheckoutPage({
     const tiers = await getMembershipTiers();
     const tier = tiers.find((t) => t.id === sp.tier);
     if (tier) {
-      const creatorName = sp.creator ? (await getCreator(sp.creator))?.name : undefined;
-      summary = summarizeTier(tier, creatorName);
+      // 구독 대상 크리에이터를 명시(아바타·이름·티어를 결제 확인 화면에 노출 — 대상 불투명 해소).
+      const creator = sp.creator ? await getCreator(sp.creator) : undefined;
+      summary = summarizeTier(tier, creator ?? undefined);
     }
   }
 

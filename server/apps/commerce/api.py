@@ -14,7 +14,7 @@ from typing import cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import QuerySet
+from django.db.models import F, QuerySet
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field, field_validator
@@ -91,6 +91,8 @@ class ProductOut(Schema):
     id: uuid.UUID
     creator_id: uuid.UUID | None = None
     creator_name: str = ""
+    # 스토어 카드→크리에이터 프로필 링크용 핸들(전역 카탈로그 상품은 빈 문자열).
+    creator_handle: str = ""
     type: str
     title: str
     price: int
@@ -116,8 +118,9 @@ def _product_out(product: Product) -> ProductOut:
     return ProductOut(
         id=product.id,
         creator_id=product.creator_id,
-        # 상세/카드 표기용 소유 크리에이터명(전역 카탈로그 상품은 빈 문자열).
+        # 상세/카드 표기용 소유 크리에이터명·핸들(전역 카탈로그 상품은 빈 문자열).
         creator_name=product.creator.name if product.creator is not None else "",
+        creator_handle=product.creator.handle if product.creator is not None else "",
         type=product.type,
         title=product.title,
         price=product.price,
@@ -503,11 +506,26 @@ class OrderRefundOut(Schema):
     reason: str
 
 
+class OrderShippingOut(Schema):
+    """Delivery-address snapshot echoed on a physical (goods) order (own orders only)."""
+
+    recipient_name: str
+    recipient_phone: str
+    postal_code: str
+    address1: str
+    address2: str
+
+
 class OrderOut(Schema):
     """A fan's order (maps to the frontend ``Order`` type).
 
-    ``subtotal``/``shipping``/``total`` are display snapshots (shipping is a mock
-    ``0`` — no real fulfilment cost is computed). NOT settlement figures.
+    ``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots
+    computed server-side (``total = subtotal + shipping_fee``; shipping is a mock
+    ``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and
+    ``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field
+    the web consumes; ``shipping_fee`` is the explicit alias matching the model.
+    ``shipping_address`` echoes the delivery snapshot for goods orders (``None`` for
+    orders that need none), safe because a fan only ever sees their own orders.
     """
 
     id: str
@@ -516,7 +534,9 @@ class OrderOut(Schema):
     items: list[OrderItemOut]
     subtotal: int
     shipping: int
+    shipping_fee: int
     total: int
+    shipping_address: OrderShippingOut | None = None
     creator_name: str | None = None
     refund: OrderRefundOut | None = None
 
@@ -528,15 +548,47 @@ class OrderPage(Schema):
     next_cursor: str | None = None
 
 
+class ShippingIn(Schema):
+    """Delivery address for a physical (goods) order (required for ``type=goods``)."""
+
+    recipient_name: str = Field(default="", max_length=60)
+    recipient_phone: str = Field(default="", max_length=32)
+    postal_code: str = Field(default="", max_length=16)
+    address1: str = Field(default="", max_length=200)
+    address2: str = Field(default="", max_length=200)
+
+
 class CreateOrderIn(Schema):
     """Fan payload to place a (mock) order for one product."""
 
     product_id: uuid.UUID
     qty: int = Field(default=1, ge=1, le=99)
     option: str = Field(default="", max_length=120)
+    # Delivery address — required for physical (goods) orders, ignored otherwise.
+    shipping: ShippingIn | None = None
     # Optional idempotency key (B1): a client retry with the same key returns the
     # original order instead of placing a duplicate.
     idempotency_key: str | None = Field(default=None, max_length=64)
+
+
+def _shipping_is_complete(shipping: ShippingIn | None) -> bool:
+    """Whether ``shipping`` carries the fields a physical delivery needs.
+
+    ``address2`` (detail line) is optional; the recipient, phone, postal code, and
+    the first address line are required so a goods order cannot be placed with an
+    empty/partial address that could not actually be fulfilled.
+    """
+    if shipping is None:
+        return False
+    return all(
+        bool(value.strip())
+        for value in (
+            shipping.recipient_name,
+            shipping.recipient_phone,
+            shipping.postal_code,
+            shipping.address1,
+        )
+    )
 
 
 class RefundIn(Schema):
@@ -549,7 +601,6 @@ class RefundIn(Schema):
 def _order_out(order: Order) -> OrderOut:
     """Build the order response from a prefetched order."""
     lines = list(order.items.all())
-    subtotal = sum(line.price * line.qty for line in lines)
     # Derive the creator display name from the first line's product (mock orders
     # are single-creator); tolerate a since-deleted product or accountless creator.
     creator_name: str | None = None
@@ -562,6 +613,19 @@ def _order_out(order: Order) -> OrderOut:
     refund = (
         OrderRefundOut(status=refunds[0].status, reason=refunds[0].reason)
         if refunds
+        else None
+    )
+    # Echo the delivery snapshot only when one was captured (goods orders); a
+    # digital/experience/ticket/coupon order has an empty recipient → None.
+    shipping_address = (
+        OrderShippingOut(
+            recipient_name=order.recipient_name,
+            recipient_phone=order.recipient_phone,
+            postal_code=order.postal_code,
+            address1=order.address1,
+            address2=order.address2,
+        )
+        if order.recipient_name
         else None
     )
     return OrderOut(
@@ -579,9 +643,11 @@ def _order_out(order: Order) -> OrderOut:
             )
             for line in lines
         ],
-        subtotal=subtotal,
-        shipping=0,
+        subtotal=order.subtotal,
+        shipping=order.shipping_fee,
+        shipping_fee=order.shipping_fee,
         total=order.total,
+        shipping_address=shipping_address,
         creator_name=creator_name,
         refund=refund,
     )
@@ -614,17 +680,26 @@ def create_order(
     """Place a mock order for one product.
 
     MOCK: records a ``paid`` order and snapshots the line item, but **no real
-    payment is taken and no money moves** (B7 gated). Stock is *validated* but not
-    decremented (inventory movement is out of B4 scope).
+    payment is taken and no money moves** (B7 gated). The order amounts
+    (``subtotal``/``shipping_fee``/``total``, ``total = subtotal + shipping_fee``)
+    are computed server-side so the fan is charged exactly what is shown; shipping
+    is a fixed mock ``0`` until the fee policy is set (대표·재무 게이트). A physical
+    (``goods``) order must carry a delivery address, else 422.
+
+    Stock (B7 precursor): a stock-tracked product is decremented atomically with a
+    ``stock >= qty`` conditional UPDATE inside the transaction — 0 rows means a
+    concurrent buyer took the last unit (TOCTOU-sealed → 422), and taking the last
+    unit flips ``sold_out``. Cancelling the order restores it (see ``cancel_order``).
 
     Idempotency (B1): if the caller supplies ``idempotency_key`` and already has an
     order for it, the existing order is returned (200) rather than duplicated. The
-    order + its line are written in one ``transaction.atomic`` block so a failure
-    can never leave a header without its item; the (buyer, key) unique constraint
-    closes the concurrent-retry race (both requests pass the pre-check, one insert
-    wins, the loser catches ``IntegrityError`` and returns the winner's order). The
-    fan notification is sent only *after* the transaction commits, so a rolled-back
-    order never emits a stray "order received" notice.
+    stock deduction, order, and its line are written in one ``transaction.atomic``
+    block so a failure can never leave a header without its item or a decrement
+    without an order; the (buyer, key) unique constraint closes the concurrent-retry
+    race (both requests pass the pre-check, one insert wins, the loser catches
+    ``IntegrityError`` — which also rolls back its decrement — and returns the
+    winner's order). The fan notification is sent only *after* the transaction
+    commits, so a rolled-back order never emits a stray "order received" notice.
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     if payload.idempotency_key:
@@ -665,14 +740,75 @@ def create_order(
         return 422, CommerceError(
             detail="재고가 부족해요.", code=ErrorCode.INSUFFICIENT_STOCK.value
         )
+    # A physical (goods) order needs a delivery address; digital/experience/ticket/
+    # coupon orders need none. Checked last so the existing gating errors above keep
+    # their codes. (실운영 전 개인정보 처리방침에 배송지 항목 반영 필요 — 법무 확인;
+    # 계약·mock 흐름은 무게이트.)
+    if product.type == ProductType.GOODS.value and not _shipping_is_complete(
+        payload.shipping
+    ):
+        return 422, CommerceError(
+            detail="배송지를 입력해 주세요.",
+            code=ErrorCode.SHIPPING_ADDRESS_REQUIRED.value,
+        )
+
+    # Server-authoritative amount snapshot (display only; NOT settlement — B7).
+    subtotal = product.price * payload.qty
+    shipping_fee = 0  # 배송비 정책 확정 전 0 — 정책은 대표·재무 게이트
+    total = subtotal + shipping_fee
+    # Snapshot the delivery address only for a physical (goods) order — a
+    # digital/experience/ticket/coupon order needs none, so any address the client
+    # sent is dropped (matches the "ignored otherwise" contract, F-G). Each field is
+    # trimmed so surrounding whitespace is never persisted.
+    ship = payload.shipping
+    if product.type == ProductType.GOODS.value and ship is not None:
+        shipping_snapshot = {
+            "recipient_name": ship.recipient_name.strip(),
+            "recipient_phone": ship.recipient_phone.strip(),
+            "postal_code": ship.postal_code.strip(),
+            "address1": ship.address1.strip(),
+            "address2": ship.address2.strip(),
+        }
+    else:
+        shipping_snapshot = {
+            "recipient_name": "",
+            "recipient_phone": "",
+            "postal_code": "",
+            "address1": "",
+            "address2": "",
+        }
 
     try:
         with transaction.atomic():
+            # Atomic stock guard: decrement only while at least ``qty`` remains, so
+            # two concurrent buyers cannot oversell the last unit. 0 rows updated =
+            # a racing order won it → 422 (the empty transaction commits nothing).
+            if product.stock is not None:
+                deducted = Product.objects.filter(
+                    id=product.id, stock__gte=payload.qty
+                ).update(stock=F("stock") - payload.qty)
+                if deducted == 0:
+                    # A concurrent retry with the same idempotency key may have
+                    # already placed this exact order and consumed the unit — return
+                    # it instead of a spurious out-of-stock 422 (code review minor1).
+                    if payload.idempotency_key:
+                        existing = _load_order_by_key(account, payload.idempotency_key)
+                        if existing is not None:
+                            return 200, _order_out(existing)
+                    return 422, CommerceError(
+                        detail="재고가 부족해요.",
+                        code=ErrorCode.INSUFFICIENT_STOCK.value,
+                    )
+                # Reflect the last-unit sell-out on the order-flow flag.
+                Product.objects.filter(id=product.id, stock=0).update(sold_out=True)
             order = Order.objects.create(
                 buyer=account,
                 status=OrderStatus.PAID,
-                total=product.price * payload.qty,
+                subtotal=subtotal,
+                shipping_fee=shipping_fee,
+                total=total,
                 idempotency_key=payload.idempotency_key or None,
+                **shipping_snapshot,
             )
             OrderItem.objects.create(
                 order=order,
@@ -733,12 +869,33 @@ def get_order(
 
 
 @orders_router.post(
-    "/{order_id}/cancel", response={200: OrderOut, 404: CommerceError, 422: CommerceError}
+    "/{order_id}/cancel",
+    response={200: OrderOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("6/min"),
 )
 def cancel_order(
     request: HttpRequest, order_id: str
 ) -> tuple[int, OrderOut | CommerceError]:
-    """Cancel one of the fan's own orders (only while paid/shipping)."""
+    """Cancel one of the fan's own orders (only while paid/shipping).
+
+    The cancellable → cancelled transition is sealed by a **conditional UPDATE
+    rowcount gate** inside the transaction (project pattern): only the request whose
+    ``filter(status__in=_CANCELLABLE).update(status=cancelled)`` touches a row (won
+    the race) proceeds to restore stock; a concurrent second cancel updates 0 rows
+    and returns 422 without restoring anything, so two racing cancels can never
+    double-restore stock. The pre-check below is a friendly early return only — the
+    rowcount gate is the actual invariant.
+
+    Stock restore (winner only): each stock-tracked line's product is incremented by
+    its ``qty`` (``F`` expression, no lost update). ``sold_out`` is only cleared for a
+    product that had **hit 0** (auto sold-out) — a product an owner manually marked
+    ``sold_out`` while stock remained keeps that flag (F-F): the restore adds stock
+    but does not silently re-open a listing the owner paused. A since-deleted product
+    line (SET_NULL) has nothing to restore and is skipped.
+
+    A refund *accepted* (operator-approved) re-stock is a separate operator flow and
+    is not handled here (후속 — 운영자 플로우).
+    """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
@@ -749,13 +906,39 @@ def cancel_order(
         return 422, CommerceError(
             detail="취소할 수 없는 주문 상태예요.", code=ErrorCode.ORDER_NOT_CANCELLABLE.value
         )
+    with transaction.atomic():
+        # Conditional transition: only the winner of the race flips the status and
+        # gets to restore stock. 0 rows = a concurrent cancel already won → 422.
+        transitioned = (
+            Order.objects.filter(id=order.id, status__in=_CANCELLABLE)
+            .update(status=OrderStatus.CANCELLED.value)
+        )
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="취소할 수 없는 주문 상태예요.",
+                code=ErrorCode.ORDER_NOT_CANCELLABLE.value,
+            )
+        for line in order.items.all():
+            product = line.product
+            if product is not None and product.stock is not None:
+                # Auto sold-out (stock == 0) re-opens on restore; a manual sold_out
+                # (stock still > 0) is preserved — restore stock only (F-F).
+                reopened = Product.objects.filter(id=product.id, stock=0).update(
+                    stock=F("stock") + line.qty, sold_out=False
+                )
+                if reopened == 0:
+                    Product.objects.filter(id=product.id).update(
+                        stock=F("stock") + line.qty
+                    )
+    # Reflect the committed transition on the in-memory instance for the response.
     order.status = OrderStatus.CANCELLED.value
-    order.save(update_fields=["status"])
     return 200, _order_out(order)
 
 
 @orders_router.post(
-    "/{order_id}/refund", response={200: OrderOut, 404: CommerceError, 422: CommerceError}
+    "/{order_id}/refund",
+    response={200: OrderOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("6/min"),
 )
 def request_refund(
     request: HttpRequest, order_id: str, payload: RefundIn

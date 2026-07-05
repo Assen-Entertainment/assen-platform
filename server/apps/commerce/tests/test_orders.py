@@ -18,6 +18,16 @@ pytestmark = pytest.mark.django_db
 BASE = "/api/orders"
 JSON = "application/json"
 
+# Delivery address for goods orders (required since R5-W1A). The default test
+# product is a physical good, so every successful order body carries it.
+SHIPPING = {
+    "recipient_name": "받는이",
+    "recipient_phone": "010-1234-5678",
+    "postal_code": "06236",
+    "address1": "서울시 강남구 테헤란로 1",
+    "address2": "101동 1001호",
+}
+
 
 def _fan() -> Account:
     """Create a fan account."""
@@ -55,7 +65,9 @@ def test_create_order_snapshots_and_notifies(client: Client) -> None:
     product = _product(title="아크릴 스탠드", price=18000)
     res = client.post(
         BASE,
-        data=json.dumps({"product_id": str(product.id), "qty": 2, "option": "A타입"}),
+        data=json.dumps(
+            {"product_id": str(product.id), "qty": 2, "option": "A타입", "shipping": SHIPPING}
+        ),
         content_type=JSON,
         headers=_auth(fan),
     )
@@ -77,7 +89,12 @@ def test_create_order_is_idempotent_by_key(client: Client) -> None:
     """A retried order with the same idempotency key returns the original (B1)."""
     fan = _fan()
     product = _product(price=10000)
-    body = {"product_id": str(product.id), "qty": 1, "idempotency_key": "order-key-1"}
+    body = {
+        "product_id": str(product.id),
+        "qty": 1,
+        "idempotency_key": "order-key-1",
+        "shipping": SHIPPING,
+    }
 
     first = client.post(BASE, data=json.dumps(body), content_type=JSON, headers=_auth(fan))
     assert first.status_code == 201
@@ -136,7 +153,7 @@ def test_cancel_transitions_and_guard(client: Client) -> None:
     product = _product()
     created = client.post(
         BASE,
-        data=json.dumps({"product_id": str(product.id)}),
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
         content_type=JSON,
         headers=_auth(fan),
     )
@@ -159,7 +176,7 @@ def test_refund_request_flow(client: Client) -> None:
     product = _product()
     order_id = client.post(
         BASE,
-        data=json.dumps({"product_id": str(product.id)}),
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
         content_type=JSON,
         headers=_auth(fan),
     ).json()["id"]
@@ -192,7 +209,7 @@ def test_refund_on_paid_order_is_422(client: Client) -> None:
     product = _product()
     order_id = client.post(
         BASE,
-        data=json.dumps({"product_id": str(product.id)}),
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
         content_type=JSON,
         headers=_auth(fan),
     ).json()["id"]
@@ -212,7 +229,7 @@ def test_list_returns_only_own_orders(client: Client) -> None:
     product = _product()
     client.post(
         BASE,
-        data=json.dumps({"product_id": str(product.id)}),
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
         content_type=JSON,
         headers=_auth(owner),
     )
@@ -229,7 +246,7 @@ def test_get_another_fans_order_is_404(client: Client) -> None:
     product = _product()
     order_id = client.post(
         BASE,
-        data=json.dumps({"product_id": str(product.id)}),
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
         content_type=JSON,
         headers=_auth(owner),
     ).json()["id"]
@@ -264,3 +281,252 @@ def test_open_refund_unique_constraint_blocks_concurrent_duplicate() -> None:
     # 종결 상태(rejected)로 바뀌면 새 신청은 다시 허용된다(조건부 제약).
     RefundRequest.objects.filter(order=order).update(status=RefundStatus.REJECTED)
     RefundRequest.objects.create(order=order, reason="재신청", status=RefundStatus.REQUESTED)
+
+
+# --- amount contract (R5-W1A) ------------------------------------------------- #
+
+
+def test_order_amounts_computed_server_side(client: Client) -> None:
+    """subtotal/shipping_fee/total are computed and stored server-side (total = sum)."""
+    fan = _fan()
+    product = _product(title="아크릴 스탠드", price=18000)
+    res = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "qty": 2, "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["subtotal"] == 36000
+    assert body["shipping_fee"] == 0
+    assert body["shipping"] == 0  # backward-compat alias of shipping_fee
+    assert body["total"] == 36000
+    assert body["total"] == body["subtotal"] + body["shipping_fee"]
+    # Persisted as a display snapshot on the order row.
+    order = Order.objects.get(id=body["id"])
+    assert (order.subtotal, order.shipping_fee, order.total) == (36000, 0, 36000)
+
+
+def test_goods_order_echoes_shipping_snapshot(client: Client) -> None:
+    """A goods order echoes the delivery snapshot back to its owner."""
+    fan = _fan()
+    product = _product()
+    body = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()
+    assert body["shipping_address"]["recipient_name"] == "받는이"
+    assert body["shipping_address"]["postal_code"] == "06236"
+    order = Order.objects.get(id=body["id"])
+    assert order.recipient_name == "받는이"
+    assert order.address1 == "서울시 강남구 테헤란로 1"
+
+
+# --- shipping address requirement (R5-W1A) ------------------------------------ #
+
+
+def test_goods_order_without_shipping_is_422(client: Client) -> None:
+    """A physical (goods) order with no delivery address is refused."""
+    fan = _fan()
+    product = _product(type="goods")
+    res = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id)}),
+        content_type=JSON,
+        headers=_auth(fan),
+    )
+    assert res.status_code == 422
+    assert res.json()["code"] == "ShippingAddressRequired"
+    assert Order.objects.count() == 0
+
+
+def test_goods_order_with_partial_shipping_is_422(client: Client) -> None:
+    """An incomplete address (missing address1) does not satisfy the goods gate."""
+    fan = _fan()
+    product = _product(type="goods")
+    partial = {**SHIPPING, "address1": ""}
+    res = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": partial}),
+        content_type=JSON,
+        headers=_auth(fan),
+    )
+    assert res.status_code == 422
+    assert res.json()["code"] == "ShippingAddressRequired"
+
+
+def test_digital_order_needs_no_shipping(client: Client) -> None:
+    """A digital order places without an address; its echo is null."""
+    fan = _fan()
+    product = _product(type="digital", title="디지털 화보")
+    res = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id)}),
+        content_type=JSON,
+        headers=_auth(fan),
+    )
+    assert res.status_code == 201
+    assert res.json()["shipping_address"] is None
+
+
+# --- atomic stock deduction / restore (R5-W1A, B7 precursor) ------------------ #
+
+
+def test_order_decrements_stock_and_sells_out_last_unit(client: Client) -> None:
+    """Ordering the last tracked units decrements stock to 0 and flips sold_out."""
+    fan = _fan()
+    product = _product(stock=2)
+    res = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "qty": 2, "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    )
+    assert res.status_code == 201
+    product.refresh_from_db()
+    assert product.stock == 0
+    assert product.sold_out is True
+
+
+def test_sequential_orders_cannot_oversell_last_unit(client: Client) -> None:
+    """Once the last unit is taken the next order is refused (deduction is the seal)."""
+    product = _product(stock=1)
+    first = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(_fan()),
+    )
+    assert first.status_code == 201
+    second = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(_fan()),
+    )
+    assert second.status_code == 422
+    product.refresh_from_db()
+    assert product.stock == 0
+
+
+def test_cancel_reopens_auto_sold_out_listing(client: Client) -> None:
+    """Cancelling an auto-sold-out order (stock hit 0) restores stock and re-opens it.
+
+    Ordering the last unit auto-sets ``sold_out``; cancelling returns the unit and
+    clears the auto flag so the listing is orderable again.
+    """
+    fan = _fan()
+    product = _product(stock=2)
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "qty": 2, "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()["id"]
+    product.refresh_from_db()
+    assert product.stock == 0
+    assert product.sold_out is True
+    res = client.post(f"{BASE}/{order_id}/cancel", content_type=JSON, headers=_auth(fan))
+    assert res.status_code == 200
+    assert res.json()["status"] == "cancelled"
+    product.refresh_from_db()
+    assert product.stock == 2
+    assert product.sold_out is False
+
+
+def test_cancel_preserves_manual_sold_out(client: Client) -> None:
+    """Cancel restores stock but PRESERVES an owner's manual ``sold_out`` (F-F).
+
+    A product whose stock never hit 0 (owner paused sales by setting ``sold_out``
+    while units remained) must not be silently re-opened by a fan's cancellation —
+    the restore adds the unit back but leaves the manual flag untouched.
+    """
+    fan = _fan()
+    product = _product(stock=5)
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "qty": 1, "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()["id"]
+    product.refresh_from_db()
+    assert product.stock == 4 and product.sold_out is False
+    # Owner manually marks the listing sold out while stock remains (pause sales).
+    Product.objects.filter(id=product.id).update(sold_out=True)
+    res = client.post(f"{BASE}/{order_id}/cancel", content_type=JSON, headers=_auth(fan))
+    assert res.status_code == 200
+    product.refresh_from_db()
+    assert product.stock == 5  # unit restored
+    assert product.sold_out is True  # manual flag preserved (not clobbered)
+
+
+def test_double_cancel_restores_stock_only_once(client: Client) -> None:
+    """A re-cancel is refused (422) and never double-restores stock (F-A seal).
+
+    The conditional-UPDATE rowcount gate makes the transition single-winner: the
+    first cancel returns the unit, the second finds no cancellable row and restores
+    nothing, so stock cannot be inflated by cancelling twice.
+    """
+    fan = _fan()
+    product = _product(stock=2)
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "qty": 2, "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()["id"]
+    first = client.post(f"{BASE}/{order_id}/cancel", content_type=JSON, headers=_auth(fan))
+    assert first.status_code == 200
+    product.refresh_from_db()
+    assert product.stock == 2
+    second = client.post(f"{BASE}/{order_id}/cancel", content_type=JSON, headers=_auth(fan))
+    assert second.status_code == 422
+    assert second.json()["code"] == "OrderNotCancellable"
+    product.refresh_from_db()
+    assert product.stock == 2  # not inflated to 4
+
+
+def test_digital_order_ignores_shipping_snapshot(client: Client) -> None:
+    """A non-goods order drops any shipping the client sends (F-G — blank snapshot)."""
+    fan = _fan()
+    product = _product(type="digital", title="디지털 화보")
+    body = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()
+    assert body["shipping_address"] is None
+    order = Order.objects.get(id=body["id"])
+    assert order.recipient_name == ""
+    assert order.recipient_phone == ""
+    assert order.postal_code == ""
+    assert order.address1 == ""
+    assert order.address2 == ""
+
+
+def test_goods_order_trims_shipping_fields(client: Client) -> None:
+    """A goods order stores the delivery snapshot trimmed of whitespace (F-G)."""
+    fan = _fan()
+    product = _product(type="goods")
+    padded = {
+        "recipient_name": "  받는이  ",
+        "recipient_phone": " 010-1234-5678 ",
+        "postal_code": " 06236 ",
+        "address1": "  서울시 강남구 테헤란로 1 ",
+        "address2": "  101동 1001호  ",
+    }
+    body = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": padded}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()
+    order = Order.objects.get(id=body["id"])
+    assert order.recipient_name == "받는이"
+    assert order.postal_code == "06236"
+    assert order.address1 == "서울시 강남구 테헤란로 1"
+    assert order.address2 == "101동 1001호"

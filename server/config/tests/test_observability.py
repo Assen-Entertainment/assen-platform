@@ -72,6 +72,9 @@ def test_init_sentry_wires_django_integration_when_dsn_set(
     assert captured["send_default_pii"] is False
     assert callable(captured["before_send"])
     assert captured["integrations"]  # DjangoIntegration attached
+    # Request bodies are never captured — a goods-order body carries the delivery
+    # address, so body capture is blocked wholesale ("zero PII to Sentry", F-D).
+    assert captured["max_request_body_size"] == "never"
 
 
 # --------------------------------------------------------------------------- #
@@ -119,6 +122,37 @@ def test_scrub_event_redacts_pii_secrets_and_forbidden_keys() -> None:
     assert event["request"]["data"]["note"] == "keep me"
     assert event["extra"]["count"] == 3
     assert event["user"]["id"] == "u1"
+
+
+def test_scrub_event_redacts_shipping_address_keys() -> None:
+    """Delivery-address PII keys are blanked wholesale before send (F-D).
+
+    A goods-order shipping snapshot (recipient name, postal code, street lines) must
+    never leave the process in a Sentry event, even under its own benign-looking key.
+    """
+    event: dict[str, Any] = {
+        "request": {
+            "data": {
+                "recipient_name": "홍길동",
+                "postal_code": "06236",
+                "address1": "서울시 강남구 테헤란로 1",
+                "address2": "101동 1001호",
+                "address": "서울시 강남구 테헤란로 1 101동 1001호",
+                "order_id": "ASN-DEADBEEF0001",
+            }
+        }
+    }
+
+    _scrub_event(cast(Any, event), cast(Any, {}))
+
+    data = event["request"]["data"]
+    assert data["recipient_name"] == "[Filtered]"
+    assert data["postal_code"] == "[Filtered]"
+    assert data["address1"] == "[Filtered]"
+    assert data["address2"] == "[Filtered]"
+    assert data["address"] == "[Filtered]"
+    # A benign non-PII field is untouched.
+    assert data["order_id"] == "ASN-DEADBEEF0001"
 
 
 def test_scrub_event_redacts_free_text_pii_in_values() -> None:

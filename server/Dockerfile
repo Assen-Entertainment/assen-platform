@@ -25,5 +25,12 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 
-# Gunicorn serves the WSGI app; settings module is provided via the environment.
-CMD ["uv", "run", "--no-sync", "gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+# Daphne serves the ASGI app so HTTP and the Channels WebSocket stack (config.asgi)
+# share one server — a WSGI server (gunicorn) would drop the `websocket` protocol
+# entirely. Static files are unaffected: the API is JSON + admin only and was never
+# served by the app server (no whitenoise); the ALB/CDN or `collectstatic` target
+# owns static delivery. Settings module comes from the environment
+# (DJANGO_SETTINGS_MODULE). Single-process here; horizontal scale-out needs the
+# shared channels-redis layer (CHANNEL_LAYERS_BACKEND=redis, E10) so socket groups
+# span workers.
+CMD ["uv", "run", "--no-sync", "daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]

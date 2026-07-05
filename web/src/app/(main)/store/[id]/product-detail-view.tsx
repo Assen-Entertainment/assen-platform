@@ -124,7 +124,18 @@ export function ProductDetailView({ product }: { product: Product }) {
               {label}
             </Badge>
             <h1 className="text-headline text-on-surface">{p.title}</h1>
-            {p.creatorName ? <p className="text-body-s text-on-surface-variant">{p.creatorName}</p> : null}
+            {p.creatorName ? (
+              p.creatorHandle ? (
+                <Link
+                  href={`/creator/${p.creatorHandle}`}
+                  className="text-body-s text-on-surface-variant hover:text-on-surface hover:underline"
+                >
+                  {p.creatorName}
+                </Link>
+              ) : (
+                <p className="text-body-s text-on-surface-variant">{p.creatorName}</p>
+              )
+            ) : null}
           </div>
 
           <div className="flex items-baseline gap-2">

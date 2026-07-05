@@ -23,6 +23,7 @@ import type {
   Product,
   RefundStatus,
   SavedPaymentMethod,
+  ShippingAddress,
   StudioStats,
   Subscription,
   SearchResult,
@@ -83,6 +84,9 @@ interface RawProduct {
   id: string;
   creator_id: string | null;
   creator_name: string;
+  // 서버 ProductOut.creator_handle(기본 "") — PDP/스토어의 크리에이터 프로필 링크용.
+  // 검색 브리프(ProductBrief)엔 없고 빈 문자열일 수 있어 옵셔널 방어(없으면 링크 생략).
+  creator_handle?: string | null;
   type: string;
   title: string;
   price: number;
@@ -133,6 +137,14 @@ interface RawRefund {
   status: string;
   reason: string;
 }
+/** 배송지 스냅샷 wire(OrderShippingOut) — 배송 상품 주문 조회에만 임베드. */
+interface RawOrderShipping {
+  recipient_name: string;
+  recipient_phone: string;
+  postal_code: string;
+  address1: string;
+  address2: string;
+}
 interface RawOrder {
   id: string;
   status: string;
@@ -140,8 +152,11 @@ interface RawOrder {
   items: RawOrderItem[];
   subtotal: number;
   shipping: number;
+  // shipping_fee는 model 정합 명시 별칭(shipping과 동일 값) — 있으면 우선, 없으면 shipping 폴백.
+  shipping_fee?: number;
   total: number;
   creator_name: string | null;
+  shipping_address?: RawOrderShipping | null;
   refund: RawRefund | null;
 }
 interface RawSubscription {
@@ -304,6 +319,7 @@ const mapProduct = (p: RawProduct): Product => ({
   type: p.type as Product["type"],
   title: p.title,
   price: p.price,
+  creatorHandle: p.creator_handle || undefined,
   meta: p.meta || undefined,
   mediaUrl: p.media_url || undefined,
   // 확장 필드 — 품절/잠금/옵션 UI가 라이브에서도 동작해야 한다(누락 시 서버 422가 최후 방어막이 됨).
@@ -351,15 +367,24 @@ const mapOrderItem = (it: RawOrderItem): OrderItem => ({
   price: it.price,
   qty: it.qty,
 });
+const mapShipping = (s: RawOrderShipping): ShippingAddress => ({
+  recipientName: s.recipient_name,
+  recipientPhone: s.recipient_phone,
+  postalCode: s.postal_code,
+  address1: s.address1,
+  address2: s.address2,
+});
 const mapOrder = (o: RawOrder): Order => ({
   id: o.id,
   createdAt: dateLabel(o.created_at),
   status: o.status as OrderStatus,
   items: o.items.map(mapOrderItem),
   subtotal: o.subtotal,
-  shipping: o.shipping,
+  // shipping_fee(model 정합 별칭) 우선, 없으면 기존 shipping 필드 폴백(둘은 동일 값).
+  shipping: o.shipping_fee ?? o.shipping,
   total: o.total,
   creatorName: o.creator_name ?? undefined,
+  shippingAddress: o.shipping_address ? mapShipping(o.shipping_address) : undefined,
   refund: o.refund
     ? { status: mapRefundStatus(o.refund.status), reason: o.refund.reason || undefined }
     : undefined,
@@ -369,6 +394,7 @@ const mapSubscription = (s: RawSubscription): Subscription => ({
   creatorId: s.creator_id ?? "",
   creatorName: s.creator_name,
   creatorHandle: s.creator_handle,
+  tierId: s.tier_id ?? undefined,
   tierName: s.tier_name,
   price: s.price,
   period: s.period,
@@ -445,15 +471,15 @@ const CREATORS: Creator[] = [
 ];
 
 const PRODUCTS: Product[] = [
-  { id: "p1", creatorId: "c1", creatorName: "별빛 일러스트", type: "goods", title: "아크릴 스탠드", price: 18000, meta: "한정 200개", stock: 143, options: ["A타입 (전신)", "B타입 (반신)"], description: "별빛 일러스트의 대표 캐릭터를 담은 고급 아크릴 스탠드입니다. 두께 3mm 아크릴에 UV 인쇄로 선명한 컬러를 구현했어요." },
-  { id: "p2", creatorId: "c1", creatorName: "별빛 일러스트", type: "digital", title: "고해상도 화보집", price: 9900, meta: "다운로드", description: "4K 해상도 일러스트 24종을 담은 디지털 화보집(PDF·PNG). 결제 즉시 다운로드할 수 있습니다." },
-  { id: "p3", creatorId: "c1", creatorName: "별빛 일러스트", type: "experience", title: "포토카드 팬사인", price: 30000, meta: "선착순 20", stock: 20, description: "친필 사인이 담긴 포토카드를 받아보세요. 선착순 20명 한정 진행됩니다." },
-  { id: "p4", creatorId: "c1", creatorName: "별빛 일러스트", type: "ticket", title: "온라인 팬미팅", price: 25000, meta: "12/24 20:00", description: "12월 24일 저녁 8시, 온라인 팬미팅 입장 티켓입니다. 결제 후 관람 링크가 발송됩니다." },
-  { id: "p5", creatorId: "c3", creatorName: "토끼방송국", type: "goods", title: "토끼 아크릴 키링", price: 9000, meta: "재고 12개", stock: 12, options: ["핑크", "블루"], description: "토끼방송국 마스코트 키링. 소량 재고로 준비했어요." },
-  { id: "p6", creatorId: "c3", creatorName: "토끼방송국", type: "ticket", title: "버튜버 생일 라이브", price: 15000, meta: "2/14 20:00", description: "생일 기념 스페셜 라이브 입장권. 참여자 전원 디지털 축하 카드 증정." },
+  { id: "p1", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", type: "goods", title: "아크릴 스탠드", price: 18000, meta: "한정 200개", stock: 143, options: ["A타입 (전신)", "B타입 (반신)"], description: "별빛 일러스트의 대표 캐릭터를 담은 고급 아크릴 스탠드입니다. 두께 3mm 아크릴에 UV 인쇄로 선명한 컬러를 구현했어요." },
+  { id: "p2", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", type: "digital", title: "고해상도 화보집", price: 9900, meta: "다운로드", description: "4K 해상도 일러스트 24종을 담은 디지털 화보집(PDF·PNG). 결제 즉시 다운로드할 수 있습니다." },
+  { id: "p3", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", type: "experience", title: "포토카드 팬사인", price: 30000, meta: "선착순 20", stock: 20, description: "친필 사인이 담긴 포토카드를 받아보세요. 선착순 20명 한정 진행됩니다." },
+  { id: "p4", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", type: "ticket", title: "온라인 팬미팅", price: 25000, meta: "12/24 20:00", description: "12월 24일 저녁 8시, 온라인 팬미팅 입장 티켓입니다. 결제 후 관람 링크가 발송됩니다." },
+  { id: "p5", creatorId: "c3", creatorName: "토끼방송국", creatorHandle: "rabbit", type: "goods", title: "토끼 아크릴 키링", price: 9000, meta: "재고 12개", stock: 12, options: ["핑크", "블루"], description: "토끼방송국 마스코트 키링. 소량 재고로 준비했어요." },
+  { id: "p6", creatorId: "c3", creatorName: "토끼방송국", creatorHandle: "rabbit", type: "ticket", title: "버튜버 생일 라이브", price: 15000, meta: "2/14 20:00", description: "생일 기념 스페셜 라이브 입장권. 참여자 전원 디지털 축하 카드 증정." },
   { id: "p7", type: "coupon", title: "웰컴 10% 할인 쿠폰", price: 3000, meta: "30일 유효", description: "첫 구매를 위한 10% 할인 쿠폰. 발급 후 30일간 사용할 수 있습니다." },
-  { id: "p8", creatorId: "c4", creatorName: "묘화가", type: "digital", title: "고양이 브러시 팩", price: 6000, meta: "멤버십 전용", locked: true, description: "묘화가 멤버십 구독자에게만 공개되는 디지털 브러시 팩입니다." },
-  { id: "p9", creatorId: "c5", creatorName: "Studio Lumi", type: "goods", title: "한정판 피규어", price: 45000, meta: "품절", soldOut: true, stock: 0, description: "Studio Lumi 1주년 기념 한정판 피규어. 현재 품절 상태입니다." },
+  { id: "p8", creatorId: "c4", creatorName: "묘화가", creatorHandle: "myo", type: "digital", title: "고양이 브러시 팩", price: 6000, meta: "멤버십 전용", locked: true, description: "묘화가 멤버십 구독자에게만 공개되는 디지털 브러시 팩입니다." },
+  { id: "p9", creatorId: "c5", creatorName: "Studio Lumi", creatorHandle: "lumi", type: "goods", title: "한정판 피규어", price: 45000, meta: "품절", soldOut: true, stock: 0, description: "Studio Lumi 1주년 기념 한정판 피규어. 현재 품절 상태입니다." },
 ];
 
 const TIERS: MembershipTier[] = [
@@ -489,8 +515,16 @@ const ORDERS: Order[] = [
       { productId: "p7", title: "웰컴 10% 할인 쿠폰", type: "coupon", price: 3000, qty: 1 },
     ],
     subtotal: 21000,
-    shipping: 3000,
-    total: 24000,
+    // 배송비=0 고정(정책 게이트) — 날조 금액 금지. total = subtotal + shipping.
+    shipping: 0,
+    total: 21000,
+    shippingAddress: {
+      recipientName: "데모 팬",
+      recipientPhone: "010-0000-0002",
+      postalCode: "04524",
+      address1: "서울 중구 세종대로 110",
+      address2: "1203호",
+    },
     tracking: { carrier: "CJ대한통운", number: "6412-0093-2201" },
   },
   {
@@ -525,7 +559,7 @@ const NOTIFICATIONS: Notification[] = [
 ];
 
 const SUBSCRIPTIONS: Subscription[] = [
-  { id: "s1", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", tierName: "스탠다드", price: 9900, period: "월", nextBillingDate: "2026-07-15", status: "active" },
+  { id: "s1", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", tierId: "t2", tierName: "스탠다드", price: 9900, period: "월", nextBillingDate: "2026-07-15", status: "active" },
   { id: "s2", creatorId: "c3", creatorName: "토끼방송국", creatorHandle: "rabbit", tierName: "라이트", price: 4900, period: "월", nextBillingDate: "2026-07-22", status: "active" },
 ];
 
@@ -643,6 +677,20 @@ export async function getPostsPage(creatorId?: string, cursor?: string): Promise
     return toPage(await apiFetch<Paginated<RawPost>>(`/posts${q}`), mapPost);
   }
   return { items: creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS };
+}
+/**
+ * 스튜디오 오너 포스트 커서 페이지 — GET /studio/posts(fan_auth 오너 스코프). 공개 `/posts`와 달리
+ * 소비자 게이트(19+ 숨김)가 적용되지 않아 오너가 자신의 draft·19+ 포스트를 전부 본다.
+ * 401·403 모두 그대로 전파한다 — client.ts가 이미 401 refresh-and-retry를 하므로 여기 도달한
+ * 401은 회복 불가 세션(만료-잔존 쿠키)이다. 빈 페이지로 삼키면 "발행 포스트 없음"으로 오표시되므로,
+ * 호출측(StudioPostsPage)이 401=재로그인 안내·403(OwnerRequired)=크리에이터 안내로 분기 렌더한다.
+ * mock=데모 오너(c1: 별빛 일러스트) 목록.
+ */
+export async function getStudioPostsPage(cursor?: string): Promise<Page<Post>> {
+  if (USE_API) {
+    return toPage(await apiFetch<Paginated<RawPost>>(`/studio/posts${pageQuery(cursor)}`), mapPost);
+  }
+  return { items: POSTS.filter((p) => p.creatorId === "c1") };
 }
 /** 피드 — B2 `/feed` 소비(익명=최신 전체). B3 개인화(팔로잉) 피드의 배선 지점. */
 export async function getFeed(): Promise<Post[]> {
@@ -832,11 +880,32 @@ export async function apiAddComment(postId: string, body: string): Promise<Comme
   });
   return mapComment(raw);
 }
-/** 주문 생성(mock 결제 확정 — 실 PG·금액이동 없음) → 201 Order. */
-export async function apiCreateOrder(input: { productId: string; qty: number; option?: string }): Promise<Order> {
+/**
+ * 주문 생성(mock 결제 확정 — 실 PG·금액이동 없음) → 201 Order.
+ * 배송 상품(굿즈)이면 shipping(배송지)을 함께 전송한다 — 누락 시 서버 422 ShippingAddressRequired.
+ */
+export async function apiCreateOrder(input: {
+  productId: string;
+  qty: number;
+  option?: string;
+  shipping?: ShippingAddress;
+}): Promise<Order> {
   const raw = await apiFetch<RawOrder>("/orders", {
     method: "POST",
-    body: JSON.stringify({ product_id: input.productId, qty: input.qty, option: input.option }),
+    body: JSON.stringify({
+      product_id: input.productId,
+      qty: input.qty,
+      option: input.option,
+      shipping: input.shipping
+        ? {
+            recipient_name: input.shipping.recipientName,
+            recipient_phone: input.shipping.recipientPhone,
+            postal_code: input.shipping.postalCode,
+            address1: input.shipping.address1,
+            address2: input.shipping.address2,
+          }
+        : undefined,
+    }),
   });
   return mapOrder(raw);
 }
@@ -864,6 +933,19 @@ export async function apiSubscribe(tierId: string): Promise<Subscription> {
 export async function apiCancelSubscription(id: string): Promise<Subscription> {
   return mapSubscription(
     await apiFetch<RawSubscription>(`/subscriptions/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  );
+}
+/**
+ * 구독 티어 전환(업/다운그레이드) — PATCH /subscriptions/{id} {tier_id} → Subscription.
+ * 같은 크리에이터의 active 티어만 가능(다른 크리에이터/비활성/미지 티어=422 TierNotFound),
+ * 비활성 구독은 전환 불가(422 SubscriptionNotActive), 현재 티어로의 전환은 200 no-op(멱등).
+ */
+export async function apiChangeSubscriptionTier(id: string, tierId: string): Promise<Subscription> {
+  return mapSubscription(
+    await apiFetch<RawSubscription>(`/subscriptions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tier_id: tierId }),
+    }),
   );
 }
 /** 알림 읽음 → Notification. */
@@ -910,6 +992,27 @@ export async function apiPublishPost(input: { body: string; mediaUrl?: string; i
     body: JSON.stringify({ body: input.body, media_url: input.mediaUrl, is_adult: input.isAdult ?? false }),
   });
   return mapPost(raw);
+}
+/** 포스트 부분 수정 입력(W1A: PATCH /posts/{id}) — 제공한 필드만 반영. */
+export interface PostUpdate {
+  body?: string;
+  mediaUrl?: string;
+  isAdult?: boolean;
+}
+/**
+ * 포스트 수정 — PATCH /posts/{id}(body/media_url/is_adult 부분 수정). 오너만 가능하며
+ * 비오너/미지 id는 서버가 404(no-leak). undefined 필드는 JSON.stringify가 제거 → 서버 무변경.
+ */
+export async function apiUpdatePost(id: string, patch: PostUpdate): Promise<Post> {
+  const raw = await apiFetch<RawPost>(`/posts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ body: patch.body, media_url: patch.mediaUrl, is_adult: patch.isAdult }),
+  });
+  return mapPost(raw);
+}
+/** 포스트 삭제 — DELETE /posts/{id}. 오너만 가능(비오너/미지 id는 404 no-leak). */
+export async function apiDeletePost(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/posts/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // --- 게이트 기능(R3): KYC 본인인증 -------------------------------------------

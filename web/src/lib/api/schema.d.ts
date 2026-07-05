@@ -349,17 +349,26 @@ export interface paths {
          * @description Place a mock order for one product.
          *
          *     MOCK: records a ``paid`` order and snapshots the line item, but **no real
-         *     payment is taken and no money moves** (B7 gated). Stock is *validated* but not
-         *     decremented (inventory movement is out of B4 scope).
+         *     payment is taken and no money moves** (B7 gated). The order amounts
+         *     (``subtotal``/``shipping_fee``/``total``, ``total = subtotal + shipping_fee``)
+         *     are computed server-side so the fan is charged exactly what is shown; shipping
+         *     is a fixed mock ``0`` until the fee policy is set (대표·재무 게이트). A physical
+         *     (``goods``) order must carry a delivery address, else 422.
+         *
+         *     Stock (B7 precursor): a stock-tracked product is decremented atomically with a
+         *     ``stock >= qty`` conditional UPDATE inside the transaction — 0 rows means a
+         *     concurrent buyer took the last unit (TOCTOU-sealed → 422), and taking the last
+         *     unit flips ``sold_out``. Cancelling the order restores it (see ``cancel_order``).
          *
          *     Idempotency (B1): if the caller supplies ``idempotency_key`` and already has an
          *     order for it, the existing order is returned (200) rather than duplicated. The
-         *     order + its line are written in one ``transaction.atomic`` block so a failure
-         *     can never leave a header without its item; the (buyer, key) unique constraint
-         *     closes the concurrent-retry race (both requests pass the pre-check, one insert
-         *     wins, the loser catches ``IntegrityError`` and returns the winner's order). The
-         *     fan notification is sent only *after* the transaction commits, so a rolled-back
-         *     order never emits a stray "order received" notice.
+         *     stock deduction, order, and its line are written in one ``transaction.atomic``
+         *     block so a failure can never leave a header without its item or a decrement
+         *     without an order; the (buyer, key) unique constraint closes the concurrent-retry
+         *     race (both requests pass the pre-check, one insert wins, the loser catches
+         *     ``IntegrityError`` — which also rolls back its decrement — and returns the
+         *     winner's order). The fan notification is sent only *after* the transaction
+         *     commits, so a rolled-back order never emits a stray "order received" notice.
          */
         post: operations["apps_commerce_api_create_order"];
         delete?: never;
@@ -400,6 +409,24 @@ export interface paths {
         /**
          * Cancel Order
          * @description Cancel one of the fan's own orders (only while paid/shipping).
+         *
+         *     The cancellable → cancelled transition is sealed by a **conditional UPDATE
+         *     rowcount gate** inside the transaction (project pattern): only the request whose
+         *     ``filter(status__in=_CANCELLABLE).update(status=cancelled)`` touches a row (won
+         *     the race) proceeds to restore stock; a concurrent second cancel updates 0 rows
+         *     and returns 422 without restoring anything, so two racing cancels can never
+         *     double-restore stock. The pre-check below is a friendly early return only — the
+         *     rowcount gate is the actual invariant.
+         *
+         *     Stock restore (winner only): each stock-tracked line's product is incremented by
+         *     its ``qty`` (``F`` expression, no lost update). ``sold_out`` is only cleared for a
+         *     product that had **hit 0** (auto sold-out) — a product an owner manually marked
+         *     ``sold_out`` while stock remained keeps that flag (F-F): the restore adds stock
+         *     but does not silently re-open a listing the owner paused. A since-deleted product
+         *     line (SET_NULL) has nothing to restore and is skipped.
+         *
+         *     A refund *accepted* (operator-approved) re-stock is a separate operator flow and
+         *     is not handled here (후속 — 운영자 플로우).
          */
         post: operations["apps_commerce_api_cancel_order"];
         delete?: never;
@@ -475,10 +502,27 @@ export interface paths {
         get: operations["apps_content_api_get_post"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Post
+         * @description Hard-delete the caller's own post; 404 if unknown or not theirs (no leak).
+         *
+         *     Owner guard identical to ``create_post``. Unlike an order/tier, a post has no
+         *     history constraint, so deletion is a hard delete — its comments and likes
+         *     CASCADE (``Comment.post`` / ``Like.post`` are ``on_delete=CASCADE``).
+         */
+        delete: operations["apps_content_api_delete_post"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Post
+         * @description Update fields on the caller's own post; 404 if unknown or not theirs (no leak).
+         *
+         *     Owner guard identical to ``create_post`` (scope is the caller's creator). Only
+         *     the provided fields (``body``/``media_url``/``is_adult``) are applied; the
+         *     ``media_url`` scheme is re-validated (A5). The response reflects fresh
+         *     like/comment counts and the caller's ``liked`` flag.
+         */
+        patch: operations["apps_content_api_update_post"];
         trace?: never;
     };
     "/api/posts/{post_id}/like": {
@@ -559,6 +603,32 @@ export interface paths {
          *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_content_api_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Posts
+         * @description List the caller's own creator's posts — including 19+ — newest first.
+         *
+         *     Owner surface (mirrors ``commerce.studio_list_products``): the consumer 19+ gate
+         *     (:func:`_post_qs`) is deliberately NOT applied, so the owner always sees their own
+         *     adult/full posts regardless of ``ENABLE_ADULT_CONTENT``. 403 if the caller
+         *     operates no creator. Each row carries the same annotations as :func:`_annotated_post`
+         *     (like/comment counts + the owner's own ``liked`` flag), cursor-paginated.
+         */
+        get: operations["apps_content_api_studio_list_posts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1545,6 +1615,35 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change Subscription Tier
+         * @description Switch the fan's own active subscription to another tier (up/downgrade).
+         *
+         *     The new tier must be an *active* tier of the **same creator** — the membership
+         *     is a relationship with one creator, so a cross-creator swap is not a tier change
+         *     but a different subscription. A tier that is unknown, inactive, or belongs to
+         *     another creator collapses to 422 ``TierNotFound`` (no cross-creator existence
+         *     leak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).
+         *     A subscription already scheduled to cancel (``cancelled_at`` set, "해지 예정") is
+         *     also refused (422): its tier is frozen until the cancellation is withdrawn (F-E).
+         *     Idempotent: switching to the tier already held is a 200 no-op.
+         */
+        patch: operations["apps_membership_api_change_subscription_tier"];
         trace?: never;
     };
     "/api/operator/notifications/policy": {
@@ -2936,6 +3035,11 @@ export interface components {
              * @default
              */
             creator_name: string;
+            /**
+             * Creator Handle
+             * @default
+             */
+            creator_handle: string;
             /** Type */
             type: string;
             /** Title */
@@ -3141,8 +3245,13 @@ export interface components {
          * OrderOut
          * @description A fan's order (maps to the frontend ``Order`` type).
          *
-         *     ``subtotal``/``shipping``/``total`` are display snapshots (shipping is a mock
-         *     ``0`` — no real fulfilment cost is computed). NOT settlement figures.
+         *     ``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots
+         *     computed server-side (``total = subtotal + shipping_fee``; shipping is a mock
+         *     ``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and
+         *     ``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field
+         *     the web consumes; ``shipping_fee`` is the explicit alias matching the model.
+         *     ``shipping_address`` echoes the delivery snapshot for goods orders (``None`` for
+         *     orders that need none), safe because a fan only ever sees their own orders.
          */
         OrderOut: {
             /** Id */
@@ -3160,8 +3269,11 @@ export interface components {
             subtotal: number;
             /** Shipping */
             shipping: number;
+            /** Shipping Fee */
+            shipping_fee: number;
             /** Total */
             total: number;
+            shipping_address?: components["schemas"]["OrderShippingOut"] | null;
             /** Creator Name */
             creator_name?: string | null;
             refund?: components["schemas"]["OrderRefundOut"] | null;
@@ -3175,6 +3287,22 @@ export interface components {
             status: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * OrderShippingOut
+         * @description Delivery-address snapshot echoed on a physical (goods) order (own orders only).
+         */
+        OrderShippingOut: {
+            /** Recipient Name */
+            recipient_name: string;
+            /** Recipient Phone */
+            recipient_phone: string;
+            /** Postal Code */
+            postal_code: string;
+            /** Address1 */
+            address1: string;
+            /** Address2 */
+            address2: string;
         };
         /**
          * CreateOrderIn
@@ -3196,8 +3324,40 @@ export interface components {
              * @default
              */
             option: string;
+            shipping?: components["schemas"]["ShippingIn"] | null;
             /** Idempotency Key */
             idempotency_key?: string | null;
+        };
+        /**
+         * ShippingIn
+         * @description Delivery address for a physical (goods) order (required for ``type=goods``).
+         */
+        ShippingIn: {
+            /**
+             * Recipient Name
+             * @default
+             */
+            recipient_name: string;
+            /**
+             * Recipient Phone
+             * @default
+             */
+            recipient_phone: string;
+            /**
+             * Postal Code
+             * @default
+             */
+            postal_code: string;
+            /**
+             * Address1
+             * @default
+             */
+            address1: string;
+            /**
+             * Address2
+             * @default
+             */
+            address2: string;
         };
         /**
          * OrderPage
@@ -3302,6 +3462,26 @@ export interface components {
              * @default false
              */
             is_adult: boolean;
+        };
+        /**
+         * PostPatch
+         * @description Request body to update a post; only the provided fields are applied.
+         */
+        PostPatch: {
+            /** Body */
+            body?: string | null;
+            /** Media Url */
+            media_url?: string | null;
+            /** Is Adult */
+            is_adult?: boolean | null;
+        };
+        /**
+         * PostAck
+         * @description Bare status ack for a post mutation that returns no body (delete).
+         */
+        PostAck: {
+            /** Status */
+            status: string;
         };
         /**
          * LikeOut
@@ -4256,6 +4436,17 @@ export interface components {
          * @description Fan payload to subscribe to a membership tier.
          */
         SubscribeIn: {
+            /**
+             * Tier Id
+             * Format: uuid
+             */
+            tier_id: string;
+        };
+        /**
+         * ChangeTierIn
+         * @description Fan payload to switch an active subscription to another tier (up/downgrade).
+         */
+        ChangeTierIn: {
             /**
              * Tier Id
              * Format: uuid
@@ -6453,6 +6644,72 @@ export interface operations {
             };
         };
     };
+    apps_content_api_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostAck"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_content_api_update_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apps_content_api_like_post: {
         parameters: {
             query?: never;
@@ -6621,6 +6878,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostPage"];
+                };
+            };
+        };
+    };
+    apps_content_api_studio_list_posts: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostPage"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -8142,6 +8431,50 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_change_subscription_tier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeTierIn"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

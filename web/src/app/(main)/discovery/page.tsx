@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCreators, getProducts } from "@/lib/api";
+import { getCreatorsPage, getProductsPage } from "@/lib/api";
 import { DiscoveryView } from "./discovery-view";
 
 export const metadata: Metadata = {
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   openGraph: { title: "크리에이터 발견 · Assen", description: "취향에 맞는 크리에이터와 상품을 발견하세요.", type: "website" },
 };
 
-/** Discovery — 서버 컴포넌트에서 데이터 fetch(현재 mock) → 클라이언트 뷰. 실 API 전환 시 lib/api만 교체. */
+/** Discovery — 서버에서 커서 Page 시드(크리에이터·상품) → 클라 뷰. 실 API 전환 시 lib/api만 교체. */
 export default async function DiscoveryPage() {
-  const [creators, products] = await Promise.all([getCreators(), getProducts()]);
+  const [creators, products] = await Promise.all([getCreatorsPage(), getProductsPage()]);
   return <DiscoveryView creators={creators} products={products} />;
 }

@@ -13,10 +13,19 @@ export interface CreatorThumbCardProps extends React.AnchorHTMLAttributes<HTMLAn
   cover?: string;
   /** 이 크리에이터의 시그니처 색(hex). 주입 시 커버가 creator-accent(자동 대비 파생). */
   accentColor?: string;
+  /**
+   * 커버 이미지 렌더 슬롯(R5-W3 #6) — 기본 "img"(DS 이식성). SmartImage 등 next/image 래퍼 주입 가능.
+   * fill 주입을 위해 커버 컨테이너는 relative + 크기 확정.
+   */
+  imageComponent?: React.ElementType;
+  /** next/image 슬롯 주입 시 반응형 힌트. */
+  sizes?: string;
 }
 
 export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumbCardProps>(
-  ({ name, meta, cover, accentColor, className, style, ...props }, ref) => (
+  ({ name, meta, cover, accentColor, imageComponent, sizes, className, style, ...props }, ref) => {
+    const ImageComp = imageComponent ?? "img";
+    return (
     <a
       ref={ref}
       style={accentColor ? { ...creatorAccentVars(accentColor), ...style } : style}
@@ -24,7 +33,7 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
       {...props}
     >
       <div
-        className="aspect-square w-full overflow-hidden rounded-md bg-surface-container-high"
+        className="relative aspect-square w-full overflow-hidden rounded-md bg-surface-container-high"
         style={
           cover
             ? undefined
@@ -34,11 +43,11 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
         }
       >
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element -- DS 이식성 위해 원시 img(소비자가 next/image 래핑 가능)
-          <img
+          <ImageComp
             src={cover}
             alt={name}
             loading="lazy"
+            sizes={sizes}
             className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.03] motion-reduce:transition-none"
           />
         ) : null}
@@ -46,6 +55,7 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
       <span className="line-clamp-1 text-title-m text-on-surface">{name}</span>
       {meta ? <span className="line-clamp-1 text-caption text-on-surface-variant">{meta}</span> : null}
     </a>
-  ),
+    );
+  },
 );
 CreatorThumbCard.displayName = "CreatorThumbCard";

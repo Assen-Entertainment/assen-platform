@@ -8,6 +8,7 @@ import type { Creator, Post } from "@/lib/api";
 // next/navigation·next/link — jsdom 렌더용 경량 목(라우팅 부수효과 제거).
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+  usePathname: () => "/creator/stellar",
 }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...p }: { href: unknown; children: React.ReactNode }) => (
@@ -35,7 +36,7 @@ const post: Post = { id: "po1", creatorId: "c1", creatorName: "별빛 일러스�
 
 describe("CreatorProfileView (차단됨)", () => {
   it("blocked면 차단 배너를 보여주고 포스트/탭 콘텐츠를 숨긴다", () => {
-    wrap(<CreatorProfileView creator={blockedCreator} posts={[post]} products={[]} tiers={[]} />);
+    wrap(<CreatorProfileView creator={blockedCreator} posts={{ items: [post] }} products={[]} tiers={[]} />);
     // 배너 + 콘텐츠 숨김 안내가 노출된다.
     expect(screen.getByText("차단한 크리에이터예요")).toBeInTheDocument();
     expect(screen.getByText("콘텐츠를 숨기고 있어요")).toBeInTheDocument();
@@ -45,7 +46,7 @@ describe("CreatorProfileView (차단됨)", () => {
   });
 
   it("차단 상태에선 해제 버튼을 노출한다", () => {
-    wrap(<CreatorProfileView creator={blockedCreator} posts={[]} products={[]} tiers={[]} />);
+    wrap(<CreatorProfileView creator={blockedCreator} posts={{ items: [] }} products={[]} tiers={[]} />);
     expect(screen.getAllByRole("button", { name: "차단 해제" }).length).toBeGreaterThan(0);
   });
 });

@@ -17,6 +17,7 @@ export { PriceLabel, type PriceLabelProps } from "./price-label";
 // Molecules
 export { MonetizableItem, type MonetizableItemProps, type MonetizableItemType } from "./monetizable-item";
 export { CreatorThumbCard, type CreatorThumbCardProps } from "./creator-thumb-card";
+export { SmartImage, isRemoteImage, type SmartImageProps } from "./smart-image";
 export { MembershipTierCard, type MembershipTierCardProps } from "./membership-tier-card";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { ErrorState, type ErrorStateProps } from "./error-state";
@@ -85,6 +86,7 @@ export { TextLink, type TextLinkProps } from "./text-link";
 export { ProgressBar, type ProgressBarProps } from "./progress-bar";
 export { DisclaimerNotice, type DisclaimerNoticeProps } from "./disclaimer-notice";
 export { SafetyGuideNotice, type SafetyGuideNoticeProps } from "./safety-guide-notice";
+export { GateNote, SHOW_GATE_NOTES, type GateNoteProps } from "./gate-note";
 
 // [W4] 레퍼런스 폴리시 — 디스커버리/크리에이터 히어로/후원/라이트박스/딜라이트 (Wave 4 소유 블록)
 export { CategoryIconRow, type CategoryIconRowProps, type CategoryItem } from "./category-icon-row";

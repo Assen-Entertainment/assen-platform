@@ -122,9 +122,13 @@ def _order_code() -> str:
 class Order(models.Model):
     """A fan's mock order. MOCK: no real payment is taken and no money moves.
 
-    ``total`` is a display snapshot (sum of item ``price`` × ``qty``) captured at
-    purchase — real PG, amounts, and settlement are gated (B7), so nothing here
-    decides money owed.
+    ``subtotal``/``shipping_fee``/``total`` are display snapshots computed at
+    purchase (``total = subtotal + shipping_fee``) — real PG, amounts, and
+    settlement are gated (B7), so nothing here decides money owed. The
+    ``recipient_*``/``postal_code``/``address*`` fields snapshot the delivery
+    address for a physical (``goods``) order; the fan sees only their own orders,
+    so echoing them back is safe. Real operation must reflect the delivery-address
+    items in the privacy policy (법무 확인); the mock contract flow is un-gated.
     """
 
     id = models.CharField(
@@ -136,8 +140,20 @@ class Order(models.Model):
     status = models.CharField(
         max_length=16, choices=OrderStatus.choices, default=OrderStatus.PAID
     )
-    # Display snapshot of the order total (KRW). NOT a settlement figure.
+    # Display snapshots of the order amounts (KRW). NOT settlement figures.
+    # ``subtotal`` is the sum of line ``price`` × ``qty``; ``shipping_fee`` is the
+    # server-authoritative delivery charge (fixed at 0 until the fee policy is set —
+    # 대표·재무 게이트); ``total`` = subtotal + shipping_fee.
+    subtotal = models.PositiveIntegerField(default=0)
+    shipping_fee = models.PositiveIntegerField(default=0)
     total = models.PositiveIntegerField(default=0)
+    # Delivery-address snapshot for physical (goods) orders; blank for
+    # digital/experience/ticket/coupon orders that need no shipping.
+    recipient_name = models.CharField(max_length=60, blank=True, default="")
+    recipient_phone = models.CharField(max_length=32, blank=True, default="")
+    postal_code = models.CharField(max_length=16, blank=True, default="")
+    address1 = models.CharField(max_length=200, blank=True, default="")
+    address2 = models.CharField(max_length=200, blank=True, default="")
     # Optional client-supplied idempotency key (B1). When set, a retried POST with
     # the same (buyer, key) returns the existing order instead of duplicating it;
     # the partial unique constraint below makes that race-safe. NULL = not supplied.

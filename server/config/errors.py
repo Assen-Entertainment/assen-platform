@@ -23,11 +23,12 @@ keys on — never rename an existing value; only add new members.
 
 from __future__ import annotations
 
+import math
 from enum import StrEnum
 
 from django.http import HttpRequest, HttpResponse
 from ninja import NinjaAPI
-from ninja.errors import HttpError
+from ninja.errors import HttpError, Throttled
 
 
 class ErrorCode(StrEnum):
@@ -68,6 +69,8 @@ class ErrorCode(StrEnum):
     MEMBERSHIP_ONLY_PRODUCT = "MembershipOnlyProduct"
     OUT_OF_STOCK = "OutOfStock"
     INSUFFICIENT_STOCK = "InsufficientStock"
+    # A physical (goods) order was placed without a delivery address.
+    SHIPPING_ADDRESS_REQUIRED = "ShippingAddressRequired"
     ORDER_NOT_FOUND = "OrderNotFound"
     ORDER_NOT_CANCELLABLE = "OrderNotCancellable"
     ORDER_NOT_REFUNDABLE = "OrderNotRefundable"
@@ -79,6 +82,12 @@ class ErrorCode(StrEnum):
     DUPLICATE_SUBSCRIPTION = "DuplicateSubscription"
     SUBSCRIPTION_NOT_FOUND = "SubscriptionNotFound"
     SUBSCRIPTION_NOT_CANCELLABLE = "SubscriptionNotCancellable"
+    # A tier change (up/downgrade) was attempted on a non-active subscription.
+    SUBSCRIPTION_NOT_ACTIVE = "SubscriptionNotActive"
+
+    # --- rate limiting ------------------------------------------------------
+    # Emitted with a 429 (+ Retry-After) when the per-client rate is exceeded.
+    RATE_LIMITED = "RateLimited"
 
     # --- payments -----------------------------------------------------------
     PAYMENTS_UNAVAILABLE = "PaymentsUnavailable"
@@ -137,3 +146,22 @@ def register_error_handlers(api: NinjaAPI) -> None:
             {"detail": exc.message, "code": str(exc.code)},
             status=exc.status_code,
         )
+
+    @api.exception_handler(Throttled)
+    def _handle_throttled(request: HttpRequest, exc: Throttled) -> HttpResponse:
+        """Render a ninja throttle rejection as a coded 429 with ``Retry-After``.
+
+        Ninja's default handler emits a bare ``{"detail": ...}`` 429; this adds the
+        stable ``code`` the web branches on and a ``Retry-After`` header (seconds,
+        rounded up from the throttle's recommended wait) so a client backs off
+        deterministically. Registered here because ``Throttled`` subclasses
+        ``HttpError`` and MRO resolution matches this handler first.
+        """
+        response = api.create_response(
+            request,
+            {"detail": "Too many requests.", "code": ErrorCode.RATE_LIMITED.value},
+            status=429,
+        )
+        if exc.wait is not None:
+            response["Retry-After"] = str(max(1, math.ceil(exc.wait)))
+        return response

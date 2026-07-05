@@ -1,24 +1,37 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TextField, Button, Divider, OTPInput } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError, ERROR_CODES } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { sanitizeNext } from "@/lib/auth-return";
 
 /**
  * Login — 라이브 백엔드면 전화번호 OTP 2단계 재인증, 아니면 mock 즉시 로그인(오프라인·데모).
  * ※본인인증/실 크리덴셜은 게이트. OTP는 dev에서 문자 대신 고정 인증번호를 사용한다.
  */
 export default function LoginPage() {
+  // useSearchParams(?next= 복귀)는 Suspense 경계가 필요 → 콘텐츠를 감싼다.
+  return (
+    <React.Suspense>
+      <LoginContent />
+    </React.Suspense>
+  );
+}
+
+function LoginContent() {
   const { useApi } = useSession();
-  return useApi ? <OtpLogin /> : <MockLogin />;
+  const searchParams = useSearchParams();
+  // 오픈 리다이렉트 방어 — 상대경로만 허용(그 외 기본값). 로그인/가입 성공 시 이 경로로 복귀.
+  const next = sanitizeNext(searchParams.get("next"));
+  return useApi ? <OtpLogin next={next} /> : <MockLogin next={next} />;
 }
 
 /** OTP 로그인(라이브). 전화번호 → 인증번호 받기 → 인증번호 입력 → 로그인. */
-function OtpLogin() {
+function OtpLogin({ next }: { next: string }) {
   const router = useRouter();
   const { toast } = useToast();
   const { requestOtp, loginWithOtp } = useSession();
@@ -49,7 +62,7 @@ function OtpLogin() {
     setNotice(null);
     try {
       await loginWithOtp(phone.trim(), otp);
-      router.push("/discovery");
+      router.push(next);
     } catch (e) {
       // 422는 미가입·인증번호 오류가 섞여 온다 — 서버 error code로 구분한다(문자열 부분일치 제거).
       //  · code=AccountNotRegistered → 회원가입 유도(미가입 번호).
@@ -69,6 +82,12 @@ function OtpLogin() {
       setBusy(false);
     }
   };
+
+  // 회원가입 링크 — 입력한 전화번호와 복귀 경로(next)를 함께 전달(가입 후에도 원경로 복귀).
+  const signupParams = new URLSearchParams();
+  if (phone.trim()) signupParams.set("phone", phone.trim());
+  if (next !== "/discovery") signupParams.set("next", next);
+  const signupHref = signupParams.toString() ? `/signup?${signupParams}` : "/signup";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
@@ -129,7 +148,7 @@ function OtpLogin() {
           <Divider className="flex-1" />
         </div>
         <Link
-          href={`/signup${phone.trim() ? `?phone=${encodeURIComponent(phone.trim())}` : ""}`}
+          href={signupHref}
           className="text-center text-caption text-primary underline underline-offset-2 hover:opacity-80"
         >
           처음이신가요? 회원가입
@@ -143,13 +162,13 @@ function OtpLogin() {
 }
 
 /** mock 로그인(오프라인·데모) — 기존 UI 목업 유지. ※실 인증 미연동(게이트). */
-function MockLogin() {
+function MockLogin({ next }: { next: string }) {
   const router = useRouter();
   const { login } = useSession();
 
   const onLogin = () => {
     login(); // mock — 실 크리덴셜 미검증(게이트)
-    router.push("/discovery");
+    router.push(next);
   };
 
   return (

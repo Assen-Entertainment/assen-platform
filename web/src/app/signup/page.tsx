@@ -6,6 +6,7 @@ import { TextField, Button, ConsentGroup, TextLink, OTPInput } from "@/component
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { useSession } from "@/lib/session";
+import { sanitizeNext } from "@/lib/auth-return";
 
 /**
  * Signup — 라이브 백엔드면 전화번호 OTP 2단계 가입, 아니면 mock 즉시 가입(오프라인·데모).
@@ -31,6 +32,8 @@ function OtpSignup() {
   const { toast } = useToast();
   const { requestOtp, signupWithOtp } = useSession();
   const searchParams = useSearchParams();
+  // 오픈 리다이렉트 방어 — 가입 성공 시 복귀할 경로(login에서 전달).
+  const next = sanitizeNext(searchParams.get("next"));
   // login에서 넘어온 ?phone= 을 초기값으로 자동 입력(이후 사용자가 편집 가능).
   const [phone, setPhone] = React.useState(() => searchParams.get("phone") ?? "");
   const [otp, setOtp] = React.useState("");
@@ -66,7 +69,7 @@ function OtpSignup() {
         consentTerms: true,
         consentPrivacy: true,
       });
-      router.push("/discovery");
+      router.push(next);
     } catch {
       toast({ title: "가입에 실패했어요", description: "인증번호를 확인하고 다시 시도해 주세요." });
       setBusy(false);
@@ -148,13 +151,15 @@ function OtpSignup() {
 function MockSignup() {
   const router = useRouter();
   const { signup } = useSession();
+  const searchParams = useSearchParams();
+  const next = sanitizeNext(searchParams.get("next"));
   const [consent, setConsent] = React.useState<string[]>([]);
   const required = consent.includes("tos") && consent.includes("priv");
 
   const onSignup = () => {
     if (!required) return; // 필수 약관 미동의 시 진행 불가
     signup(); // mock — 실 인증 미연동(게이트)
-    router.push("/discovery");
+    router.push(next);
   };
 
   return (

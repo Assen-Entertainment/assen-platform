@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from django.test import Client, RequestFactory, override_settings
 from ninja import NinjaAPI
-from ninja.errors import HttpError
+from ninja.errors import HttpError, Throttled
 
 from apps.identity.signup_services import register_fan
 from config.errors import ApiError, ErrorCode, register_error_handlers
@@ -74,6 +74,28 @@ def test_plain_httperror_still_renders_detail_only() -> None:
     assert json.loads(response.content) == {"detail": "plain"}
 
 
+def test_throttled_handler_adds_code_and_retry_after() -> None:
+    # A ninja throttle rejection renders a coded 429 plus a Retry-After header
+    # (seconds, rounded up from the recommended wait).
+    api = NinjaAPI()
+    register_error_handlers(api)
+    response = api.on_exception(RequestFactory().post("/x"), Throttled(wait=13))
+    assert response.status_code == 429
+    assert json.loads(response.content) == {
+        "detail": "Too many requests.",
+        "code": "RateLimited",
+    }
+    assert response["Retry-After"] == "13"
+
+
+def test_throttled_handler_without_wait_omits_retry_after() -> None:
+    api = NinjaAPI()
+    register_error_handlers(api)
+    response = api.on_exception(RequestFactory().post("/x"), Throttled(wait=None))
+    assert response.status_code == 429
+    assert response.has_header("Retry-After") is False
+
+
 def test_error_code_values_are_stable() -> None:
     # These string values are the wire contract the web branches on — pin a sample so
     # a rename is caught here.
@@ -83,6 +105,9 @@ def test_error_code_values_are_stable() -> None:
     assert ErrorCode.DUPLICATE_SUBSCRIPTION.value == "DuplicateSubscription"
     assert ErrorCode.OPEN_REFUND_EXISTS.value == "OpenRefundExists"
     assert str(ErrorCode.PRODUCT_NOT_ORDERABLE) == "ProductNotOrderable"
+    assert ErrorCode.SHIPPING_ADDRESS_REQUIRED.value == "ShippingAddressRequired"
+    assert ErrorCode.SUBSCRIPTION_NOT_ACTIVE.value == "SubscriptionNotActive"
+    assert ErrorCode.RATE_LIMITED.value == "RateLimited"
 
 
 # --- critical login branch (integration) -------------------------------------

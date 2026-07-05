@@ -180,6 +180,13 @@ _PII_SCRUB_KEYS: frozenset[str] = frozenset(
         "cvc",
         "cvv",
         "contact",
+        # Delivery-address PII (goods order shipping snapshot, F-D) — a name /
+        # postal code / street line must never leave the process in a Sentry event.
+        "recipient_name",
+        "postal_code",
+        "address1",
+        "address2",
+        "address",
     }
 )
 
@@ -357,5 +364,9 @@ def init_sentry() -> None:
         environment=os.environ.get("DJANGO_ENV", "production"),
         traces_sample_rate=traces_sample_rate,
         send_default_pii=False,
+        # Never capture request bodies — a goods-order payload carries the delivery
+        # address (name / phone / postal / street). Blocking body capture wholesale
+        # is the "zero PII to Sentry" backstop above the before_send scrubber (F-D).
+        max_request_body_size="never",
         before_send=_scrub_event,
     )

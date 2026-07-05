@@ -23,7 +23,10 @@ import {
   WritingIcon,
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
-import type { Creator, Product } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
+import { Spinner } from "@/components/ui";
+import type { Creator, Page, Product } from "@/lib/api";
 
 const CATS = [
   { label: "전체", value: "all" },
@@ -53,16 +56,27 @@ function creatorMeta(c: Creator): string {
   return `${c.category ?? ""} · 팔로워 ${followers(c.followers)}`;
 }
 
-export function DiscoveryView({ creators, products }: { creators: Creator[]; products: Product[] }) {
+export function DiscoveryView({ creators, products }: { creators: Page<Creator>; products: Page<Product> }) {
   const router = useRouter();
+  const { user } = useSession();
   const [cat, setCat] = React.useState("all");
   const creatorsQ = useCreators(creators);
   const productsQ = useProducts(undefined, products);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = creatorsQ;
-  const cList = creatorsQ.data ?? creators;
-  const pList = productsQ.data ?? products;
+  const cList = creatorsQ.data ?? creators.items;
+  const pList = productsQ.data ?? products.items;
   const isError = (creatorsQ.isError && !creatorsQ.data) || (productsQ.isError && !productsQ.data);
   const shown = cat === "all" ? cList : cList.filter((c) => c.category === cat);
+
+  // 무한 스크롤(전체 둘러보기 그리드) — sentinel 근접 시 크리에이터 다음 페이지 자동 로드.
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const canLoadMore = hasNextPage && !isFetchingNextPage;
+  useInfiniteScroll(sentinelRef, {
+    enabled: canLoadMore,
+    onLoadMore: () => {
+      if (canLoadMore) fetchNextPage();
+    },
+  });
 
   // 선반용 파생 목록 — 인기(팔로워 desc) / 신규(역순) / 추천 상품.
   const popular = React.useMemo(() => [...cList].sort((a, b) => b.followers - a.followers), [cList]);
@@ -112,10 +126,10 @@ export function DiscoveryView({ creators, products }: { creators: Creator[]; pro
         ))}
       </Shelf>
 
-      {/* 추천 상품 선반 — 추천 근거 라벨(#9). */}
+      {/* 추천 상품 선반 — 개인화 카피는 로그인 시에만. 비로그인은 일반 카피(#9·P0 비로그인 동선). */}
       <Shelf
-        title="회원님을 위한 추천 상품"
-        description="팔로우한 취향을 바탕으로 골랐어요"
+        title={user ? "회원님을 위한 추천 상품" : "지금 주목받는 상품"}
+        description={user ? "팔로우한 취향을 바탕으로 골랐어요" : "많은 팬이 함께 보고 있는 상품이에요"}
         action={
           <Link href="/store" className="text-body-s text-primary hover:underline">
             더보기
@@ -164,11 +178,13 @@ export function DiscoveryView({ creators, products }: { creators: Creator[]; pro
             />
           ))}
         </div>
-        {/* 더보기 — 커서 다음 페이지가 있을 때만(무한 쿼리). 카테고리 필터는 로드된 전체에 적용. */}
+        {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
         {hasNextPage ? (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+            {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
             <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+              {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
             </Button>
           </div>
         ) : null}

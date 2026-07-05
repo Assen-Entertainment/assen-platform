@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
-import { getMembershipTiers } from "@/lib/api";
+import { getSubscriptions } from "@/lib/api";
 import { MembershipView } from "./membership-view";
 
 export const metadata: Metadata = {
   title: "멤버십",
-  description: "크리에이터를 정기 후원하고 전용 혜택을 받는 멤버십 티어를 둘러보세요.",
-  openGraph: { title: "멤버십 · Assen", description: "크리에이터를 정기 후원하고 전용 혜택을 받아보세요.", type: "website" },
+  description: "내 멤버십을 관리하고, 크리에이터를 둘러보며 새 멤버십에 가입해 보세요.",
+  openGraph: { title: "멤버십 · Assen", description: "내 멤버십을 관리하고 크리에이터를 둘러보세요.", type: "website" },
 };
 
-/** Membership — 멤버십 티어 둘러보기. 서버 fetch(tiers) → 클라 뷰(구독 CTA→체크아웃). */
+/**
+ * Membership — "내 멤버십 허브". 서버 fetch(내 활성 구독) → 클라 뷰(관리 + 디스커버리 유도).
+ * 구독은 항상 크리에이터 컨텍스트(프로필 멤버십 탭)에서만 시작 — 전역 요금표 직접 구독 동선 제거.
+ */
 export default async function MembershipPage() {
-  const tiers = await getMembershipTiers();
-  return <MembershipView tiers={tiers} />;
+  const subscriptions = await getSubscriptions();
+  return <MembershipView subscriptions={subscriptions} />;
 }

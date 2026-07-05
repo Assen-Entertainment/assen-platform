@@ -15,6 +15,7 @@ import {
   getProductsPage,
   getMembershipTiers,
   getPostsPage,
+  getStudioPostsPage,
   getPost,
   getCommentsPage,
   getFeedPage,
@@ -36,10 +37,14 @@ import {
   apiRequestRefund,
   apiSubscribe,
   apiCancelSubscription,
+  apiChangeSubscriptionTier,
   apiMarkNotificationRead,
   apiMarkAllNotificationsRead,
   apiReport,
   apiPublishPost,
+  apiUpdatePost,
+  apiDeletePost,
+  type PostUpdate,
   apiStartVerify,
   apiConfirmVerify,
   apiUpdateMe,
@@ -63,7 +68,7 @@ import {
   type StudioTierUpdate,
   type StudioProfileUpdate,
 } from "./index";
-import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, BlockedCreator, StudioStats } from "./types";
+import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, ShippingAddress, BlockedCreator, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
 import { emitNotificationRead, emitAllNotificationsRead } from "./notification-events";
 
@@ -80,9 +85,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 type ListCache<T> = T[] | InfiniteData<Page<T>, string | undefined>;
 
-/** SSR 배열 → 무한 쿼리 initialData(첫 페이지 시드). nextCursor는 마운트 refetch가 채운다. */
-function seedInfinite<T>(items?: T[]): InfiniteData<Page<T>, string | undefined> | undefined {
-  return items ? { pages: [{ items }], pageParams: [undefined] } : undefined;
+/**
+ * SSR Page 시드 → 무한 쿼리 initialData(첫 페이지). Page형(items+nextCursor)이라 nextCursor가
+ * 처음부터 있어 hasNextPage가 마운트 즉시 정확 → initialDataUpdatedAt:0 없이도 이중 페치 없이
+ * 더보기 노출(신선 60s 캐시 존중). mock 폴백은 단일 페이지(nextCursor 없음 → hasNextPage=false).
+ */
+function seedInfinite<T>(page?: Page<T>): InfiniteData<Page<T>, string | undefined> | undefined {
+  return page ? { pages: [page], pageParams: [undefined] } : undefined;
 }
 
 /** 무한 페이지 → 평탄화 배열(뷰는 배열만 소비 — data 접근부 무변경). */
@@ -146,6 +155,9 @@ export const qk = {
   product: (id: string) => ["product", id] as const,
   tiers: (id?: string) => ["tiers", id ?? "all"] as const,
   posts: (id?: string) => ["posts", id ?? "all"] as const,
+  // 스튜디오 오너 포스트 — 공용 ["posts"] 네임스페이스 하위 키. useUpdatePost/useDeletePost의
+  // 낙관 갱신·무효화(["posts"] prefix)가 오너 목록에도 자동 반영되도록 같은 prefix를 공유한다.
+  studioPosts: ["posts", "studio"] as const,
   feed: ["feed"] as const,
   post: (id: string) => ["post", id] as const,
   comments: (postId: string) => ["comments", postId] as const,
@@ -164,17 +176,15 @@ export const qk = {
 /**
  * 크리에이터 목록 — 커서 무한 쿼리(디스커버리). select로 평탄화해 소비처는 배열만 보고
  * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
- * SSR 배열 시드는 initialDataUpdatedAt:0으로 즉시 stale → 마운트 refetch가 커서 포함 첫 페이지로
- * 교체(전역 staleTime 60s여도 21번째+ 도달 가능).
+ * SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
  */
-export function useCreators(initialData?: Creator[]) {
+export function useCreators(initialData?: Page<Creator>) {
   return useInfiniteQuery({
     queryKey: qk.creators,
     queryFn: ({ pageParam }) => getCreatorsPage(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -185,16 +195,14 @@ export function useCreator(handle: string, initialData?: Creator) {
  * 상품 목록 — 커서 무한 쿼리(스토어·디스커버리). select로 평탄화해 뷰는 배열만 소비하고
  * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
  */
-export function useProducts(creatorId?: string, initialData?: Product[]) {
+export function useProducts(creatorId?: string, initialData?: Page<Product>) {
   return useInfiniteQuery({
     queryKey: qk.products(creatorId),
     queryFn: ({ pageParam }) => getProductsPage(creatorId, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
+    // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
-    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
-    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -202,33 +210,46 @@ export function useMembershipTiers(id?: string) {
   return useQuery({ queryKey: qk.tiers(id), queryFn: () => getMembershipTiers(id) });
 }
 /** 크리에이터 포스트 — 커서 무한 쿼리. select 평탄화(뷰 무변경). mock=단일 페이지. */
-export function usePosts(id?: string, initialData?: Post[]) {
+export function usePosts(id?: string, initialData?: Page<Post>) {
   return useInfiniteQuery({
     queryKey: qk.posts(id),
     queryFn: ({ pageParam }) => getPostsPage(id, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
+    // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
-    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
-    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
 /**
- * 피드 — B2 `/feed` 커서 무한 쿼리(B3 개인화 배선 지점). 서버 initialData 하이드레이션 +
- * 마운트 refetch로 첫 페이지 nextCursor 확보 → 더보기. mock=단일 페이지.
+ * 스튜디오 오너 포스트 — GET /studio/posts(오너 스코프, 소비자 게이트 미적용) 커서 무한 쿼리.
+ * 소비자용 usePosts(creatorId)의 fan_id 오용(라이브 빈 목록·오너 19+ 미표시) 대체 —
+ * 오너가 자신의 전체 포스트(draft·19+ 포함)를 본다. 쿼리 키는 ["posts","studio"](공용 prefix)라
+ * useUpdatePost/useDeletePost의 낙관 갱신·무효화가 자동 반영된다. mock=데모 오너 c1 목록.
+ * 403(OwnerRequired, 비크리에이터)은 retry 없이 error로 노출 → 페이지가 방어 안내 렌더.
  */
-export function useFeed(initialData?: Post[]) {
+export function useStudioPosts() {
+  return useInfiniteQuery({
+    queryKey: qk.studioPosts,
+    queryFn: ({ pageParam }) => getStudioPostsPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    select: flattenPages,
+    retry: false,
+  });
+}
+/**
+ * 피드 — B2 `/feed` 커서 무한 쿼리(B3 개인화 배선 지점). 서버 Page initialData 하이드레이션으로
+ * 마운트 즉시 nextCursor 확보 → 이중 페치 없이 더보기. mock=단일 페이지.
+ */
+export function useFeed(initialData?: Page<Post>) {
   return useInfiniteQuery({
     queryKey: qk.feed,
     queryFn: ({ pageParam }) => getFeedPage(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
+    // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
-    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
-    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -245,16 +266,14 @@ export function usePost(id: string, initialData?: Post) {
   return useQuery({ queryKey: qk.post(id), queryFn: () => getPost(id), initialData });
 }
 /** 댓글 — 커서 무한 쿼리(포스트 상세). select 평탄화(뷰 무변경). mock=단일 페이지. */
-export function useComments(postId: string, initialData?: Comment[]) {
+export function useComments(postId: string, initialData?: Page<Comment>) {
   return useInfiniteQuery({
     queryKey: qk.comments(postId),
     queryFn: ({ pageParam }) => getCommentsPage(postId, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
+    // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
-    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
-    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -263,16 +282,14 @@ export function useProduct(id: string, initialData?: Product) {
   return useQuery({ queryKey: qk.product(id), queryFn: () => getProduct(id), initialData });
 }
 /** 주문 목록 — 커서 무한 쿼리. select 평탄화. 서버 initialData 하이드레이션. mock=단일 페이지. */
-export function useOrders(initialData?: Order[]) {
+export function useOrders(initialData?: Page<Order>) {
   return useInfiniteQuery({
     queryKey: qk.orders,
     queryFn: ({ pageParam }) => getOrdersPage(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
+    // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
-    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
-    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -281,16 +298,14 @@ export function useOrder(id: string, initialData?: Order) {
   return useQuery({ queryKey: qk.order(id), queryFn: () => getOrder(id), initialData });
 }
 /** 알림 목록 — 커서 무한 쿼리. select 평탄화. 서버 initialData 하이드레이션. mock=단일 페이지. */
-export function useNotifications(initialData?: Notification[]) {
+export function useNotifications(initialData?: Page<Notification>) {
   return useInfiniteQuery({
     queryKey: qk.notifications,
     queryFn: ({ pageParam }) => getNotificationsPage(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
+    // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
-    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
-    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
-    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -442,11 +457,11 @@ export function useAddComment(postId: string) {
   });
 }
 
-/** 주문 생성(mock 결제 확정 — 실 PG 아님). 반환 Order(USE_API)/null(mock). */
+/** 주문 생성(mock 결제 확정 — 실 PG 아님). 배송 상품이면 shipping(배송지) 동봉. 반환 Order(USE_API)/null(mock). */
 export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { productId: string; qty: number; option?: string }) => {
+    mutationFn: async (input: { productId: string; qty: number; option?: string; shipping?: ShippingAddress }) => {
       if (USE_API) return apiCreateOrder(input);
       await sleep(400);
       return null;
@@ -570,6 +585,48 @@ export function useCancelSubscription() {
     },
     onSettled: () => {
       if (USE_API) qc.invalidateQueries({ queryKey: qk.subscriptions });
+    },
+  });
+}
+
+/**
+ * 구독 티어 전환(업/다운그레이드) — 낙관적으로 해당 구독의 tierId 즉시 반영("구독 중" 배지 이동),
+ * 성공 시 서버 SubscriptionOut(가격·티어명 정정)로 교체. 실패 시 롤백.
+ * 티어 목록(qk.tiers)도 무효화 — 프로필 멤버십 탭이 최신 상태를 반영하도록.
+ */
+export function useChangeSubscriptionTier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; tierId: string }) => {
+      if (USE_API) return apiChangeSubscriptionTier(input.id, input.tierId);
+      await sleep(300);
+      return input;
+    },
+    onMutate: async ({ id, tierId }: { id: string; tierId: string }) => {
+      await qc.cancelQueries({ queryKey: qk.subscriptions });
+      const prev = qc.getQueryData<Subscription[]>(qk.subscriptions);
+      qc.setQueryData<Subscription[] | undefined>(qk.subscriptions, (list) =>
+        list?.map((s) => (s.id === id ? { ...s, tierId } : s)),
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(qk.subscriptions, ctx.prev);
+    },
+    onSuccess: (data) => {
+      // 실 경로: 서버 Subscription(가격·티어명 반영)으로 해당 구독 전체 교체. mock({id,tierId})은 낙관값 유지.
+      if (USE_API && typeof data === "object" && "tierName" in data) {
+        const sub = data as Subscription;
+        qc.setQueryData<Subscription[] | undefined>(qk.subscriptions, (list) =>
+          list?.map((s) => (s.id === sub.id ? sub : s)),
+        );
+      }
+    },
+    onSettled: () => {
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: qk.subscriptions });
+        qc.invalidateQueries({ queryKey: ["tiers"] });
+      }
     },
   });
 }
@@ -772,6 +829,80 @@ export function usePublishPost() {
       if (USE_API) {
         qc.invalidateQueries({ queryKey: qk.feed });
         qc.invalidateQueries({ queryKey: ["posts"] });
+      }
+    },
+  });
+}
+
+/**
+ * 포스트 수정(오너 — PATCH /posts/{id}). 성공 시 포스트 목록(["posts", …])·피드·상세 캐시의
+ * 해당 항목을 갱신. 실 경로는 서버 Post로 전체 교체, mock은 제공 필드만 병합. 비오너/미지 id는 404.
+ */
+export function useUpdatePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string } & PostUpdate) => {
+      const { id, ...patch } = input;
+      if (USE_API) return apiUpdatePost(id, patch);
+      await sleep(250);
+      return { id, patch };
+    },
+    onSuccess: (result) => {
+      // mock은 { id, patch }(patch 키로 판별) → 제공 필드만 병합. 실 경로는 Post 전체 교체.
+      const apply = (p: Post): Post => {
+        if ("patch" in result) {
+          if (p.id !== result.id) return p;
+          const { patch } = result;
+          return {
+            ...p,
+            ...(patch.body !== undefined ? { body: patch.body } : {}),
+            ...(patch.mediaUrl !== undefined ? { mediaUrl: patch.mediaUrl } : {}),
+            ...(patch.isAdult !== undefined ? { isAdult: patch.isAdult } : {}),
+          };
+        }
+        return p.id === result.id ? result : p;
+      };
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => mapListCache(d, apply));
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => mapListCache(d, apply));
+      qc.setQueryData<Post | undefined>(qk.post(result.id), (p) => (p ? apply(p) : p));
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: ["posts"] });
+        qc.invalidateQueries({ queryKey: qk.feed });
+      }
+    },
+  });
+}
+
+/**
+ * 포스트 삭제(오너 — DELETE /posts/{id}) — 낙관적으로 포스트 목록·피드에서 즉시 제거 후 실패 시 롤백.
+ * 비오너/미지 id는 서버 404(no-leak). USE_API면 성공 시 관련 목록 무효화.
+ */
+export function useDeletePost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (USE_API) await apiDeletePost(id);
+      else await sleep(200);
+      return id;
+    },
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ["posts"] });
+      await qc.cancelQueries({ queryKey: qk.feed });
+      const prevLists = qc.getQueriesData<ListCache<Post>>({ queryKey: ["posts"] });
+      const prevFeed = qc.getQueryData<ListCache<Post>>(qk.feed);
+      const keep = (p: Post) => p.id !== id;
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => filterListCache(d, keep));
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => filterListCache(d, keep));
+      return { prevLists, prevFeed };
+    },
+    onError: (_e, _v, ctx) => {
+      ctx?.prevLists?.forEach(([key, data]) => qc.setQueryData(key, data));
+      if (ctx?.prevFeed) qc.setQueryData(qk.feed, ctx.prevFeed);
+    },
+    onSettled: () => {
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: ["posts"] });
+        qc.invalidateQueries({ queryKey: qk.feed });
       }
     },
   });

@@ -1,18 +1,17 @@
 import * as React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider, useInfiniteQuery } from "@tanstack/react-query";
-import type { Page } from "./index";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Post, Creator } from "./types";
 
 /**
- * M1·F6 회귀 방지 — SSR 배열 시드는 nextCursor가 없어 hasNextPage=false이고, "마운트 refetch가
- * 커서를 채운다"는 설계가 전역 staleTime(60s)에 막혀 더보기가 영구 미노출되던 가짜 green을 해소한다.
- * 실 훅(useFeed/useCreators)이 프로덕션과 동일한 staleTime:60_000 QueryClient에서 initialDataUpdatedAt:0
- * 덕분에 마운트 refetch로 커서 포함 첫 페이지를 받아 hasNextPage=true(더보기 노출)가 되는지 단언한다.
+ * 이중 페치 제거(R5-W2D) — SSR가 Page형(items+nextCursor) 시드를 주면 nextCursor가 처음부터 있어
+ * hasNextPage가 마운트 즉시 정확하고, initialDataUpdatedAt:0 없이도 전역 staleTime(60s)이 시드를
+ * 신선으로 간주해 마운트 refetch(이중 페치)가 발생하지 않는다. 구 계약(배열 시드 → 강제 stale →
+ * 마운트마다 첫 페이지 재요청)의 회귀를 이 테스트가 방지한다.
  */
 
-// 실 훅이 리페치 시 커서 포함 첫 페이지를 받도록 fetcher를 모킹(서버 페이지네이션 시뮬).
+// fetcher가 호출되면 안 됨을 단언하기 위해 mock으로 감지(호출 시 커서 페이지 반환).
 const { getFeedPageMock, getCreatorsPageMock } = vi.hoisted(() => ({
   getFeedPageMock: vi.fn(),
   getCreatorsPageMock: vi.fn(),
@@ -24,7 +23,7 @@ vi.mock("./index", async (importOriginal) => {
 
 import { useFeed, useCreators } from "./queries";
 
-/** 프로덕션 QueryProvider와 동일한 기본 옵션(staleTime 60s)의 래퍼 — 가짜 green의 핵심 조건. */
+/** 프로덕션 QueryProvider와 동일한 기본 옵션(staleTime 60s)의 래퍼 — 이중 페치 판정의 핵심 조건. */
 function prodWrapper() {
   const qc = new QueryClient({
     defaultOptions: { queries: { staleTime: 60_000, refetchOnWindowFocus: false } },
@@ -42,48 +41,52 @@ beforeEach(() => {
   getCreatorsPageMock.mockReset();
 });
 
-describe("M1: SSR 시드 무한 리스트 마운트 refetch(프로덕션 staleTime 60s)", () => {
-  it("useFeed: 시드는 hasNextPage=false지만 마운트 refetch가 커서 페이지로 교체해 더보기가 노출된다", async () => {
+describe("W2D: Page 시드 → 이중 페치 없이 hasNextPage 정확", () => {
+  it("useFeed: nextCursor 포함 Page 시드는 마운트 즉시 hasNextPage=true이고 mount refetch가 없다", async () => {
     getFeedPageMock.mockResolvedValue({ items: [post("po1")], nextCursor: "cursor-2" });
-    const { result } = renderHook(() => useFeed([post("po1")]), { wrapper: prodWrapper() });
-    // 시드 즉시 렌더(로딩 플래시 없음) — 커서가 없어 더보기 미노출.
+    const { result } = renderHook(() => useFeed({ items: [post("po1")], nextCursor: "cursor-1" }), {
+      wrapper: prodWrapper(),
+    });
+    // 시드 즉시 렌더 + nextCursor가 있어 더보기 노출(마운트 refetch를 기다리지 않는다).
     expect(result.current.data).toEqual([post("po1")]);
-    expect(result.current.hasNextPage).toBe(false);
-    // initialDataUpdatedAt:0 → 즉시 stale → staleTime 60s에도 마운트 refetch가 nextCursor를 채운다.
-    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
-    expect(getFeedPageMock).toHaveBeenCalled();
+    expect(result.current.hasNextPage).toBe(true);
+    // 신선 60s 캐시 존중 → fetcher 미호출(이중 페치 소멸).
+    await new Promise((r) => setTimeout(r, 60));
+    expect(getFeedPageMock).not.toHaveBeenCalled();
+    expect(result.current.hasNextPage).toBe(true);
   });
 
-  it("가짜 green 가드: initialDataUpdatedAt 없이 staleTime 60s면 마운트 refetch가 없어 hasNextPage=false로 고착된다(구 버그 재현)", async () => {
-    const queryFn = vi.fn().mockResolvedValue({ items: [post("x")], nextCursor: "c2" });
-    const { result } = renderHook(
-      () =>
-        useInfiniteQuery({
-          queryKey: ["m1-fake-green-guard"],
-          queryFn,
-          initialPageParam: undefined as string | undefined,
-          getNextPageParam: (last: Page<Post>) => last.nextCursor ?? undefined,
-          initialData: { pages: [{ items: [post("seed")] }], pageParams: [undefined] },
-          // ★initialDataUpdatedAt 부재 → 시드가 fresh로 간주 → 마운트 refetch 없음.
-          select: (d) => d.pages.flatMap((p) => p.items),
-        }),
-      { wrapper: prodWrapper() },
-    );
-    // 시드가 fresh → refetch 미발생 → 커서 못 채움 → 더보기 영구 미노출.
-    await new Promise((r) => setTimeout(r, 60));
-    expect(queryFn).not.toHaveBeenCalled();
+  it("useFeed: mock 단일 페이지 시드(nextCursor 없음)는 hasNextPage=false이고 refetch도 없다", async () => {
+    const { result } = renderHook(() => useFeed({ items: [post("po1")] }), { wrapper: prodWrapper() });
+    expect(result.current.data).toEqual([post("po1")]);
     expect(result.current.hasNextPage).toBe(false);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(getFeedPageMock).not.toHaveBeenCalled();
+  });
+
+  it("useCreators: nextCursor 포함 Page 시드는 마운트 즉시 hasNextPage=true이고 mount refetch가 없다", async () => {
+    getCreatorsPageMock.mockResolvedValue({ items: [creator("c1")], nextCursor: "cursor-2" });
+    const { result } = renderHook(() => useCreators({ items: [creator("c1")], nextCursor: "cursor-1" }), {
+      wrapper: prodWrapper(),
+    });
+    // select 평탄화 → 소비처(discovery-view)는 Creator[] 형태 그대로 소비(무변경).
+    expect(result.current.data).toEqual([creator("c1")]);
+    expect(result.current.hasNextPage).toBe(true);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(getCreatorsPageMock).not.toHaveBeenCalled();
   });
 });
 
-describe("F6: useCreators 무한 쿼리(디스커버리 21번째+ 도달)", () => {
-  it("SSR 시드는 더보기 미노출이지만 마운트 refetch가 커서 페이지로 교체해 더보기가 노출된다", async () => {
-    getCreatorsPageMock.mockResolvedValue({ items: [creator("c1")], nextCursor: "cursor-2" });
-    const { result } = renderHook(() => useCreators([creator("c1")]), { wrapper: prodWrapper() });
-    // select 평탄화 → 소비처(discovery-view)는 Creator[] 형태 그대로 소비(무변경).
-    expect(result.current.data).toEqual([creator("c1")]);
+describe("W2D: 시드 소진 후 fetchNextPage는 정상 동작(커서 이어받기)", () => {
+  it("useFeed: 시드의 nextCursor로 다음 페이지를 이어 로드하고 커서 소진 시 종료한다", async () => {
+    getFeedPageMock.mockResolvedValue({ items: [post("po2")] }); // 마지막 페이지(nextCursor 없음)
+    const { result } = renderHook(() => useFeed({ items: [post("po1")], nextCursor: "cursor-1" }), {
+      wrapper: prodWrapper(),
+    });
+    expect(result.current.hasNextPage).toBe(true);
+    await result.current.fetchNextPage();
+    await waitFor(() => expect(result.current.data).toEqual([post("po1"), post("po2")]));
     expect(result.current.hasNextPage).toBe(false);
-    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
-    expect(getCreatorsPageMock).toHaveBeenCalled();
+    expect(getFeedPageMock).toHaveBeenCalledWith("cursor-1");
   });
 });
