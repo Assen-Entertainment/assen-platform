@@ -20,6 +20,7 @@ NOTE (differences from the web mock):
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from django.core.management.base import BaseCommand
@@ -103,6 +104,16 @@ _DEMO_FAN_NICKNAME = "데모팬"
 _DEMO_CREATOR_PHONE = "010-0000-0002"
 _DEMO_CREATOR_NICKNAME = "데모크리에이터"
 
+# 시드 엔티티 id는 **재시드 간 결정적**(uuid5)이어야 한다 — 웹 시각 회귀(e2e/visual.spec)의
+# seed 그라디언트가 엔티티 id에서 파생되므로(web/src/lib/placeholder gradientStyle), id가
+# 재시드마다 바뀌면 스크린샷 베이스라인이 흔들린다. 자연키에서 파생해 멱등성과도 일관.
+_SEED_NS = uuid.uuid5(uuid.NAMESPACE_URL, "assen:seed_demo")
+
+
+def _seed_id(kind: str, key: str) -> uuid.UUID:
+    """Deterministic per-entity UUID derived from the entity's natural key."""
+    return uuid.uuid5(_SEED_NS, f"{kind}:{key}")
+
 
 class Command(BaseCommand):
     """Populate demo creators, owners, posts, comments, products, tiers, and a fan."""
@@ -117,6 +128,7 @@ class Command(BaseCommand):
             creator, _ = Creator.objects.get_or_create(
                 handle=handle,
                 defaults={
+                    "id": _seed_id("creator", handle),
                     "name": name,
                     "category": category,
                     "verified": verified,
@@ -136,7 +148,11 @@ class Command(BaseCommand):
 
         posts: dict[str, Post] = {}
         for handle, body in _POSTS:
-            post, _ = Post.objects.get_or_create(creator=creators[handle], body=body)
+            post, _ = Post.objects.get_or_create(
+                creator=creators[handle],
+                body=body,
+                defaults={"id": _seed_id("post", f"{handle}:{body}")},
+            )
             posts[body] = post
 
         for post_body, author_name, body in _COMMENTS:
@@ -152,6 +168,7 @@ class Command(BaseCommand):
                 creator=creators[handle] if handle else None,
                 title=title,
                 defaults={
+                    "id": _seed_id("product", f"{handle}:{title}"),
                     "type": type_,
                     "price": price,
                     "meta": meta,
@@ -172,6 +189,7 @@ class Command(BaseCommand):
                 creator=stellar,
                 name=name,
                 defaults={
+                    "id": _seed_id("tier", f"stellar:{name}"),
                     "price": price,
                     "period": period,
                     "benefits": benefits,
