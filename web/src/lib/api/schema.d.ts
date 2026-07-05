@@ -498,6 +498,13 @@ export interface paths {
         /**
          * Unlike Post
          * @description Unlike a post; idempotent (unliking a non-liked post is a no-op).
+         *
+         *     Retraction is exempt from the personal-block gate (F4): unliking is not a *new*
+         *     interaction against the creator but cleanup of the fan's own existing like, so a
+         *     fan who blocked the creator after liking can still withdraw that like (standard
+         *     block UX — you can always remove your own trace). New interactions
+         *     (``like``/comment/order) stay refused while blocked; only the 19+ read funnel
+         *     still applies here, so a gated adult post 404s.
          */
         delete: operations["apps_content_api_unlike_post"];
         options?: never;
@@ -6513,15 +6520,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InteractionBlockedError"];
                 };
             };
         };

@@ -6,9 +6,11 @@ Three fail-safe, gate-driven concerns live here (R4-W2, ASS-242/B8):
   and test are never touched and production only reports when explicitly wired.
   A ``before_send`` scrubber (:func:`_scrub_event`) redacts PII / secrets / raw
   report narrative before anything leaves the process — both by *key* (reusing the
-  forbidden key list the event pipeline enforces, ``FORBIDDEN_SAFETY_PROPERTY_KEYS``)
-  and by *value* (regex over string leaves, so a phone number / token embedded in an
-  exception message or ``request.url`` is caught even under a benign key).
+  forbidden key list the event pipeline enforces, ``FORBIDDEN_SAFETY_PROPERTY_KEYS``,
+  minus Sentry-legitimate text keys such as ``message`` that are the error signal
+  itself) and by *value* (regex over string leaves, so a phone number / token
+  embedded in an exception / ``message`` / ``request.url`` is caught even under a
+  benign key).
 - **Request-id log correlation** — a :class:`contextvars.ContextVar` bound by
   ``RequestIDMiddleware`` and read back by :class:`RequestIDLogFilter`, so every
   log line can be traced to the request that produced it.
@@ -234,20 +236,35 @@ def _scrub_text(value: str) -> str:
     return _PHONE_VALUE_RE.sub(_REDACTED, value)
 
 
+# Keys that name a *forbidden narrative* in the event-log domain (so
+# FORBIDDEN_SAFETY_PROPERTY_KEYS blocks them there) but a *legitimate display text*
+# in a Sentry event: a Sentry ``message`` / logentry is the primary error signal,
+# not PII. These are excluded from the Sentry *key* scrub so the text is not blanked
+# wholesale — :func:`_scrub_text` (value-based) still runs on the value, so an
+# embedded phone / Bearer / ``token=`` is redacted in place. The event-log message
+# ban is a domain rule; Sentry's message is a legitimate signal, so here it is
+# protected by value scrubbing only.
+_SENTRY_LEGIT_TEXT_KEYS: frozenset[str] = frozenset({"message"})
+
+
 @lru_cache(maxsize=1)
 def _forbidden_keys() -> frozenset[str]:
     """Return the lowercased set of keys the scrubber redacts on exact match.
 
     Reuses the event pipeline's ``FORBIDDEN_SAFETY_PROPERTY_KEYS`` (raw report
-    narrative, contact, card_number, …) so the two enforcement points cannot drift.
-    Imported lazily — the app registry is not ready when a settings module first
-    imports this file.
+    narrative, contact, card_number, …) so the two enforcement points cannot drift,
+    then subtracts :data:`_SENTRY_LEGIT_TEXT_KEYS` — keys (``message``) that are a
+    banned narrative in the event-log domain but a legitimate Sentry signal, which
+    the value pass (:func:`_scrub_text`) protects instead of blanking. Imported
+    lazily — the app registry is not ready when a settings module first imports this
+    file.
     """
     try:
         from apps.event_log.events import FORBIDDEN_SAFETY_PROPERTY_KEYS
     except Exception:  # pragma: no cover - defensive; app import must never gate scrubbing
-        return _PII_SCRUB_KEYS
-    return frozenset(key.lower() for key in FORBIDDEN_SAFETY_PROPERTY_KEYS) | _PII_SCRUB_KEYS
+        return _PII_SCRUB_KEYS - _SENTRY_LEGIT_TEXT_KEYS
+    combined = frozenset(key.lower() for key in FORBIDDEN_SAFETY_PROPERTY_KEYS) | _PII_SCRUB_KEYS
+    return combined - _SENTRY_LEGIT_TEXT_KEYS
 
 
 def _is_sensitive_key(key: str, forbidden: frozenset[str]) -> bool:

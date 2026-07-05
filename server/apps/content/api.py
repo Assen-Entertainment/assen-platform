@@ -318,25 +318,27 @@ def like_post(
 
 @posts_router.delete(
     "/{post_id}/like",
-    response={200: LikeOut, 404: ErrorOut, 422: InteractionBlockedError},
+    response={200: LikeOut, 404: ErrorOut},
     auth=fan_auth,
     throttle=user_write_throttle("60/min"),
 )
 def unlike_post(
     request: HttpRequest, post_id: uuid.UUID
-) -> tuple[int, LikeOut | ErrorOut | InteractionBlockedError]:
-    """Unlike a post; idempotent (unliking a non-liked post is a no-op)."""
+) -> tuple[int, LikeOut | ErrorOut]:
+    """Unlike a post; idempotent (unliking a non-liked post is a no-op).
+
+    Retraction is exempt from the personal-block gate (F4): unliking is not a *new*
+    interaction against the creator but cleanup of the fan's own existing like, so a
+    fan who blocked the creator after liking can still withdraw that like (standard
+    block UX — you can always remove your own trace). New interactions
+    (``like``/comment/order) stay refused while blocked; only the 19+ read funnel
+    still applies here, so a gated adult post 404s.
+    """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     # 19+ gate (same funnel as reads): a gated adult post 404s here too.
     post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
-    # Personal-block consistency (F4): no new interaction (incl. toggling like state)
-    # against a blocked creator's content. One set query.
-    if post.creator_id in blocked_creator_ids(account):
-        return 422, InteractionBlockedError(
-            detail=_INTERACTION_BLOCKED_DETAIL, code=ErrorCode.INTERACTION_BLOCKED.value
-        )
     Like.objects.filter(post=post, user=account).delete()
     return 200, LikeOut(liked=False, like_count=Like.objects.filter(post=post).count())
 

@@ -89,7 +89,9 @@ def test_scrub_event_redacts_pii_secrets_and_forbidden_keys() -> None:
             },
             "data": {
                 "phone": "010-1234-5678",
-                "message": "raw report narrative",  # FORBIDDEN_SAFETY_PROPERTY_KEYS
+                # ``message`` is banned in the event-log domain but a legitimate
+                # Sentry signal — it must NOT be key-blanked (R-A regression guard).
+                "message": "raw report narrative",
                 "note": "keep me",
             },
         },
@@ -106,8 +108,11 @@ def test_scrub_event_redacts_pii_secrets_and_forbidden_keys() -> None:
     assert event["request"]["headers"]["Authorization"] == "[Filtered]"
     assert event["request"]["data"]["phone"] == "[Filtered]"
     assert event["extra"]["access_token"] == "[Filtered]"
-    # Reused forbidden-safety keys → redacted (even nested inside a list).
-    assert event["request"]["data"]["message"] == "[Filtered]"
+    # A Sentry ``message`` is a legitimate signal (not a forbidden narrative here):
+    # it survives the key scrub. Value-scrub still runs, but this text carries no PII
+    # so it is preserved verbatim — blanking it would destroy observability signal.
+    assert event["request"]["data"]["message"] == "raw report narrative"
+    # A genuinely forbidden key (narrative) is still blanked, even nested in a list.
     assert event["breadcrumbs"][0]["data"]["narrative"] == "[Filtered]"
     # Benign fields untouched.
     assert event["request"]["headers"]["Content-Type"] == "application/json"
@@ -157,6 +162,35 @@ def test_scrub_event_redacts_free_text_pii_in_values() -> None:
     trace = event["extra"]["trace"]
     assert "eyJhbGciOi.JIUzI1NiIs" not in trace  # Bearer credential redacted
     assert "Bearer [Filtered]" in trace  # scheme kept, credential redacted
+
+
+def test_scrub_event_preserves_message_but_value_scrubs_its_pii() -> None:
+    """A Sentry ``message`` is the error signal, not PII (R-A regression guard).
+
+    ``message`` is banned as a free-narrative key in the event-log domain, but for a
+    Sentry event it is the primary display text — key-blanking it wholesale destroys
+    the observability signal. So a clean message survives verbatim, and a message
+    carrying PII is only *value*-scrubbed (phone / ``token=`` spans redacted in
+    place), never dropped.
+    """
+    event: dict[str, Any] = {
+        # Top-level event message with no PII → preserved verbatim.
+        "message": "checkout failed for order 42",
+        # A logentry message carrying PII → value-scrubbed in place, text kept.
+        "logentry": {"message": "user 010-1234-5678 hit token=abc123DEF456 error"},
+    }
+
+    _scrub_event(cast(Any, event), cast(Any, {}))
+
+    # Clean message text survives — the key scrub must not touch it.
+    assert event["message"] == "checkout failed for order 42"
+    # A message carrying PII is value-scrubbed (spans redacted, surrounding text kept).
+    entry = event["logentry"]["message"]
+    assert "010-1234-5678" not in entry  # phone redacted
+    assert "abc123DEF456" not in entry  # token value redacted
+    assert entry.startswith("user ")  # surrounding text preserved
+    assert entry.endswith(" error")
+    assert "[Filtered]" in entry
 
 
 # --------------------------------------------------------------------------- #

@@ -1684,19 +1684,9 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Unprocessable Entity",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InteractionBlockedError"
-                }
-              }
-            }
           }
         },
-        "description": "Unlike a post; idempotent (unliking a non-liked post is a no-op).",
+        "description": "Unlike a post; idempotent (unliking a non-liked post is a no-op).\n\nRetraction is exempt from the personal-block gate (F4): unliking is not a *new*\ninteraction against the creator but cleanup of the fan's own existing like, so a\nfan who blocked the creator after liking can still withdraw that like (standard\nblock UX — you can always remove your own trace). New interactions\n(``like``/comment/order) stay refused while blocked; only the 19+ read funnel\nstill applies here, so a gated adult post 404s.",
         "tags": [
           "content"
         ],

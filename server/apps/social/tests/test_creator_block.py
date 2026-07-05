@@ -304,6 +304,33 @@ def test_like_on_blocked_creator_post_is_422_and_unblock_restores(client: Client
     assert reliked.json()["liked"] is True
 
 
+def test_unlike_on_blocked_creator_post_is_allowed_retraction(client: Client) -> None:
+    """Retracting one's own like is allowed even after blocking (unlike is not a new
+    interaction), while a *new* like against the blocked creator stays refused (422).
+
+    Standard block UX: you can always remove your own trace. Gating unlike (R2
+    regression) over-blocks — a fan who liked a post and then blocked the creator
+    could never withdraw that like.
+    """
+    fan = _fan()
+    blocked = _creator("blocked", "차단")
+    post = Post.objects.create(creator=blocked, body="글")
+
+    # Like *before* blocking so there is an existing like to retract, then block.
+    assert client.put(f"/api/posts/{post.id}/like", headers=_bearer(fan)).status_code == 200
+    _block(client, fan, blocked)
+
+    # A *new* like against the blocked creator is still refused (gate intact).
+    liked = client.put(f"/api/posts/{post.id}/like", headers=_bearer(fan))
+    assert liked.status_code == 422
+    assert liked.json()["code"] == "InteractionBlocked"
+
+    # Retracting the existing like (unlike) is allowed despite the block: 200, liked=false.
+    unliked = client.delete(f"/api/posts/{post.id}/like", headers=_bearer(fan))
+    assert unliked.status_code == 200
+    assert unliked.json()["liked"] is False
+
+
 def test_comment_on_blocked_creator_post_is_422_and_unblock_restores(client: Client) -> None:
     """A comment on a blocked creator's post is refused (422); unblock re-allows it."""
     fan = _fan()
