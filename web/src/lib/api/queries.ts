@@ -1,22 +1,34 @@
 "use client";
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import {
-  getCreators,
+  getCreatorsPage,
   getCreator,
-  getProducts,
   getProduct,
+  getProductsPage,
   getMembershipTiers,
-  getPosts,
+  getPostsPage,
   getPost,
-  getComments,
-  getFeed,
+  getCommentsPage,
+  getFeedPage,
   getSearch,
-  getOrders,
+  getOrdersPage,
   getOrder,
-  getNotifications,
+  getNotificationsPage,
   getSubscriptions,
+  getBlocks,
+  mockSetBlocked,
+  type Page,
   apiToggleFollow,
+  apiBlockCreator,
+  apiUnblockCreator,
   apiToggleLike,
   apiAddComment,
   apiCreateOrder,
@@ -31,6 +43,7 @@ import {
   apiStartVerify,
   apiConfirmVerify,
   apiUpdateMe,
+  getStudioStats,
   getStudioProducts,
   apiCreateStudioProduct,
   apiUpdateStudioProduct,
@@ -50,14 +63,80 @@ import {
   type StudioTierUpdate,
   type StudioProfileUpdate,
 } from "./index";
-import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod } from "./types";
+import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, BlockedCreator, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
+import { emitNotificationRead, emitAllNotificationsRead } from "./notification-events";
 
 /** 라이브 백엔드 연동 여부 — false면 뮤테이션은 낙관 로직만(sleep) 유지(오프라인·테스트). */
 const USE_API = Boolean(config.apiUrl);
 
 /** 네트워크 지연 시뮬레이션(목업 경로 전용). */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// --- 커서 페이지네이션(R4-W1) 유틸 --------------------------------------------
+/**
+ * 리스트 캐시 형태 — 테스트/레거시는 배열, 실사용(무한 쿼리)은 커서 페이지(InfiniteData).
+ * 낙관적 뮤테이션이 양쪽을 모두 안전하게 갱신하도록 공용 헬퍼로 다룬다(회귀 0).
+ */
+type ListCache<T> = T[] | InfiniteData<Page<T>, string | undefined>;
+
+/** SSR 배열 → 무한 쿼리 initialData(첫 페이지 시드). nextCursor는 마운트 refetch가 채운다. */
+function seedInfinite<T>(items?: T[]): InfiniteData<Page<T>, string | undefined> | undefined {
+  return items ? { pages: [{ items }], pageParams: [undefined] } : undefined;
+}
+
+/** 무한 페이지 → 평탄화 배열(뷰는 배열만 소비 — data 접근부 무변경). */
+function flattenPages<T>(data: InfiniteData<Page<T>, string | undefined>): T[] {
+  return data.pages.flatMap((pg) => pg.items);
+}
+
+/** 다음 페이지 커서(없으면 undefined → hasNextPage=false). */
+function nextPageParam<T>(last: Page<T>): string | undefined {
+  return last.nextCursor ?? undefined;
+}
+
+/** 리스트 캐시의 각 항목에 fn 적용(배열/InfiniteData 공용). */
+function mapListCache<T>(data: ListCache<T> | undefined, fn: (item: T) => T): ListCache<T> | undefined {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.map(fn);
+  return { ...data, pages: data.pages.map((pg) => ({ ...pg, items: pg.items.map(fn) })) };
+}
+
+/** 리스트 캐시에서 keep=false 항목 제거(배열/InfiniteData 공용) — 차단 시 해당 크리에이터 포스트 제거. */
+function filterListCache<T>(
+  data: ListCache<T> | undefined,
+  keep: (item: T) => boolean,
+): ListCache<T> | undefined {
+  if (!data) return data;
+  if (Array.isArray(data)) return data.filter(keep);
+  return { ...data, pages: data.pages.map((pg) => ({ ...pg, items: pg.items.filter(keep) })) };
+}
+
+/** 리스트 캐시 끝에 항목 추가(배열/InfiniteData 공용). 빈 캐시는 배열로 시드. */
+function appendListCache<T>(data: ListCache<T> | undefined, item: T): ListCache<T> {
+  if (!data) return [item];
+  if (Array.isArray(data)) return [...data, item];
+  const pages = data.pages.length ? data.pages : [{ items: [] as T[], nextCursor: undefined }];
+  const lastIdx = pages.length - 1;
+  return {
+    ...data,
+    pages: pages.map((pg, i) => (i === lastIdx ? { ...pg, items: [...pg.items, item] } : pg)),
+  };
+}
+
+/** 리스트 캐시 항목 수(tmp id 생성용 — 배열/InfiniteData 공용). */
+function countListCache<T>(data: ListCache<T> | undefined): number {
+  if (!data) return 0;
+  if (Array.isArray(data)) return data.length;
+  return data.pages.reduce((n, pg) => n + pg.items.length, 0);
+}
+
+/** 리스트 캐시에 조건 만족 항목이 있는지(배열/InfiniteData 공용). 읽음 전 미읽음 여부 판정용. */
+function someListCache<T>(data: ListCache<T> | undefined, pred: (item: T) => boolean): boolean {
+  if (!data) return false;
+  if (Array.isArray(data)) return data.some(pred);
+  return data.pages.some((pg) => pg.items.some(pred));
+}
 
 /** 쿼리 키 */
 export const qk = {
@@ -75,29 +154,83 @@ export const qk = {
   order: (id: string) => ["order", id] as const,
   notifications: ["notifications"] as const,
   subscriptions: ["subscriptions"] as const,
+  blocks: ["blocks"] as const,
   paymentMethods: ["payment-methods"] as const,
+  studioStats: ["studio-stats"] as const,
   studioProducts: ["studio-products"] as const,
   studioTiers: ["studio-tiers"] as const,
 };
 
+/**
+ * 크리에이터 목록 — 커서 무한 쿼리(디스커버리). select로 평탄화해 소비처는 배열만 보고
+ * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
+ * SSR 배열 시드는 initialDataUpdatedAt:0으로 즉시 stale → 마운트 refetch가 커서 포함 첫 페이지로
+ * 교체(전역 staleTime 60s여도 21번째+ 도달 가능).
+ */
 export function useCreators(initialData?: Creator[]) {
-  return useQuery({ queryKey: qk.creators, queryFn: getCreators, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.creators,
+    queryFn: ({ pageParam }) => getCreatorsPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 export function useCreator(handle: string, initialData?: Creator) {
   return useQuery({ queryKey: qk.creator(handle), queryFn: () => getCreator(handle), initialData });
 }
+/**
+ * 상품 목록 — 커서 무한 쿼리(스토어·디스커버리). select로 평탄화해 뷰는 배열만 소비하고
+ * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
+ */
 export function useProducts(creatorId?: string, initialData?: Product[]) {
-  return useQuery({ queryKey: qk.products(creatorId), queryFn: () => getProducts(creatorId), initialData });
+  return useInfiniteQuery({
+    queryKey: qk.products(creatorId),
+    queryFn: ({ pageParam }) => getProductsPage(creatorId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 export function useMembershipTiers(id?: string) {
   return useQuery({ queryKey: qk.tiers(id), queryFn: () => getMembershipTiers(id) });
 }
+/** 크리에이터 포스트 — 커서 무한 쿼리. select 평탄화(뷰 무변경). mock=단일 페이지. */
 export function usePosts(id?: string, initialData?: Post[]) {
-  return useQuery({ queryKey: qk.posts(id), queryFn: () => getPosts(id), initialData });
+  return useInfiniteQuery({
+    queryKey: qk.posts(id),
+    queryFn: ({ pageParam }) => getPostsPage(id, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
-/** 피드 — B2 `/feed` 소비(B3 개인화 배선 지점). 서버 initialData 하이드레이션. */
+/**
+ * 피드 — B2 `/feed` 커서 무한 쿼리(B3 개인화 배선 지점). 서버 initialData 하이드레이션 +
+ * 마운트 refetch로 첫 페이지 nextCursor 확보 → 더보기. mock=단일 페이지.
+ */
 export function useFeed(initialData?: Post[]) {
-  return useQuery({ queryKey: qk.feed, queryFn: getFeed, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.feed,
+    queryFn: ({ pageParam }) => getFeedPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 /** 검색 — B2 `/search?q=` 소비. 빈 질의는 비활성, 타이핑 중 직전 결과 유지. */
 export function useSearch(q: string) {
@@ -111,24 +244,55 @@ export function useSearch(q: string) {
 export function usePost(id: string, initialData?: Post) {
   return useQuery({ queryKey: qk.post(id), queryFn: () => getPost(id), initialData });
 }
+/** 댓글 — 커서 무한 쿼리(포스트 상세). select 평탄화(뷰 무변경). mock=단일 페이지. */
 export function useComments(postId: string, initialData?: Comment[]) {
-  return useQuery({ queryKey: qk.comments(postId), queryFn: () => getComments(postId), initialData });
+  return useInfiniteQuery({
+    queryKey: qk.comments(postId),
+    queryFn: ({ pageParam }) => getCommentsPage(postId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 /** 단일 상품(스토어 상세). 인자 있는 fetcher → 화살표로 감싼다. */
 export function useProduct(id: string, initialData?: Product) {
   return useQuery({ queryKey: qk.product(id), queryFn: () => getProduct(id), initialData });
 }
-/** 주문 목록 — USE_API면 실 조회. 서버 initialData 하이드레이션. */
+/** 주문 목록 — 커서 무한 쿼리. select 평탄화. 서버 initialData 하이드레이션. mock=단일 페이지. */
 export function useOrders(initialData?: Order[]) {
-  return useQuery({ queryKey: qk.orders, queryFn: getOrders, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.orders,
+    queryFn: ({ pageParam }) => getOrdersPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 /** 단일 주문 — USE_API면 실 조회. */
 export function useOrder(id: string, initialData?: Order) {
   return useQuery({ queryKey: qk.order(id), queryFn: () => getOrder(id), initialData });
 }
-/** 알림 목록 — USE_API면 실 조회. */
+/** 알림 목록 — 커서 무한 쿼리. select 평탄화. 서버 initialData 하이드레이션. mock=단일 페이지. */
 export function useNotifications(initialData?: Notification[]) {
-  return useQuery({ queryKey: qk.notifications, queryFn: getNotifications, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.notifications,
+    queryFn: ({ pageParam }) => getNotificationsPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 /** 구독 목록 — USE_API면 실 조회. */
 export function useSubscriptions(initialData?: Subscription[]) {
@@ -192,16 +356,17 @@ export function useToggleLike() {
       await qc.cancelQueries({ queryKey: qk.feed });
       await qc.cancelQueries({ queryKey: ["posts"] });
       const prevPost = qc.getQueryData<Post>(qk.post(id));
-      const prevFeed = qc.getQueryData<Post[]>(qk.feed);
-      const prevLists = qc.getQueriesData<Post[]>({ queryKey: ["posts"] });
+      const prevFeed = qc.getQueryData<ListCache<Post>>(qk.feed);
+      const prevLists = qc.getQueriesData<ListCache<Post>>({ queryKey: ["posts"] });
       const apply = (p: Post): Post => {
         // 멱등: 대상이 아니거나 이미 같은 liked 상태면 그대로. count는 0 미만 방지.
         if (p.id !== id || p.liked === next) return p;
         return { ...p, liked: next, likeCount: Math.max(0, p.likeCount + (next ? 1 : -1)) };
       };
+      // post(id)는 단건, feed·["posts"]는 리스트 캐시(배열/무한 페이지 공용) — 대칭 갱신.
       qc.setQueryData<Post | undefined>(qk.post(id), (p) => (p ? apply(p) : p));
-      qc.setQueryData<Post[] | undefined>(qk.feed, (list) => list?.map(apply));
-      qc.setQueriesData<Post[]>({ queryKey: ["posts"] }, (list) => list?.map(apply));
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => mapListCache(d, apply));
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => mapListCache(d, apply));
       return { prevPost, prevFeed, prevLists, id };
     },
     onError: (_e, _v, ctx) => {
@@ -216,8 +381,8 @@ export function useToggleLike() {
       const fix = (p: Post): Post =>
         p.id === id ? { ...p, liked: result.liked, likeCount: result.like_count } : p;
       qc.setQueryData<Post | undefined>(qk.post(id), (p) => (p ? fix(p) : p));
-      qc.setQueryData<Post[] | undefined>(qk.feed, (list) => list?.map(fix));
-      qc.setQueriesData<Post[]>({ queryKey: ["posts"] }, (list) => list?.map(fix));
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => mapListCache(d, fix));
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => mapListCache(d, fix));
     },
     onSettled: (data) => {
       if (USE_API && data) qc.invalidateQueries({ queryKey: qk.post(data.id) });
@@ -240,9 +405,9 @@ export function useAddComment(postId: string) {
     onMutate: async (body: string) => {
       await qc.cancelQueries({ queryKey: qk.comments(postId) });
       await qc.cancelQueries({ queryKey: qk.post(postId) });
-      const prev = qc.getQueryData<Comment[]>(qk.comments(postId));
+      const prev = qc.getQueryData<ListCache<Comment>>(qk.comments(postId));
       const prevPost = qc.getQueryData<Post>(qk.post(postId));
-      const tmpId = `tmp-${prev?.length ?? 0}`;
+      const tmpId = `tmp-${countListCache(prev)}`;
       const optimistic: Comment = {
         id: tmpId,
         postId,
@@ -251,7 +416,7 @@ export function useAddComment(postId: string) {
         body,
         createdAt: "방금",
       };
-      qc.setQueryData<Comment[]>(qk.comments(postId), (list) => [...(list ?? []), optimistic]);
+      qc.setQueryData<ListCache<Comment>>(qk.comments(postId), (d) => appendListCache(d, optimistic));
       qc.setQueryData<Post | undefined>(qk.post(postId), (p) =>
         p ? { ...p, commentCount: p.commentCount + 1 } : p,
       );
@@ -266,8 +431,8 @@ export function useAddComment(postId: string) {
       // 임시 댓글(tmp-…)을 서버 실 댓글로 치환(id·작성자·시각 정정).
       if (USE_API && typeof data === "object" && ctx?.tmpId) {
         const real = data as Comment;
-        qc.setQueryData<Comment[]>(qk.comments(postId), (list) =>
-          list?.map((c) => (c.id === ctx.tmpId ? real : c)),
+        qc.setQueryData<ListCache<Comment>>(qk.comments(postId), (d) =>
+          mapListCache(d, (c) => (c.id === ctx.tmpId ? real : c)),
         );
       }
     },
@@ -420,14 +585,20 @@ export function useMarkNotificationRead() {
     },
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: qk.notifications });
-      const prev = qc.getQueryData<Notification[]>(qk.notifications);
-      qc.setQueryData<Notification[] | undefined>(qk.notifications, (list) =>
-        list?.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      const prev = qc.getQueryData<ListCache<Notification>>(qk.notifications);
+      // 캐시에서 이미 읽음으로 확인되는 경우만 감소 생략(중복 감소 방지) — 그 외엔 미읽음으로 간주.
+      const wasUnread = !someListCache(prev, (n) => n.id === id && n.read === true);
+      qc.setQueryData<ListCache<Notification>>(qk.notifications, (d) =>
+        mapListCache(d, (n) => (n.id === id ? { ...n, read: true } : n)),
       );
-      return { prev };
+      return { prev, wasUnread };
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.notifications, ctx.prev);
+    },
+    onSuccess: (_data, _id, ctx) => {
+      // 실시간 뱃지(useNotificationSocket) 스테일-하이 해소 — 읽은 만큼 소켓 카운트 감소.
+      if (ctx?.wasUnread) emitNotificationRead();
     },
     onSettled: () => {
       if (USE_API) qc.invalidateQueries({ queryKey: qk.notifications });
@@ -446,14 +617,18 @@ export function useMarkAllNotificationsRead() {
     },
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: qk.notifications });
-      const prev = qc.getQueryData<Notification[]>(qk.notifications);
-      qc.setQueryData<Notification[] | undefined>(qk.notifications, (list) =>
-        list?.map((n) => ({ ...n, read: true })),
+      const prev = qc.getQueryData<ListCache<Notification>>(qk.notifications);
+      qc.setQueryData<ListCache<Notification>>(qk.notifications, (d) =>
+        mapListCache(d, (n) => ({ ...n, read: true })),
       );
       return { prev };
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.notifications, ctx.prev);
+    },
+    onSuccess: () => {
+      // 서버 read-all은 전체를 읽음 처리 → 실시간 뱃지도 0으로 재동기(스테일-하이 해소).
+      emitAllNotificationsRead();
     },
     onSettled: () => {
       if (USE_API) qc.invalidateQueries({ queryKey: qk.notifications });
@@ -468,6 +643,118 @@ export function useReport() {
       if (USE_API) return apiReport(input);
       await sleep(200);
       return null;
+    },
+  });
+}
+
+// --- 안전(R4-W3): 팬 개인 차단(CreatorBlock) --------------------------------
+/** 내 차단 목록(설정 차단 화면). */
+export function useBlocks() {
+  return useQuery({ queryKey: qk.blocks, queryFn: getBlocks });
+}
+
+/**
+ * 크리에이터 차단 — 낙관적. 프로필(핸들 알 때) blocked=true + 자동 언팔로우(following=false),
+ * 피드·포스트 목록에서 해당 크리에이터 포스트 즉시 제거(차단이 피드/디스커버리/검색/팔로우에 영향).
+ * USE_API면 서버 상태로 정정 후 관련 쿼리(feed·creators·search·posts·해당 creator·blocks) 무효화 —
+ * 자동 언팔 반영. mock은 로컬 상태(mockSetBlocked)로 설정 목록 코히어런스 유지. 실패 시 롤백.
+ */
+export function useBlockCreator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorId: string; handle?: string }) => {
+      if (USE_API) return apiBlockCreator(input.creatorId);
+      await sleep(200);
+      mockSetBlocked(input.creatorId, true);
+      return null;
+    },
+    onMutate: async ({ creatorId, handle }: { creatorId: string; handle?: string }) => {
+      // 프로필 크리에이터 캐시(핸들 알 때): blocked=true + 자동 언팔로우.
+      let prevCreator: Creator | undefined;
+      if (handle) {
+        await qc.cancelQueries({ queryKey: qk.creator(handle) });
+        prevCreator = qc.getQueryData<Creator>(qk.creator(handle));
+        qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
+          c ? { ...c, blocked: true, following: false } : c,
+        );
+      }
+      // 피드·포스트 목록에서 차단 크리에이터 포스트 제거(즉시 사라짐).
+      await qc.cancelQueries({ queryKey: qk.feed });
+      await qc.cancelQueries({ queryKey: ["posts"] });
+      const prevFeed = qc.getQueryData<ListCache<Post>>(qk.feed);
+      const prevLists = qc.getQueriesData<ListCache<Post>>({ queryKey: ["posts"] });
+      const keep = (p: Post) => p.creatorId !== creatorId;
+      qc.setQueryData<ListCache<Post>>(qk.feed, (d) => filterListCache(d, keep));
+      qc.setQueriesData<ListCache<Post>>({ queryKey: ["posts"] }, (d) => filterListCache(d, keep));
+      return { prevCreator, prevFeed, prevLists, handle };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.handle && ctx.prevCreator) qc.setQueryData(qk.creator(ctx.handle), ctx.prevCreator);
+      if (ctx?.prevFeed) qc.setQueryData(qk.feed, ctx.prevFeed);
+      ctx?.prevLists?.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSuccess: (result, { handle }) => {
+      // 서버 응답(BlockResult)으로 정정 — blocked 반영 + 자동 언팔 유지.
+      if (USE_API && result && handle) {
+        qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
+          c ? { ...c, blocked: result.blocked, following: false } : c,
+        );
+      }
+    },
+    onSettled: (_d, _e, { handle }) => {
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: qk.feed });
+        qc.invalidateQueries({ queryKey: qk.creators });
+        qc.invalidateQueries({ queryKey: ["posts"] });
+        qc.invalidateQueries({ queryKey: ["search"] });
+        qc.invalidateQueries({ queryKey: qk.blocks });
+        if (handle) qc.invalidateQueries({ queryKey: qk.creator(handle) });
+      }
+    },
+  });
+}
+
+/**
+ * 크리에이터 차단 해제 — 낙관적. 프로필 blocked=false(자동 재팔로우 없음), 설정 차단 목록에서 즉시 제거.
+ * USE_API면 관련 쿼리 무효화. mock은 mockSetBlocked(false)로 설정 목록 코히어런스 유지. 실패 시 롤백.
+ */
+export function useUnblockCreator() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorId: string; handle?: string }) => {
+      if (USE_API) return apiUnblockCreator(input.creatorId);
+      await sleep(200);
+      mockSetBlocked(input.creatorId, false);
+      return null;
+    },
+    onMutate: async ({ creatorId, handle }: { creatorId: string; handle?: string }) => {
+      let prevCreator: Creator | undefined;
+      if (handle) {
+        await qc.cancelQueries({ queryKey: qk.creator(handle) });
+        prevCreator = qc.getQueryData<Creator>(qk.creator(handle));
+        qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) => (c ? { ...c, blocked: false } : c));
+      }
+      // 설정 차단 목록에서 즉시 제거.
+      await qc.cancelQueries({ queryKey: qk.blocks });
+      const prevBlocks = qc.getQueryData<BlockedCreator[]>(qk.blocks);
+      qc.setQueryData<BlockedCreator[] | undefined>(qk.blocks, (list) =>
+        list?.filter((b) => b.creatorId !== creatorId),
+      );
+      return { prevCreator, prevBlocks, handle };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.handle && ctx.prevCreator) qc.setQueryData(qk.creator(ctx.handle), ctx.prevCreator);
+      if (ctx?.prevBlocks) qc.setQueryData(qk.blocks, ctx.prevBlocks);
+    },
+    onSettled: (_d, _e, { handle }) => {
+      if (USE_API) {
+        qc.invalidateQueries({ queryKey: qk.feed });
+        qc.invalidateQueries({ queryKey: qk.creators });
+        qc.invalidateQueries({ queryKey: ["posts"] });
+        qc.invalidateQueries({ queryKey: ["search"] });
+        qc.invalidateQueries({ queryKey: qk.blocks });
+        if (handle) qc.invalidateQueries({ queryKey: qk.creator(handle) });
+      }
     },
   });
 }
@@ -559,6 +846,12 @@ export function useUpdateStudioProfile() {
       }
     },
   });
+}
+
+// --- R4-W5: 스튜디오 대시보드 실 카운트 --------------------------------------
+/** 스튜디오 대시보드 실 카운트 — data가 null이면 비크리에이터/비로그인(호출측 빈 상태 안내). */
+export function useStudioStats(initialData?: StudioStats | null) {
+  return useQuery({ queryKey: qk.studioStats, queryFn: getStudioStats, initialData });
 }
 
 // --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기 ---------------------------------

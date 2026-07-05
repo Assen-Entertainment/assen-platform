@@ -1,8 +1,8 @@
 """Tests for the commerce studio (owner catalog write) + public 19+/visibility gate.
 
 Covers owner-guard 403 / auth 401, create+list including draft/status, owner-scoped
-update/delete (404 for a non-owner), and the consumer ``list_products`` excluding
-draft/hidden and gated adult (R3 gated features).
+update/delete (404 for a non-owner, 422 for order history), and the consumer
+``list_products`` excluding draft/hidden and gated adult (R3 gated features).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from django.test import Client, override_settings
 
-from apps.commerce.models import Product
+from apps.commerce.models import Order, OrderItem, Product
 from apps.creator.models import Creator
 from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
@@ -138,3 +138,24 @@ def test_studio_update_and_delete_scoped_to_owner(client: Client) -> None:
     deleted = client.delete(f"{STUDIO}/{prod.id}", headers=_auth(owner))
     assert deleted.status_code == 200
     assert not Product.objects.filter(id=prod.id).exists()
+
+
+def test_studio_delete_product_with_order_history_is_422(client: Client) -> None:
+    owner, creator = _owner_with_creator()
+    prod = Product.objects.create(creator=creator, type="goods", title="히스토리", price=1000)
+    buyer = Account.objects.create(role=Role.FAN.value)
+    order = Order.objects.create(buyer=buyer)
+    OrderItem.objects.create(
+        order=order, product=prod, title=prod.title, item_type=prod.type, qty=1, price=prod.price
+    )
+
+    res = client.delete(f"{STUDIO}/{prod.id}", headers=_auth(owner))
+    assert res.status_code == 422
+    assert res.json()["code"] == "ProductHasOrders"
+    assert Product.objects.filter(id=prod.id).exists()  # not deleted; history preserved
+
+    # A product with no order history still deletes as before.
+    fresh = Product.objects.create(creator=creator, type="goods", title="새상품", price=500)
+    res2 = client.delete(f"{STUDIO}/{fresh.id}", headers=_auth(owner))
+    assert res2.status_code == 200
+    assert not Product.objects.filter(id=fresh.id).exists()

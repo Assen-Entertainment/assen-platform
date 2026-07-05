@@ -23,7 +23,7 @@ const GROUPS: { key: Notification["group"]; label: string }[] = [
 export function NotificationsView({ notifications }: { notifications: Notification[] }) {
   const router = useRouter();
   // USE_API면 실 목록/읽음, 아니면 mock(sleep) — 낙관적 read=true 반영.
-  const { data } = useNotifications(notifications);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useNotifications(notifications);
   const list = data ?? notifications;
   const markReadMut = useMarkNotificationRead();
   const markAllMut = useMarkAllNotificationsRead();
@@ -94,6 +94,14 @@ export function NotificationsView({ notifications }: { notifications: Notificati
           </section>
         );
       })}
+      {/* 더보기 — 커서 다음 페이지가 있을 때만(무한 쿼리). 그룹핑은 로드된 전체에 적용. */}
+      {hasNextPage ? (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -24,7 +24,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { PRODUCT_STATUS_META, won, type StudioProduct, type ProductStatus } from "@/lib/studio-mock";
 import { PRODUCT_TYPE_LABEL } from "@/lib/product-labels";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useStudioProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from "@/lib/api/queries";
 import type { MonetizableItemType } from "@/components/ui";
 
@@ -37,13 +37,12 @@ const FILTERS: { label: string; value: ProductStatus | "all" }[] = [
 
 const STATUS_OPTIONS: ProductStatus[] = ["selling", "soldout", "draft", "hidden"];
 
-/** 실패 토스트 — ApiError.detail 우선(401은 전역 세션 가드가 처리하므로 무시). */
+/** 실패 토스트 — 서버 error code→apiErrorMessage(detail 폴백). 401은 전역 세션 가드가 처리하므로 무시. */
 function useApiErrorToast() {
   const { toast } = useToast();
   return (e: unknown, fallback: string) => {
     if (e instanceof ApiError && e.status === 401) return;
-    const description = e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.";
-    toast({ title: fallback, description });
+    toast({ title: fallback, description: apiErrorMessage(e) });
   };
 }
 

@@ -8,6 +8,7 @@ never live in source; only `.env.example` is committed (CONSTRAINTS #27).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import environ
 from celery.schedules import crontab
@@ -67,6 +68,12 @@ ENABLE_MOCK_PAYMENT: bool = False
 # See config.throttle.
 FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", default=True)
 
+# Rate-limiter backend for the cross-cutting middleware limiter (config.ratelimit).
+# "memory" (default) is the per-process in-memory limiter; "redis" selects the
+# shared cross-worker limiter once it is wired (deployment-bound). An unwired value
+# fails safe to in-memory rather than crash the request path — see get_rate_limiter.
+RATELIMIT_BACKEND: str = env("RATELIMIT_BACKEND", default="memory")
+
 # Django contrib + third-party apps.
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -116,7 +123,10 @@ LOCAL_APPS = [
     "apps.payments",
 ]
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+# daphne must precede django.contrib.staticfiles so Channels' ASGI runserver
+# override wins; channels provides the routing/consumer layer (ASS-240). Both are
+# migration-less (no models).
+INSTALLED_APPS = ["daphne", *DJANGO_APPS, "channels", *THIRD_PARTY_APPS, *LOCAL_APPS]
 
 # Ordering follows Technical Architecture §3.5 #1. Only the outer cross-cutting
 # concerns are Django middleware: request_id -> security headers -> rate limit.
@@ -164,6 +174,42 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
+# Channels realtime (ASS-240). Realtime is a courtesy rail — it must never be a
+# single point of failure — so the layer selection fails safe exactly like the
+# rate limiter (config.ratelimit.get_rate_limiter): the single-process
+# InMemoryChannelLayer by default (dev/test/one worker, no broker), and the shared
+# cross-worker channels-redis layer ONLY when CHANNEL_LAYERS_BACKEND=redis AND
+# channels-redis is installed AND CHANNEL_LAYERS_REDIS_URL is set. Anything short
+# of that falls back to in-memory rather than crash boot. channels-redis is an
+# optional extra (pyproject [project.optional-dependencies] realtime-redis) and is
+# never installed in dev/test. Migration-less: channels/daphne ship no models.
+CHANNEL_LAYERS_BACKEND: str = env("CHANNEL_LAYERS_BACKEND", default="memory")
+
+
+def _build_channel_layers() -> dict[str, Any]:
+    """Return the ``CHANNEL_LAYERS`` mapping, failing safe to the in-memory layer."""
+    in_memory: dict[str, Any] = {
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+    }
+    if CHANNEL_LAYERS_BACKEND.lower() != "redis":
+        return in_memory
+    redis_url = env("CHANNEL_LAYERS_REDIS_URL", default="")
+    if not redis_url:
+        return in_memory
+    try:
+        import channels_redis  # noqa: F401
+    except ImportError:
+        return in_memory
+    return {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [redis_url]},
+        },
+    }
+
+
+CHANNEL_LAYERS: dict[str, Any] = _build_channel_layers()
+
 # PostgreSQL in dev/prod (CONSTRAINTS #14). The test environment overrides this
 # with sqlite so the suite runs without a database server.
 DATABASES = {
@@ -207,3 +253,54 @@ CELERY_BEAT_SCHEDULE: dict[str, object] = {
         "schedule": crontab(minute=0),
     },
 }
+
+# Structured logging (R4-W2, ASS-242). One dictConfig shared by every
+# environment; the only axis that varies is the console formatter — dev/test keep
+# the human-readable line, prod switches to the JSON formatter (see prod.py). Every
+# record is stamped with the per-request correlation id via the request_id filter
+# (config.observability.RequestIDLogFilter), so a log line traces back to the
+# request that produced it. Handlers write to stdout only — the container runtime
+# (CloudWatch) collects it; no file/socket sinks that could smuggle PII off-box.
+LOG_LEVEL: str = env("DJANGO_LOG_LEVEL", default="INFO")
+
+
+def build_logging(*, json_format: bool) -> dict[str, Any]:
+    """Return the dictConfig ``LOGGING`` mapping.
+
+    ``json_format`` selects the structured JSON formatter (prod) over the
+    human-readable console formatter (dev/test). Both attach the request_id filter
+    so the correlation id is available to whichever formatter renders the record.
+    """
+    formatter = "json" if json_format else "console"
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "filters": {
+            "request_id": {"()": "config.observability.RequestIDLogFilter"},
+        },
+        "formatters": {
+            "console": {
+                "format": "%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
+            },
+            "json": {"()": "config.observability.JsonLogFormatter"},
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": formatter,
+                "filters": ["request_id"],
+            },
+        },
+        "root": {"handlers": ["console"], "level": LOG_LEVEL},
+        "loggers": {
+            # Standard hierarchy: framework noise and our own app tree both flow
+            # through the single console handler. propagate=False so a record is
+            # emitted once (by the logger's own handler), not re-emitted at root.
+            "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+            "apps": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        },
+    }
+
+
+# dev/test inherit this human-readable config; prod overrides with json_format=True.
+LOGGING: dict[str, Any] = build_logging(json_format=False)

@@ -51,6 +51,10 @@ export default function SettingsPage() {
           <ListItem title="결제 수단" subtitle="카드·간편결제 관리" showChevron />
         </Link>
         <Divider />
+        <Link href="/settings/blocked" className="block transition-colors hover:bg-surface-container-high">
+          <ListItem title="차단 목록" subtitle="차단한 크리에이터 관리" showChevron />
+        </Link>
+        <Divider />
         <button type="button" onClick={onLogout} className="block w-full text-left transition-colors hover:bg-surface-container-high">
           <ListItem title="로그아웃" />
         </button>

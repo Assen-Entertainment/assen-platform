@@ -25,7 +25,7 @@ import { useOrder, useCancelOrder, useRequestRefund } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
 import { PRODUCT_TYPE_LABEL } from "@/lib/product-labels";
 import { orderStatusMeta, refundStatusMeta } from "../status";
-import { ApiError, type Order } from "@/lib/api";
+import { ApiError, apiErrorMessage, type Order } from "@/lib/api";
 
 const REFUND_REASONS = ["단순 변심", "상품 불량·파손", "배송 지연", "상품 정보와 다름", "기타"];
 
@@ -55,13 +55,11 @@ export function OrderDetailView({ order }: { order: Order }) {
   const canCancel = status === "paid" || status === "shipping";
   const canRefund = (status === "completed" || status === "shipping") && !refund;
 
-  // 실패 안내(서버 detail 활용). 401은 전역 세션 가드가 처리 → 그 외만 토스트.
+  // 실패 안내 — 서버 error code(OrderNotCancellable·OrderNotRefundable·OpenRefundExists 등)를
+  // apiErrorMessage로 한국어 매핑(detail 표시 폴백). 401은 전역 세션 가드가 처리 → 그 외만 토스트.
   const failToast = (title: string, e: unknown) => {
     if (e instanceof ApiError && e.status === 401) return;
-    toast({
-      title,
-      description: e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.",
-    });
+    toast({ title, description: apiErrorMessage(e) });
   };
 
   const doCancel = () => {

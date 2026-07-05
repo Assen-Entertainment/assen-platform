@@ -37,7 +37,6 @@ from django.http import HttpRequest, HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from ninja import Router, Schema
-from ninja.errors import HttpError
 from ninja.utils import check_csrf
 from pydantic import Field
 
@@ -67,6 +66,7 @@ from apps.identity.signup_services import (
     register_fan,
 )
 from config.api import api
+from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
 from config.otp import MockOtpSender, OtpSender
 from config.throttle import anon_throttle, user_write_throttle
@@ -94,6 +94,15 @@ def _otp_sender() -> OtpSender | None:
     production) so its reproducible codes can never back a real signup/login. With
     no SMS adapter yet, production returns ``None`` and the surface fails closed
     with 503 rather than trust an unverifiable code (Fan_Signup_Privacy_Policy).
+
+    Runtime caveat (F3): a **new** :class:`MockOtpSender` is built on every call, so
+    it carries no armed-code state between the ``/signup/otp`` send and the later
+    ``/signup``·``/login`` verify — the verify takes the mock's stateless
+    deterministic fallback, which does NOT enforce expiry / single-use / lockout
+    (those are proven by unit tests against one shared instance, and are the real
+    SMS adapter + shared-store's job, not the mock's). This is not a production
+    exposure: prod runs ``ENABLE_MOCK_FAN_OTP=False`` → ``None`` → 503 fail-closed,
+    so the un-enforced mock path never executes outside dev/test.
     """
     if settings.ENABLE_MOCK_FAN_OTP:
         return MockOtpSender()
@@ -259,13 +268,17 @@ def request_otp(request: HttpRequest, data: OtpRequestIn) -> dict[str, str]:
     del request
     sender = _otp_sender()
     if sender is None:
-        raise HttpError(503, "Signup is temporarily unavailable.")
+        raise ApiError(
+            503,
+            "Signup is temporarily unavailable.",
+            code=ErrorCode.OTP_UNAVAILABLE,
+        )
     try:
         # Canonicalise before send so the code is derived from the same form the
         # signup step verifies against (otherwise a formatted number mismatches).
         phone = normalize_phone(data.phone)
     except SignupError as exc:
-        raise HttpError(422, str(exc)) from exc
+        raise ApiError(422, str(exc), code=exc.code) from exc
     sender.send(phone=phone)
     return {"status": "sent"}
 
@@ -280,7 +293,11 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
     del request
     sender = _otp_sender()
     if sender is None:
-        raise HttpError(503, "Signup is temporarily unavailable.")
+        raise ApiError(
+            503,
+            "Signup is temporarily unavailable.",
+            code=ErrorCode.OTP_UNAVAILABLE,
+        )
     try:
         pair = register_fan(
             phone=data.phone,
@@ -291,7 +308,7 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
             otp_sender=sender,
         )
     except SignupError as exc:
-        raise HttpError(422, str(exc)) from exc
+        raise ApiError(422, str(exc), code=exc.code) from exc
 
     return _deliver_token_pair(pair, response, web=data.web)
 
@@ -308,14 +325,18 @@ def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> Signup
     del request
     sender = _otp_sender()
     if sender is None:
-        raise HttpError(503, "Login is temporarily unavailable.")
+        raise ApiError(
+            503, "Login is temporarily unavailable.", code=ErrorCode.OTP_UNAVAILABLE
+        )
     try:
         phone = normalize_phone(data.phone)
     except SignupError as exc:
-        raise HttpError(422, str(exc)) from exc
+        raise ApiError(422, str(exc), code=exc.code) from exc
 
     if not sender.verify(phone=phone, code=data.otp_code):
-        raise HttpError(422, "인증번호가 올바르지 않아요.")
+        raise ApiError(
+            422, "인증번호가 올바르지 않아요.", code=ErrorCode.OTP_INVALID
+        )
 
     account = Account.objects.filter(
         auth_subject_hash=hash_phone(phone),
@@ -325,7 +346,9 @@ def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> Signup
     if account is None:
         # The number holds no active fan account: guide to signup without exposing
         # more than the caller (who controls the phone) already knows.
-        raise HttpError(422, "가입이 필요해요.")
+        raise ApiError(
+            422, "가입이 필요해요.", code=ErrorCode.ACCOUNT_NOT_REGISTERED
+        )
 
     return _deliver_token_pair(issue_token_pair(account), response, web=data.web)
 
@@ -380,14 +403,18 @@ def refresh(
     cookie_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
     web = cookie_token is not None
     if web and check_csrf(request) is not None:
-        raise HttpError(403, "CSRF 검증에 실패했어요.")
+        raise ApiError(403, "CSRF 검증에 실패했어요.", code=ErrorCode.CSRF_FAILED)
     presented = cookie_token or (data.refresh_token if data is not None else None)
     if not presented:
-        raise HttpError(401, "Refresh token required.")
+        raise ApiError(
+            401, "Refresh token required.", code=ErrorCode.REFRESH_TOKEN_REQUIRED
+        )
     try:
         pair = rotate_refresh_token(presented)
     except TokenError as exc:
-        raise HttpError(401, "Refresh token is invalid.") from exc
+        raise ApiError(
+            401, "Refresh token is invalid.", code=ErrorCode.REFRESH_TOKEN_INVALID
+        ) from exc
     return _deliver_token_pair(pair, response, web=web)
 
 
@@ -445,7 +472,9 @@ def verify_start(request: HttpRequest) -> dict[str, str]:
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     verifier = identity_verifier()
     if verifier is None:
-        raise HttpError(503, "본인인증을 사용할 수 없어요.")
+        raise ApiError(
+            503, "본인인증을 사용할 수 없어요.", code=ErrorCode.KYC_UNAVAILABLE
+        )
     verifier.start(account=account)
     # Move an unconfirmed account into 'pending' so the state machine reflects an
     # in-flight challenge; an already-verified account is left as-is (no downgrade).
@@ -473,7 +502,9 @@ def verify_confirm(request: HttpRequest) -> VerifyConfirmOut:
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     verifier = identity_verifier()
     if verifier is None:
-        raise HttpError(503, "본인인증을 사용할 수 없어요.")
+        raise ApiError(
+            503, "본인인증을 사용할 수 없어요.", code=ErrorCode.KYC_UNAVAILABLE
+        )
     result = verifier.confirm(account=account)
     account.adult_verified = result.adult
     account.kyc_status = KycStatus.VERIFIED.value

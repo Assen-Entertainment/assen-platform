@@ -12,11 +12,12 @@ because the production limiter is deployment-bound (Redis).
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
 from collections.abc import Callable
-from time import monotonic
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
+
+from config.observability import bind_request_id, unbind_request_id
+from config.ratelimit import RateLimiter, get_rate_limiter
 
 # Header carrying the per-request correlation id, echoed to the client and
 # available to logs/audit so a request can be traced end to end.
@@ -35,11 +36,20 @@ class RequestIDMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Set ``request.request_id`` and mirror it onto the response header."""
+        """Set ``request.request_id`` and mirror it onto the response header.
+
+        The id is also bound to a context variable for the duration of the request
+        so log records can be correlated to it (see ``config.observability``); the
+        binding is always unwound, even if a downstream handler raises.
+        """
         incoming = request.headers.get(REQUEST_ID_HEADER)
         request_id = incoming or uuid.uuid4().hex
         request.request_id = request_id  # type: ignore[attr-defined]
-        response = self.get_response(request)
+        token = bind_request_id(request_id)
+        try:
+            response = self.get_response(request)
+        finally:
+            unbind_request_id(token)
         response[REQUEST_ID_HEADER] = request_id
         return response
 
@@ -68,10 +78,13 @@ class SecurityHeadersMiddleware:
 class InMemoryRateLimitMiddleware:
     """A naive fixed-window rate limiter (skeleton; production uses Redis).
 
-    In-memory and per-process, so it is *not* correct across workers — it exists
-    to nail the middleware position (§3.5 #1, after security headers, before the
-    Ninja auth layer) and provide a working contract. The real limiter is a
-    drop-in that shares state in Redis (deployment-bound, hence not wired here).
+    The limiting *decision* now lives behind the :class:`~config.ratelimit.RateLimiter`
+    abstraction (selected by ``RATELIMIT_BACKEND``); this middleware only owns the
+    position (§3.5 #1, after security headers, before the Ninja auth layer) and the
+    per-client key. The default backend is in-memory and per-process, so it is *not*
+    correct across workers — the real limiter is a drop-in that shares state in Redis
+    (deployment-bound, hence not wired here). The class name is kept for the settings
+    ``MIDDLEWARE`` reference; the backend, not the middleware, is what swaps.
     """
 
     # Generous default so the placeholder never interferes with normal use/tests.
@@ -79,9 +92,9 @@ class InMemoryRateLimitMiddleware:
     WINDOW_SECONDS = 60
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
-        """Initialise the next handler and the per-client hit buckets."""
+        """Initialise the next handler and the configured rate-limiter backend."""
         self.get_response = get_response
-        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._limiter: RateLimiter = get_rate_limiter()
 
     def _client_key(self, request: HttpRequest) -> str:
         """Identify the client for bucketing (remote address at this layer)."""
@@ -90,15 +103,11 @@ class InMemoryRateLimitMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         """Reject the request with 429 if the per-window limit is exceeded."""
-        now = monotonic()
-        key = self._client_key(request)
-        window_start = now - self.WINDOW_SECONDS
-        recent = [t for t in self._hits[key] if t >= window_start]
-        if len(recent) >= self.DEFAULT_LIMIT:
-            self._hits[key] = recent
-            return JsonResponse(
-                {"detail": "Rate limit exceeded."}, status=429
-            )
-        recent.append(now)
-        self._hits[key] = recent
+        allowed = self._limiter.allow(
+            key=self._client_key(request),
+            limit=self.DEFAULT_LIMIT,
+            window_seconds=self.WINDOW_SECONDS,
+        )
+        if not allowed:
+            return JsonResponse({"detail": "Rate limit exceeded."}, status=429)
         return self.get_response(request)

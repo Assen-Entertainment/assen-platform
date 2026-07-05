@@ -1,15 +1,20 @@
 import { config } from "@/lib/config";
 
-/** API 오류 — status + 서버 detail 보존. */
+/** API 오류 — status + 서버 detail/code 보존. */
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
     /**
-     * 비정상 응답 본문 `{detail}` 문자열(있을 때). 사용자 안내 분기에 사용.
-     * ※문자열 결합/부분일치로 분기하는 소비처는 취약 — 서버 error code 도입 시 교체(백로그).
+     * 비정상 응답 본문 `{detail}` 문자열(있을 때). 사용자 표시용 폴백 문구.
+     * ※문자열 부분일치 분기는 취약 — 안정 분기는 `code`를 쓴다(detail은 표시 폴백).
      */
     public detail?: string,
+    /**
+     * 서버 계약 error code(있을 때) — 기계 판독용 안정 사유(config.errors.ErrorCode 미러).
+     * 사용자 안내 분기는 이 값을 기준으로 한다(문자열 매칭 제거). 매핑은 `apiErrorMessage`.
+     */
+    public code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -40,20 +45,27 @@ function readBrowserCookie(name: string): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-/** 비정상 응답 본문에서 `{detail}` 문자열만 안전 추출(비-JSON·비객체·비문자열은 undefined). */
-async function parseErrorDetail(res: Response): Promise<string | undefined> {
+/**
+ * 비정상 응답 본문에서 `{detail, code}`를 안전 추출(비-JSON·비객체·비문자열은 undefined).
+ * code는 서버 계약 error code(안정 분기용), detail은 표시용 폴백 문구.
+ */
+async function parseErrorBody(res: Response): Promise<{ detail?: string; code?: string }> {
   try {
     const text = await res.text();
-    if (!text) return undefined;
+    if (!text) return {};
     const data: unknown = JSON.parse(text);
-    if (data && typeof data === "object" && "detail" in data) {
+    if (data && typeof data === "object") {
       const d = (data as { detail?: unknown }).detail;
-      return typeof d === "string" ? d : undefined;
+      const c = (data as { code?: unknown }).code;
+      return {
+        detail: typeof d === "string" ? d : undefined,
+        code: typeof c === "string" ? c : undefined,
+      };
     }
   } catch {
-    /* 비-JSON 본문 등은 detail 없음 */
+    /* 비-JSON 본문 등은 detail/code 없음 */
   }
-  return undefined;
+  return {};
 }
 
 let csrfPriming: Promise<void> | null = null;
@@ -184,8 +196,8 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
   }
 
   if (!res.ok) {
-    const detail = await parseErrorDetail(res);
-    throw new ApiError(res.status, `API ${res.status}: ${path}`, detail);
+    const { detail, code } = await parseErrorBody(res);
+    throw new ApiError(res.status, `API ${res.status}: ${path}`, detail, code);
   }
   if (res.status === 204) return undefined as T;
   // logout/csrf 등 일부 200 응답은 본문이 비어 있음 → 안전 파싱.

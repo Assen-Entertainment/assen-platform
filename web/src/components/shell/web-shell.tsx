@@ -6,6 +6,7 @@ import { Sidebar, TopBar, SearchField, Button, Avatar, BottomNav } from "@/compo
 import { HomeIcon, FeedIcon, StoreIcon, HeartIcon, BellIcon, PersonIcon, SunIcon, MoonIcon } from "@/lib/icons";
 import { useTheme } from "@/components/theme-provider";
 import { useSession } from "@/lib/session";
+import { useNotificationSocket } from "@/lib/realtime/use-notification-socket";
 
 /** Sidebar(lg+) 네비. 홈 다음에 피드(/feed) 진입점. */
 const NAV = [
@@ -38,6 +39,8 @@ export function WebShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const router = useRouter();
   const { user } = useSession();
+  // 실시간 알림 소켓(R4-W4) — 셸에서 1회 마운트. wsUrl 미설정/비로그인이면 no-op(0 반환·회귀 0).
+  const unread = useNotificationSocket();
   const [q, setQ] = React.useState("");
   const active = BOTTOM_NAV.find((n) => pathname.startsWith(n.href))?.href;
   const initial = user ? user.name.slice(0, 1) : "나";
@@ -92,10 +95,19 @@ export function WebShell({ children }: { children: React.ReactNode }) {
               <ThemeToggle />
               <Link
                 href="/notifications"
-                aria-label="알림"
-                className="flex size-9 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high [&>svg]:size-5"
+                aria-label={unread > 0 ? `알림 (안 읽음 ${unread > 99 ? "99+" : unread}개)` : "알림"}
+                className="relative flex size-9 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high [&>svg]:size-5"
               >
                 <BellIcon />
+                {/* 실시간 미읽음 뱃지 — 소켓 카운트>0일 때만(미설정 시 항상 0 → 미노출·회귀 0). */}
+                {unread > 0 ? (
+                  <span
+                    aria-hidden
+                    className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-surface bg-primary px-1 text-[0.625rem] font-bold leading-none tabular-nums text-on-primary"
+                  >
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                ) : null}
               </Link>
               <Link href="/mypage" aria-label="내 페이지">
                 <Avatar fallback={initial} size="sm" />

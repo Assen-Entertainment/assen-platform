@@ -225,6 +225,13 @@ export interface paths {
          *
          *     Consumer surface: draft/hidden listings and gated 19+ items are excluded
          *     (:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.
+         *
+         *     Personal-block gating (mirrors ``content.list_posts``): the global (unfiltered)
+         *     browse is an aggregate surface, so products from creators the authenticated
+         *     caller has personally blocked are excluded. A ``?creator_id=`` request is
+         *     explicit creator-scoped navigation (a store visit), so it is returned even for
+         *     a blocked creator — the web renders the block state; a personal block is not
+         *     existence hiding, unlike the 19+ gate.
          */
         get: operations["apps_commerce_api_list_products"];
         put?: never;
@@ -295,10 +302,24 @@ export interface paths {
         post?: never;
         /**
          * Studio Delete Product
-         * @description Delete the caller's own product; 403 (no creator) / 404 (not theirs).
+         * @description Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).
          *
-         *     Historical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),
-         *     so removing a catalog listing never rewrites a fan's order history.
+         *     A product with order history can't be hard-deleted: ``OrderItem.product`` is
+         *     SET_NULL, so deleting it would sever the historical order lines' attribution
+         *     back to this creator (breaking dashboard/stats counts and order provenance).
+         *     Instead of deleting, the owner should archive it (``status="hidden"``), which
+         *     removes it from public listings while keeping order history intact. A product
+         *     with no order history has nothing to preserve, so it deletes as before.
+         *
+         *     Concurrency (F5): the owner check, the reload under ``select_for_update`` and the
+         *     ``order_items`` re-check run in one ``transaction.atomic`` block so the
+         *     check→delete window is narrowed — the product row is locked for the duration, so
+         *     a second concurrent *delete* cannot slip between the check and the delete. NOT a
+         *     complete seal: an in-flight ``create_order`` does not lock the product row, so an
+         *     order committing during this block can still leave a just-deleted product with a
+         *     dangling (SET_NULL) line. Fully closing that needs the order path to lock the
+         *     product too (a broader change deferred), so the residual window is documented,
+         *     not hidden.
          */
         delete: operations["apps_commerce_api_studio_delete_product"];
         options?: never;
@@ -417,6 +438,11 @@ export interface paths {
         /**
          * List Posts
          * @description List posts, newest first; filter to one creator via ``?creator_id=``.
+         *
+         *     Personal-block gating: the global (unfiltered) list is an aggregate surface, so
+         *     personally blocked creators are excluded. A ``?creator_id=`` request is explicit
+         *     creator-scoped navigation (a profile visit), so it is returned even for a blocked
+         *     creator — the web renders the block state; a personal block is not existence hiding.
          */
         get: operations["apps_content_api_list_posts"];
         put?: never;
@@ -472,6 +498,13 @@ export interface paths {
         /**
          * Unlike Post
          * @description Unlike a post; idempotent (unliking a non-liked post is a no-op).
+         *
+         *     Retraction is exempt from the personal-block gate (F4): unliking is not a *new*
+         *     interaction against the creator but cleanup of the fan's own existing like, so a
+         *     fan who blocked the creator after liking can still withdraw that like (standard
+         *     block UX — you can always remove your own trace). New interactions
+         *     (``like``/comment/order) stay refused while blocked; only the 19+ read funnel
+         *     still applies here, so a gated adult post 404s.
          */
         delete: operations["apps_content_api_unlike_post"];
         options?: never;
@@ -521,6 +554,9 @@ export interface paths {
          *     Personalised (following-only) feed needs a richer ranking and lands later; for
          *     now this returns the same recent-posts page as ``/posts``, but with the
          *     per-user ``liked`` flag filled in when the caller is authenticated.
+         *
+         *     The feed is an aggregate surface, so posts from creators the caller has
+         *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_content_api_feed"];
         put?: never;
@@ -725,6 +761,9 @@ export interface paths {
         /**
          * List Creators
          * @description List creators (optionally filtered by category), cursor-paginated.
+         *
+         *     Discovery is an aggregate surface, so creators the authenticated caller has
+         *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_creator_api_list_creators"];
         put?: never;
@@ -793,6 +832,34 @@ export interface paths {
          * @description Update the caller's own creator profile; 403 if they operate no creator.
          */
         patch: operations["apps_creator_api_studio_update_profile"];
+        trace?: never;
+    };
+    "/api/studio/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio Stats
+         * @description Real per-creator dashboard counts for the caller's own creator.
+         *
+         *     Owner-scoped: every figure is filtered to the creator this account operates, so
+         *     another creator's stats never leak. 403 (OwnerRequired) if the caller operates
+         *     no creator. Counts only — no revenue/settlement (ASS-229 gated).
+         *
+         *     A handful of owner-scoped scalar aggregates (no per-row query → no N+1): the
+         *     product total + selling counts collapse into one conditional aggregate, the
+         *     rest are single indexed ``COUNT``s.
+         */
+        get: operations["apps_creator_api_studio_stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/operator/dashboard/": {
@@ -1358,6 +1425,13 @@ export interface paths {
          *
          *     Inactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from
          *     this consumer surface, mirroring draft/hidden products in the catalog.
+         *
+         *     Personal-block gating (F8 — the 6th aggregate surface, aligning with
+         *     ``content.list_posts`` / ``commerce.list_products``): the global (unfiltered)
+         *     browse excludes tiers from creators the authenticated caller has personally
+         *     blocked. An explicit ``?creator_id=`` visit is creator-scoped navigation and is
+         *     NOT hidden (a personal block is not existence hiding); an anonymous caller blocks
+         *     nothing.
          */
         get: operations["apps_membership_api_list_tiers"];
         put?: never;
@@ -2244,6 +2318,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fan/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Blocks
+         * @description List the creators the requesting fan has blocked (settings screen).
+         */
+        get: operations["apps_social_api_list_blocks"];
+        put?: never;
+        /**
+         * Block Creator
+         * @description Block a creator; idempotent (a second block is a no-op, still 200).
+         *
+         *     Blocking auto-unfollows (standard mute/block UX): a fan who blocks a creator
+         *     they follow should not keep receiving that creator's follow-derived surfaces.
+         *     An unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,
+         *     a personal block does not hide the target's existence.
+         */
+        post: operations["apps_social_api_block_creator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/blocks/{creator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unblock Creator
+         * @description Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200).
+         */
+        delete: operations["apps_social_api_unblock_creator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/visits/": {
         parameters: {
             query?: never;
@@ -2852,10 +2975,15 @@ export interface components {
         /**
          * CommerceError
          * @description Stable error shape for commerce endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
          */
         CommerceError: {
             /** Detail */
             detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * StudioProductOut
@@ -3186,6 +3314,20 @@ export interface components {
             like_count: number;
         };
         /**
+         * InteractionBlockedError
+         * @description 422 body when a fan interacts with a personally-blocked creator's content.
+         *
+         *     Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+         *     (``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the
+         *     ``{detail, code}`` shape used by commerce/membership.
+         */
+        InteractionBlockedError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
          * CommentOut
          * @description A comment (maps to the frontend ``Comment`` type; ``author`` is a display name).
          */
@@ -3422,6 +3564,11 @@ export interface components {
              * @default false
              */
             following: boolean;
+            /**
+             * Blocked
+             * @default false
+             */
+            blocked: boolean;
         };
         /**
          * CreatorPage
@@ -3479,6 +3626,52 @@ export interface components {
             accent_color?: string | null;
             /** Category */
             category?: string | null;
+        };
+        /**
+         * StudioStatsOut
+         * @description Owner dashboard real counts (maps to the studio dashboard summary).
+         *
+         *     Every field is a pure count scoped to the caller's own creator. There is NO
+         *     revenue/settlement/amount field by design — money figures are gated (ASS-229),
+         *     so this endpoint carries counts only.
+         *
+         *     - ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).
+         *     - ``posts``: the creator's feed posts.
+         *     - ``products``: catalog products the creator owns (all statuses).
+         *     - ``products_selling``: the subset currently ``selling`` (public on-sale).
+         *     - ``orders``: distinct **non-cancelled** orders that contain at least one of
+         *       the creator's products (order **count**, never an amount). A cancelled
+         *       order never happened commercially, so it is excluded from the dashboard
+         *       "order count" the same way a cancelled order is excluded everywhere else.
+         *     - ``subscribers``: the creator's active subscribers (``status = active``).
+         */
+        StudioStatsOut: {
+            /** Followers */
+            followers: number;
+            /** Posts */
+            posts: number;
+            /** Products */
+            products: number;
+            /** Products Selling */
+            products_selling: number;
+            /** Orders */
+            orders: number;
+            /** Subscribers */
+            subscribers: number;
+        };
+        /**
+         * StudioError
+         * @description Coded error for studio-owner endpoints (``detail`` + machine ``code``).
+         *
+         *     Mirrors the commerce/membership coded-error shape so the web branches on the
+         *     stable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather
+         *     than the localized ``detail`` copy.
+         */
+        StudioError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * DashboardOut
@@ -3941,10 +4134,15 @@ export interface components {
         /**
          * SubscriptionError
          * @description Stable error shape for subscription and studio-tier endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
          */
         SubscriptionError: {
             /** Detail */
             detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * StudioTierIn
@@ -4201,10 +4399,15 @@ export interface components {
         /**
          * PaymentMethodError
          * @description Stable error shape for payment-method endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
          */
         PaymentMethodError: {
             /** Detail */
             detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * PaymentMethodIn
@@ -4755,32 +4958,16 @@ export interface components {
         };
         /**
          * BlockOut
-         * @description Block row exposed to managers.
+         * @description Block-edge state after a mutation (lets the client reconcile its state).
          */
         BlockOut: {
+            /** Blocked */
+            blocked: boolean;
             /**
-             * Id
+             * Creator Id
              * Format: uuid
              */
-            id: string;
-            /**
-             * Target Id
-             * Format: uuid
-             */
-            target_id: string;
-            /** Block Scope */
-            block_scope: string;
-            /** Block Reason */
-            block_reason: string;
-            /** Is Risk Flag */
-            is_risk_flag: boolean;
-            /** Status */
-            status: string;
-            /**
-             * Effective From
-             * Format: date-time
-             */
-            effective_from: string;
+            creator_id: string;
         };
         /**
          * BlockCreateIn
@@ -4989,6 +5176,42 @@ export interface components {
             following: boolean;
             /** Followers */
             followers: number;
+        };
+        /**
+         * BlockError
+         * @description Coded error shape for block endpoints (``detail`` copy + stable ``code``).
+         */
+        BlockError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * BlockIn
+         * @description Request body to block a creator (by id).
+         */
+        BlockIn: {
+            /**
+             * Creator Id
+             * Format: uuid
+             */
+            creator_id: string;
+        };
+        /**
+         * BlockedCreatorOut
+         * @description One blocked creator, for the fan's block-list settings screen.
+         */
+        BlockedCreatorOut: {
+            /**
+             * Creator Id
+             * Format: uuid
+             */
+            creator_id: string;
+            /** Name */
+            name: string;
+            /** Handle */
+            handle: string;
         };
         /**
          * VisitRecordOut
@@ -5889,6 +6112,15 @@ export interface operations {
                     "application/json": components["schemas"]["CommerceError"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
         };
     };
     apps_commerce_api_studio_update_product: {
@@ -6250,6 +6482,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
+                };
+            };
         };
     };
     apps_content_api_unlike_post: {
@@ -6348,6 +6589,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
                 };
             };
         };
@@ -6843,6 +7093,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_creator_api_studio_stats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioStatsOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioError"];
                 };
             };
         };
@@ -9362,6 +9641,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_social_api_list_blocks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedCreatorOut"][];
+                };
+            };
+        };
+    };
+    apps_social_api_block_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockError"];
+                };
+            };
+        };
+    };
+    apps_social_api_unblock_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creator_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockOut"];
                 };
             };
         };

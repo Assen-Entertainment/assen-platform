@@ -9,6 +9,7 @@
 import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "./client";
 import type {
+  BlockedCreator,
   Comment,
   Creator,
   MembershipTier,
@@ -22,6 +23,7 @@ import type {
   Product,
   RefundStatus,
   SavedPaymentMethod,
+  StudioStats,
   Subscription,
   SearchResult,
 } from "./types";
@@ -36,6 +38,8 @@ import {
 
 export * from "./types";
 export { apiFetch, ApiError } from "./client";
+export { apiErrorMessage, ERROR_CODE_MESSAGES, ERROR_CODES } from "./error-messages";
+export type { ErrorCode } from "./error-messages";
 
 const USE_API = Boolean(config.apiUrl);
 interface RawCreator {
@@ -51,6 +55,8 @@ interface RawCreator {
   followers: number;
   posts: number;
   following: boolean;
+  // 서버 CreatorOut.blocked(default false) — 단건 조회에서만 신뢰값. 목록엔 없을 수 있어 옵셔널.
+  blocked?: boolean;
 }
 interface RawPost {
   id: string;
@@ -200,6 +206,15 @@ interface RawPaymentMethod {
   is_primary: boolean;
   created_at: string;
 }
+/** 스튜디오 대시보드 실 카운트 wire(StudioStatsOut) — 전부 정수 카운트(금액 필드 없음·정산 게이트). */
+interface RawStudioStats {
+  followers: number;
+  posts: number;
+  products: number;
+  products_selling: number;
+  orders: number;
+  subscribers: number;
+}
 /** 소셜 토글 응답(카운트 정정용). */
 export interface FollowResult {
   following: boolean;
@@ -215,6 +230,22 @@ export interface ReportResult {
   status: string;
   createdAt: string;
 }
+/** 차단 토글 응답(서버 BlockOut — 클라 상태 정정용). */
+export interface BlockResult {
+  blocked: boolean;
+  creatorId: string;
+}
+/** 설정 차단 목록 wire(BlockedCreatorOut). */
+interface RawBlockedCreator {
+  creator_id: string;
+  name: string;
+  handle: string;
+}
+const mapBlockedCreator = (b: RawBlockedCreator): BlockedCreator => ({
+  creatorId: b.creator_id,
+  name: b.name,
+  handle: b.handle,
+});
 
 /** ISO 시각 → 상대 라벨(방금 / N분·시간·일 전 / 날짜). */
 function relativeTime(iso: string): string {
@@ -244,6 +275,7 @@ const mapCreator = (c: RawCreator): Creator => ({
   verified: c.verified,
   category: c.category || undefined,
   following: c.following,
+  blocked: c.blocked,
 });
 const mapPost = (p: RawPost): Post => ({
   id: p.id,
@@ -393,6 +425,15 @@ const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({
   isPrimary: m.is_primary,
   createdAt: m.created_at,
 });
+/** 스튜디오 스탯 매핑 — snake→camel(products_selling→productsSelling). 전부 정수 카운트(금액 없음). */
+const mapStudioStats = (s: RawStudioStats): StudioStats => ({
+  followers: s.followers,
+  posts: s.posts,
+  products: s.products,
+  productsSelling: s.products_selling,
+  orders: s.orders,
+  subscribers: s.subscribers,
+});
 
 // --- mock 폴백 데이터 (apiUrl 미설정 시) ------------------------------------
 const CREATORS: Creator[] = [
@@ -494,10 +535,62 @@ const PAYMENT_METHODS: SavedPaymentMethod[] = [
   { id: "m2", brand: "카카오페이", last4: "8890", isPrimary: false, createdAt: "2026-06-10T00:00:00Z" },
 ];
 
+/**
+ * 스튜디오 대시보드 실 카운트 mock 폴백 — 기존 mock 대시보드 수치와 일관(회귀 0).
+ * followers 12,400은 기존 하드코딩 대시보드 카드 및 데모 오너(별빛 일러스트) 값과 일치,
+ * products/productsSelling은 STUDIO_PRODUCTS(스튜디오 상품 mock)에서 파생, subscribers 872는
+ * 애널리틱스 시계열 최근월(6월) 활성 구독자와 일치, orders 124는 최근 항목 "판매 124"와 일치.
+ * ※금액 필드는 없다(정산 게이트) — mock도 금액을 날조하지 않는다.
+ */
+const STUDIO_STATS: StudioStats = {
+  followers: 12400,
+  posts: 320,
+  products: STUDIO_PRODUCTS.length,
+  productsSelling: STUDIO_PRODUCTS.filter((p) => p.status === "selling").length,
+  orders: 124,
+  subscribers: 872,
+};
+
+// mock 차단 상태(USE_API=false 로컬 시뮬 — 실 경로는 서버가 권위). getBlocks/getCreator 코히어런스.
+const MOCK_BLOCKED = new Set<string>();
+/** mock 차단/해제 반영(설정 목록·프로필 blocked 일관성). 뮤테이션 훅의 mock 분기에서 호출. */
+export function mockSetBlocked(creatorId: string, blocked: boolean): void {
+  if (blocked) MOCK_BLOCKED.add(creatorId);
+  else MOCK_BLOCKED.delete(creatorId);
+}
+
+// --- 커서 페이지네이션(R4-W1): 커서 인지 fetcher --------------------------------
+/**
+ * 커서 페이지 — 뷰/훅이 소비하는 언랩 형태(camelCase). 서버 `Paginated<T>`(next_cursor)에서
+ * items를 매핑하고 next_cursor→nextCursor로 좁힌다. 마지막 페이지·mock 폴백은 nextCursor=undefined.
+ */
+export interface Page<T> {
+  items: T[];
+  nextCursor?: string;
+}
+
+/** cursor + 추가 파라미터(creator_id 등)를 병합해 쿼리스트링 구성(빈 값은 생략). */
+function pageQuery(cursor?: string, ...extra: (string | false | undefined)[]): string {
+  const parts = [...extra, cursor ? `cursor=${encodeURIComponent(cursor)}` : undefined].filter(
+    (p): p is string => Boolean(p),
+  );
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+/** 서버 Paginated 응답 → Page(매퍼 적용 + next_cursor 정규화). */
+function toPage<R, T>(raw: Paginated<R>, map: (r: R) => T): Page<T> {
+  return { items: raw.items.map(map), nextCursor: raw.next_cursor ?? undefined };
+}
+
 // --- 도메인 함수 (apiUrl 설정 시 실 B2 API, 아니면 mock 폴백) ----------------
 export async function getCreators(): Promise<Creator[]> {
   if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);
   return CREATORS;
+}
+/** 크리에이터 커서 페이지 — 디스커버리 무한 로드(21번째+ 도달). mock은 단일 페이지(nextCursor 없음). */
+export async function getCreatorsPage(cursor?: string): Promise<Page<Creator>> {
+  if (USE_API) return toPage(await apiFetch<Paginated<RawCreator>>(`/creators${pageQuery(cursor)}`), mapCreator);
+  return { items: CREATORS };
 }
 export async function getCreator(handle: string): Promise<Creator | undefined> {
   if (USE_API) {
@@ -509,7 +602,9 @@ export async function getCreator(handle: string): Promise<Creator | undefined> {
       throw e;
     }
   }
-  return CREATORS.find((c) => c.handle === handle);
+  // mock: 로컬 차단 상태를 반영(단건 blocked 코히어런스 — 정적 CREATORS는 불변 유지).
+  const found = CREATORS.find((c) => c.handle === handle);
+  return found ? { ...found, blocked: MOCK_BLOCKED.has(found.id) } : undefined;
 }
 export async function getProducts(creatorId?: string): Promise<Product[]> {
   if (USE_API) {
@@ -517,6 +612,14 @@ export async function getProducts(creatorId?: string): Promise<Product[]> {
     return (await apiFetch<Paginated<RawProduct>>(`/products${q}`)).items.map(mapProduct);
   }
   return creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS;
+}
+/** 상품 커서 페이지 — 스토어·디스커버리 무한 로드. mock은 단일 페이지(nextCursor 없음). */
+export async function getProductsPage(creatorId?: string, cursor?: string): Promise<Page<Product>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, creatorId && `creator_id=${encodeURIComponent(creatorId)}`);
+    return toPage(await apiFetch<Paginated<RawProduct>>(`/products${q}`), mapProduct);
+  }
+  return { items: creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS };
 }
 export async function getMembershipTiers(creatorId?: string): Promise<MembershipTier[]> {
   if (USE_API) {
@@ -533,10 +636,23 @@ export async function getPosts(creatorId?: string): Promise<Post[]> {
   }
   return creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS;
 }
+/** 포스트 커서 페이지 — 크리에이터 포스트 무한 로드. mock은 단일 페이지. */
+export async function getPostsPage(creatorId?: string, cursor?: string): Promise<Page<Post>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, creatorId && `creator_id=${encodeURIComponent(creatorId)}`);
+    return toPage(await apiFetch<Paginated<RawPost>>(`/posts${q}`), mapPost);
+  }
+  return { items: creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS };
+}
 /** 피드 — B2 `/feed` 소비(익명=최신 전체). B3 개인화(팔로잉) 피드의 배선 지점. */
 export async function getFeed(): Promise<Post[]> {
   if (USE_API) return (await apiFetch<Paginated<RawPost>>("/feed")).items.map(mapPost);
   return POSTS;
+}
+/** 피드 커서 페이지 — 무한 로드. mock은 단일 페이지. */
+export async function getFeedPage(cursor?: string): Promise<Page<Post>> {
+  if (USE_API) return toPage(await apiFetch<Paginated<RawPost>>(`/feed${pageQuery(cursor)}`), mapPost);
+  return { items: POSTS };
 }
 /** 검색 — B2 `/search?q=` 소비. mock 폴백은 서버 의미론(name/handle·title 부분일치, 10건)을 미러. */
 export async function getSearch(q: string): Promise<SearchResult> {
@@ -577,6 +693,14 @@ export async function getComments(postId: string): Promise<Comment[]> {
   }
   return COMMENTS.filter((c) => c.postId === postId);
 }
+/** 댓글 커서 페이지 — 포스트 상세 무한 로드. mock은 단일 페이지. */
+export async function getCommentsPage(postId: string, cursor?: string): Promise<Page<Comment>> {
+  if (USE_API) {
+    const path = `/posts/${encodeURIComponent(postId)}/comments${pageQuery(cursor)}`;
+    return toPage(await apiFetch<Paginated<RawComment>>(path), mapComment);
+  }
+  return { items: COMMENTS.filter((c) => c.postId === postId) };
+}
 
 /**
  * 단일 상품 — USE_API면 `GET /products/{id}`(ProductOut) 단건 조회(404/422→undefined),
@@ -609,6 +733,18 @@ export async function getOrders(): Promise<Order[]> {
   }
   return ORDERS;
 }
+/** 주문 커서 페이지 — 무한 로드. 401(비로그인)은 빈 단일 페이지. mock은 단일 페이지. */
+export async function getOrdersPage(cursor?: string): Promise<Page<Order>> {
+  if (USE_API) {
+    try {
+      return toPage(await apiFetch<Paginated<RawOrder>>(`/orders${pageQuery(cursor)}`), mapOrder);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: ORDERS };
+}
 /** 단일 주문 — USE_API면 실 조회. 미지의 id/비로그인은 undefined(notFound 계약). */
 export async function getOrder(id: string): Promise<Order | undefined> {
   if (USE_API) {
@@ -633,6 +769,19 @@ export async function getNotifications(): Promise<Notification[]> {
   }
   return NOTIFICATIONS;
 }
+/** 알림 커서 페이지 — 무한 로드. 401(비로그인)은 빈 단일 페이지. mock은 단일 페이지. */
+export async function getNotificationsPage(cursor?: string): Promise<Page<Notification>> {
+  if (USE_API) {
+    try {
+      const raw = await apiFetch<Paginated<RawNotification>>(`/notifications${pageQuery(cursor)}`);
+      return toPage(raw, mapNotification);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: NOTIFICATIONS };
+}
 /** 구독 목록 — USE_API면 실 조회(배열 응답), 아니면 mock. SSR 401(비로그인)은 빈 목록. */
 export async function getSubscriptions(): Promise<Subscription[]> {
   if (USE_API) {
@@ -644,6 +793,22 @@ export async function getSubscriptions(): Promise<Subscription[]> {
     }
   }
   return SUBSCRIPTIONS;
+}
+/** 내 차단 목록 — USE_API면 GET /fan/blocks, 아니면 mock 로컬 상태. 401(비로그인)은 빈 목록. */
+export async function getBlocks(): Promise<BlockedCreator[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawBlockedCreator[]>("/fan/blocks")).map(mapBlockedCreator);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return CREATORS.filter((c) => MOCK_BLOCKED.has(c.id)).map((c) => ({
+    creatorId: c.id,
+    name: c.name,
+    handle: c.handle,
+  }));
 }
 
 // --- 뮤테이션 API(실 호출 전용 — queries.ts가 USE_API로 분기해 호출) ----------
@@ -719,6 +884,25 @@ export async function apiReport(input: { reportType: string; narrative?: string 
   );
   return { safetyReportId: raw.safety_report_id, status: raw.status, createdAt: raw.created_at };
 }
+/**
+ * 크리에이터 차단 — POST /fan/blocks {creator_id} → {blocked, creator_id}(멱등).
+ * 부수효과: 서버가 자동 언팔로우(팔로우 파생 노출 제거). 404=BlockTargetNotFound.
+ */
+export async function apiBlockCreator(creatorId: string): Promise<BlockResult> {
+  const raw = await apiFetch<{ blocked: boolean; creator_id: string }>("/fan/blocks", {
+    method: "POST",
+    body: JSON.stringify({ creator_id: creatorId }),
+  });
+  return { blocked: raw.blocked, creatorId: raw.creator_id };
+}
+/** 크리에이터 차단 해제 — DELETE /fan/blocks/{creator_id} → {blocked, creator_id}(멱등). */
+export async function apiUnblockCreator(creatorId: string): Promise<BlockResult> {
+  const raw = await apiFetch<{ blocked: boolean; creator_id: string }>(
+    `/fan/blocks/${encodeURIComponent(creatorId)}`,
+    { method: "DELETE" },
+  );
+  return { blocked: raw.blocked, creatorId: raw.creator_id };
+}
 /** 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. is_adult=19+ 성인 등급(서버가 노출 통제). */
 export async function apiPublishPost(input: { body: string; mediaUrl?: string; isAdult?: boolean }): Promise<Post> {
   const raw = await apiFetch<RawPost>("/posts", {
@@ -748,6 +932,25 @@ export async function apiConfirmVerify(): Promise<{ adultVerified: boolean; kycS
 /** 내 프로필 수정 — nickname만(이메일/전화는 재인증 게이트). 세션 무효화는 호출측(useUpdateMe). */
 export async function apiUpdateMe(nickname: string): Promise<void> {
   await apiFetch("/fan/me", { method: "PATCH", body: JSON.stringify({ nickname }) });
+}
+
+// --- R4-W5: 스튜디오 대시보드 실 카운트(오너 스코프) -------------------------
+/**
+ * 스튜디오 대시보드 실 카운트 — USE_API면 GET /studio/stats(StudioStatsOut) 소비.
+ * 401(비로그인)/403(OwnerRequired, 비크리에이터)은 null(방어적 — 호출측이 빈 상태/안내 렌더).
+ * mock 폴백은 결정적 카운트(STUDIO_STATS). 서버 계약에 수익/금액은 없다(정산 게이트).
+ */
+export async function getStudioStats(): Promise<StudioStats | null> {
+  if (USE_API) {
+    try {
+      return mapStudioStats(await apiFetch<RawStudioStats>("/studio/stats"));
+    } catch (e) {
+      // 비크리에이터(403)·비로그인(401)은 통계 없음 → null(카운트를 0으로 날조하지 않는다).
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
+      throw e;
+    }
+  }
+  return STUDIO_STATS;
 }
 
 // --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기(오너 스코프) ---------------------

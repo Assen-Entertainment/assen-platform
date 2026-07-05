@@ -30,7 +30,9 @@ from apps.creator.models import Creator
 from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.services import notify
+from apps.social.models import blocked_creator_ids
 from config.api import api
+from config.errors import ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -42,6 +44,22 @@ class ErrorOut(Schema):
     """Stable error shape for content endpoints."""
 
     detail: str
+
+
+class InteractionBlockedError(Schema):
+    """422 body when a fan interacts with a personally-blocked creator's content.
+
+    Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+    (``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the
+    ``{detail, code}`` shape used by commerce/membership.
+    """
+
+    detail: str
+    code: str
+
+
+# 422 copy shared by every blocked write interaction (like/comment/order).
+_INTERACTION_BLOCKED_DETAIL = "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요."
 
 
 class PostOut(Schema):
@@ -206,10 +224,19 @@ def list_posts(
     cursor: str | None = None,
     limit: int | None = None,
 ) -> PostPage:
-    """List posts, newest first; filter to one creator via ``?creator_id=``."""
-    queryset = _post_qs(resolve_optional_account(request)).order_by("-created_at", "id")
+    """List posts, newest first; filter to one creator via ``?creator_id=``.
+
+    Personal-block gating: the global (unfiltered) list is an aggregate surface, so
+    personally blocked creators are excluded. A ``?creator_id=`` request is explicit
+    creator-scoped navigation (a profile visit), so it is returned even for a blocked
+    creator — the web renders the block state; a personal block is not existence hiding.
+    """
+    account = resolve_optional_account(request)
+    queryset = _post_qs(account).order_by("-created_at", "id")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
+    else:
+        queryset = queryset.exclude(creator_id__in=blocked_creator_ids(account))
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
     return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
 
@@ -256,13 +283,13 @@ def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | Erro
 
 @posts_router.put(
     "/{post_id}/like",
-    response={200: LikeOut, 404: ErrorOut},
+    response={200: LikeOut, 404: ErrorOut, 422: InteractionBlockedError},
     auth=fan_auth,
     throttle=user_write_throttle("60/min"),
 )
 def like_post(
     request: HttpRequest, post_id: uuid.UUID
-) -> tuple[int, LikeOut | ErrorOut]:
+) -> tuple[int, LikeOut | ErrorOut | InteractionBlockedError]:
     """Like a post; idempotent (a second like is a no-op, still 200)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     # 19+ gate (same funnel as reads): an adult post the caller may not see 404s here
@@ -270,6 +297,12 @@ def like_post(
     post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
+    # Personal-block consistency (F4): the read stays allowed, but a new write
+    # interaction against a creator this fan has blocked is refused. One set query.
+    if post.creator_id in blocked_creator_ids(account):
+        return 422, InteractionBlockedError(
+            detail=_INTERACTION_BLOCKED_DETAIL, code=ErrorCode.INTERACTION_BLOCKED.value
+        )
     # No notification is emitted on a like (B6): likes are high-volume and would
     # spam the creator's feed. Only comments notify. The web mock's like-notification
     # is demo-only and intentionally not mirrored server-side.
@@ -292,7 +325,15 @@ def like_post(
 def unlike_post(
     request: HttpRequest, post_id: uuid.UUID
 ) -> tuple[int, LikeOut | ErrorOut]:
-    """Unlike a post; idempotent (unliking a non-liked post is a no-op)."""
+    """Unlike a post; idempotent (unliking a non-liked post is a no-op).
+
+    Retraction is exempt from the personal-block gate (F4): unliking is not a *new*
+    interaction against the creator but cleanup of the fan's own existing like, so a
+    fan who blocked the creator after liking can still withdraw that like (standard
+    block UX — you can always remove your own trace). New interactions
+    (``like``/comment/order) stay refused while blocked; only the 19+ read funnel
+    still applies here, so a gated adult post 404s.
+    """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     # 19+ gate (same funnel as reads): a gated adult post 404s here too.
     post = _post_qs(account).filter(id=post_id).first()
@@ -328,13 +369,13 @@ def list_comments(
 
 @posts_router.post(
     "/{post_id}/comments",
-    response={201: CommentOut, 404: ErrorOut},
+    response={201: CommentOut, 404: ErrorOut, 422: InteractionBlockedError},
     auth=fan_auth,
     throttle=user_write_throttle("10/min"),
 )
 def create_comment(
     request: HttpRequest, post_id: uuid.UUID, data: CommentIn
-) -> tuple[int, CommentOut | ErrorOut]:
+) -> tuple[int, CommentOut | ErrorOut | InteractionBlockedError]:
     """Add a comment to a post as the authenticated fan; 404 if the post is unknown.
 
     ``author`` is the account; ``author_name`` denormalises the display nickname so
@@ -347,6 +388,12 @@ def create_comment(
     post = _post_qs(account).select_related("creator__owner").filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
+    # Personal-block consistency (F4): reads stay allowed, but a new comment on a
+    # blocked creator's post is refused. One set query.
+    if post.creator_id in blocked_creator_ids(account):
+        return 422, InteractionBlockedError(
+            detail=_INTERACTION_BLOCKED_DETAIL, code=ErrorCode.INTERACTION_BLOCKED.value
+        )
     comment = Comment.objects.create(
         post=post, author=account, author_name=account.nickname, body=data.body
     )
@@ -371,8 +418,16 @@ def feed(
     Personalised (following-only) feed needs a richer ranking and lands later; for
     now this returns the same recent-posts page as ``/posts``, but with the
     per-user ``liked`` flag filled in when the caller is authenticated.
+
+    The feed is an aggregate surface, so posts from creators the caller has
+    personally blocked are excluded (anonymous callers block nothing).
     """
-    queryset = _post_qs(resolve_optional_account(request)).order_by("-created_at", "id")
+    account = resolve_optional_account(request)
+    queryset = (
+        _post_qs(account)
+        .exclude(creator_id__in=blocked_creator_ids(account))
+        .order_by("-created_at", "id")
+    )
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
     return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
 

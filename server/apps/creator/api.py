@@ -15,17 +15,20 @@ import uuid
 from typing import cast
 
 from django.conf import settings
-from django.db.models import Count, Exists, OuterRef, QuerySet
+from django.db.models import Count, Exists, OuterRef, Q, QuerySet
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field
 
-from apps.commerce.models import Product, ProductStatus
+from apps.commerce.models import OrderItem, OrderStatus, Product, ProductStatus
+from apps.content.models import Post
 from apps.creator.models import Creator
 from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
-from apps.social.models import Follow
+from apps.membership.models import Subscription, SubscriptionStatus
+from apps.social.models import CreatorBlock, Follow, blocked_creator_ids
 from config.api import api
+from config.errors import ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -57,6 +60,11 @@ class CreatorOut(Schema):
     followers: int
     posts: int
     following: bool = False
+    # True only when the authenticated caller has *personally* blocked this creator
+    # (apps.social.CreatorBlock). Discovery/search already exclude blocked creators,
+    # so this is meaningful on explicit single navigation (get_creator) where the
+    # creator is returned and the web renders a "blocked" state. Anonymous → False.
+    blocked: bool = False
 
 
 class CreatorPage(Schema):
@@ -90,9 +98,9 @@ def _annotated(account: Account | None = None) -> QuerySet[Creator]:
     fan-out. At scale the intermediate row explosion is a perf cost — move to
     subquery counts or denormalised counters then (tracked, non-blocking for B2).
 
-    When ``account`` is given, a per-user ``is_following`` flag is annotated via a
-    single ``Exists`` subquery — no extra per-row query. Anonymous callers pass
-    ``None`` and get no annotation (``following`` False).
+    When ``account`` is given, per-user ``is_following`` / ``is_blocked`` flags are
+    annotated via single ``Exists`` subqueries — no extra per-row query. Anonymous
+    callers pass ``None`` and get no annotation (``following`` / ``blocked`` False).
     """
     queryset = Creator.objects.annotate(
         followers_count=Count("followers", distinct=True),
@@ -102,7 +110,10 @@ def _annotated(account: Account | None = None) -> QuerySet[Creator]:
         queryset = queryset.annotate(
             is_following=Exists(
                 Follow.objects.filter(creator=OuterRef("pk"), follower=account)
-            )
+            ),
+            is_blocked=Exists(
+                CreatorBlock.objects.filter(creator=OuterRef("pk"), blocker=account)
+            ),
         )
     return queryset
 
@@ -122,6 +133,7 @@ def _creator_out(creator: Creator) -> CreatorOut:
         followers=getattr(creator, "followers_count", 0),
         posts=getattr(creator, "posts_count", 0),
         following=bool(getattr(creator, "is_following", False)),
+        blocked=bool(getattr(creator, "is_blocked", False)),
     )
 
 
@@ -132,9 +144,17 @@ def list_creators(
     limit: int | None = None,
     category: str | None = None,
 ) -> CreatorPage:
-    """List creators (optionally filtered by category), cursor-paginated."""
+    """List creators (optionally filtered by category), cursor-paginated.
+
+    Discovery is an aggregate surface, so creators the authenticated caller has
+    personally blocked are excluded (anonymous callers block nothing).
+    """
     account = resolve_optional_account(request)
-    queryset = _annotated(account).order_by("handle")
+    queryset = (
+        _annotated(account)
+        .exclude(id__in=blocked_creator_ids(account))
+        .order_by("handle")
+    )
     if category:
         queryset = queryset.filter(category=category)
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
@@ -160,21 +180,28 @@ def search(request: HttpRequest, q: str = "") -> SearchOut:
     term = q.strip()[:_SEARCH_TERM_MAX]
     if not term:
         return SearchOut(creators=[], products=[])
+    # Search is an aggregate surface: personally blocked creators AND their products
+    # are excluded for the authenticated caller (anonymous blocks nothing).
+    blocked = blocked_creator_ids(account)
     creators = list(
         _annotated(account)
         .filter(name__icontains=term)
+        .exclude(id__in=blocked)
         .order_by("handle")[:_SEARCH_LIMIT]
     ) + list(
         _annotated(account)
         .filter(handle__icontains=term)
         .exclude(name__icontains=term)
+        .exclude(id__in=blocked)
         .order_by("handle")[:_SEARCH_LIMIT]
     )
     # 19+ / visibility gate on product results (same invariant as list_products):
     # draft/hidden are owner-only, and adult_only follows the ENABLE_ADULT_CONTENT +
     # adult_verified gate (off → hidden from everyone), so search cannot leak them.
-    product_qs = Product.objects.filter(title__icontains=term).exclude(
-        status__in=(ProductStatus.DRAFT.value, ProductStatus.HIDDEN.value)
+    product_qs = (
+        Product.objects.filter(title__icontains=term)
+        .exclude(status__in=(ProductStatus.DRAFT.value, ProductStatus.HIDDEN.value))
+        .exclude(creator_id__in=blocked)
     )
     if not (
         settings.ENABLE_ADULT_CONTENT and account is not None and account.adult_verified
@@ -246,3 +273,98 @@ def studio_update_profile(
 
 
 api.add_router("/studio/profile", studio_profile_router)
+
+
+# --------------------------------------------------------------------------- #
+# Studio dashboard stats (owner real counts; R4-W5 — pure engineering).
+# COUNTS ONLY. No revenue/settlement/amount ever appears here — 수익·매출·정산 금액은
+# 재무·법무 게이트(ASS-229) 소관이라 이 집계에서 전면 배제한다. Every figure is scoped to
+# the caller's OWN creator (``owner=account``), so another creator's stats cannot
+# leak. The web dashboard replaces its placeholder STATS with these.
+# --------------------------------------------------------------------------- #
+studio_stats_router = Router(auth=fan_auth, tags=["studio-creator"])
+
+
+class StudioError(Schema):
+    """Coded error for studio-owner endpoints (``detail`` + machine ``code``).
+
+    Mirrors the commerce/membership coded-error shape so the web branches on the
+    stable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather
+    than the localized ``detail`` copy.
+    """
+
+    detail: str
+    code: str
+
+
+class StudioStatsOut(Schema):
+    """Owner dashboard real counts (maps to the studio dashboard summary).
+
+    Every field is a pure count scoped to the caller's own creator. There is NO
+    revenue/settlement/amount field by design — money figures are gated (ASS-229),
+    so this endpoint carries counts only.
+
+    - ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).
+    - ``posts``: the creator's feed posts.
+    - ``products``: catalog products the creator owns (all statuses).
+    - ``products_selling``: the subset currently ``selling`` (public on-sale).
+    - ``orders``: distinct **non-cancelled** orders that contain at least one of
+      the creator's products (order **count**, never an amount). A cancelled
+      order never happened commercially, so it is excluded from the dashboard
+      "order count" the same way a cancelled order is excluded everywhere else.
+    - ``subscribers``: the creator's active subscribers (``status = active``).
+    """
+
+    followers: int
+    posts: int
+    products: int
+    products_selling: int
+    orders: int
+    subscribers: int
+
+
+@studio_stats_router.get("", response={200: StudioStatsOut, 403: StudioError})
+def studio_stats(request: HttpRequest) -> tuple[int, StudioStatsOut | StudioError]:
+    """Real per-creator dashboard counts for the caller's own creator.
+
+    Owner-scoped: every figure is filtered to the creator this account operates, so
+    another creator's stats never leak. 403 (OwnerRequired) if the caller operates
+    no creator. Counts only — no revenue/settlement (ASS-229 gated).
+
+    A handful of owner-scoped scalar aggregates (no per-row query → no N+1): the
+    product total + selling counts collapse into one conditional aggregate, the
+    rest are single indexed ``COUNT``s.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = Creator.objects.filter(owner=account).first()
+    if creator is None:
+        return 403, StudioError(
+            detail="크리에이터만 스튜디오 통계를 볼 수 있어요.",
+            code=ErrorCode.OWNER_REQUIRED.value,
+        )
+    product_counts = Product.objects.filter(creator=creator).aggregate(
+        total=Count("id"),
+        selling=Count("id", filter=Q(status=ProductStatus.SELLING.value)),
+    )
+    return 200, StudioStatsOut(
+        followers=Follow.objects.filter(creator=creator).count(),
+        posts=Post.objects.filter(creator=creator).count(),
+        products=product_counts["total"],
+        products_selling=product_counts["selling"],
+        # OrderItem → distinct Order: how many non-cancelled orders include this
+        # creator's products (a count, never a sum of amounts). Cancelled orders
+        # are excluded — they never happened commercially.
+        orders=(
+            OrderItem.objects.filter(product__creator=creator)
+            .exclude(order__status=OrderStatus.CANCELLED.value)
+            .values("order_id")
+            .distinct()
+            .count()
+        ),
+        subscribers=Subscription.objects.filter(
+            creator=creator, status=SubscriptionStatus.ACTIVE.value
+        ).count(),
+    )
+
+
+api.add_router("/studio/stats", studio_stats_router)

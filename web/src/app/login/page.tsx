@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { TextField, Button, Divider, OTPInput } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
-import { ApiError } from "@/lib/api";
+import { ApiError, ERROR_CODES } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 /**
@@ -51,15 +51,17 @@ function OtpLogin() {
       await loginWithOtp(phone.trim(), otp);
       router.push("/discovery");
     } catch (e) {
-      // 422는 미가입·인증번호 오류가 섞여 온다 — 서버 detail로 구분한다.
-      //  · detail에 "가입"이 포함될 때만 회원가입 유도(미가입 번호).
-      //  · 그 외 422는 인증번호 오류로 안내.
-      // ※문자열 부분일치 분기는 취약 — 서버 error code 도입 시 교체(백로그).
+      // 422는 미가입·인증번호 오류가 섞여 온다 — 서버 error code로 구분한다(문자열 부분일치 제거).
+      //  · code=AccountNotRegistered → 회원가입 유도(미가입 번호).
+      //  · code=OtpInvalid → 인증번호 오류 안내.
+      //  · 그 외 422는 서버 detail(표시용)로 폴백.
       if (e instanceof ApiError && e.status === 422) {
-        if (e.detail?.includes("가입")) {
+        if (e.code === ERROR_CODES.AccountNotRegistered) {
           setNotice("가입되지 않은 번호예요. 아래에서 회원가입을 진행해 주세요.");
-        } else {
+        } else if (e.code === ERROR_CODES.OtpInvalid) {
           setNotice("인증번호가 올바르지 않아요. 다시 확인해 주세요.");
+        } else {
+          setNotice(e.detail ?? "인증번호가 올바르지 않아요. 다시 확인해 주세요.");
         }
       } else {
         toast({ title: "로그인에 실패했어요", description: "인증번호를 확인하고 다시 시도해 주세요." });

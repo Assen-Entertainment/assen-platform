@@ -800,7 +800,7 @@
             }
           }
         },
-        "description": "List catalog products; filter by creator and/or type, cursor-paginated.\n\nConsumer surface: draft/hidden listings and gated 19+ items are excluded\n(:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.",
+        "description": "List catalog products; filter by creator and/or type, cursor-paginated.\n\nConsumer surface: draft/hidden listings and gated 19+ items are excluded\n(:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.\n\nPersonal-block gating (mirrors ``content.list_posts``): the global (unfiltered)\nbrowse is an aggregate surface, so products from creators the authenticated\ncaller has personally blocked are excluded. A ``?creator_id=`` request is\nexplicit creator-scoped navigation (a store visit), so it is returned even for\na blocked creator — the web renders the block state; a personal block is not\nexistence hiding, unlike the 19+ gate.",
         "tags": [
           "commerce"
         ]
@@ -1080,9 +1080,19 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
           }
         },
-        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs).\n\nHistorical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),\nso removing a catalog listing never rewrites a fan's order history.",
+        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).\n\nA product with order history can't be hard-deleted: ``OrderItem.product`` is\nSET_NULL, so deleting it would sever the historical order lines' attribution\nback to this creator (breaking dashboard/stats counts and order provenance).\nInstead of deleting, the owner should archive it (``status=\"hidden\"``), which\nremoves it from public listings while keeping order history intact. A product\nwith no order history has nothing to preserve, so it deletes as before.\n\nConcurrency (F5): the owner check, the reload under ``select_for_update`` and the\n``order_items`` re-check run in one ``transaction.atomic`` block so the\ncheck→delete window is narrowed — the product row is locked for the duration, so\na second concurrent *delete* cannot slip between the check and the delete. NOT a\ncomplete seal: an in-flight ``create_order`` does not lock the product row, so an\norder committing during this block can still leave a just-deleted product with a\ndangling (SET_NULL) line. Fully closing that needs the order path to lock the\nproduct too (a broader change deferred), so the residual window is documented,\nnot hidden.",
         "tags": [
           "studio-commerce"
         ],
@@ -1479,7 +1489,7 @@
             }
           }
         },
-        "description": "List posts, newest first; filter to one creator via ``?creator_id=``.",
+        "description": "List posts, newest first; filter to one creator via ``?creator_id=``.\n\nPersonal-block gating: the global (unfiltered) list is an aggregate surface, so\npersonally blocked creators are excluded. A ``?creator_id=`` request is explicit\ncreator-scoped navigation (a profile visit), so it is returned even for a blocked\ncreator — the web renders the block state; a personal block is not existence hiding.",
         "tags": [
           "content"
         ]
@@ -1614,6 +1624,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionBlockedError"
+                }
+              }
+            }
           }
         },
         "description": "Like a post; idempotent (a second like is a no-op, still 200).",
@@ -1666,7 +1686,7 @@
             }
           }
         },
-        "description": "Unlike a post; idempotent (unliking a non-liked post is a no-op).",
+        "description": "Unlike a post; idempotent (unliking a non-liked post is a no-op).\n\nRetraction is exempt from the personal-block gate (F4): unliking is not a *new*\ninteraction against the creator but cleanup of the fan's own existing like, so a\nfan who blocked the creator after liking can still withdraw that like (standard\nblock UX — you can always remove your own trace). New interactions\n(``like``/comment/order) stay refused while blocked; only the 19+ read funnel\nstill applies here, so a gated adult post 404s.",
         "tags": [
           "content"
         ],
@@ -1790,6 +1810,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionBlockedError"
+                }
+              }
+            }
           }
         },
         "description": "Add a comment to a post as the authenticated fan; 404 if the post is unknown.\n\n``author`` is the account; ``author_name`` denormalises the display nickname so\nthe comment renders identically to a seeded one (and _comment_out never leaks\nthe internal fan_id).",
@@ -1866,7 +1896,7 @@
             }
           }
         },
-        "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs a richer ranking and lands later; for\nnow this returns the same recent-posts page as ``/posts``, but with the\nper-user ``liked`` flag filled in when the caller is authenticated.",
+        "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs a richer ranking and lands later; for\nnow this returns the same recent-posts page as ``/posts``, but with the\nper-user ``liked`` flag filled in when the caller is authenticated.\n\nThe feed is an aggregate surface, so posts from creators the caller has\npersonally blocked are excluded (anonymous callers block nothing).",
         "tags": [
           "content"
         ]
@@ -2492,7 +2522,7 @@
             }
           }
         },
-        "description": "List creators (optionally filtered by category), cursor-paginated.",
+        "description": "List creators (optionally filtered by category), cursor-paginated.\n\nDiscovery is an aggregate surface, so creators the authenticated caller has\npersonally blocked are excluded (anonymous callers block nothing).",
         "tags": [
           "creator"
         ]
@@ -2616,6 +2646,47 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/studio/stats": {
+      "get": {
+        "operationId": "apps_creator_api_studio_stats",
+        "summary": "Studio Stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioStatsOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Real per-creator dashboard counts for the caller's own creator.\n\nOwner-scoped: every figure is filtered to the creator this account operates, so\nanother creator's stats never leak. 403 (OwnerRequired) if the caller operates\nno creator. Counts only — no revenue/settlement (ASS-229 gated).\n\nA handful of owner-scoped scalar aggregates (no per-row query → no N+1): the\nproduct total + selling counts collapse into one conditional aggregate, the\nrest are single indexed ``COUNT``s.",
+        "tags": [
+          "studio-creator"
+        ],
         "security": [
           {
             "FanBearerAuth": []
@@ -3838,7 +3909,7 @@
             }
           }
         },
-        "description": "List *active* membership tiers, optionally filtered to one creator.\n\nInactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from\nthis consumer surface, mirroring draft/hidden products in the catalog.",
+        "description": "List *active* membership tiers, optionally filtered to one creator.\n\nInactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from\nthis consumer surface, mirroring draft/hidden products in the catalog.\n\nPersonal-block gating (F8 — the 6th aggregate surface, aligning with\n``content.list_posts`` / ``commerce.list_products``): the global (unfiltered)\nbrowse excludes tiers from creators the authenticated caller has personally\nblocked. An explicit ``?creator_id=`` visit is creator-scoped navigation and is\nNOT hidden (a personal block is not existence hiding); an anonymous caller blocks\nnothing.",
         "tags": [
           "membership"
         ]
@@ -6620,6 +6691,132 @@
         ]
       }
     },
+    "/api/fan/blocks": {
+      "post": {
+        "operationId": "apps_social_api_block_creator",
+        "summary": "Block Creator",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Block a creator; idempotent (a second block is a no-op, still 200).\n\nBlocking auto-unfollows (standard mute/block UX): a fan who blocks a creator\nthey follow should not keep receiving that creator's follow-derived surfaces.\nAn unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,\na personal block does not hide the target's existence.",
+        "tags": [
+          "social-blocks"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "apps_social_api_list_blocks",
+        "summary": "List Blocks",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedCreatorOut"
+                  },
+                  "title": "Response",
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the creators the requesting fan has blocked (settings screen).",
+        "tags": [
+          "social-blocks"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fan/blocks/{creator_id}": {
+      "delete": {
+        "operationId": "apps_social_api_unblock_creator",
+        "summary": "Unblock Creator",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "creator_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Creator Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200).",
+        "tags": [
+          "social-blocks"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/operator/visits/": {
       "post": {
         "operationId": "apps_visit_api_create_visit",
@@ -8107,15 +8304,20 @@
         "type": "object"
       },
       "CommerceError": {
-        "description": "Stable error shape for commerce endpoints.",
+        "description": "Stable error shape for commerce endpoints.\n\n``detail`` is human-facing copy (display); ``code`` is the stable machine-readable\nreason the web branches on (see :class:`~config.errors.ErrorCode`).",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code"
         ],
         "title": "CommerceError",
         "type": "object"
@@ -8852,6 +9054,25 @@
         "title": "LikeOut",
         "type": "object"
       },
+      "InteractionBlockedError": {
+        "description": "422 body when a fan interacts with a personally-blocked creator's content.\n\nCarries the stable :class:`~config.errors.ErrorCode` value the web branches on\n(``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the\n``{detail, code}`` shape used by commerce/membership.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "InteractionBlockedError",
+        "type": "object"
+      },
       "CommentOut": {
         "description": "A comment (maps to the frontend ``Comment`` type; ``author`` is a display name).",
         "properties": {
@@ -9267,6 +9488,11 @@
             "default": false,
             "title": "Following",
             "type": "boolean"
+          },
+          "blocked": {
+            "default": false,
+            "title": "Blocked",
+            "type": "boolean"
           }
         },
         "required": [
@@ -9451,6 +9677,64 @@
           }
         },
         "title": "StudioProfilePatch",
+        "type": "object"
+      },
+      "StudioStatsOut": {
+        "description": "Owner dashboard real counts (maps to the studio dashboard summary).\n\nEvery field is a pure count scoped to the caller's own creator. There is NO\nrevenue/settlement/amount field by design — money figures are gated (ASS-229),\nso this endpoint carries counts only.\n\n- ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).\n- ``posts``: the creator's feed posts.\n- ``products``: catalog products the creator owns (all statuses).\n- ``products_selling``: the subset currently ``selling`` (public on-sale).\n- ``orders``: distinct **non-cancelled** orders that contain at least one of\n  the creator's products (order **count**, never an amount). A cancelled\n  order never happened commercially, so it is excluded from the dashboard\n  \"order count\" the same way a cancelled order is excluded everywhere else.\n- ``subscribers``: the creator's active subscribers (``status = active``).",
+        "properties": {
+          "followers": {
+            "title": "Followers",
+            "type": "integer"
+          },
+          "posts": {
+            "title": "Posts",
+            "type": "integer"
+          },
+          "products": {
+            "title": "Products",
+            "type": "integer"
+          },
+          "products_selling": {
+            "title": "Products Selling",
+            "type": "integer"
+          },
+          "orders": {
+            "title": "Orders",
+            "type": "integer"
+          },
+          "subscribers": {
+            "title": "Subscribers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "followers",
+          "posts",
+          "products",
+          "products_selling",
+          "orders",
+          "subscribers"
+        ],
+        "title": "StudioStatsOut",
+        "type": "object"
+      },
+      "StudioError": {
+        "description": "Coded error for studio-owner endpoints (``detail`` + machine ``code``).\n\nMirrors the commerce/membership coded-error shape so the web branches on the\nstable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather\nthan the localized ``detail`` copy.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "StudioError",
         "type": "object"
       },
       "DashboardOut": {
@@ -10346,15 +10630,20 @@
         "type": "object"
       },
       "SubscriptionError": {
-        "description": "Stable error shape for subscription and studio-tier endpoints.",
+        "description": "Stable error shape for subscription and studio-tier endpoints.\n\n``detail`` is human-facing copy (display); ``code`` is the stable machine-readable\nreason the web branches on (see :class:`~config.errors.ErrorCode`).",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code"
         ],
         "title": "SubscriptionError",
         "type": "object"
@@ -10903,15 +11192,20 @@
         "type": "object"
       },
       "PaymentMethodError": {
-        "description": "Stable error shape for payment-method endpoints.",
+        "description": "Stable error shape for payment-method endpoints.\n\n``detail`` is human-facing copy (display); ``code`` is the stable machine-readable\nreason the web branches on (see :class:`~config.errors.ErrorCode`).",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           }
         },
         "required": [
-          "detail"
+          "detail",
+          "code"
         ],
         "title": "PaymentMethodError",
         "type": "object"
@@ -11893,48 +12187,21 @@
         "type": "object"
       },
       "BlockOut": {
-        "description": "Block row exposed to managers.",
+        "description": "Block-edge state after a mutation (lets the client reconcile its state).",
         "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "target_id": {
-            "format": "uuid",
-            "title": "Target Id",
-            "type": "string"
-          },
-          "block_scope": {
-            "title": "Block Scope",
-            "type": "string"
-          },
-          "block_reason": {
-            "title": "Block Reason",
-            "type": "string"
-          },
-          "is_risk_flag": {
-            "title": "Is Risk Flag",
+          "blocked": {
+            "title": "Blocked",
             "type": "boolean"
           },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "effective_from": {
-            "format": "date-time",
-            "title": "Effective From",
+          "creator_id": {
+            "format": "uuid",
+            "title": "Creator Id",
             "type": "string"
           }
         },
         "required": [
-          "id",
-          "target_id",
-          "block_scope",
-          "block_reason",
-          "is_risk_flag",
-          "status",
-          "effective_from"
+          "blocked",
+          "creator_id"
         ],
         "title": "BlockOut",
         "type": "object"
@@ -12306,6 +12573,65 @@
           "followers"
         ],
         "title": "FollowOut",
+        "type": "object"
+      },
+      "BlockError": {
+        "description": "Coded error shape for block endpoints (``detail`` copy + stable ``code``).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "BlockError",
+        "type": "object"
+      },
+      "BlockIn": {
+        "description": "Request body to block a creator (by id).",
+        "properties": {
+          "creator_id": {
+            "format": "uuid",
+            "title": "Creator Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "creator_id"
+        ],
+        "title": "BlockIn",
+        "type": "object"
+      },
+      "BlockedCreatorOut": {
+        "description": "One blocked creator, for the fan's block-list settings screen.",
+        "properties": {
+          "creator_id": {
+            "format": "uuid",
+            "title": "Creator Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          }
+        },
+        "required": [
+          "creator_id",
+          "name",
+          "handle"
+        ],
+        "title": "BlockedCreatorOut",
         "type": "object"
       },
       "VisitRecordOut": {

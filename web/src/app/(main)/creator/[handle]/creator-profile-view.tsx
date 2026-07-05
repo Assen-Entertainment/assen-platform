@@ -6,13 +6,16 @@ import {
   Button,
   Tabs, TabsList, TabsTrigger, TabsContent,
   PostCard, MonetizableItem, MembershipTierCard, ErrorState, EmptyState,
-  CreatorHomeHeader, GiftSheet, LockedOverlay,
+  CreatorHomeHeader, GiftSheet, LockedOverlay, DisclaimerNotice,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { MoreIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
 import { gradientStyle } from "@/lib/placeholder";
-import { useCreator, useToggleFollow, usePosts, useToggleLike } from "@/lib/api/queries";
-import type { Creator, Post, Product, MembershipTier } from "@/lib/api";
+import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator } from "@/lib/api/queries";
+import { ApiError, apiErrorMessage, type Creator, type Post, type Product, type MembershipTier } from "@/lib/api";
 
 /** CreatorProfile 뷰 — 동적 + React Query. 팔로우=낙관적 뮤테이션(캐시 즉시 반영). */
 export function CreatorProfileView({
@@ -42,6 +45,11 @@ export function CreatorProfileView({
   const postList = postData ?? posts;
   const toggleLike = useToggleLike();
 
+  // 팬 개인 차단(R4-W3) — 차단은 파괴적 UX(자동 언팔) → 확인 다이얼로그. 해제는 비파괴적 → 즉시.
+  const block = useBlockCreator();
+  const unblock = useUnblockCreator();
+  const [confirmBlockOpen, setConfirmBlockOpen] = React.useState(false);
+
   const share = async (id: string) => {
     const url = `${window.location.origin}/post/${id}`;
     try {
@@ -50,6 +58,36 @@ export function CreatorProfileView({
     } catch {
       toast({ title: "링크 복사에 실패했어요" });
     }
+  };
+
+  const onConfirmBlock = () => {
+    block.mutate(
+      { creatorId: c.id, handle: c.handle },
+      {
+        onSuccess: () =>
+          toast({ title: "차단했어요", description: `${c.name}님의 콘텐츠가 더 이상 보이지 않아요.` }),
+        onError: (e) => {
+          // 401은 전역 세션 가드가 처리 → 그 외만 안내.
+          if (e instanceof ApiError && e.status === 401) return;
+          toast({ title: "차단하지 못했어요", description: apiErrorMessage(e) });
+        },
+      },
+    );
+    setConfirmBlockOpen(false);
+  };
+
+  const onUnblock = () => {
+    unblock.mutate(
+      { creatorId: c.id, handle: c.handle },
+      {
+        onSuccess: () =>
+          toast({ title: "차단을 해제했어요", description: `${c.name}님의 콘텐츠를 다시 볼 수 있어요.` }),
+        onError: (e) => {
+          if (e instanceof ApiError && e.status === 401) return;
+          toast({ title: "해제하지 못했어요", description: apiErrorMessage(e) });
+        },
+      },
+    );
   };
 
   if (isError && !data) {
@@ -80,8 +118,46 @@ export function CreatorProfileView({
         onGift={() => setGiftOpen(true)}
         followersHref={`/creator/${c.handle}/followers`}
         goal={{ label: "이번 달 팔로워 목표", value: c.followers, max: goalMax }}
+        menu={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="더보기">
+                <MoreIcon aria-hidden className="size-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {c.blocked ? (
+                <DropdownMenuItem onSelect={onUnblock} disabled={unblock.isPending}>
+                  차단 해제
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem destructive onSelect={() => setConfirmBlockOpen(true)}>
+                  차단하기
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
       />
 
+      {c.blocked ? (
+        // 차단됨 — 배너 + 콘텐츠 숨김(포스트/스토어/멤버십 자리에 안내 + 해제 버튼).
+        <div className="flex flex-col gap-4 px-2 pt-2">
+          <DisclaimerNotice title="차단한 크리에이터예요">
+            이 크리에이터의 포스트·스토어·멤버십을 숨기고 있어요. 차단을 해제하면 다시 볼 수 있어요.
+          </DisclaimerNotice>
+          <EmptyState
+            icon={<span className="text-2xl">🚫</span>}
+            title="콘텐츠를 숨기고 있어요"
+            description="차단을 해제하면 이 크리에이터의 포스트와 상품을 다시 볼 수 있어요."
+            action={
+              <Button variant="outline" onClick={onUnblock} disabled={unblock.isPending}>
+                차단 해제
+              </Button>
+            }
+          />
+        </div>
+      ) : (
       <Tabs value={tab} onValueChange={setTab} className="px-2">
         <TabsList>
           <TabsTrigger value="posts">포스트</TabsTrigger>
@@ -171,8 +247,34 @@ export function CreatorProfileView({
           )}
         </TabsContent>
       </Tabs>
+      )}
 
       <GiftSheet open={giftOpen} onOpenChange={setGiftOpen} creatorName={c.name} />
+
+      {/* 차단 확인 — 파괴적 UX(자동 언팔로우 안내). 기존 Dialog 패턴 재사용. */}
+      <Dialog open={confirmBlockOpen} onOpenChange={setConfirmBlockOpen}>
+        <DialogContent>
+          <DialogTitle>{c.name}님을 차단할까요?</DialogTitle>
+          <DialogDescription>
+            차단하면 이 크리에이터의 포스트·활동이 보이지 않고, 팔로우가 자동으로 해제돼요. 차단은
+            설정 &gt; 차단 목록에서 언제든 해제할 수 있어요.
+          </DialogDescription>
+          <div className="mt-1 flex gap-2">
+            <DialogClose asChild>
+              <Button variant="outline" className="flex-1">
+                취소
+              </Button>
+            </DialogClose>
+            <Button
+              className="flex-1 bg-error text-on-error hover:opacity-90"
+              onClick={onConfirmBlock}
+              disabled={block.isPending}
+            >
+              차단하기
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

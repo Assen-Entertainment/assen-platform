@@ -13,6 +13,14 @@ dependencies = [
     "psycopg[binary]>=3.2,<4.0",
     "gunicorn>=23.0,<24.0",
     "django-linear-migrations>=2.3,<3.0",
+    # Realtime (ASS-240): Channels adds the ASGI WebSocket stack; daphne is the
+    # ASGI server (must lead INSTALLED_APPS to override runserver). The shared
+    # cross-worker layer (channels-redis) is an optional extra, see below.
+    "channels>=4.0,<5.0",
+    "daphne>=4.0,<5.0",
+    # Error tracking. No-op unless SENTRY_DSN is set (config.observability); the
+    # Django integration ships in the base package, so no extra is needed.
+    "sentry-sdk>=2.0,<3.0",
 ]
 
 [dependency-groups]
@@ -23,7 +31,16 @@ dev = [
     "ruff>=0.8,<1.0",
     "mypy>=1.13,<2.0",
     "django-stubs[compatible-mypy]>=5.1,<6.0",
+    # Async test driver for the Channels WebSocket tests (ASS-240).
+    "pytest-asyncio>=0.24,<2.0",
 ]
+
+[project.optional-dependencies]
+# Shared cross-worker channel layer for realtime (ASS-240). Only needed when
+# CHANNEL_LAYERS_BACKEND=redis in a multi-process deployment; dev/test use the
+# in-memory layer and never install this. The settings loader fails safe to the
+# in-memory layer if it is unset/absent (config.settings.base._build_channel_layers).
+realtime-redis = ["channels-redis>=4.2,<5.0"]
 
 [tool.ruff]
 line-length = 100
@@ -56,3 +73,6 @@ DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py", "tests.py"]
 # Discover tests inside each domain app's tests/ package.
 testpaths = ["apps", "config"]
+# Realtime WebSocket tests opt in explicitly with @pytest.mark.asyncio (ASS-240);
+# strict mode leaves every existing sync test untouched.
+asyncio_mode = "strict"

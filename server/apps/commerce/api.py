@@ -34,7 +34,9 @@ from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
+from apps.social.models import blocked_creator_ids
 from config.api import api
+from config.errors import ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -73,9 +75,14 @@ _OPEN_REFUND = {RefundStatus.REQUESTED.value, RefundStatus.REVIEWING.value}
 
 
 class CommerceError(Schema):
-    """Stable error shape for commerce endpoints."""
+    """Stable error shape for commerce endpoints.
+
+    ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+    reason the web branches on (see :class:`~config.errors.ErrorCode`).
+    """
 
     detail: str
+    code: str
 
 
 class ProductOut(Schema):
@@ -154,12 +161,20 @@ def list_products(
 
     Consumer surface: draft/hidden listings and gated 19+ items are excluded
     (:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.
+
+    Personal-block gating (mirrors ``content.list_posts``): the global (unfiltered)
+    browse is an aggregate surface, so products from creators the authenticated
+    caller has personally blocked are excluded. A ``?creator_id=`` request is
+    explicit creator-scoped navigation (a store visit), so it is returned even for
+    a blocked creator — the web renders the block state; a personal block is not
+    existence hiding, unlike the 19+ gate.
     """
-    queryset = _public_product_qs(resolve_optional_account(request)).order_by(
-        "-created_at", "id"
-    )
+    account = resolve_optional_account(request)
+    queryset = _public_product_qs(account).order_by("-created_at", "id")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
+    else:
+        queryset = queryset.exclude(creator_id__in=blocked_creator_ids(account))
     if product_type:
         queryset = queryset.filter(type=product_type)
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
@@ -180,7 +195,9 @@ def get_product(
         id=product_id
     ).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
     return 200, _product_out(product)
 
 
@@ -303,7 +320,9 @@ def studio_list_products(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     products = Product.objects.filter(creator=creator).order_by("-created_at", "id")
     return 200, [_studio_product_out(p) for p in products]
 
@@ -320,11 +339,17 @@ def studio_create_product(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     if payload.type not in ProductType.values:
-        return 422, CommerceError(detail="상품 유형이 올바르지 않아요.")
+        return 422, CommerceError(
+            detail="상품 유형이 올바르지 않아요.", code=ErrorCode.PRODUCT_TYPE_INVALID.value
+        )
     if payload.status not in ProductStatus.values:
-        return 422, CommerceError(detail="상품 상태가 올바르지 않아요.")
+        return 422, CommerceError(
+            detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
+        )
     product = Product.objects.create(
         creator=creator,
         type=payload.type,
@@ -355,17 +380,25 @@ def studio_update_product(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
     product = Product.objects.filter(id=product_id, creator=creator).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
     if payload.type is not None:
         if payload.type not in ProductType.values:
-            return 422, CommerceError(detail="상품 유형이 올바르지 않아요.")
+            return 422, CommerceError(
+                detail="상품 유형이 올바르지 않아요.", code=ErrorCode.PRODUCT_TYPE_INVALID.value
+            )
         product.type = payload.type
     if payload.status is not None:
         if payload.status not in ProductStatus.values:
-            return 422, CommerceError(detail="상품 상태가 올바르지 않아요.")
+            return 422, CommerceError(
+                detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
+            )
         product.status = payload.status
     if payload.title is not None:
         product.title = payload.title
@@ -396,25 +429,53 @@ def studio_update_product(
 
 @studio_products_router.delete(
     "/{product_id}",
-    response={200: StudioAck, 403: CommerceError, 404: CommerceError},
+    response={200: StudioAck, 403: CommerceError, 404: CommerceError, 422: CommerceError},
     throttle=user_write_throttle("30/min"),
 )
 def studio_delete_product(
     request: HttpRequest, product_id: uuid.UUID
 ) -> tuple[int, StudioAck | CommerceError]:
-    """Delete the caller's own product; 403 (no creator) / 404 (not theirs).
+    """Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).
 
-    Historical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),
-    so removing a catalog listing never rewrites a fan's order history.
+    A product with order history can't be hard-deleted: ``OrderItem.product`` is
+    SET_NULL, so deleting it would sever the historical order lines' attribution
+    back to this creator (breaking dashboard/stats counts and order provenance).
+    Instead of deleting, the owner should archive it (``status="hidden"``), which
+    removes it from public listings while keeping order history intact. A product
+    with no order history has nothing to preserve, so it deletes as before.
+
+    Concurrency (F5): the owner check, the reload under ``select_for_update`` and the
+    ``order_items`` re-check run in one ``transaction.atomic`` block so the
+    check→delete window is narrowed — the product row is locked for the duration, so
+    a second concurrent *delete* cannot slip between the check and the delete. NOT a
+    complete seal: an in-flight ``create_order`` does not lock the product row, so an
+    order committing during this block can still leave a just-deleted product with a
+    dangling (SET_NULL) line. Fully closing that needs the order path to lock the
+    product too (a broader change deferred), so the residual window is documented,
+    not hidden.
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
     if creator is None:
-        return 403, CommerceError(detail="크리에이터만 상품을 관리할 수 있어요.")
-    product = Product.objects.filter(id=product_id, creator=creator).first()
-    if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
-    product.delete()
+        return 403, CommerceError(
+            detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
+    with transaction.atomic():
+        product = (
+            Product.objects.select_for_update()
+            .filter(id=product_id, creator=creator)
+            .first()
+        )
+        if product is None:
+            return 404, CommerceError(
+                detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+            )
+        if product.order_items.exists():
+            return 422, CommerceError(
+                detail="주문 이력이 있는 상품은 삭제할 수 없어요. 숨김(hidden) 처리해 주세요.",
+                code=ErrorCode.PRODUCT_HAS_ORDERS.value,
+            )
+        product.delete()
     return 200, StudioAck(status="deleted")
 
 
@@ -575,17 +636,35 @@ def create_order(
     # can't be used to buy (or probe the existence of) a listing the fan can't see.
     product = _public_product_qs(account).filter(id=payload.product_id).first()
     if product is None:
-        return 404, CommerceError(detail="상품을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
+    # Personal-block consistency (F4): the catalog read stays allowed (a personal
+    # block is not existence hiding), but placing a new order against a creator this
+    # buyer has blocked is refused. One set query, before the stock/state checks.
+    if product.creator_id in blocked_creator_ids(account):
+        return 422, CommerceError(
+            detail="차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요.",
+            code=ErrorCode.INTERACTION_BLOCKED.value,
+        )
     # Only a live 'selling' listing is orderable; a 'soldout'-status listing stays
     # publicly visible but cannot be purchased.
     if product.status != ProductStatus.SELLING.value:
-        return 422, CommerceError(detail="판매 중인 상품이 아니에요.")
+        return 422, CommerceError(
+            detail="판매 중인 상품이 아니에요.", code=ErrorCode.PRODUCT_NOT_ORDERABLE.value
+        )
     if product.locked:
-        return 422, CommerceError(detail="멤버십 전용 상품이에요.")
+        return 422, CommerceError(
+            detail="멤버십 전용 상품이에요.", code=ErrorCode.MEMBERSHIP_ONLY_PRODUCT.value
+        )
     if product.sold_out or (product.stock is not None and product.stock <= 0):
-        return 422, CommerceError(detail="품절된 상품이에요.")
+        return 422, CommerceError(
+            detail="품절된 상품이에요.", code=ErrorCode.OUT_OF_STOCK.value
+        )
     if product.stock is not None and payload.qty > product.stock:
-        return 422, CommerceError(detail="재고가 부족해요.")
+        return 422, CommerceError(
+            detail="재고가 부족해요.", code=ErrorCode.INSUFFICIENT_STOCK.value
+        )
 
     try:
         with transaction.atomic():
@@ -647,7 +726,9 @@ def get_order(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
-        return 404, CommerceError(detail="주문을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
     return 200, _order_out(order)
 
 
@@ -661,9 +742,13 @@ def cancel_order(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
-        return 404, CommerceError(detail="주문을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
     if order.status not in _CANCELLABLE:
-        return 422, CommerceError(detail="취소할 수 없는 주문 상태예요.")
+        return 422, CommerceError(
+            detail="취소할 수 없는 주문 상태예요.", code=ErrorCode.ORDER_NOT_CANCELLABLE.value
+        )
     order.status = OrderStatus.CANCELLED.value
     order.save(update_fields=["status"])
     return 200, _order_out(order)
@@ -679,15 +764,22 @@ def request_refund(
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
     if order is None:
-        return 404, CommerceError(detail="주문을 찾을 수 없어요.")
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
     if order.status not in _REFUNDABLE:
-        return 422, CommerceError(detail="환불 신청할 수 없는 주문 상태예요.")
+        return 422, CommerceError(
+            detail="환불 신청할 수 없는 주문 상태예요.", code=ErrorCode.ORDER_NOT_REFUNDABLE.value
+        )
     # 열린 환불 1건 불변식은 DB 조건부 유니크 제약(uniq_open_refund_per_order)이 봉인 —
     # exists() 선확인은 친절한 메시지용이고, 동시 신청의 패자는 IntegrityError로 잡는다.
     try:
         with transaction.atomic():
             if order.refund_requests.filter(status__in=_OPEN_REFUND).exists():
-                return 422, CommerceError(detail="이미 환불 신청이 접수된 주문이에요.")
+                return 422, CommerceError(
+                    detail="이미 환불 신청이 접수된 주문이에요.",
+                    code=ErrorCode.OPEN_REFUND_EXISTS.value,
+                )
             RefundRequest.objects.create(
                 order=order,
                 reason=payload.reason,
@@ -695,7 +787,9 @@ def request_refund(
                 status=RefundStatus.REQUESTED,
             )
     except IntegrityError:
-        return 422, CommerceError(detail="이미 환불 신청이 접수된 주문이에요.")
+        return 422, CommerceError(
+            detail="이미 환불 신청이 접수된 주문이에요.", code=ErrorCode.OPEN_REFUND_EXISTS.value
+        )
     refreshed = _load_order(order_id, account)
     assert refreshed is not None  # owned above
     return 200, _order_out(refreshed)

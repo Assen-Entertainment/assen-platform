@@ -17,7 +17,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useSubscriptions, useCancelSubscription } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
-import { ApiError, type Subscription } from "@/lib/api";
+import { ApiError, apiErrorMessage, type Subscription } from "@/lib/api";
 
 export function SubscriptionsView({ subscriptions }: { subscriptions: Subscription[] }) {
   const { toast } = useToast();
@@ -35,12 +35,9 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
           description: `${sub.creatorName} · ${sub.tierName} — 다음 결제일부터 중단됩니다.`,
         }),
       onError: (e) => {
-        // 401은 전역 세션 가드가 처리 → 그 외 오류만 안내(서버 detail 활용).
+        // 401은 전역 세션 가드가 처리 → 그 외는 error code로 안내(SubscriptionNotCancellable 등, detail 폴백).
         if (e instanceof ApiError && e.status === 401) return;
-        toast({
-          title: "구독 해지를 처리하지 못했어요",
-          description: e instanceof ApiError && e.detail ? e.detail : "잠시 후 다시 시도해 주세요.",
-        });
+        toast({ title: "구독 해지를 처리하지 못했어요", description: apiErrorMessage(e) });
       },
     });
   };

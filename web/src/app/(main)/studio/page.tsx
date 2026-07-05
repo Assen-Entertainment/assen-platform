@@ -1,14 +1,7 @@
 import Link from "next/link";
-import { Card, CardBody, Button, ListItem, Divider, StatItem, SectionHeader } from "@/components/ui";
+import { Card, CardBody, Button, ListItem, Divider, SectionHeader } from "@/components/ui";
 import { STUDIO_RECENT } from "@/lib/studio-mock";
-
-/** 대시보드 요약 지표(placeholder 수치 — 실 데이터 B2 게이트). */
-const STATS: { label: string; value: string; delta: string; trend: "up" | "down" | "flat" }[] = [
-  { label: "팔로워", value: "12,400", delta: "+3.2%", trend: "up" },
-  { label: "이번 달 수익", value: "₩1,840,000", delta: "+12%", trend: "up" },
-  { label: "신규 구독", value: "86", delta: "+9", trend: "up" },
-  { label: "포스트 조회", value: "54,200", delta: "+5%", trend: "up" },
-];
+import { StudioStatsGrid } from "./studio-stats";
 
 /** 서브메뉴 카드 — 스튜디오 각 영역 진입점. */
 const SECTIONS = [
@@ -29,11 +22,8 @@ export default function StudioPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 rounded-lg border border-outline bg-surface p-4 lg:grid-cols-4">
-        {STATS.map((s) => (
-          <StatItem key={s.label} label={s.label} value={s.value} delta={s.delta} trend={s.trend} />
-        ))}
-      </div>
+      {/* 실 카운트 대시보드(R4-W5) — GET /studio/stats 소비. 수익 카드 없음(정산 게이트). */}
+      <StudioStatsGrid />
 
       <section className="flex flex-col gap-3">
         <SectionHeader title="바로가기" description="스튜디오 주요 영역으로 이동" />
