@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { GateNote } from "./gate-note";
 
 /**
  * RefundPolicyNotice — Figma DS(45:16). 환불·청약철회 안내 + 신뢰 시그널.
@@ -31,7 +32,7 @@ export function RefundPolicyNotice({ showTrust = true, className, ...props }: Re
       {showTrust ? (
         <p className="mt-1 border-t border-outline pt-2 text-caption text-on-surface-variant">
           안전결제(에스크로) 적용 · Assen은 통신판매중개자로서 거래 당사자가 아니며 상품·거래 책임은 판매자에게 있습니다.{" "}
-          <span className="italic">(문구 placeholder — 법무 확정 전)</span>
+          <GateNote className="italic">(문구 placeholder — 법무 확정 전)</GateNote>
         </p>
       ) : null}
     </div>

@@ -39,7 +39,7 @@
       "pink": { "bg": { "$type": "color", "$value": "#FFF2F2" }, "ink": { "$type": "color", "$value": "#9F1239" } },
       "zinc": { "bg": { "$type": "color", "$value": "#F4F4FA" }, "ink": { "$type": "color", "$value": "#3F3F46" } },
       "green": { "main": { "$type": "color", "$value": "#1DA951", "$description": "success (#22C55E → a11y 3.05:1)" } },
-      "amber": { "main": { "$type": "color", "$value": "#CE8509", "$description": "warning (#F59E0B → a11y 3.02:1)" } },
+      "amber": { "main": { "$type": "color", "$value": "#B8740A", "$description": "warning — 라이트 warning 색. #CE8509(3.01:1, cream 컨테이너 위 2.86:1)은 비텍스트 3:1 미달 → #B8740A(white 3.79:1 / cream.bg 3.61:1, WCAG 1.4.11 통과)" } },
       "red": { "main": { "$type": "color", "$value": "#D73D3D", "$description": "error #EF4444 → a11y 4.53:1" }, "bg": { "$type": "color", "$value": "#FFF2F2" }, "ink": { "$type": "color", "$value": "#9F1239" } }
     },
     "$note_theme": "메이드 테마(color.ref.hatsukoi)는 2026-06-27 대표 '완전 제거' 결정으로 삭제됨. 제품=순수 범용 크리에이터 플랫폼, 단일 클린/인디고 레지스터. 크리에이터 개성은 향후 일반 theme.{creator} 사용자 액센트(런타임)로만. 참조: 전략_방향_범용크리에이터플랫폼_2026-06-27.",

@@ -1,12 +1,18 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { PostCard, TextField, Button, Avatar, MediaViewer, LockedOverlay } from "@/components/ui";
+import dynamic from "next/dynamic";
+import { PostCard, TextField, Button, Avatar, LockedOverlay } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
 import { useSession } from "@/lib/session";
 import { usePost, useComments, useToggleLike, useAddComment } from "@/lib/api/queries";
 import type { Post, Comment, Page } from "@/lib/api";
+
+// 라이트박스 코드 스플리팅(R5-W3 #7b) — 열릴 때만 로드. document 접근 → ssr:false.
+const MediaViewer = dynamic(() => import("@/components/ui/media-viewer").then((m) => m.MediaViewer), {
+  ssr: false,
+});
 
 /** Post 상세 뷰(클라). 좋아요·댓글=낙관적 뮤테이션, 공유=토스트. */
 export function PostDetailView({ post: initialPost, comments: initialComments }: { post: Post; comments: Page<Comment> }) {

@@ -6,6 +6,7 @@ import {
   SectionHeader,
   DisclaimerNotice,
   SafetyGuideNotice,
+  SHOW_GATE_NOTES,
 } from "@/components/ui";
 import { SETTLEMENT_ROWS, SETTLEMENT_STATUS_META, won, type SettlementRow } from "@/lib/studio-mock";
 
@@ -42,9 +43,10 @@ export default function StudioSettlementPage() {
       <SectionHeader title="정산" description="수익과 정산 내역을 확인하세요" />
 
       <div className="grid grid-cols-1 gap-4 rounded-lg border border-outline bg-surface p-4 sm:grid-cols-3">
-        <StatItem label="이번 달 수익" value={won(latest.gross)} note="※ placeholder — 확정 아님" />
-        <StatItem label="정산 예정액" value={won(latest.net)} note="※ placeholder — 확정 아님" />
-        <StatItem label="공제 합계 (수수료+원천징수)" value={won(latest.fee + latest.withholding)} note="※ 요율 미확정(게이트)" />
+        {/* note(괄호/메타 주석)는 게이트 스위치로만 노출(#4). 실 고지는 아래 DisclaimerNotice가 항상 담당. */}
+        <StatItem label="이번 달 수익" value={won(latest.gross)} note={SHOW_GATE_NOTES ? "※ placeholder — 확정 아님" : undefined} />
+        <StatItem label="정산 예정액" value={won(latest.net)} note={SHOW_GATE_NOTES ? "※ placeholder — 확정 아님" : undefined} />
+        <StatItem label="공제 합계 (수수료+원천징수)" value={won(latest.fee + latest.withholding)} note={SHOW_GATE_NOTES ? "※ 요율 미확정(게이트)" : undefined} />
       </div>
 
       <DisclaimerNotice title="정산 수치 안내">

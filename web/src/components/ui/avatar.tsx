@@ -19,29 +19,37 @@ export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   verified?: boolean;
   /** seed(핸들·이름 등) — 이미지 없을 때 회색 대신 결정적 파생색 배경(대비 보정). */
   tone?: string;
+  /**
+   * 이미지 렌더 슬롯(R5-W3 #6) — 기본 "img"(DS 이식성). 소비처에서 next/image 래퍼(SmartImage) 주입 가능.
+   * fill 기반 컴포넌트를 주입할 수 있도록 이미지 컨테이너는 relative + 크기 확정.
+   */
+  imageComponent?: React.ElementType;
+  /** next/image 슬롯 주입 시 반응형 힌트. */
+  sizes?: string;
 }
 
 export const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
-  ({ src, alt, fallback, size = "md", verified, tone, className, ...props }, ref) => {
+  ({ src, alt, fallback, size = "md", verified, tone, imageComponent, sizes, className, ...props }, ref) => {
     const [errored, setErrored] = React.useState(false);
     const showImg = src && !errored;
     const toneColors = !showImg && tone ? avatarTone(tone) : null;
+    const ImageComp = imageComponent ?? "img";
     return (
       <div ref={ref} className={cn("relative inline-flex shrink-0", className)} {...props}>
         <div
           className={cn(
-            "flex items-center justify-center overflow-hidden rounded-full font-medium",
+            "relative flex items-center justify-center overflow-hidden rounded-full font-medium",
             toneColors ? "" : "bg-surface-container-high text-on-surface-variant",
             SIZES[size],
           )}
           style={toneColors ? { backgroundColor: toneColors.bg, color: toneColors.fg } : undefined}
         >
           {showImg ? (
-            // eslint-disable-next-line @next/next/no-img-element -- DS 이식성(소비자가 next/image 래핑 가능)
-            <img
+            <ImageComp
               src={src}
               alt={alt ?? ""}
               loading="lazy"
+              sizes={sizes}
               className="size-full object-cover"
               onError={() => setErrored(true)}
             />
