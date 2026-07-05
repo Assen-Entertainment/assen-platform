@@ -15,6 +15,7 @@ import {
   getProductsPage,
   getMembershipTiers,
   getPostsPage,
+  getStudioPostsPage,
   getPost,
   getCommentsPage,
   getFeedPage,
@@ -154,6 +155,9 @@ export const qk = {
   product: (id: string) => ["product", id] as const,
   tiers: (id?: string) => ["tiers", id ?? "all"] as const,
   posts: (id?: string) => ["posts", id ?? "all"] as const,
+  // 스튜디오 오너 포스트 — 공용 ["posts"] 네임스페이스 하위 키. useUpdatePost/useDeletePost의
+  // 낙관 갱신·무효화(["posts"] prefix)가 오너 목록에도 자동 반영되도록 같은 prefix를 공유한다.
+  studioPosts: ["posts", "studio"] as const,
   feed: ["feed"] as const,
   post: (id: string) => ["post", id] as const,
   comments: (postId: string) => ["comments", postId] as const,
@@ -215,6 +219,23 @@ export function usePosts(id?: string, initialData?: Page<Post>) {
     // SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
     initialData: seedInfinite(initialData),
     select: flattenPages,
+  });
+}
+/**
+ * 스튜디오 오너 포스트 — GET /studio/posts(오너 스코프, 소비자 게이트 미적용) 커서 무한 쿼리.
+ * 소비자용 usePosts(creatorId)의 fan_id 오용(라이브 빈 목록·오너 19+ 미표시) 대체 —
+ * 오너가 자신의 전체 포스트(draft·19+ 포함)를 본다. 쿼리 키는 ["posts","studio"](공용 prefix)라
+ * useUpdatePost/useDeletePost의 낙관 갱신·무효화가 자동 반영된다. mock=데모 오너 c1 목록.
+ * 403(OwnerRequired, 비크리에이터)은 retry 없이 error로 노출 → 페이지가 방어 안내 렌더.
+ */
+export function useStudioPosts() {
+  return useInfiniteQuery({
+    queryKey: qk.studioPosts,
+    queryFn: ({ pageParam }) => getStudioPostsPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    select: flattenPages,
+    retry: false,
   });
 }
 /**

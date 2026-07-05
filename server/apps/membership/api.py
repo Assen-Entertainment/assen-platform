@@ -472,6 +472,7 @@ def cancel_subscription(
 @subscriptions_router.patch(
     "/{subscription_id}",
     response={200: SubscriptionOut, 404: SubscriptionError, 422: SubscriptionError},
+    throttle=user_write_throttle("6/min"),
 )
 def change_subscription_tier(
     request: HttpRequest, subscription_id: uuid.UUID, payload: ChangeTierIn
@@ -483,6 +484,8 @@ def change_subscription_tier(
     but a different subscription. A tier that is unknown, inactive, or belongs to
     another creator collapses to 422 ``TierNotFound`` (no cross-creator existence
     leak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).
+    A subscription already scheduled to cancel (``cancelled_at`` set, "해지 예정") is
+    also refused (422): its tier is frozen until the cancellation is withdrawn (F-E).
     Idempotent: switching to the tier already held is a 200 no-op.
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
@@ -498,6 +501,13 @@ def change_subscription_tier(
     if sub.status != SubscriptionStatus.ACTIVE.value:
         return 422, SubscriptionError(
             detail="활성 구독만 등급을 변경할 수 있어요.",
+            code=ErrorCode.SUBSCRIPTION_NOT_ACTIVE.value,
+        )
+    # A cancel-scheduled subscription (active but ``cancelled_at`` set) is frozen —
+    # the tier can't be changed until the fan withdraws the cancellation (F-E).
+    if sub.cancelled_at is not None:
+        return 422, SubscriptionError(
+            detail="해지 예정인 구독은 티어를 변경할 수 없어요. 해지를 취소한 뒤 변경해 주세요.",
             code=ErrorCode.SUBSCRIPTION_NOT_ACTIVE.value,
         )
     # No-op when already on the requested tier (idempotent).

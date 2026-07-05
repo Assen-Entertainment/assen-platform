@@ -17,12 +17,13 @@ export const MAX_TOASTS = 3;
 
 /**
  * 토스트 큐 정책(R5-W3 #2) — 순수 함수(테스트 대상).
- * - 최신 토스트와 title이 같으면 새로 쌓지 않고 마지막 항목을 새 id로 교체(연속 중복 병합·타이머 리셋).
+ * - 최신 토스트와 title+description이 모두 같으면 새로 쌓지 않고 마지막 항목을 새 id로 교체
+ *   (연속 중복 병합·타이머 리셋). title만 같고 내용(description)이 다르면 병합하지 않는다(내용 유실 방지).
  * - 그 외엔 append 하되 동시 개수를 MAX_TOASTS로 제한(초과분은 오래된 것부터 제거).
  */
 export function reduceToastQueue(prev: ToastItem[], input: ToastInput, nextId: number): ToastItem[] {
   const last = prev[prev.length - 1];
-  if (last && last.title === input.title) {
+  if (last && last.title === input.title && last.description === input.description) {
     return [...prev.slice(0, -1), { id: nextId, ...input }];
   }
   const next = [...prev, { id: nextId, ...input }];

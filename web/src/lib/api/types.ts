@@ -65,7 +65,8 @@ export interface Product {
   creatorName?: string;
   /**
    * 소유 크리에이터 핸들 — 스토어/PDP에서 크리에이터 프로필(/creator/[handle]) 링크용.
-   * 서버 ProductOut엔 아직 없어(creator_name만) 옵셔널 — 없으면 링크 없이 이름만 표기(끊긴 링크 방지).
+   * 서버 ProductOut(creator_handle) 계약. 검색 브리프(ProductBrief)엔 없고 빈 문자열일 수
+   * 있어 옵셔널 — 없으면 링크 없이 이름만 표기(끊긴 링크 방지).
    */
   creatorHandle?: string;
   // --- 이하 상세용 확장 필드 — 서버 ProductOut(B4) 계약. 값 없으면 undefined. ---

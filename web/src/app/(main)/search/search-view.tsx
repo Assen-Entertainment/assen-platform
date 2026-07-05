@@ -140,6 +140,10 @@ export function SearchView({
   const listboxId = "search-suggest-list";
   const optionId = (i: number) => `search-suggest-opt-${i}`;
 
+  // iOS Safari: 드롭다운 옵션을 탭하면 input의 blur가 click보다 먼저 발생해 드롭다운이 닫히며 탭이
+  // 유실된다. 옵션에서 pointerdown 기본동작(포커스 이동)을 막아 blur→닫힘을 차단(표준 해법).
+  const preventBlur = (e: React.PointerEvent) => e.preventDefault();
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       {/* combobox — 입력 포커스 시 서제스트/최근 검색어 드롭다운. 포커스가 래퍼 밖으로 나가면 닫힘.
@@ -185,23 +189,24 @@ export function SearchView({
                     type="button"
                     className="rounded px-1 text-caption text-on-surface-variant hover:text-on-surface"
                     onClick={() => persistRecent([])}
+                    onPointerDown={preventBlur}
                   >
                     전체 삭제
                   </button>
                 </li>
                 {recent.map((term, i) => (
-                  <li
-                    key={term}
-                    id={optionId(i)}
-                    role="option"
-                    aria-selected={highlight === i}
-                    className={cnRow(highlight === i)}
-                  >
+                  // role=presentation: 옵션(role=option)은 내부 select 버튼이 담당하고, 삭제 버튼은
+                  // 옵션 밖(형제)에 둔다 — role=option 안에 인터랙티브 요소를 넣지 않는 리스트박스 패턴.
+                  <li key={term} role="presentation" className={cnRow(highlight === i)}>
                     <button
                       type="button"
+                      id={optionId(i)}
+                      role="option"
+                      aria-selected={highlight === i}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       onMouseEnter={() => setHighlight(i)}
                       onClick={() => runSearch(term)}
+                      onPointerDown={preventBlur}
                     >
                       <SearchIcon aria-hidden className="size-4 shrink-0 text-on-surface-variant" />
                       <span className="truncate text-body-m text-on-surface">{term}</span>
@@ -211,6 +216,7 @@ export function SearchView({
                       aria-label={`${term} 삭제`}
                       className="shrink-0 rounded px-1.5 text-on-surface-variant hover:text-error"
                       onClick={() => removeRecent(term)}
+                      onPointerDown={preventBlur}
                     >
                       ✕
                     </button>
@@ -233,6 +239,7 @@ export function SearchView({
                         className="flex min-w-0 flex-1 items-center gap-2 text-left"
                         onMouseEnter={() => setHighlight(i)}
                         onClick={() => selectOption(opt)}
+                        onPointerDown={preventBlur}
                       >
                         <span
                           aria-hidden
@@ -258,6 +265,7 @@ export function SearchView({
                         className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
                         onMouseEnter={() => setHighlight(i)}
                         onClick={() => selectOption(opt)}
+                        onPointerDown={preventBlur}
                       >
                         <span className="truncate text-body-m text-on-surface">{opt.product.title}</span>
                         <span className="shrink-0 text-caption tabular-nums text-on-surface-variant">
@@ -278,6 +286,7 @@ export function SearchView({
                         className="flex w-full items-center gap-2 text-left"
                         onMouseEnter={() => setHighlight(i)}
                         onClick={() => selectOption(opt)}
+                        onPointerDown={preventBlur}
                       >
                         <SearchIcon aria-hidden className="size-4 shrink-0 text-primary" />
                         <span className="truncate text-body-m text-primary">

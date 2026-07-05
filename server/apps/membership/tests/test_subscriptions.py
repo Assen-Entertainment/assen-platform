@@ -299,3 +299,28 @@ def test_change_tier_another_fans_subscription_is_404(client: Client) -> None:
     sub_id = _subscribe(client, owner, tier_a)
     res = _change(client, other, sub_id, tier_b)
     assert res.status_code == 404
+
+
+def test_change_tier_on_cancel_scheduled_is_422(client: Client) -> None:
+    """A cancel-scheduled (해지 예정) subscription cannot change tiers (F-E).
+
+    Cancelling schedules end-of-period termination while ``status`` stays active; the
+    tier must stay frozen until the fan withdraws the cancellation.
+    """
+    fan = _fan()
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    light = _tier(creator=creator, name="라이트", price=5000, sort_order=0)
+    premium = _tier(creator=creator, name="프리미엄", price=15000, sort_order=1)
+    sub_id = _subscribe(client, fan, light)
+    # Schedule end-of-period cancellation (status stays active, cancelled_at set).
+    cancelled = client.post(
+        f"{BASE}/{sub_id}/cancel", content_type=JSON, headers=_auth(fan)
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["cancel_scheduled"] is True
+
+    res = _change(client, fan, sub_id, premium)
+    assert res.status_code == 422
+    assert res.json()["code"] == "SubscriptionNotActive"
+    # Tier is frozen — the change did not take.
+    assert Subscription.objects.get(id=sub_id).tier_id == light.id

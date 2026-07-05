@@ -54,4 +54,27 @@ describe("PendingAction (미완료 액션 브리지)", () => {
     sessionStorage.setItem("assen.pendingAction", JSON.stringify({ action: "like", id: "x" }));
     expect(readPendingAction()).toBeNull();
   });
+
+  it("10분 초과 만료된 액션은 무시하고 정리한다(스테일 재실행 방지)", () => {
+    sessionStorage.setItem(
+      "assen.pendingAction",
+      JSON.stringify({ action: "follow", handle: "rabbit", from: "/creator/rabbit", savedAt: Date.now() - 11 * 60 * 1000 }),
+    );
+    expect(readPendingAction()).toBeNull();
+    // 만료분은 정리되어 재조회도 null(잔존 없음).
+    expect(sessionStorage.getItem("assen.pendingAction")).toBeNull();
+  });
+
+  it("시각(savedAt) 누락 값은 만료로 간주해 무시한다", () => {
+    sessionStorage.setItem(
+      "assen.pendingAction",
+      JSON.stringify({ action: "follow", handle: "rabbit", from: "/creator/rabbit" }),
+    );
+    expect(readPendingAction()).toBeNull();
+  });
+
+  it("유효 시간 내(방금 저장) 액션은 그대로 재실행 가능하다", () => {
+    savePendingAction({ action: "follow", handle: "stellar", from: "/creator/stellar" });
+    expect(readPendingAction()).toEqual({ action: "follow", handle: "stellar", from: "/creator/stellar" });
+  });
 });

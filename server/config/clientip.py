@@ -15,6 +15,8 @@ app (e.g. 1 for a single ALB) in the deployment environment.
 
 from __future__ import annotations
 
+import ipaddress
+
 from django.conf import settings
 from django.http import HttpRequest
 
@@ -37,7 +39,9 @@ def client_ip(request: HttpRequest, trusted_proxies: int | None = None) -> str:
     positions from the right of ``X-Forwarded-For`` (the address the first trusted
     proxy observed), clamped to the leftmost entry so a shorter-than-declared chain
     — or a client-forged prefix — can never push the selection past the trusted
-    tail. Falls back to ``REMOTE_ADDR`` when XFF is absent or empty.
+    tail. Falls back to ``REMOTE_ADDR`` when XFF is absent or empty, or when the
+    selected entry does not parse as a valid IP address (F-J — a malformed value
+    would otherwise mint an unbounded set of junk rate-limit buckets).
     """
     hops = _trusted_hops() if trusted_proxies is None else max(0, trusted_proxies)
     remote_addr = str(request.META.get("REMOTE_ADDR", "unknown"))
@@ -49,4 +53,9 @@ def client_ip(request: HttpRequest, trusted_proxies: int | None = None) -> str:
     addrs = [part.strip() for part in str(forwarded).split(",") if part.strip()]
     if not addrs:
         return remote_addr
-    return addrs[-min(hops, len(addrs))]
+    selected = addrs[-min(hops, len(addrs))]
+    try:
+        ipaddress.ip_address(selected)
+    except ValueError:
+        return remote_addr
+    return selected

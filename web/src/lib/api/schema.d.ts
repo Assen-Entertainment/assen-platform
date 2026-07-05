@@ -410,12 +410,23 @@ export interface paths {
          * Cancel Order
          * @description Cancel one of the fan's own orders (only while paid/shipping).
          *
-         *     Cancelling returns the reserved stock: each stock-tracked line's product is
-         *     incremented by its ``qty`` and its ``sold_out`` flag cleared, atomically with
-         *     the status flip (``F`` expression, so no lost update). The cancellable-state
-         *     guard makes this a one-shot transition, so a cancelled order can't be cancelled
-         *     again to inflate stock. A since-deleted product line (SET_NULL) has nothing to
-         *     restore and is skipped.
+         *     The cancellable → cancelled transition is sealed by a **conditional UPDATE
+         *     rowcount gate** inside the transaction (project pattern): only the request whose
+         *     ``filter(status__in=_CANCELLABLE).update(status=cancelled)`` touches a row (won
+         *     the race) proceeds to restore stock; a concurrent second cancel updates 0 rows
+         *     and returns 422 without restoring anything, so two racing cancels can never
+         *     double-restore stock. The pre-check below is a friendly early return only — the
+         *     rowcount gate is the actual invariant.
+         *
+         *     Stock restore (winner only): each stock-tracked line's product is incremented by
+         *     its ``qty`` (``F`` expression, no lost update). ``sold_out`` is only cleared for a
+         *     product that had **hit 0** (auto sold-out) — a product an owner manually marked
+         *     ``sold_out`` while stock remained keeps that flag (F-F): the restore adds stock
+         *     but does not silently re-open a listing the owner paused. A since-deleted product
+         *     line (SET_NULL) has nothing to restore and is skipped.
+         *
+         *     A refund *accepted* (operator-approved) re-stock is a separate operator flow and
+         *     is not handled here (후속 — 운영자 플로우).
          */
         post: operations["apps_commerce_api_cancel_order"];
         delete?: never;
@@ -592,6 +603,32 @@ export interface paths {
          *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_content_api_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Posts
+         * @description List the caller's own creator's posts — including 19+ — newest first.
+         *
+         *     Owner surface (mirrors ``commerce.studio_list_products``): the consumer 19+ gate
+         *     (:func:`_post_qs`) is deliberately NOT applied, so the owner always sees their own
+         *     adult/full posts regardless of ``ENABLE_ADULT_CONTENT``. 403 if the caller
+         *     operates no creator. Each row carries the same annotations as :func:`_annotated_post`
+         *     (like/comment counts + the owner's own ``liked`` flag), cursor-paginated.
+         */
+        get: operations["apps_content_api_studio_list_posts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1602,6 +1639,8 @@ export interface paths {
          *     but a different subscription. A tier that is unknown, inactive, or belongs to
          *     another creator collapses to 422 ``TierNotFound`` (no cross-creator existence
          *     leak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).
+         *     A subscription already scheduled to cancel (``cancelled_at`` set, "해지 예정") is
+         *     also refused (422): its tier is frozen until the cancellation is withdrawn (F-E).
          *     Idempotent: switching to the tier already held is a 200 no-op.
          */
         patch: operations["apps_membership_api_change_subscription_tier"];
@@ -6839,6 +6878,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostPage"];
+                };
+            };
+        };
+    };
+    apps_content_api_studio_list_posts: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostPage"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };

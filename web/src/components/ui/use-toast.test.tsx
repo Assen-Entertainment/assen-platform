@@ -15,12 +15,20 @@ describe("reduceToastQueue", () => {
     expect(items.map((i) => i.id)).toEqual([3, 4, 5]);
   });
 
-  it("최신 토스트와 title이 같으면 새로 쌓지 않고 마지막 항목을 새 id로 교체(병합·타이머 리셋)", () => {
-    let items = reduceToastQueue([], { title: "저장됨", description: "1회" }, 1);
-    items = reduceToastQueue(items, { title: "저장됨", description: "2회" }, 2);
+  it("title+description이 모두 같으면 새로 쌓지 않고 마지막 항목을 새 id로 교체(병합·타이머 리셋)", () => {
+    let items = reduceToastQueue([], { title: "저장됨", description: "완료" }, 1);
+    items = reduceToastQueue(items, { title: "저장됨", description: "완료" }, 2);
     // 병합 — 1개만 유지, 최신 내용/새 id.
     expect(items).toHaveLength(1);
-    expect(items[0]).toEqual({ id: 2, title: "저장됨", description: "2회" });
+    expect(items[0]).toEqual({ id: 2, title: "저장됨", description: "완료" });
+  });
+
+  it("title이 같아도 description이 다르면 병합하지 않는다(내용 유실 방지)", () => {
+    let items = reduceToastQueue([], { title: "저장됨", description: "1회" }, 1);
+    items = reduceToastQueue(items, { title: "저장됨", description: "2회" }, 2);
+    // 서로 다른 내용 — 둘 다 유지(2회차 안내가 1회차를 삼키지 않음).
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.description)).toEqual(["1회", "2회"]);
   });
 
   it("직전과 다른 title은 병합하지 않고 append 한다", () => {

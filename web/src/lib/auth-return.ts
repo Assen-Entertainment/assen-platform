@@ -27,23 +27,37 @@ export function sanitizeNext(raw: string | null | undefined): string {
 export type PendingAction = { action: "follow"; handle: string; from: string };
 
 const PENDING_KEY = "assen.pendingAction";
+/** 미완료 액션 유효 시간(10분) — 오래 전 시도가 예기치 않게 재실행되는 것을 막는다. */
+const PENDING_TTL_MS = 10 * 60 * 1000;
 
-/** 미완료 액션 저장(sessionStorage — 탭 세션 한정, 새로고침 견딤·탭 닫으면 소거). */
+/** 저장 형태(내부) — 공개 PendingAction + 저장 시각(만료 판정용). */
+type StoredPendingAction = PendingAction & { savedAt: number };
+
+/** 미완료 액션 저장(sessionStorage — 탭 세션 한정, 새로고침 견딤·탭 닫으면 소거). 저장 시각을 함께 기록. */
 export function savePendingAction(a: PendingAction): void {
   try {
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify(a));
+    const stored: StoredPendingAction = { ...a, savedAt: Date.now() };
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify(stored));
   } catch {
     /* 저장 실패 무시(프라이빗 모드 등) */
   }
 }
 
-/** 미완료 액션 읽기 — 형태 검증 통과분만 반환(손상값은 null). */
+/**
+ * 미완료 액션 읽기 — 형태 검증 + 만료(10분) 검사 통과분만 반환.
+ * 시각 누락·만료·손상값은 null(만료·손상은 정리까지 수행).
+ */
 export function readPendingAction(): PendingAction | null {
   try {
     const raw = sessionStorage.getItem(PENDING_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw) as Partial<PendingAction>;
-    if (p && p.action === "follow" && typeof p.handle === "string" && typeof p.from === "string") {
+    const p = JSON.parse(raw) as Partial<StoredPendingAction>;
+    // 시각 누락·만료(10분 초과)는 무시하고 정리(스테일 재실행 방지).
+    if (typeof p?.savedAt !== "number" || Date.now() - p.savedAt > PENDING_TTL_MS) {
+      clearPendingAction();
+      return null;
+    }
+    if (p.action === "follow" && typeof p.handle === "string" && typeof p.from === "string") {
       return { action: "follow", handle: p.handle, from: p.from };
     }
   } catch {

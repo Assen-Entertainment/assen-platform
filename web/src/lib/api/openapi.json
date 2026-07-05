@@ -1337,7 +1337,7 @@
             }
           }
         },
-        "description": "Cancel one of the fan's own orders (only while paid/shipping).\n\nCancelling returns the reserved stock: each stock-tracked line's product is\nincremented by its ``qty`` and its ``sold_out`` flag cleared, atomically with\nthe status flip (``F`` expression, so no lost update). The cancellable-state\nguard makes this a one-shot transition, so a cancelled order can't be cancelled\nagain to inflate stock. A since-deleted product line (SET_NULL) has nothing to\nrestore and is skipped.",
+        "description": "Cancel one of the fan's own orders (only while paid/shipping).\n\nThe cancellable → cancelled transition is sealed by a **conditional UPDATE\nrowcount gate** inside the transaction (project pattern): only the request whose\n``filter(status__in=_CANCELLABLE).update(status=cancelled)`` touches a row (won\nthe race) proceeds to restore stock; a concurrent second cancel updates 0 rows\nand returns 422 without restoring anything, so two racing cancels can never\ndouble-restore stock. The pre-check below is a friendly early return only — the\nrowcount gate is the actual invariant.\n\nStock restore (winner only): each stock-tracked line's product is incremented by\nits ``qty`` (``F`` expression, no lost update). ``sold_out`` is only cleared for a\nproduct that had **hit 0** (auto sold-out) — a product an owner manually marked\n``sold_out`` while stock remained keeps that flag (F-F): the restore adds stock\nbut does not silently re-open a listing the owner paused. A since-deleted product\nline (SET_NULL) has nothing to restore and is skipped.\n\nA refund *accepted* (operator-approved) re-stock is a separate operator flow and\nis not handled here (후속 — 운영자 플로우).",
         "tags": [
           "commerce-orders"
         ],
@@ -2009,6 +2009,80 @@
         "description": "Anonymous feed = most recent posts across creators.\n\nPersonalised (following-only) feed needs a richer ranking and lands later; for\nnow this returns the same recent-posts page as ``/posts``, but with the\nper-user ``liked`` flag filled in when the caller is authenticated.\n\nThe feed is an aggregate surface, so posts from creators the caller has\npersonally blocked are excluded (anonymous callers block nothing).",
         "tags": [
           "content"
+        ]
+      }
+    },
+    "/api/studio/posts": {
+      "get": {
+        "operationId": "apps_content_api_studio_list_posts",
+        "summary": "Studio List Posts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the caller's own creator's posts — including 19+ — newest first.\n\nOwner surface (mirrors ``commerce.studio_list_products``): the consumer 19+ gate\n(:func:`_post_qs`) is deliberately NOT applied, so the owner always sees their own\nadult/full posts regardless of ``ENABLE_ADULT_CONTENT``. 403 if the caller\noperates no creator. Each row carries the same annotations as :func:`_annotated_post`\n(like/comment counts + the owner's own ``liked`` flag), cursor-paginated.",
+        "tags": [
+          "studio-content"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
         ]
       }
     },
@@ -4465,7 +4539,7 @@
             }
           }
         },
-        "description": "Switch the fan's own active subscription to another tier (up/downgrade).\n\nThe new tier must be an *active* tier of the **same creator** — the membership\nis a relationship with one creator, so a cross-creator swap is not a tier change\nbut a different subscription. A tier that is unknown, inactive, or belongs to\nanother creator collapses to 422 ``TierNotFound`` (no cross-creator existence\nleak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).\nIdempotent: switching to the tier already held is a 200 no-op.",
+        "description": "Switch the fan's own active subscription to another tier (up/downgrade).\n\nThe new tier must be an *active* tier of the **same creator** — the membership\nis a relationship with one creator, so a cross-creator swap is not a tier change\nbut a different subscription. A tier that is unknown, inactive, or belongs to\nanother creator collapses to 422 ``TierNotFound`` (no cross-creator existence\nleak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).\nA subscription already scheduled to cancel (``cancelled_at`` set, \"해지 예정\") is\nalso refused (422): its tier is frozen until the cancellation is withdrawn (F-E).\nIdempotent: switching to the tier already held is a 200 no-op.",
         "tags": [
           "membership-subscriptions"
         ],

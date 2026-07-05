@@ -38,6 +38,9 @@ from config.throttle import user_write_throttle
 
 posts_router = Router(tags=["content"])
 feed_router = Router(tags=["content"])
+# Owner post management (studio surface — consumer 19+ gate NOT applied; the owner
+# always sees their own adult/full posts). Mirrors commerce ``/studio/products``.
+studio_posts_router = Router(auth=fan_auth, tags=["studio-content"])
 
 
 class ErrorOut(Schema):
@@ -337,6 +340,36 @@ def _annotated_post(post_id: uuid.UUID, account: Account) -> Post:
     )
 
 
+@studio_posts_router.get("", response={200: PostPage, 403: ErrorOut})
+def studio_list_posts(
+    request: HttpRequest, cursor: str | None = None, limit: int | None = None
+) -> tuple[int, PostPage | ErrorOut]:
+    """List the caller's own creator's posts — including 19+ — newest first.
+
+    Owner surface (mirrors ``commerce.studio_list_products``): the consumer 19+ gate
+    (:func:`_post_qs`) is deliberately NOT applied, so the owner always sees their own
+    adult/full posts regardless of ``ENABLE_ADULT_CONTENT``. 403 if the caller
+    operates no creator. Each row carries the same annotations as :func:`_annotated_post`
+    (like/comment counts + the owner's own ``liked`` flag), cursor-paginated.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    creator = Creator.objects.filter(owner=account).first()
+    if creator is None:
+        return 403, ErrorOut(detail="크리에이터만 게시물을 관리할 수 있어요.")
+    queryset = (
+        Post.objects.filter(creator=creator)
+        .select_related("creator")
+        .annotate(
+            like_count=Count("likes", distinct=True),
+            comment_count=Count("comments", distinct=True),
+            is_liked=Exists(Like.objects.filter(post=OuterRef("pk"), user=account)),
+        )
+        .order_by("-created_at", "id")
+    )
+    items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
+    return 200, PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
+
+
 @posts_router.patch(
     "/{post_id}",
     response={200: PostOut, 404: ErrorOut},
@@ -543,3 +576,4 @@ def feed(
 
 api.add_router("/posts", posts_router)
 api.add_router("/feed", feed_router)
+api.add_router("/studio/posts", studio_posts_router)

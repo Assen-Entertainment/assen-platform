@@ -62,6 +62,17 @@ def test_negative_hops_treated_as_zero() -> None:
     assert client_ip(_req(remote="10.0.0.1", xff="1.2.3.4"), trusted_proxies=-3) == "10.0.0.1"
 
 
+def test_unparseable_xff_falls_back_to_remote_addr() -> None:
+    # A selected XFF entry that is not a valid IP would mint a junk rate-limit bucket
+    # per malformed value; fall back to the trusted REMOTE_ADDR instead (F-J).
+    assert client_ip(_req(remote="10.0.0.9", xff="not-an-ip"), trusted_proxies=1) == "10.0.0.9"
+
+
+def test_ipv6_xff_entry_is_accepted() -> None:
+    # A valid IPv6 client address parses and is returned unchanged (F-J guard).
+    assert client_ip(_req(xff="2001:db8::1"), trusted_proxies=1) == "2001:db8::1"
+
+
 @override_settings(TRUSTED_PROXY_HOPS=1)
 def test_default_uses_settings_hops() -> None:
     assert client_ip(_req(xff="9.9.9.9, 203.0.113.7")) == "203.0.113.7"

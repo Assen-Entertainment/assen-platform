@@ -2,23 +2,50 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * 인증 가드(P0) — 보호 경로에 세션 쿠키(assen_access)가 없으면 /login?next=<원경로>로 리다이렉트.
+ * mock 모드(NEXT_PUBLIC_API_URL 미설정) 여부 — Edge에서 빌드타임 인라인되는 상수.
+ * mock 로그인은 httpOnly 쿠키(assen_access)를 심지 않으므로, 쿠키 가드를 켜두면 로그인해도
+ * 보호 라우트가 영구 차단되어 무한 로그인 루프(login→push(next)→다시 /login)가 발생한다.
+ */
+const MOCK_MODE = !process.env.NEXT_PUBLIC_API_URL;
+
+/**
+ * 보호 경로 접근 판정(순수 — 단위 테스트 대상).
+ * @returns 로그인 후 복귀할 원경로(리다이렉트 필요) 또는 null(가드 통과).
  *
- * ※ 쿠키 존재 ≠ 유효 세션이다(만료·위조 가능). 여기서는 값을 신뢰하지 않고 "존재"만 보는
- *    저비용 1차 가드이며, 실 유효성(만료·권한)의 세밀 판정은 서버 응답 401을 받는 기존
- *    클라이언트 가드(SessionGuard)가 담당한다. httpOnly 쿠키라 Edge에서 값 검증도 불가.
+ * - mock 모드(실 API 미설정): 항상 통과 → 클라이언트 SessionGuard만 담당(쿠키 가드 비활성).
+ * - 실 API 모드: 세션 쿠키(assen_access) "존재"만 보는 저비용 1차 가드(값 미검증 — httpOnly라
+ *   Edge에서 검증 불가). 실 유효성(만료·권한)은 서버 401을 받는 SessionGuard가 세밀 판정한다.
+ */
+export function guardRedirectTarget(opts: {
+  mockMode: boolean;
+  hasSession: boolean;
+  pathname: string;
+  search: string;
+}): string | null {
+  if (opts.mockMode) return null;
+  if (opts.hasSession) return null;
+  return opts.pathname + opts.search;
+}
+
+/**
+ * 인증 가드(P0) — 실 API 모드에서 보호 경로에 세션 쿠키가 없으면 /login?next=<원경로>로 리다이렉트.
  * ※ Edge 런타임 — Node API 미사용(NextRequest.cookies / NextResponse만 사용).
  */
 export function middleware(req: NextRequest) {
-  // 쿠키만 존재하면 통과(값 미검증 — 상단 주석 참조).
-  if (req.cookies.has("assen_access")) return NextResponse.next();
-
   const { pathname, search } = req.nextUrl;
+  const next = guardRedirectTarget({
+    mockMode: MOCK_MODE,
+    hasSession: req.cookies.has("assen_access"),
+    pathname,
+    search,
+  });
+  if (next === null) return NextResponse.next();
+
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.search = "";
   // 로그인 성공 후 복귀할 원경로(쿼리 포함). login 페이지가 sanitizeNext로 재검증.
-  url.searchParams.set("next", pathname + search);
+  url.searchParams.set("next", next);
   return NextResponse.redirect(url);
 }
 

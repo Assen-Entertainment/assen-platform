@@ -401,6 +401,64 @@ def test_delete_post_not_owned_is_404(client: Client) -> None:
     assert Post.objects.filter(id=post.id).exists()
 
 
+# --- studio post management list (owner surface, F-B) ------------------------ #
+
+STUDIO_POSTS = "/api/studio/posts"
+
+
+def test_studio_posts_requires_auth(client: Client) -> None:
+    """An anonymous caller cannot list the studio posts."""
+    assert client.get(STUDIO_POSTS).status_code in {401, 403}
+
+
+def test_studio_posts_non_owner_is_403(client: Client) -> None:
+    """A fan who operates no creator profile gets 403 (OwnerRequired)."""
+    _creator()  # exists but is not owned by the caller
+    resp = client.get(STUDIO_POSTS, headers=_bearer(_fan()))
+    assert resp.status_code == 403
+    assert resp.json() == {"detail": "크리에이터만 게시물을 관리할 수 있어요."}
+
+
+def test_studio_posts_includes_owners_adult_posts(client: Client) -> None:
+    """The owner sees their own posts including 19+ ones (consumer gate not applied)."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="mio", name="Mio", owner=fan)
+    Post.objects.create(creator=creator, body="일반 글", adult_only=False)
+    Post.objects.create(creator=creator, body="성인 글", adult_only=True)
+    body = client.get(STUDIO_POSTS, headers=_bearer(fan)).json()
+    assert "next_cursor" in body
+    bodies = {row["body"] for row in body["items"]}
+    # Both posts appear — the adult one is NOT hidden from its owner, even with the
+    # default ENABLE_ADULT_CONTENT off that hides it from consumers.
+    assert bodies == {"일반 글", "성인 글"}
+    adult_row = next(r for r in body["items"] if r["body"] == "성인 글")
+    assert adult_row["is_adult"] is True
+
+
+def test_studio_posts_isolated_to_callers_creator(client: Client) -> None:
+    """The list is scoped to the caller's own creator; another creator's posts are hidden."""
+    owner = _fan()
+    my_creator = Creator.objects.create(handle="mio", name="Mio", owner=owner)
+    Post.objects.create(creator=my_creator, body="내 글")
+    stranger = _creator("rabbit")
+    Post.objects.create(creator=stranger, body="남의 글")
+    body = client.get(STUDIO_POSTS, headers=_bearer(owner)).json()
+    assert [row["body"] for row in body["items"]] == ["내 글"]
+
+
+def test_studio_posts_reflects_owner_liked_flag(client: Client) -> None:
+    """Each row carries the owner's own ``liked`` flag and fresh counts (like _annotated_post)."""
+    owner = _fan()
+    creator = Creator.objects.create(handle="mio", name="Mio", owner=owner)
+    post = Post.objects.create(creator=creator, body="x")
+    Like.objects.create(post=post, user=owner)
+    Comment.objects.create(post=post, author_name="팬", body="좋아요")
+    row = client.get(STUDIO_POSTS, headers=_bearer(owner)).json()["items"][0]
+    assert row["liked"] is True
+    assert row["like_count"] == 1
+    assert row["comment_count"] == 1
+
+
 def test_comment_notifies_post_creator_owner(client: Client) -> None:
     """Commenting on a post appends a comment notification to the creator owner."""
     from apps.content.models import Post

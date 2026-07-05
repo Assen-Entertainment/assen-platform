@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Button,
   EmptyState,
+  ErrorState,
   Spinner,
   Divider,
   Badge,
@@ -16,22 +17,15 @@ import {
   Switch,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
-import { config } from "@/lib/config";
-import { useSession } from "@/lib/session";
 import { ApiError, apiErrorMessage, type Post } from "@/lib/api";
-import { usePosts, useUpdatePost, useDeletePost } from "@/lib/api/queries";
+import { useStudioPosts, useUpdatePost, useDeletePost } from "@/lib/api/queries";
 
 /**
  * Studio 포스트 관리 — 발행한 크리에이터 포스트 목록/수정/삭제(오너 뷰).
- * 목록은 기존 커서 fetcher(getPostsPage?creator_id=)를 재사용한다. 수정=본문·19+ 인라인 시트,
- * 삭제=확인 다이얼로그 → 낙관적 제거(+롤백). 실 API/mock 양쪽 동작(회귀 0).
+ * 목록은 오너 스코프 fetcher(GET /studio/posts)를 소비한다(소비자 게이트 미적용 → 오너의 19+·draft도
+ * 노출). 수정=본문·19+ 인라인 시트, 삭제=확인 다이얼로그 → 낙관적 제거(+롤백). 실 API/mock 양쪽 동작.
  */
 export default function StudioPostsPage() {
-  const { user, mounted } = useSession();
-  const live = Boolean(config.apiUrl);
-  // 오너(크리에이터) 식별 — 실 경로는 세션 사용자 id, mock 데모는 데모 크리에이터(c1: 별빛 일러스트).
-  const creatorId = live ? user?.id : "c1";
-
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
@@ -41,26 +35,16 @@ export default function StudioPostsPage() {
         </Button>
       </div>
 
-      {live && !mounted ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : creatorId ? (
-        <StudioPostsList creatorId={creatorId} />
-      ) : (
-        <EmptyState
-          title="크리에이터 계정이 필요해요"
-          description="포스트 관리는 크리에이터 계정에서만 이용할 수 있어요."
-        />
-      )}
+      <StudioPostsList />
     </div>
   );
 }
 
-/** 오너 포스트 목록 — creatorId가 확정된 뒤 마운트(usePosts를 유효 id로만 호출). */
-function StudioPostsList({ creatorId }: { creatorId: string }) {
+/** 오너 포스트 목록 — GET /studio/posts 소비(오너 스코프). 403(비크리에이터)은 방어 안내. */
+function StudioPostsList() {
   const { toast } = useToast();
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = usePosts(creatorId);
+  const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useStudioPosts();
   const updatePost = useUpdatePost();
   const deletePost = useDeletePost();
   const posts = data ?? [];
@@ -87,6 +71,24 @@ function StudioPostsList({ creatorId }: { creatorId: string }) {
     return (
       <div className="flex justify-center py-16">
         <Spinner />
+      </div>
+    );
+  }
+
+  // 403(OwnerRequired) — 오너 스코프 엔드포인트가 비크리에이터를 거부. 방어 안내(빈 목록과 구분).
+  if (isError && error instanceof ApiError && error.status === 403) {
+    return (
+      <EmptyState
+        title="크리에이터 계정이 필요해요"
+        description="포스트 관리는 크리에이터 계정에서만 이용할 수 있어요."
+      />
+    );
+  }
+  // 그 외 오류(네트워크 등) — 재시도 안내(401은 전역 SessionGuard가 처리).
+  if (isError) {
+    return (
+      <div className="flex justify-center py-16">
+        <ErrorState onRetry={() => refetch()} />
       </div>
     );
   }

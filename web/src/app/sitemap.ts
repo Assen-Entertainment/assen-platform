@@ -30,10 +30,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     collectAll<Product>((c) => getProductsPage(undefined, c)),
   ]);
 
-  const staticRoutes: MetadataRoute.Sitemap = ["", "/discovery", "/store", "/membership", "/feed"].map((path) => ({
+  // 루트("")는 /discovery로 redirect(app/page.tsx)라 sitemap에서 제외 — 리다이렉트 URL 색인 방지.
+  // /discovery가 사실상 홈이므로 최우선 순위(1)를 부여한다.
+  const staticRoutes: MetadataRoute.Sitemap = ["/discovery", "/store", "/membership", "/feed"].map((path) => ({
     url: `${config.siteUrl}${path}`,
     changeFrequency: "daily",
-    priority: path === "" ? 1 : 0.8,
+    priority: path === "/discovery" ? 1 : 0.8,
   }));
 
   const creatorRoutes: MetadataRoute.Sitemap = creators.map((c) => ({

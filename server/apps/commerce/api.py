@@ -756,14 +756,27 @@ def create_order(
     subtotal = product.price * payload.qty
     shipping_fee = 0  # 배송비 정책 확정 전 0 — 정책은 대표·재무 게이트
     total = subtotal + shipping_fee
+    # Snapshot the delivery address only for a physical (goods) order — a
+    # digital/experience/ticket/coupon order needs none, so any address the client
+    # sent is dropped (matches the "ignored otherwise" contract, F-G). Each field is
+    # trimmed so surrounding whitespace is never persisted.
     ship = payload.shipping
-    shipping_snapshot = {
-        "recipient_name": ship.recipient_name if ship else "",
-        "recipient_phone": ship.recipient_phone if ship else "",
-        "postal_code": ship.postal_code if ship else "",
-        "address1": ship.address1 if ship else "",
-        "address2": ship.address2 if ship else "",
-    }
+    if product.type == ProductType.GOODS.value and ship is not None:
+        shipping_snapshot = {
+            "recipient_name": ship.recipient_name.strip(),
+            "recipient_phone": ship.recipient_phone.strip(),
+            "postal_code": ship.postal_code.strip(),
+            "address1": ship.address1.strip(),
+            "address2": ship.address2.strip(),
+        }
+    else:
+        shipping_snapshot = {
+            "recipient_name": "",
+            "recipient_phone": "",
+            "postal_code": "",
+            "address1": "",
+            "address2": "",
+        }
 
     try:
         with transaction.atomic():
@@ -775,6 +788,13 @@ def create_order(
                     id=product.id, stock__gte=payload.qty
                 ).update(stock=F("stock") - payload.qty)
                 if deducted == 0:
+                    # A concurrent retry with the same idempotency key may have
+                    # already placed this exact order and consumed the unit — return
+                    # it instead of a spurious out-of-stock 422 (code review minor1).
+                    if payload.idempotency_key:
+                        existing = _load_order_by_key(account, payload.idempotency_key)
+                        if existing is not None:
+                            return 200, _order_out(existing)
                     return 422, CommerceError(
                         detail="재고가 부족해요.",
                         code=ErrorCode.INSUFFICIENT_STOCK.value,
@@ -849,19 +869,32 @@ def get_order(
 
 
 @orders_router.post(
-    "/{order_id}/cancel", response={200: OrderOut, 404: CommerceError, 422: CommerceError}
+    "/{order_id}/cancel",
+    response={200: OrderOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("6/min"),
 )
 def cancel_order(
     request: HttpRequest, order_id: str
 ) -> tuple[int, OrderOut | CommerceError]:
     """Cancel one of the fan's own orders (only while paid/shipping).
 
-    Cancelling returns the reserved stock: each stock-tracked line's product is
-    incremented by its ``qty`` and its ``sold_out`` flag cleared, atomically with
-    the status flip (``F`` expression, so no lost update). The cancellable-state
-    guard makes this a one-shot transition, so a cancelled order can't be cancelled
-    again to inflate stock. A since-deleted product line (SET_NULL) has nothing to
-    restore and is skipped.
+    The cancellable → cancelled transition is sealed by a **conditional UPDATE
+    rowcount gate** inside the transaction (project pattern): only the request whose
+    ``filter(status__in=_CANCELLABLE).update(status=cancelled)`` touches a row (won
+    the race) proceeds to restore stock; a concurrent second cancel updates 0 rows
+    and returns 422 without restoring anything, so two racing cancels can never
+    double-restore stock. The pre-check below is a friendly early return only — the
+    rowcount gate is the actual invariant.
+
+    Stock restore (winner only): each stock-tracked line's product is incremented by
+    its ``qty`` (``F`` expression, no lost update). ``sold_out`` is only cleared for a
+    product that had **hit 0** (auto sold-out) — a product an owner manually marked
+    ``sold_out`` while stock remained keeps that flag (F-F): the restore adds stock
+    but does not silently re-open a listing the owner paused. A since-deleted product
+    line (SET_NULL) has nothing to restore and is skipped.
+
+    A refund *accepted* (operator-approved) re-stock is a separate operator flow and
+    is not handled here (후속 — 운영자 플로우).
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     order = _load_order(order_id, account)
@@ -874,19 +907,38 @@ def cancel_order(
             detail="취소할 수 없는 주문 상태예요.", code=ErrorCode.ORDER_NOT_CANCELLABLE.value
         )
     with transaction.atomic():
-        order.status = OrderStatus.CANCELLED.value
-        order.save(update_fields=["status"])
+        # Conditional transition: only the winner of the race flips the status and
+        # gets to restore stock. 0 rows = a concurrent cancel already won → 422.
+        transitioned = (
+            Order.objects.filter(id=order.id, status__in=_CANCELLABLE)
+            .update(status=OrderStatus.CANCELLED.value)
+        )
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="취소할 수 없는 주문 상태예요.",
+                code=ErrorCode.ORDER_NOT_CANCELLABLE.value,
+            )
         for line in order.items.all():
             product = line.product
             if product is not None and product.stock is not None:
-                Product.objects.filter(id=product.id).update(
+                # Auto sold-out (stock == 0) re-opens on restore; a manual sold_out
+                # (stock still > 0) is preserved — restore stock only (F-F).
+                reopened = Product.objects.filter(id=product.id, stock=0).update(
                     stock=F("stock") + line.qty, sold_out=False
                 )
+                if reopened == 0:
+                    Product.objects.filter(id=product.id).update(
+                        stock=F("stock") + line.qty
+                    )
+    # Reflect the committed transition on the in-memory instance for the response.
+    order.status = OrderStatus.CANCELLED.value
     return 200, _order_out(order)
 
 
 @orders_router.post(
-    "/{order_id}/refund", response={200: OrderOut, 404: CommerceError, 422: CommerceError}
+    "/{order_id}/refund",
+    response={200: OrderOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("6/min"),
 )
 def request_refund(
     request: HttpRequest, order_id: str, payload: RefundIn

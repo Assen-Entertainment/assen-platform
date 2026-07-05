@@ -84,7 +84,8 @@ interface RawProduct {
   id: string;
   creator_id: string | null;
   creator_name: string;
-  // 서버 ProductOut엔 아직 없음(creator_name만) — 서버가 추가하면 자동 소비하도록 옵셔널 방어.
+  // 서버 ProductOut.creator_handle(기본 "") — PDP/스토어의 크리에이터 프로필 링크용.
+  // 검색 브리프(ProductBrief)엔 없고 빈 문자열일 수 있어 옵셔널 방어(없으면 링크 생략).
   creator_handle?: string | null;
   type: string;
   title: string;
@@ -676,6 +677,23 @@ export async function getPostsPage(creatorId?: string, cursor?: string): Promise
     return toPage(await apiFetch<Paginated<RawPost>>(`/posts${q}`), mapPost);
   }
   return { items: creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS };
+}
+/**
+ * 스튜디오 오너 포스트 커서 페이지 — GET /studio/posts(fan_auth 오너 스코프). 공개 `/posts`와 달리
+ * 소비자 게이트(19+ 숨김)가 적용되지 않아 오너가 자신의 draft·19+ 포스트를 전부 본다.
+ * 401(비로그인)은 SessionGuard가 처리 → 빈 페이지. 403(OwnerRequired, 비크리에이터)은 그대로
+ * 전파해 호출측(useStudioPosts)이 방어 안내를 렌더한다. mock=데모 오너(c1: 별빛 일러스트) 목록.
+ */
+export async function getStudioPostsPage(cursor?: string): Promise<Page<Post>> {
+  if (USE_API) {
+    try {
+      return toPage(await apiFetch<Paginated<RawPost>>(`/studio/posts${pageQuery(cursor)}`), mapPost);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: POSTS.filter((p) => p.creatorId === "c1") };
 }
 /** 피드 — B2 `/feed` 소비(익명=최신 전체). B3 개인화(팔로잉) 피드의 배선 지점. */
 export async function getFeed(): Promise<Post[]> {
