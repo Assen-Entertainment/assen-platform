@@ -14,8 +14,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { MoreIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
 import { gradientStyle } from "@/lib/placeholder";
-import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator } from "@/lib/api/queries";
-import { ApiError, apiErrorMessage, type Creator, type Post, type Product, type MembershipTier } from "@/lib/api";
+import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator, useSubscriptions, useChangeSubscriptionTier } from "@/lib/api/queries";
+import { ApiError, apiErrorMessage, type Creator, type Page, type Post, type Product, type MembershipTier } from "@/lib/api";
+import { won } from "@/lib/checkout";
 import { useSession } from "@/lib/session";
 import { savePendingAction, readPendingAction, clearPendingAction } from "@/lib/auth-return";
 
@@ -27,7 +28,7 @@ export function CreatorProfileView({
   tiers,
 }: {
   creator: Creator;
-  posts: Post[];
+  posts: Page<Post>;
   products: Product[];
   tiers: MembershipTier[];
 }) {
@@ -71,13 +72,37 @@ export function CreatorProfileView({
   // 포스트 좋아요 — 공용 useToggleLike(캐시 통일). 프로필 포스트도 ["posts", creatorId]
   // 캐시로 하이드레이트 → 뮤테이션이 즉시 UI에 반영되고 피드·상세와 동일 경로.
   const { data: postData } = usePosts(creator.id, posts);
-  const postList = postData ?? posts;
+  const postList = postData ?? posts.items;
   const toggleLike = useToggleLike();
 
   // 팬 개인 차단(R4-W3) — 차단은 파괴적 UX(자동 언팔) → 확인 다이얼로그. 해제는 비파괴적 → 즉시.
   const block = useBlockCreator();
   const unblock = useUnblockCreator();
   const [confirmBlockOpen, setConfirmBlockOpen] = React.useState(false);
+
+  // 멤버십 탭 — 이 크리에이터에 내 활성 구독이 있으면 "구독 중" 배지+티어 전환(업/다운그레이드) 제공.
+  const { data: subsData } = useSubscriptions();
+  const mySub = (subsData ?? []).find((s) => s.creatorHandle === c.handle && s.status !== "cancelled");
+  const changeTier = useChangeSubscriptionTier();
+  const [pendingTier, setPendingTier] = React.useState<MembershipTier | null>(null);
+
+  const onConfirmTierChange = () => {
+    if (!mySub || !pendingTier) return;
+    const targetTier = pendingTier;
+    changeTier.mutate(
+      { id: mySub.id, tierId: targetTier.id },
+      {
+        onSuccess: () =>
+          toast({ title: "멤버십 티어를 변경했어요", description: `${targetTier.name} 멤버십으로 변경됐어요.` }),
+        onError: (e) => {
+          // 401은 전역 세션 가드가 처리 → 그 외는 error code로 안내(SubscriptionNotActive·TierNotFound 등).
+          if (e instanceof ApiError && e.status === 401) return;
+          toast({ title: "티어를 변경하지 못했어요", description: apiErrorMessage(e) });
+        },
+      },
+    );
+    setPendingTier(null);
+  };
 
   const share = async (id: string) => {
     const url = `${window.location.origin}/post/${id}`;
@@ -258,25 +283,68 @@ export function CreatorProfileView({
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-3">
-              {tiers.map((t, i) => (
-                <MembershipTierCard
-                  key={t.id}
-                  name={t.name}
-                  price={t.price}
-                  period={t.period}
-                  benefits={t.benefits}
-                  badge={t.badge}
-                  featured={t.featured}
-                  accent={t.featured}
-                  inheritNote={i > 0 ? `${tiers[i - 1].name} 혜택 포함` : undefined}
-                  onSubscribe={() => router.push(`/checkout?tier=${encodeURIComponent(t.id)}&creator=${encodeURIComponent(c.handle)}`)}
-                />
-              ))}
+              {tiers.map((t, i) => {
+                // 내 활성 구독이 이 크리에이터에 있으면: 현재 티어는 "구독 중"(비활성), 그 외는 "이 티어로 변경".
+                const isCurrent = mySub?.tierId === t.id;
+                return (
+                  <MembershipTierCard
+                    key={t.id}
+                    name={t.name}
+                    price={t.price}
+                    period={t.period}
+                    benefits={t.benefits}
+                    badge={t.badge}
+                    featured={t.featured}
+                    accent={t.featured}
+                    inheritNote={i > 0 ? `${tiers[i - 1].name} 혜택 포함` : undefined}
+                    currentPlan={isCurrent}
+                    ctaLabel={mySub ? "이 티어로 변경" : "구독하기"}
+                    onSubscribe={
+                      mySub
+                        ? () => setPendingTier(t)
+                        : () =>
+                            router.push(
+                              `/checkout?tier=${encodeURIComponent(t.id)}&creator=${encodeURIComponent(c.handle)}`,
+                            )
+                    }
+                  />
+                );
+              })}
             </div>
           )}
         </TabsContent>
       </Tabs>
       )}
+
+      {/* 멤버십 티어 전환 확인 — 현재 → 새 티어, 가격 변화 안내. */}
+      <Dialog open={pendingTier !== null} onOpenChange={(o) => !o && setPendingTier(null)}>
+        <DialogContent>
+          <DialogTitle>멤버십 티어를 변경할까요?</DialogTitle>
+          <DialogDescription>
+            {mySub && pendingTier ? (
+              <>
+                {mySub.tierName}({won(mySub.price)}/{mySub.period}) → {pendingTier.name}(
+                {won(pendingTier.price)}/{pendingTier.period})로 변경돼요.
+                {pendingTier.price > mySub.price
+                  ? " 다음 결제부터 인상된 금액이 적용됩니다."
+                  : pendingTier.price < mySub.price
+                    ? " 다음 결제부터 인하된 금액이 적용됩니다."
+                    : ""}
+              </>
+            ) : null}
+          </DialogDescription>
+          <div className="mt-1 flex gap-2">
+            <DialogClose asChild>
+              <Button variant="outline" className="flex-1">
+                취소
+              </Button>
+            </DialogClose>
+            <Button className="flex-1" onClick={onConfirmTierChange} disabled={changeTier.isPending}>
+              변경하기
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <GiftSheet open={giftOpen} onOpenChange={setGiftOpen} creatorName={c.name} />
 

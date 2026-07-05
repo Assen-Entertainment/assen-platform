@@ -5,6 +5,7 @@ import { StudioStatsGrid } from "./studio-stats";
 
 /** 서브메뉴 카드 — 스튜디오 각 영역 진입점. */
 const SECTIONS = [
+  { title: "포스트 관리", desc: "발행한 포스트 수정·삭제", href: "/studio/posts" },
   { title: "상품 관리", desc: "굿즈·디지털·티켓 판매 관리", href: "/studio/products" },
   { title: "멤버십", desc: "티어·혜택 편집", href: "/studio/membership" },
   { title: "정산", desc: "수익·정산 내역", href: "/studio/settlement" },

@@ -1,6 +1,7 @@
 "use client";
 // ※ 실결제/PG 연동은 대표·법무 게이트, 본 플로우는 UI mock입니다.
-//   금액·VAT·약관 문구는 placeholder이며 단독 확정 대상이 아닙니다.
+//   표시 금액은 서버 계약(subtotal + shipping = total)을 그대로 미러합니다 — 클라에서 배송비/VAT를
+//   날조하지 않습니다. KR 관행상 표시가는 VAT 포함가이므로 별도 VAT 행을 두지 않습니다.
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +13,8 @@ import {
   Button,
   Divider,
   Spinner,
+  Avatar,
+  TextField,
   PaymentIcon,
   RefundPolicyNotice,
   AutoPayConsentSheet,
@@ -22,7 +25,7 @@ import {
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
-import { ApiError, apiErrorMessage } from "@/lib/api";
+import { ApiError, apiErrorMessage, type ShippingAddress } from "@/lib/api";
 import { useCreateOrder, useSubscribe } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { mockOrderId, won, type OrderSummary } from "@/lib/checkout";
@@ -43,6 +46,15 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 
 const METHODS: PaymentMethod[] = ["card", "bank", "pay"];
 
+/** 빈 배송지 초기값. */
+const EMPTY_SHIPPING: ShippingAddress = {
+  recipientName: "",
+  recipientPhone: "",
+  postalCode: "",
+  address1: "",
+  address2: "",
+};
+
 export function CheckoutView({ summary, target }: { summary: OrderSummary; target?: CheckoutTarget }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -52,10 +64,15 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   const subscribe = useSubscribe();
   const live = Boolean(config.apiUrl);
   const isMembership = summary.kind === "membership";
+  // 배송 상품(굿즈)만 배송지 입력 필요 — 디지털/티켓/쿠폰/체험/멤버십은 미노출.
+  const needsShipping = summary.kind === "product" && summary.productType === "goods";
   const [pay, setPay] = React.useState<PaymentMethod>("card");
   const [agree, setAgree] = React.useState(false);
   const [autoPay, setAutoPay] = React.useState(false);
   const [processing, setProcessing] = React.useState(false);
+  const [ship, setShip] = React.useState<ShippingAddress>(EMPTY_SHIPPING);
+  // 배송지 미완성 상태에서 결제 시도 시에만 인라인 오류 노출(첫 렌더부터 빨갛게 뜨지 않도록).
+  const [shipTouched, setShipTouched] = React.useState(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(
@@ -65,11 +82,21 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
     [],
   );
 
+  const setShipField = (key: keyof ShippingAddress) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setShip((s) => ({ ...s, [key]: e.target.value }));
+
+  // 필수: 받는분·연락처·우편번호·기본주소(상세주소는 선택). 서버 422 방어 전 클라 1차 검증.
+  const shippingComplete =
+    ship.recipientName.trim() !== "" &&
+    ship.recipientPhone.trim() !== "" &&
+    ship.postalCode.trim() !== "" &&
+    ship.address1.trim() !== "";
+
   const canPay = agree && (!isMembership || autoPay) && !processing;
 
-  // 422(주문 불가/품절/재고/멤버십 전용/중복 구독)는 서버 error code로 안내(문자열 매칭 제거,
-  // ProductNotOrderable·OutOfStock·InsufficientStock·MembershipOnlyProduct·DuplicateSubscription 등).
-  // 코드가 없으면 서버 detail(표시용) → 일반 폴백. 401은 전역 세션 가드가 처리.
+  // 422(주문 불가/품절/재고/멤버십 전용/배송지 누락/중복 구독)는 서버 error code로 안내(문자열 매칭 제거,
+  // ProductNotOrderable·OutOfStock·InsufficientStock·MembershipOnlyProduct·ShippingAddressRequired·
+  // DuplicateSubscription 등). 코드가 없으면 서버 detail(표시용) → 일반 폴백. 401은 전역 세션 가드가 처리.
   const onCheckoutError = (e: unknown) => {
     setProcessing(false);
     if (e instanceof ApiError) {
@@ -90,12 +117,23 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
 
   const submit = () => {
     if (!canPay) return;
+    // 배송 상품인데 배송지가 미완성이면 결제 진행 전 차단(서버 422 전 클라 안내).
+    if (needsShipping && !shippingComplete) {
+      setShipTouched(true);
+      toast({ title: "배송지를 입력해 주세요", description: "받는 분·연락처·우편번호·주소를 확인해 주세요." });
+      return;
+    }
     setProcessing(true);
 
     // 라이브 백엔드 + 대상 식별자가 있으면 실 주문/구독(mock 결제 확정 — 실 PG·금액이동 없음).
     if (live && target?.kind === "product") {
       createOrder.mutate(
-        { productId: target.productId, qty: target.qty, option: target.option },
+        {
+          productId: target.productId,
+          qty: target.qty,
+          option: target.option,
+          shipping: needsShipping ? ship : undefined,
+        },
         {
           onSuccess: (order) => {
             const id = order?.id ?? mockOrderId();
@@ -123,10 +161,28 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
     }, 1000);
   };
 
+  const initial = summary.creatorName?.slice(0, 1) ?? "";
+
   return (
     <main className="min-h-screen bg-surface-container-high py-10">
       <div className="mx-auto flex max-w-lg flex-col gap-4 px-4">
         <h1 className="text-headline text-on-surface">주문 / 결제</h1>
+
+        {/* 구독 대상 크리에이터 명시 — 아바타+이름+티어(대상 불투명 해소). */}
+        {isMembership && summary.creatorName ? (
+          <Card>
+            <CardBody className="flex items-center gap-3">
+              <Avatar fallback={initial} tone={summary.creatorHandle ?? summary.creatorName} size="lg" />
+              <div className="flex min-w-0 flex-col">
+                <span className="text-caption text-on-surface-variant">구독 크리에이터</span>
+                <span className="line-clamp-1 text-body-l text-on-surface">{summary.creatorName}</span>
+                {summary.tierName ? (
+                  <span className="text-body-s text-on-surface-variant">{summary.tierName} 멤버십</span>
+                ) : null}
+              </div>
+            </CardBody>
+          </Card>
+        ) : null}
 
         {/* 주문 요약 */}
         <Card>
@@ -138,13 +194,70 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
                 <span className="text-caption text-on-surface-variant">
                   {isMembership
                     ? "정기 결제(월)"
-                    : `수량 ${summary.qty}개${summary.option ? ` · ${summary.option}` : ""}`}
+                    : `${won(summary.unitPrice)} × ${summary.qty}개${summary.option ? ` · ${summary.option}` : ""}`}
                 </span>
               </div>
-              <span className="shrink-0 text-title-m tabular-nums text-on-surface">{won(summary.unitPrice)}</span>
+              {/* 행 합계 = 단가 × 수량(멤버십은 월 정기 금액). */}
+              <span className="shrink-0 text-title-m tabular-nums text-on-surface">
+                {won(isMembership ? summary.unitPrice : summary.subtotal)}
+              </span>
             </div>
           </CardBody>
         </Card>
+
+        {/* 배송지 — 배송 상품(굿즈)만 노출. 서버 계약: 누락 시 422 ShippingAddressRequired. */}
+        {needsShipping ? (
+          <Card>
+            <CardBody className="flex flex-col gap-3">
+              <span className="text-title-m text-on-surface">배송지</span>
+              <TextField
+                label="받는 분"
+                value={ship.recipientName}
+                onChange={setShipField("recipientName")}
+                placeholder="이름"
+                maxLength={60}
+                error={shipTouched && ship.recipientName.trim() === ""}
+                errorText="받는 분을 입력해 주세요."
+              />
+              <TextField
+                label="연락처"
+                type="tel"
+                value={ship.recipientPhone}
+                onChange={setShipField("recipientPhone")}
+                placeholder="010-0000-0000"
+                maxLength={32}
+                error={shipTouched && ship.recipientPhone.trim() === ""}
+                errorText="연락처를 입력해 주세요."
+              />
+              <TextField
+                label="우편번호"
+                inputMode="numeric"
+                value={ship.postalCode}
+                onChange={setShipField("postalCode")}
+                placeholder="00000"
+                maxLength={16}
+                error={shipTouched && ship.postalCode.trim() === ""}
+                errorText="우편번호를 입력해 주세요."
+              />
+              <TextField
+                label="주소"
+                value={ship.address1}
+                onChange={setShipField("address1")}
+                placeholder="도로명/지번 주소"
+                maxLength={200}
+                error={shipTouched && ship.address1.trim() === ""}
+                errorText="주소를 입력해 주세요."
+              />
+              <TextField
+                label="상세 주소"
+                value={ship.address2}
+                onChange={setShipField("address2")}
+                placeholder="동·호수 등(선택)"
+                maxLength={200}
+              />
+            </CardBody>
+          </Card>
+        ) : null}
 
         {/* 결제 수단 */}
         <Card>
@@ -161,18 +274,17 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
           </CardBody>
         </Card>
 
-        {/* 금액 요약(VAT 분리 placeholder) */}
+        {/* 금액 요약 — 서버 계약 미러(subtotal + 배송비 = total). 배송비는 정책상 무료(날조 금액 없음). */}
         <Card>
           <CardBody className="flex flex-col gap-2">
             <Row label={isMembership ? "구독 금액" : "상품 금액"} value={won(summary.subtotal)} />
-            {summary.shipping > 0 ? <Row label="배송비" value={won(summary.shipping)} /> : null}
-            <Row label="공급가액" value={won(summary.supply)} muted />
-            <Row label="부가세(VAT 10%)" value={won(summary.vat)} muted />
+            {needsShipping ? <Row label="배송비" value={summary.shipping > 0 ? won(summary.shipping) : "무료"} /> : null}
             <Divider className="my-1" />
             <div className="flex items-center justify-between">
               <span className="text-title-m text-on-surface">총 결제금액</span>
               <span className="text-title-l tabular-nums text-primary">{won(summary.total)}</span>
             </div>
+            <p className="text-caption text-on-surface-variant">부가세(VAT 10%) 포함 금액입니다.</p>
           </CardBody>
         </Card>
 

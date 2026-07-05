@@ -166,6 +166,17 @@ async function main() {
     const box = consents.nth(i);
     if ((await box.getAttribute("aria-checked")) !== "true") await box.click();
   }
+  // 배송 상품(굿즈)이면 배송지 입력 필요(W1A 계약: 누락 시 422 ShippingAddressRequired) —
+  // 배송지 섹션이 있으면 필수 필드를 채운다. 디지털/티켓 등 비배송 상품은 섹션이 없어 건너뛴다.
+  const recipient = page.getByLabel("받는 분");
+  if (await recipient.count()) {
+    await recipient.fill("스모크 배송");
+    await page.getByLabel("연락처").fill("010-0000-0002");
+    await page.getByLabel("우편번호").fill("04524");
+    await page.getByLabel("주소", { exact: true }).fill("서울 중구 세종대로 110");
+    await page.getByLabel("상세 주소").fill("1203호");
+    pass("배송지 입력(굿즈)");
+  }
   await shot(page, "checkout-consented");
   await page
     .getByRole("button", { name: /결제하기/ })

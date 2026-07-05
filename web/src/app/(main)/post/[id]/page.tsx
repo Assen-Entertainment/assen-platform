@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getPost, getComments } from "@/lib/api";
+import { getPost, getCommentsPage } from "@/lib/api";
 import { PostDetailView } from "./post-detail-view";
 
 /** Post 상세 — 동적 라우트(/post/[id]). 서버 fetch → 클라 뷰(initialData 하이드레이션·낙관적 뮤테이션). */
@@ -8,7 +8,8 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const post = await getPost(id);
   if (!post) notFound();
-  const comments = await getComments(id);
+  // 댓글은 커서 Page 시드(무한 로드 이중 페치 제거).
+  const comments = await getCommentsPage(id);
   return <PostDetailView post={post} comments={comments} />;
 }
 

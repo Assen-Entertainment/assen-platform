@@ -20,6 +20,8 @@ export interface MembershipTierCardProps extends React.HTMLAttributes<HTMLDivEle
   /** perk 빌드업 시각화(루브릭 #15) — 예: "라이트 혜택 포함". 상위 티어가 하위 perk 누적임을 표기. */
   inheritNote?: string;
   ctaLabel?: string;
+  /** 현재 구독 중인 티어 — "구독 중" 배지 + CTA 비활성(중복 구독 방지). */
+  currentPlan?: boolean;
   onSubscribe?: () => void;
 }
 
@@ -30,7 +32,7 @@ function formatPrice(v: number | string): string {
 
 export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTierCardProps>(
   (
-    { name, price, period = "월", benefits, badge, featured, accent, inheritNote, ctaLabel = "구독하기", onSubscribe, className, ...props },
+    { name, price, period = "월", benefits, badge, featured, accent, inheritNote, ctaLabel = "구독하기", currentPlan, onSubscribe, className, ...props },
     ref,
   ) => (
     <div
@@ -51,7 +53,10 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
       <div className="flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-title-l text-on-surface">{name}</h3>
-          {badge ? <Badge variant="primary">{badge}</Badge> : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {currentPlan ? <Badge variant="success">구독 중</Badge> : null}
+            {badge ? <Badge variant="primary">{badge}</Badge> : null}
+          </div>
         </div>
         <div className="flex items-baseline gap-1">
           <span className={cn("text-display-m tabular-nums", accent ? "text-creator-accent" : "text-primary")}>₩{formatPrice(price)}</span>
@@ -87,8 +92,14 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
             </li>
           ))}
         </ul>
-        <Button variant={featured ? (accent ? "accent" : "primary") : "secondary"} size="lg" className="w-full" onClick={onSubscribe}>
-          {ctaLabel}
+        <Button
+          variant={featured ? (accent ? "accent" : "primary") : "secondary"}
+          size="lg"
+          className="w-full"
+          disabled={currentPlan}
+          onClick={currentPlan ? undefined : onSubscribe}
+        >
+          {currentPlan ? "구독 중" : ctaLabel}
         </Button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCreator, getPosts, getProducts, getMembershipTiers } from "@/lib/api";
+import { getCreator, getPostsPage, getProducts, getMembershipTiers } from "@/lib/api";
 import { CreatorProfileView } from "./creator-profile-view";
 
 /** Creator 프로필 — 동적 라우트(/creator/[handle]). 서버 fetch → 클라 뷰(initialData 하이드레이션). */
@@ -8,8 +8,9 @@ export default async function CreatorPage({ params }: { params: Promise<{ handle
   const { handle } = await params;
   const creator = await getCreator(handle);
   if (!creator) notFound();
+  // 포스트는 커서 Page 시드(무한 로드 이중 페치 제거), 스토어·티어는 단순 목록.
   const [posts, products, tiers] = await Promise.all([
-    getPosts(creator.id),
+    getPostsPage(creator.id),
     getProducts(creator.id),
     getMembershipTiers(creator.id),
   ]);

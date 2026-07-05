@@ -1,11 +1,13 @@
 "use client";
+import * as React from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ListItem, EmptyState, Divider, Button } from "@/components/ui";
+import { ListItem, EmptyState, Divider, Button, Spinner } from "@/components/ui";
 import { HeartFilledIcon, CommentIcon, PersonIcon, StoreIcon, BellIcon } from "@/lib/icons";
+import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/lib/api/queries";
-import type { Notification, NotificationKind } from "@/lib/api";
+import type { Notification, NotificationKind, Page } from "@/lib/api";
 
 const ICON: Record<NotificationKind, ReactNode> = {
   like: <HeartFilledIcon className="size-5 text-error" />,
@@ -20,13 +22,23 @@ const GROUPS: { key: Notification["group"]; label: string }[] = [
   { key: "earlier", label: "이전" },
 ];
 
-export function NotificationsView({ notifications }: { notifications: Notification[] }) {
+export function NotificationsView({ notifications }: { notifications: Page<Notification> }) {
   const router = useRouter();
   // USE_API면 실 목록/읽음, 아니면 mock(sleep) — 낙관적 read=true 반영.
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useNotifications(notifications);
-  const list = data ?? notifications;
+  const list = data ?? notifications.items;
   const markReadMut = useMarkNotificationRead();
   const markAllMut = useMarkAllNotificationsRead();
+
+  // 무한 스크롤 — sentinel 뷰포트 근접 시 자동 로드(reduced-motion·미지원은 더보기 버튼 폴백).
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const canLoadMore = hasNextPage && !isFetchingNextPage;
+  useInfiniteScroll(sentinelRef, {
+    enabled: canLoadMore,
+    onLoadMore: () => {
+      if (canLoadMore) fetchNextPage();
+    },
+  });
 
   const isRead = (n: Notification) => !!n.read;
   const open = (n: Notification) => {
@@ -94,11 +106,13 @@ export function NotificationsView({ notifications }: { notifications: Notificati
           </section>
         );
       })}
-      {/* 더보기 — 커서 다음 페이지가 있을 때만(무한 쿼리). 그룹핑은 로드된 전체에 적용. */}
+      {/* 무한 스크롤 sentinel + 폴백 버튼(그룹핑은 로드된 전체에 적용). */}
       {hasNextPage ? (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+          {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
           <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-            {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+            {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
           </Button>
         </div>
       ) : null}

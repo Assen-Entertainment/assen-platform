@@ -120,16 +120,35 @@ export function OrderDetailView({ order }: { order: Order }) {
         </CardBody>
       </Card>
 
-      {/* 결제 요약 */}
+      {/* 결제 요약 — 서버 계약(subtotal + shipping_fee = total). 배송 상품은 배송비 무료 표기(정책 게이트). */}
       <Card>
         <CardBody className="flex flex-col gap-2">
           <span className="text-title-m text-on-surface">결제 정보</span>
           <Row label="상품 금액" value={won(o.subtotal)} />
-          {o.shipping > 0 ? <Row label="배송비" value={won(o.shipping)} /> : null}
+          {o.shippingAddress || o.shipping > 0 ? (
+            <Row label="배송비" value={o.shipping > 0 ? won(o.shipping) : "무료"} />
+          ) : null}
           <Divider className="my-1" />
           <Row label="총 결제금액" value={won(o.total)} strong />
         </CardBody>
       </Card>
+
+      {/* 배송지 — 배송 상품(굿즈) 주문에만(서버 OrderShippingOut 스냅샷). */}
+      {o.shippingAddress ? (
+        <Card>
+          <CardBody className="flex flex-col gap-2">
+            <span className="text-title-m text-on-surface">배송지</span>
+            <Row label="받는 분" value={o.shippingAddress.recipientName} />
+            <Row label="연락처" value={o.shippingAddress.recipientPhone} />
+            <Row
+              label="주소"
+              value={`(${o.shippingAddress.postalCode}) ${o.shippingAddress.address1}${
+                o.shippingAddress.address2 ? ` ${o.shippingAddress.address2}` : ""
+              }`}
+            />
+          </CardBody>
+        </Card>
+      ) : null}
 
       {/* 배송 추적(placeholder) */}
       {o.tracking ? (

@@ -34,13 +34,15 @@ export interface MonetizableItemProps extends React.HTMLAttributes<HTMLDivElemen
   meta?: string;
   /** 썸네일/이미지 노드. 없으면 surface-container-high placeholder. */
   media?: React.ReactNode;
+  /** 크리에이터 표기 슬롯(이름/프로필 링크 등) — 있을 때만 제목 아래 노출. 전역 상품은 생략. */
+  creator?: React.ReactNode;
   /** 기본 CTA 라벨은 type 파생; 필요 시 오버라이드. */
   ctaLabel?: string;
   onAction?: () => void;
 }
 
 export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemProps>(
-  ({ type, title, price, meta, media, ctaLabel, onAction, className, ...props }, ref) => {
+  ({ type, title, price, meta, media, creator, ctaLabel, onAction, className, ...props }, ref) => {
     const t = TYPE_META[type];
     return (
       <div
@@ -62,6 +64,7 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
             {t.tag}
           </Badge>
           <h3 className="line-clamp-1 text-title-m text-on-surface">{title}</h3>
+          {creator ? <div className="line-clamp-1 text-body-s text-on-surface-variant">{creator}</div> : null}
           {meta ? (
             <p className="line-clamp-1 text-body-s text-on-surface-variant">{meta}</p>
           ) : null}

@@ -8386,6 +8386,11 @@
             "title": "Creator Name",
             "type": "string"
           },
+          "creator_handle": {
+            "default": "",
+            "title": "Creator Handle",
+            "type": "string"
+          },
           "type": {
             "title": "Type",
             "type": "string"

@@ -91,6 +91,8 @@ class ProductOut(Schema):
     id: uuid.UUID
     creator_id: uuid.UUID | None = None
     creator_name: str = ""
+    # 스토어 카드→크리에이터 프로필 링크용 핸들(전역 카탈로그 상품은 빈 문자열).
+    creator_handle: str = ""
     type: str
     title: str
     price: int
@@ -116,8 +118,9 @@ def _product_out(product: Product) -> ProductOut:
     return ProductOut(
         id=product.id,
         creator_id=product.creator_id,
-        # 상세/카드 표기용 소유 크리에이터명(전역 카탈로그 상품은 빈 문자열).
+        # 상세/카드 표기용 소유 크리에이터명·핸들(전역 카탈로그 상품은 빈 문자열).
         creator_name=product.creator.name if product.creator is not None else "",
+        creator_handle=product.creator.handle if product.creator is not None else "",
         type=product.type,
         title=product.title,
         price=product.price,

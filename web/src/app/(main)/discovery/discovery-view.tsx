@@ -24,7 +24,9 @@ import {
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
-import type { Creator, Product } from "@/lib/api";
+import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
+import { Spinner } from "@/components/ui";
+import type { Creator, Page, Product } from "@/lib/api";
 
 const CATS = [
   { label: "전체", value: "all" },
@@ -54,17 +56,27 @@ function creatorMeta(c: Creator): string {
   return `${c.category ?? ""} · 팔로워 ${followers(c.followers)}`;
 }
 
-export function DiscoveryView({ creators, products }: { creators: Creator[]; products: Product[] }) {
+export function DiscoveryView({ creators, products }: { creators: Page<Creator>; products: Page<Product> }) {
   const router = useRouter();
   const { user } = useSession();
   const [cat, setCat] = React.useState("all");
   const creatorsQ = useCreators(creators);
   const productsQ = useProducts(undefined, products);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = creatorsQ;
-  const cList = creatorsQ.data ?? creators;
-  const pList = productsQ.data ?? products;
+  const cList = creatorsQ.data ?? creators.items;
+  const pList = productsQ.data ?? products.items;
   const isError = (creatorsQ.isError && !creatorsQ.data) || (productsQ.isError && !productsQ.data);
   const shown = cat === "all" ? cList : cList.filter((c) => c.category === cat);
+
+  // 무한 스크롤(전체 둘러보기 그리드) — sentinel 근접 시 크리에이터 다음 페이지 자동 로드.
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const canLoadMore = hasNextPage && !isFetchingNextPage;
+  useInfiniteScroll(sentinelRef, {
+    enabled: canLoadMore,
+    onLoadMore: () => {
+      if (canLoadMore) fetchNextPage();
+    },
+  });
 
   // 선반용 파생 목록 — 인기(팔로워 desc) / 신규(역순) / 추천 상품.
   const popular = React.useMemo(() => [...cList].sort((a, b) => b.followers - a.followers), [cList]);
@@ -166,11 +178,13 @@ export function DiscoveryView({ creators, products }: { creators: Creator[]; pro
             />
           ))}
         </div>
-        {/* 더보기 — 커서 다음 페이지가 있을 때만(무한 쿼리). 카테고리 필터는 로드된 전체에 적용. */}
+        {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
         {hasNextPage ? (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+            {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
             <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+              {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
             </Button>
           </div>
         ) : null}

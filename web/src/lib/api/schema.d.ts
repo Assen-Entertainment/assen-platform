@@ -2996,6 +2996,11 @@ export interface components {
              * @default
              */
             creator_name: string;
+            /**
+             * Creator Handle
+             * @default
+             */
+            creator_handle: string;
             /** Type */
             type: string;
             /** Title */
