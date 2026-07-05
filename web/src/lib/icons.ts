@@ -13,6 +13,7 @@ export {
   MdMoreHoriz as MoreIcon,
   MdChevronRight as ChevronRightIcon,
   MdChevronLeft as ChevronLeftIcon,
+  MdCalendarToday as CalendarIcon,
   MdExpandMore as ExpandMoreIcon,
   MdCheck as CheckIcon,
   MdClose as CloseIcon,

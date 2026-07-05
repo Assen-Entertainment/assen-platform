@@ -11,6 +11,7 @@
   --outline: #e9e9f1;
   --outline-variant: #f4f4f5;
   --primary: #5a4df0;
+  --primary-hover: #3727ed;
   --on-primary: #ffffff;
   --primary-container: #efeffe;
   --on-primary-container: #2e2c8a;
@@ -29,6 +30,7 @@
   --gradient-brand: linear-gradient(135deg, #5a4df0 0%, #8a5cf7 100%);
 
   --creator-accent: #5a4df0;
+  --creator-accent-hover: #3727ed;
   --on-creator-accent: #ffffff;
   --creator-accent-container: #efeffe;
   --on-creator-accent-container: #2e2c8a;
@@ -56,6 +58,7 @@
   --outline: #34343a;
   --outline-variant: #34343a;
   --primary: #5a4df0;
+  --primary-hover: #3727ed;
   --on-primary: #ffffff;
   --primary-container: #2a2a52;
   --on-primary-container: #c7c9ff;

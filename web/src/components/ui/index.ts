@@ -95,3 +95,7 @@ export { CreatorHomeHeader, type CreatorHomeHeaderProps } from "./creator-home-h
 export { GiftSheet, type GiftSheetProps } from "./gift-sheet";
 export { MediaViewer, type MediaViewerProps } from "./media-viewer";
 export { SuccessCheck, type SuccessCheckProps } from "./success-check";
+
+// [R6-W2D] DS 폴리시 — 날짜 선택(자체 구현) (append-only 블록)
+export { Calendar, type CalendarProps } from "./calendar";
+export { DatePicker, type DatePickerProps } from "./date-picker";

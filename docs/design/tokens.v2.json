@@ -25,6 +25,7 @@
       },
       "indigo": {
         "500": { "$type": "color", "$value": "#5A4DF0", "$description": "Assen Indigo — primary 액센트. 2026-06-28 브랜드 시그니처: Stripe #635BFF/범용 SaaS 인디고 탈피 위해 violet 방향 hue 미세시프트+심도. 흰 대비 5.6:1(구 #5E63F8 4.54→개선). 라이트/다크 불변. ※대표 최종 사인 대기(가역)" },
+        "hover": { "$type": "color", "$value": "#3727ED", "$description": "primary filled hover — Stripe식 색조 시프트(명도 -8%, opacity 대체). 흰(onPrimary) 대비 7.85:1(AA). 라이트/다크 공통(darken → 두 모드 모두 대비 상승으로 AA 보장; 다크 lighten은 흰 텍스트 4.5 미달)." },
         "600": { "$type": "color", "$value": "#4B50E0", "$description": "pressed (파생)" },
         "100": { "$type": "color", "$value": "#EFEFFE", "$description": "accentContainer/필 (Fanding 실측)" },
         "ink": { "$type": "color", "$value": "#2E2C8A", "$description": "강한 대비 필요 시 (파생)" },
@@ -52,6 +53,7 @@
       "outline": { "$type": "color", "$value": "{color.ref.neutral.200}" },
       "outlineVariant": { "$type": "color", "$value": "{color.ref.neutral.100}" },
       "primary": { "$type": "color", "$value": "{color.ref.indigo.500}" },
+      "primaryHover": { "$type": "color", "$value": "{color.ref.indigo.hover}", "$description": "filled 버튼 hover(색조 시프트)" },
       "onPrimary": { "$type": "color", "$value": "{color.ref.white}" },
       "primaryContainer": { "$type": "color", "$value": "{color.ref.indigo.100}" },
       "onPrimaryContainer": { "$type": "color", "$value": "{color.ref.indigo.ink}", "$description": "라벤더 필 위 텍스트 — a11y AA: indigo.ink #2E2C8A (10:1)" },
@@ -76,6 +78,7 @@
       "outline": { "$type": "color", "$value": "{color.ref.dark.border}" },
       "outlineVariant": { "$type": "color", "$value": "{color.ref.dark.border}" },
       "primary": { "$type": "color", "$value": "{color.ref.indigo.500}" },
+      "primaryHover": { "$type": "color", "$value": "{color.ref.indigo.hover}", "$description": "filled 버튼 hover — 다크도 darken(흰 텍스트 AA 보장)" },
       "onPrimary": { "$type": "color", "$value": "{color.ref.white}" },
       "primaryContainer": { "$type": "color", "$value": "{color.ref.indigo.darkContainer}" },
       "onPrimaryContainer": { "$type": "color", "$value": "{color.ref.indigo.onDarkContainer}" },

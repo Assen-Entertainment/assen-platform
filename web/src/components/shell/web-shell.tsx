@@ -7,6 +7,7 @@ import { HomeIcon, FeedIcon, StoreIcon, HeartIcon, BellIcon, PersonIcon, SunIcon
 import { useTheme } from "@/components/theme-provider";
 import { useSession } from "@/lib/session";
 import { useNotificationSocket } from "@/lib/realtime/use-notification-socket";
+import { OfflineBanner } from "@/components/offline-banner";
 
 /** Sidebar(lg+) 네비. 홈 다음에 피드(/feed) 진입점. */
 const NAV = [
@@ -73,6 +74,8 @@ export function WebShell({ children }: { children: React.ReactNode }) {
         }
       />
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* 오프라인 감지 배너(R6-W2D) — 셸 1회 마운트. 온라인이면 null(회귀 0). */}
+        <OfflineBanner />
         <TopBar
           className="px-4 sm:px-6"
           logo={
