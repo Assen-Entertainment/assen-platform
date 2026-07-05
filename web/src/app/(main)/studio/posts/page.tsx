@@ -40,7 +40,7 @@ export default function StudioPostsPage() {
   );
 }
 
-/** 오너 포스트 목록 — GET /studio/posts 소비(오너 스코프). 403(비크리에이터)은 방어 안내. */
+/** 오너 포스트 목록 — GET /studio/posts 소비(오너 스코프). 403(비크리에이터)·401(세션 만료)은 방어 안내. */
 function StudioPostsList() {
   const { toast } = useToast();
   const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -84,7 +84,22 @@ function StudioPostsList() {
       />
     );
   }
-  // 그 외 오류(네트워크 등) — 재시도 안내(401은 전역 SessionGuard가 처리).
+  // 401(세션 만료/무효) — client.ts refresh-retry 실패 후 도달(회복 불가 세션). getStudioPostsPage가
+  // 이 401을 빈 페이지로 삼키지 않고 전파하므로, "발행 포스트 없음"으로 오표시하지 않고 재로그인 안내.
+  if (isError && error instanceof ApiError && error.status === 401) {
+    return (
+      <EmptyState
+        title="다시 로그인해 주세요"
+        description="세션이 만료되었어요. 다시 로그인하면 포스트 관리를 이어갈 수 있어요."
+        action={
+          <Button asChild>
+            <Link href="/login?next=/studio/posts">로그인</Link>
+          </Button>
+        }
+      />
+    );
+  }
+  // 그 외 오류(네트워크 등) — 재시도 안내(401·403은 위에서 방어 안내로 분기).
   if (isError) {
     return (
       <div className="flex justify-center py-16">

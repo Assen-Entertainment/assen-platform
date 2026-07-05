@@ -681,17 +681,14 @@ export async function getPostsPage(creatorId?: string, cursor?: string): Promise
 /**
  * 스튜디오 오너 포스트 커서 페이지 — GET /studio/posts(fan_auth 오너 스코프). 공개 `/posts`와 달리
  * 소비자 게이트(19+ 숨김)가 적용되지 않아 오너가 자신의 draft·19+ 포스트를 전부 본다.
- * 401(비로그인)은 SessionGuard가 처리 → 빈 페이지. 403(OwnerRequired, 비크리에이터)은 그대로
- * 전파해 호출측(useStudioPosts)이 방어 안내를 렌더한다. mock=데모 오너(c1: 별빛 일러스트) 목록.
+ * 401·403 모두 그대로 전파한다 — client.ts가 이미 401 refresh-and-retry를 하므로 여기 도달한
+ * 401은 회복 불가 세션(만료-잔존 쿠키)이다. 빈 페이지로 삼키면 "발행 포스트 없음"으로 오표시되므로,
+ * 호출측(StudioPostsPage)이 401=재로그인 안내·403(OwnerRequired)=크리에이터 안내로 분기 렌더한다.
+ * mock=데모 오너(c1: 별빛 일러스트) 목록.
  */
 export async function getStudioPostsPage(cursor?: string): Promise<Page<Post>> {
   if (USE_API) {
-    try {
-      return toPage(await apiFetch<Paginated<RawPost>>(`/studio/posts${pageQuery(cursor)}`), mapPost);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) return { items: [] };
-      throw e;
-    }
+    return toPage(await apiFetch<Paginated<RawPost>>(`/studio/posts${pageQuery(cursor)}`), mapPost);
   }
   return { items: POSTS.filter((p) => p.creatorId === "c1") };
 }

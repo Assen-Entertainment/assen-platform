@@ -5,6 +5,11 @@ import type { NextRequest } from "next/server";
  * mock 모드(NEXT_PUBLIC_API_URL 미설정) 여부 — Edge에서 빌드타임 인라인되는 상수.
  * mock 로그인은 httpOnly 쿠키(assen_access)를 심지 않으므로, 쿠키 가드를 켜두면 로그인해도
  * 보호 라우트가 영구 차단되어 무한 로그인 루프(login→push(next)→다시 /login)가 발생한다.
+ *
+ * ⚠ 불변식: MOCK_MODE는 빌드타임에 인라인된다(런타임 env 주입으로 되돌릴 수 없다). 따라서
+ * NEXT_PUBLIC_API_URL 없이 빌드한 이미지는 이 인증 가드가 조용히 영구 비활성이다. 배포 이미지는
+ * web/Dockerfile의 프로드 가드가 NEXT_PUBLIC_API_URL을 강제한다(누락 시 이미지 빌드 실패).
+ * mock 빌드 산출물(NEXT_PUBLIC_API_URL 없이 빌드)은 절대 배포하지 말 것.
  */
 const MOCK_MODE = !process.env.NEXT_PUBLIC_API_URL;
 

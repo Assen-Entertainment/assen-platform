@@ -73,4 +73,17 @@ describe("StudioPostsPage (오너 스코프)", () => {
     // 빈 목록 문구는 나오지 않는다(상태 구분).
     expect(screen.queryByText("아직 발행한 포스트가 없어요")).not.toBeInTheDocument();
   });
+
+  it("401(세션 만료)은 재로그인 안내를 보여준다(빈 목록과 구분)", () => {
+    // getStudioPostsPage가 401을 빈 페이지로 삼키지 않고 전파 → 페이지가 재로그인 안내로 분기(회복 불가 세션).
+    vi.mocked(useStudioPosts).mockReturnValue(
+      hookState({ isError: true, error: new ApiError(401, "API 401") }),
+    );
+    wrap(<StudioPostsPage />);
+    expect(screen.getByText("다시 로그인해 주세요")).toBeInTheDocument();
+    const login = screen.getByRole("link", { name: "로그인" });
+    expect(login).toHaveAttribute("href", "/login?next=/studio/posts");
+    // "발행 포스트 없음" 빈 목록 문구로 오표시하지 않는다(회귀 방지).
+    expect(screen.queryByText("아직 발행한 포스트가 없어요")).not.toBeInTheDocument();
+  });
 });
