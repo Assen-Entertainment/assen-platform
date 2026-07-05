@@ -1422,6 +1422,254 @@
         ]
       }
     },
+    "/api/ops/refunds": {
+      "get": {
+        "operationId": "apps_commerce_api_ops_list_refunds",
+        "summary": "Ops List Refunds",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsRefundPage"
+                }
+              }
+            }
+          }
+        },
+        "description": "List open refund requests (requested/reviewing), newest first, cursor-paginated.\n\nNot caller-scoped: the whole platform's pending refund queue is an operator\nsurface (the ``operator_required`` guard is the access control).",
+        "tags": [
+          "ops-commerce"
+        ],
+        "security": [
+          {
+            "RoleRequired": []
+          }
+        ]
+      }
+    },
+    "/api/ops/refunds/{refund_id}/review": {
+      "post": {
+        "operationId": "apps_commerce_api_ops_review_refund",
+        "summary": "Ops Review Refund",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "refund_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Refund Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsRefundOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Move a refund requested→reviewing (operator+). 422 if not in ``requested``.",
+        "tags": [
+          "ops-commerce"
+        ],
+        "security": [
+          {
+            "RoleRequired": []
+          }
+        ]
+      }
+    },
+    "/api/ops/refunds/{refund_id}/accept": {
+      "post": {
+        "operationId": "apps_commerce_api_ops_accept_refund",
+        "summary": "Ops Accept Refund",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "refund_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Refund Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsRefundOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Accept a refund (operator+): resolve it, cancel + restock the order, notify the fan.\n\nThe refund requested/reviewing→accepted transition is the rowcount gate: 0 rows\nmeans a concurrent accept/reject already resolved it → 422 (so a double accept\ncannot re-run the restock). The order is cancelled + restocked only when it is\nstill in a refundable (active) state — a second, independent rowcount gate — so a\nrefund accepted on an order a fan already cancelled does not double-restore stock\n(the fan cancel restocked it then). Money never moves (mock, B7). The fan\nnotification is sent after commit so a rolled-back accept emits nothing.",
+        "tags": [
+          "ops-commerce"
+        ],
+        "security": [
+          {
+            "RoleRequired": []
+          }
+        ]
+      }
+    },
+    "/api/ops/refunds/{refund_id}/reject": {
+      "post": {
+        "operationId": "apps_commerce_api_ops_reject_refund",
+        "summary": "Ops Reject Refund",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "refund_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Refund Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsRefundOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Reject a refund requested/reviewing→rejected (operator+); reason mandatory.\n\nThe reason is required (schema) and recorded on the audit entry so a refusal\nalways answers \"why\". The rowcount gate makes it single-winner (a concurrent\naccept/reject leaves the loser with 0 rows → 422). The order is left untouched\n(only accept cancels/restocks). The fan is notified of the outcome after commit.",
+        "tags": [
+          "ops-commerce"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsRefundRejectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "RoleRequired": []
+          }
+        ]
+      }
+    },
     "/api/posts": {
       "get": {
         "operationId": "apps_content_api_list_posts",
@@ -9250,6 +9498,107 @@
           "reason"
         ],
         "title": "RefundIn",
+        "type": "object"
+      },
+      "OpsRefundOut": {
+        "description": "A refund request as seen in the operator review queue.\n\nCarries the request fields plus the minimal owning-order context an operator\ntool needs to triage (buyer's public fan id, current order status, order total\n— a display snapshot, never a settlement figure).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "buyer_fan_id": {
+            "format": "uuid",
+            "title": "Buyer Fan Id",
+            "type": "string"
+          },
+          "order_status": {
+            "title": "Order Status",
+            "type": "string"
+          },
+          "order_total": {
+            "title": "Order Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "status",
+          "reason",
+          "detail",
+          "created_at",
+          "buyer_fan_id",
+          "order_status",
+          "order_total"
+        ],
+        "title": "OpsRefundOut",
+        "type": "object"
+      },
+      "OpsRefundPage": {
+        "description": "One page of the operator refund queue plus the next cursor.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpsRefundOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpsRefundPage",
+        "type": "object"
+      },
+      "OpsRefundRejectIn": {
+        "description": "Operator payload to reject a refund; a reason is mandatory (audited).",
+        "properties": {
+          "reason": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "OpsRefundRejectIn",
         "type": "object"
       },
       "PostOut": {

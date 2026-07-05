@@ -3,12 +3,16 @@
 The web "더보기" (load-more) consumes ``{items, next_cursor}``: the cursor is an
 opaque token, ``limit`` is clamped to an upper bound, and ``next_cursor`` is
 ``None`` exactly on the final page. These tests pin that wire contract so a later
-change to the pagination internals cannot silently break the consumer.
+change to the pagination internals cannot silently break the consumer. The
+internals are now a keyset (seek) cursor (R6-W1A); the contract tests below hold
+across the offset→keyset swap, and the keyset stability guarantee (no duplicate or
+skipped row when the list moves mid-walk) is pinned by its own test at the bottom.
 """
 
 from __future__ import annotations
 
 import base64
+import json
 
 import pytest
 
@@ -67,9 +71,12 @@ def test_next_cursor_is_opaque_base64() -> None:
     queryset = AnonymousSession.objects.order_by("id")
     _, next_cursor = paginate(queryset, cursor=None, limit=2)
     assert next_cursor is not None
-    # Opaque token: base64-decodable, not a bare integer offset the client can reason about.
+    # Opaque token: base64-decodable, and NOT a bare integer offset the client can
+    # reason about — the keyset payload is a JSON array of the last row's sort-key
+    # values, so it decodes to a structure, not a single number.
     decoded = base64.urlsafe_b64decode(next_cursor.encode()).decode()
-    assert decoded.isdigit()  # internal representation, but only via decode
+    assert not decoded.isdigit()  # never a bare offset a caller could increment
+    assert isinstance(json.loads(decoded), list)  # internal shape, reachable only via decode
 
 
 def test_malformed_cursor_starts_from_beginning() -> None:
@@ -77,3 +84,41 @@ def test_malformed_cursor_starts_from_beginning() -> None:
     queryset = AnonymousSession.objects.order_by("id")
     items, _ = paginate(queryset, cursor="!!!not-base64!!!", limit=10)
     assert len(items) == 2  # tolerated → treated as "start"
+
+
+def test_legacy_offset_cursor_falls_back_to_start() -> None:
+    """An old-format base64 offset token (pre-keyset) degrades to the first page.
+
+    The previous implementation encoded a bare integer offset; a client that still
+    holds one must not error — it is treated as "start" like any malformed cursor,
+    so the swap is seamless.
+    """
+    _seed(3)
+    queryset = AnonymousSession.objects.order_by("id")
+    legacy = base64.urlsafe_b64encode(b"1").decode()  # what the offset encoder emitted
+    items, _ = paginate(queryset, cursor=legacy, limit=10)
+    assert len(items) == 3  # arity mismatch (bare int, not a list) → start from beginning
+
+
+def test_keyset_is_stable_when_rows_are_inserted_between_pages() -> None:
+    """Keyset walk never duplicates or skips a row when the list moves mid-walk.
+
+    Ordered newest-first (``-id`` simulates top insertion), two new rows arriving at
+    the head after page 1 must not shift the page-2 window: an offset cursor would
+    have re-shown the two head rows (a duplicate + a skip), the keyset seek anchors
+    on the last row seen and continues cleanly below it.
+    """
+    _seed(4)  # ids 1,2,3,4
+    queryset = AnonymousSession.objects.order_by("-id")
+    page1, cursor1 = paginate(queryset, cursor=None, limit=2)
+    assert [s.pk for s in page1] == [4, 3]
+    assert cursor1 is not None
+
+    _seed(2)  # ids 5,6 arrive at the "top" (higher ids) mid-walk
+
+    page2, cursor2 = paginate(queryset, cursor=cursor1, limit=2)
+    assert [s.pk for s in page2] == [2, 1]  # continues strictly below id=3
+    assert cursor2 is None  # walk terminates; the head inserts are simply not in this walk
+    walked = [s.pk for s in (*page1, *page2)]
+    assert walked == [4, 3, 2, 1]  # no duplicate, no skip across the boundary
+    assert len(set(walked)) == 4

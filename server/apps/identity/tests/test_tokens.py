@@ -179,6 +179,31 @@ def test_fan_cannot_use_operator_login() -> None:
         authenticate_operator(username="not_staff", password="anything")
 
 
+def test_duplicate_staff_username_is_rejected_by_constraint() -> None:
+    """A second account with the same non-empty username violates the partial unique.
+
+    ``authenticate_operator`` resolves the login with ``.get(username=…)``; the
+    ``uniq_staff_username`` partial constraint keeps that lookup single-valued so it
+    can never raise MultipleObjectsReturned (→ 500) on a collided username.
+    """
+    from django.db import IntegrityError, transaction
+
+    Account.objects.create(role=Role.OPERATOR.value, username="op_dup")
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Account.objects.create(role=Role.MANAGER.value, username="op_dup")
+
+
+def test_blank_username_is_not_constrained() -> None:
+    """Many accounts may keep the default empty username (fans/non-login staff).
+
+    The unique is partial (``username != ''``), so the common case of blank
+    usernames is unconstrained — otherwise every fan row (all "") would collide.
+    """
+    for _ in range(3):
+        Account.objects.create(role=Role.FAN.value)  # username defaults to ""
+    assert Account.objects.filter(username="").count() == 3
+
+
 @pytest.mark.django_db
 def test_access_token_rejected_when_family_revoked_even_if_row_not_flagged() -> None:
     """Family-level gate: 소각-회전 경합으로 access 행이 revoked=False로 남아도 거부된다."""

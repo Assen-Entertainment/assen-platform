@@ -75,6 +75,14 @@ class ErrorCode(StrEnum):
     ORDER_NOT_CANCELLABLE = "OrderNotCancellable"
     ORDER_NOT_REFUNDABLE = "OrderNotRefundable"
     OPEN_REFUND_EXISTS = "OpenRefundExists"
+    # --- commerce (operator refund review, R6-W1A) --------------------------
+    # A refund request id was not found in the operator queue.
+    REFUND_NOT_FOUND = "RefundNotFound"
+    # A refund state transition (review/accept/reject) was attempted from a state
+    # that does not permit it — e.g. accepting an already-resolved request. Emitted
+    # by the conditional-UPDATE rowcount gate (0 rows won → 422), the same seal the
+    # order cancel path uses, so a double accept/reject can never re-run its effects.
+    REFUND_NOT_TRANSITIONABLE = "RefundNotTransitionable"
 
     # --- membership ---------------------------------------------------------
     TIER_NOT_FOUND = "TierNotFound"

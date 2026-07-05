@@ -19,6 +19,9 @@ from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field, field_validator
 
+from apps.admin_rbac.permissions import operator_required
+from apps.audit.models import AuditAction
+from apps.audit.services import record_audit
 from apps.commerce.models import (
     Order,
     OrderItem,
@@ -671,6 +674,29 @@ def _load_order_by_key(buyer: Account, idempotency_key: str) -> Order | None:
     )
 
 
+def _restock_order_lines(order: Order) -> None:
+    """Restore stock for each stock-tracked line of a cancelled/refunded order.
+
+    Winner-only contract: call this exactly once, and only after the caller's own
+    conditional status UPDATE won the transition race (rowcount == 1), so stock can
+    never be double-restored (F-A). The two-step restore mirrors ``create_order``'s
+    sell-out: a product that auto sold-out (stock hit 0) is re-opened (``sold_out``
+    cleared) on restore, while a product an owner manually marked ``sold_out`` with
+    stock still remaining keeps that flag (F-F) — the restore adds the unit back but
+    does not silently re-open a listing the owner paused. A since-deleted product
+    line (SET_NULL) has nothing to restore and is skipped. Shared by the fan cancel
+    and the operator refund-accept paths so the restock invariant is identical.
+    """
+    for line in order.items.all():
+        product = line.product
+        if product is not None and product.stock is not None:
+            reopened = Product.objects.filter(id=product.id, stock=0).update(
+                stock=F("stock") + line.qty, sold_out=False
+            )
+            if reopened == 0:
+                Product.objects.filter(id=product.id).update(stock=F("stock") + line.qty)
+
+
 @orders_router.post(
     "", response={200: OrderOut, 201: OrderOut, 404: CommerceError, 422: CommerceError}
 )
@@ -918,18 +944,8 @@ def cancel_order(
                 detail="취소할 수 없는 주문 상태예요.",
                 code=ErrorCode.ORDER_NOT_CANCELLABLE.value,
             )
-        for line in order.items.all():
-            product = line.product
-            if product is not None and product.stock is not None:
-                # Auto sold-out (stock == 0) re-opens on restore; a manual sold_out
-                # (stock still > 0) is preserved — restore stock only (F-F).
-                reopened = Product.objects.filter(id=product.id, stock=0).update(
-                    stock=F("stock") + line.qty, sold_out=False
-                )
-                if reopened == 0:
-                    Product.objects.filter(id=product.id).update(
-                        stock=F("stock") + line.qty
-                    )
+        # Winner-only restock (the rowcount gate above proved this request won).
+        _restock_order_lines(order)
     # Reflect the committed transition on the in-memory instance for the response.
     order.status = OrderStatus.CANCELLED.value
     return 200, _order_out(order)
@@ -979,3 +995,250 @@ def request_refund(
 
 
 api.add_router("/orders", orders_router)
+
+
+# --------------------------------------------------------------------------- #
+# Operator refund review (R6-W1A — pure engineering; MOCK order flow, no money
+# moves, B7-gated).
+#
+# The fan surface only *creates* a RefundRequest (request_refund above); this
+# operator surface drives its review lifecycle. RBAC mirrors the safety operator
+# pattern (apps/safety/api.py): the routes are gated by ``operator_required`` — a
+# fan/anonymous caller is refused (401/403) by the auth class before the view runs.
+# All four routes sit at operator+; refund processing is operator triage work and
+# the flow is mock (no settlement), so a manager floor is unnecessary — if refund
+# policy later needs a manager sign-off on accept, raise that one route's guard.
+#
+# Every transition is sealed by a **conditional-UPDATE rowcount gate** (the R5
+# cancel lesson): ``filter(status__in=<from-states>).update(<to-state>)`` returning
+# 0 rows means a concurrent operator already moved it → 422, so a double
+# accept/reject can never re-run its side effects (restock, notify). Accept reuses
+# the fan-cancel restock (``_restock_order_lines``) under its own order-side rowcount
+# gate, so a refund accepted on an order a fan already cancelled never double-restores
+# stock. Order status on accept moves to ``cancelled`` (an existing OrderStatus the
+# web StatusChip already renders) rather than a new ``refunded`` value: the web lane
+# is evolving in parallel and a status it does not yet handle would break the chip,
+# and the embedded ``refund.status = accepted`` on the order already conveys
+# "refunded" to the fan surface — so cancelled + accepted-refund is the
+# backward-compatible encoding. The fan surface is otherwise unchanged.
+# --------------------------------------------------------------------------- #
+ops_refunds_router = Router(auth=operator_required, tags=["ops-commerce"])
+
+
+class OpsRefundOut(Schema):
+    """A refund request as seen in the operator review queue.
+
+    Carries the request fields plus the minimal owning-order context an operator
+    tool needs to triage (buyer's public fan id, current order status, order total
+    — a display snapshot, never a settlement figure).
+    """
+
+    id: uuid.UUID
+    order_id: str
+    status: str
+    reason: str
+    detail: str
+    created_at: datetime
+    buyer_fan_id: uuid.UUID
+    order_status: str
+    order_total: int
+
+
+class OpsRefundPage(Schema):
+    """One page of the operator refund queue plus the next cursor."""
+
+    items: list[OpsRefundOut]
+    next_cursor: str | None = None
+
+
+class OpsRefundRejectIn(Schema):
+    """Operator payload to reject a refund; a reason is mandatory (audited)."""
+
+    reason: str = Field(min_length=1, max_length=200)
+
+
+def _ops_actor(request: HttpRequest) -> Account:
+    """Return the operator account supplied by ``operator_required`` (RBAC guard)."""
+    # request.auth is the Account resolved by RoleRequired; untyped without Ninja
+    # stubs (same idiom as apps/safety/api.py._actor).
+    return cast(Account, request.auth)  # type: ignore[attr-defined]
+
+
+def _ops_refund_out(refund: RefundRequest) -> OpsRefundOut:
+    """Build the operator refund-queue row from a refund with its order prefetched."""
+    order = refund.order
+    return OpsRefundOut(
+        id=refund.id,
+        order_id=order.id,
+        status=refund.status,
+        reason=refund.reason,
+        detail=refund.detail,
+        created_at=refund.created_at,
+        buyer_fan_id=order.buyer.fan_id,
+        order_status=order.status,
+        order_total=order.total,
+    )
+
+
+def _load_refund(refund_id: uuid.UUID) -> RefundRequest | None:
+    """Load a refund with its order/buyer/lines prefetched, or ``None`` (→ 404)."""
+    return (
+        RefundRequest.objects.select_related("order", "order__buyer")
+        .prefetch_related("order__items", "order__items__product")
+        .filter(id=refund_id)
+        .first()
+    )
+
+
+@ops_refunds_router.get("", response=OpsRefundPage)
+def ops_list_refunds(
+    request: HttpRequest, cursor: str | None = None, limit: int | None = None
+) -> OpsRefundPage:
+    """List open refund requests (requested/reviewing), newest first, cursor-paginated.
+
+    Not caller-scoped: the whole platform's pending refund queue is an operator
+    surface (the ``operator_required`` guard is the access control).
+    """
+    del request  # operator auth only; the queue is global, not caller-scoped.
+    queryset = (
+        RefundRequest.objects.filter(status__in=_OPEN_REFUND)
+        .select_related("order", "order__buyer")
+        .order_by("-created_at", "id")
+    )
+    items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
+    return OpsRefundPage(
+        items=[_ops_refund_out(r) for r in items], next_cursor=next_cursor
+    )
+
+
+@ops_refunds_router.post(
+    "/{refund_id}/review",
+    response={200: OpsRefundOut, 404: CommerceError, 422: CommerceError},
+)
+def ops_review_refund(
+    request: HttpRequest, refund_id: uuid.UUID
+) -> tuple[int, OpsRefundOut | CommerceError]:
+    """Move a refund requested→reviewing (operator+). 422 if not in ``requested``."""
+    refund = _load_refund(refund_id)
+    if refund is None:
+        return 404, CommerceError(
+            detail="환불 신청을 찾을 수 없어요.", code=ErrorCode.REFUND_NOT_FOUND.value
+        )
+    transitioned = RefundRequest.objects.filter(
+        id=refund.id, status=RefundStatus.REQUESTED.value
+    ).update(status=RefundStatus.REVIEWING.value)
+    if transitioned == 0:
+        return 422, CommerceError(
+            detail="검토로 전환할 수 없는 상태예요.",
+            code=ErrorCode.REFUND_NOT_TRANSITIONABLE.value,
+        )
+    refund.status = RefundStatus.REVIEWING.value
+    record_audit(
+        actor=_ops_actor(request),
+        action=AuditAction.REFUND_REVIEWED.value,
+        target=str(refund.id),
+    )
+    return 200, _ops_refund_out(refund)
+
+
+@ops_refunds_router.post(
+    "/{refund_id}/accept",
+    response={200: OpsRefundOut, 404: CommerceError, 422: CommerceError},
+)
+def ops_accept_refund(
+    request: HttpRequest, refund_id: uuid.UUID
+) -> tuple[int, OpsRefundOut | CommerceError]:
+    """Accept a refund (operator+): resolve it, cancel + restock the order, notify the fan.
+
+    The refund requested/reviewing→accepted transition is the rowcount gate: 0 rows
+    means a concurrent accept/reject already resolved it → 422 (so a double accept
+    cannot re-run the restock). The order is cancelled + restocked only when it is
+    still in a refundable (active) state — a second, independent rowcount gate — so a
+    refund accepted on an order a fan already cancelled does not double-restore stock
+    (the fan cancel restocked it then). Money never moves (mock, B7). The fan
+    notification is sent after commit so a rolled-back accept emits nothing.
+    """
+    refund = _load_refund(refund_id)
+    if refund is None:
+        return 404, CommerceError(
+            detail="환불 신청을 찾을 수 없어요.", code=ErrorCode.REFUND_NOT_FOUND.value
+        )
+    order = refund.order
+    with transaction.atomic():
+        transitioned = RefundRequest.objects.filter(
+            id=refund.id, status__in=_OPEN_REFUND
+        ).update(status=RefundStatus.ACCEPTED.value)
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="승인할 수 없는 환불 상태예요.",
+                code=ErrorCode.REFUND_NOT_TRANSITIONABLE.value,
+            )
+        # Cancel + restock the order only if it is still active (refundable). If a
+        # fan already cancelled it meanwhile, it was restocked then → 0 rows, skip.
+        order_cancelled = (
+            Order.objects.filter(id=order.id, status__in=_REFUNDABLE)
+            .update(status=OrderStatus.CANCELLED.value)
+        )
+        if order_cancelled:
+            _restock_order_lines(order)
+            order.status = OrderStatus.CANCELLED.value
+        record_audit(
+            actor=_ops_actor(request),
+            action=AuditAction.REFUND_ACCEPTED.value,
+            target=str(refund.id),
+        )
+    refund.status = RefundStatus.ACCEPTED.value
+    notify(
+        order.buyer,
+        NotificationKind.ORDER.value,
+        f"주문 {order.id}의 환불이 승인되었어요.",
+        "/orders",
+    )
+    return 200, _ops_refund_out(refund)
+
+
+@ops_refunds_router.post(
+    "/{refund_id}/reject",
+    response={200: OpsRefundOut, 404: CommerceError, 422: CommerceError},
+)
+def ops_reject_refund(
+    request: HttpRequest, refund_id: uuid.UUID, payload: OpsRefundRejectIn
+) -> tuple[int, OpsRefundOut | CommerceError]:
+    """Reject a refund requested/reviewing→rejected (operator+); reason mandatory.
+
+    The reason is required (schema) and recorded on the audit entry so a refusal
+    always answers "why". The rowcount gate makes it single-winner (a concurrent
+    accept/reject leaves the loser with 0 rows → 422). The order is left untouched
+    (only accept cancels/restocks). The fan is notified of the outcome after commit.
+    """
+    refund = _load_refund(refund_id)
+    if refund is None:
+        return 404, CommerceError(
+            detail="환불 신청을 찾을 수 없어요.", code=ErrorCode.REFUND_NOT_FOUND.value
+        )
+    with transaction.atomic():
+        transitioned = RefundRequest.objects.filter(
+            id=refund.id, status__in=_OPEN_REFUND
+        ).update(status=RefundStatus.REJECTED.value)
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="거절할 수 없는 환불 상태예요.",
+                code=ErrorCode.REFUND_NOT_TRANSITIONABLE.value,
+            )
+        record_audit(
+            actor=_ops_actor(request),
+            action=AuditAction.REFUND_REJECTED.value,
+            target=str(refund.id),
+            reason=payload.reason,
+        )
+    refund.status = RefundStatus.REJECTED.value
+    notify(
+        refund.order.buyer,
+        NotificationKind.ORDER.value,
+        f"주문 {refund.order.id}의 환불이 거절되었어요.",
+        "/orders",
+    )
+    return 200, _ops_refund_out(refund)
+
+
+api.add_router("/ops/refunds", ops_refunds_router)
