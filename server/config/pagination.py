@@ -94,6 +94,18 @@ def _ordering_of(queryset: QuerySet[Any]) -> list[tuple[str, bool]]:
         name = entry[1:] if descending else entry
         if name == "pk":
             name = pk.name
+        # Only a concrete, non-relation model field can drive a keyset seek. An
+        # annotation alias is a string and lives as an instance attr (so ``_encode``
+        # would emit a cursor) but ``_decode``'s ``get_field(alias)`` fails → a cursor
+        # that never seeks → a first-page loop. A relation / relation-path (``foo__bar``)
+        # key is equally unseekable. Reject any such key up front so the caller imposes
+        # the deterministic pk-only fallback instead of a cursor that mis-seeks.
+        try:
+            field = model._meta.get_field(name)
+        except FieldDoesNotExist:
+            return []
+        if not isinstance(field, Field) or field.is_relation:
+            return []
         fields.append((name, descending))
     # pk tiebreak: guarantee a unique final key so the seek is a total order and a
     # tied non-unique key cannot skip/duplicate a row at a page boundary.

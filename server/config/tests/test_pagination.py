@@ -248,3 +248,31 @@ def test_nullable_sort_key_drops_cursor_instead_of_500() -> None:
     items, next_cursor = paginate(queryset, cursor=None, limit=2)
     assert len(items) == 2  # a page still returns — no crash
     assert next_cursor is None  # None sort value → cursor dropped (no 500, no "None" token)
+
+
+def test_annotated_sort_key_falls_back_to_pk_and_does_not_loop() -> None:
+    """An annotation-alias ordering degrades to a stable pk seek — no first-page loop.
+
+    An annotated alias is a string (passes ``_ordering_of``'s string check) and lives as
+    an instance attr (so ``_encode`` could emit a cursor), but ``get_field(alias)`` fails
+    on decode: a cursor that never seeks would refetch page 1 forever. ``_ordering_of``
+    rejects any non-concrete key up front → pk-only fallback, so the walk advances past
+    every row exactly once and terminates.
+    """
+    from django.db.models import IntegerField, Value
+
+    for _ in range(5):
+        Account.objects.create()
+    queryset = Account.objects.annotate(
+        rank=Value(1, output_field=IntegerField())
+    ).order_by("-rank")
+    seen: set[object] = set()
+    cursor: str | None = None
+    for _ in range(10):  # bounded: a page-1 loop would never terminate / would dup rows
+        items, cursor = paginate(queryset, cursor=cursor, limit=2)
+        for item in items:
+            assert item.pk not in seen  # no duplicate → not stuck on page 1
+            seen.add(item.pk)
+        if cursor is None:
+            break
+    assert len(seen) == 5  # every row walked exactly once

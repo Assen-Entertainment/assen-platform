@@ -18,7 +18,7 @@ const NEWNICK = "스모크수정";
  * 로그인 전 익명 상태에서 의도적으로 401 이 나는 프로브 URL 화이트리스트.
  * 이 URL 의 401 만 무시하고, 로그인 이후 다른 URL 의 401 은 진짜 회귀로 실패시킨다.
  */
-const ANON_401_PROBES = ["/fan/me"];
+const ANON_401_PROBES = ["/fan/me", "/fan/refresh"];
 
 /**
  * favicon 404, 그리고 익명 프로브(ANON_401_PROBES)의 의도된 401 만 비-에러 노이즈로 무시한다.
@@ -192,12 +192,21 @@ test("팬 저니 — 로그인부터 로그아웃까지(14스텝)", async ({ pag
   // 7.7 본인인증(KYC) — age-gate: 동의 → 성인 인증하기 → 입장(성공) → 재방문 세션 반영.
   await test.step("본인인증(KYC mock) — 세션 반영", async () => {
     await page.goto("/age-gate", { waitUntil: "networkidle" });
-    // "전체 동의" 마스터 하나로 필수 3종 일괄 체크(개별 루프의 상태전파 경합 회피).
-    await page.getByText("전체 동의").click();
-    await page.getByRole("button", { name: "성인 인증하기" }).click({ timeout: 15_000 });
-    await page.waitForURL("**/discovery", { timeout: 15_000 });
-    // 재방문 시 세션 adult_verified 반영("이미 본인인증") — 서버 영속 + /fan/me 재조회 검증.
-    await page.goto("/age-gate", { waitUntil: "networkidle" });
+    // 재시도/비신선 DB 내성: 이미 인증된 상태면(전 회차가 KYC를 변형) 동의 플로우를 건너뛰고
+    // 인증 완료 상태만 단언한다 — 저니는 서버 상태를 변형하므로 retry가 다른 상태를 만난다.
+    const alreadyVerified = await page
+      .getByText("이미 본인인증이 완료되었어요")
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (!alreadyVerified) {
+      // "전체 동의" 마스터 하나로 필수 3종 일괄 체크(개별 루프의 상태전파 경합 회피).
+      await page.getByText("전체 동의").click();
+      await page.getByRole("button", { name: "성인 인증하기" }).click({ timeout: 15_000 });
+      await page.waitForURL("**/discovery", { timeout: 15_000 });
+      // 재방문 시 세션 adult_verified 반영("이미 본인인증") — 서버 영속 + /fan/me 재조회 검증.
+      await page.goto("/age-gate", { waitUntil: "networkidle" });
+    }
     await expect(page.getByText("이미 본인인증이 완료되었어요").first()).toBeVisible({ timeout: 10_000 });
   });
 
