@@ -17,7 +17,13 @@ jobs:
           node-version: "22"
       - run: npm install --legacy-peer-deps
       - run: npx tsc --noEmit
+      # ESLint 게이트(R6-W3) — 지금까지 CI에서 lint가 아예 안 돌던 SDLC 갭을 메운다.
+      # next.config는 빌드 시 lint를 켜두나, 명시 스텝으로 실패를 조기·독립적으로 드러낸다.
+      - run: npm run lint
       - run: npm run build
+      # 번들 회귀 게이트(R6-W3) — build 산출(.next/static/chunks)의 클라이언트 JS 총량/최대
+      # 청크를 상한 검사한다. 상한·근거는 scripts/check-bundle-budget.mjs 상단 주석.
+      - run: npm run check:budget
       - run: npm test
 
   # 컨테이너 패키징(ECS 경로) 상시 검증 — 빌드만, 푸시 없음(SDLC 11 §3).

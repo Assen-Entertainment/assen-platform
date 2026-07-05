@@ -1,0 +1,148 @@
+name: e2e
+# 라이브 통합 E2E (R6-W3) — Django(seed_demo·mock OTP/KYC/PG) + Next(live 모드) 서버를
+# 실제로 기동한 뒤 Playwright 팬 저니(chromium)·모바일 스모크(mobile)를 돌린다.
+#
+# 왜 별도 워크플로인가(web-ci.yml 병합 대신): 이 잡은 웹뿐 아니라 **서버의 API 계약**
+# (OTP·seed 데이터·상품·주문·KYC·결제)을 소비하므로 server/** 변경도 회귀를 유발할 수 있다.
+# web-ci.yml은 web/** 트리거를 유지하고, 이 잡만 web/**+server/** 양쪽을 트리거하는 게 정확하다.
+#
+# ★ 스텝 시퀀스는 R6-W1B의 로컬 실증 절차(playwright.config.ts 주석·scripts/integration-smoke.mjs)와
+#   1:1 대응한다. 리포 고유 함정 3건을 반영:
+#   ① output:"standalone" → `next start` 불가. .next/static(·public)을 standalone에 복사 후
+#      `node .next/standalone/server.js`로 기동해야 클라이언트 JS가 서빙되고 하이드레이트된다.
+#   ② NEXT_PUBLIC_API_URL=/api 는 빌드타임 인라인 — MSYS 경로변환은 Windows(Git Bash) 전용 함정이라
+#      Linux CI(bash)는 무관. 그대로 env 주입한다.
+#   ③ 시각 회귀(visual) 베이스라인은 win32 접미사 스냅샷이라 Linux CI에서 매칭 불가 →
+#      게이트는 --project=chromium --project=mobile 만. visual은 로컬 전용 게이트(README/절차 문서화).
+on:
+  push:
+    paths: ["web/**", "server/**", ".github/workflows/e2e.yml"]
+  pull_request:
+    paths: ["web/**", "server/**", ".github/workflows/e2e.yml"]
+
+# 같은 ref의 이전 실행은 취소해 러너 분을 아낀다(ci.yml 패턴 미러).
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Live integration E2E (Django + Next standalone → Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # 서버는 dev 설정으로 — mock OTP/KYC/결제·19+ 노출이 켜져 저니(로그인·본인인증·결제)가 성립한다
+      # (config/settings/dev.py). manage.py 기본값과 동일하나 명시해 스트레이 env를 배제.
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      # 한 팬 계정이 팔로우/좋아요/댓글/신고/주문/계정/결제/KYC를 연속 write → per-user 스로틀이면
+      # 429가 난다. e2e는 결정성을 위해 off(base.py FAN_WRITE_THROTTLE_ENABLED, env override).
+      FAN_WRITE_THROTTLE_ENABLED: "False"
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- 서버(Django) 부트스트랩 — ci.yml server 잡의 uv 패턴 미러 ------------------
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+      - name: Sync server dependencies
+        working-directory: server
+        run: uv sync --frozen
+
+      # sqlite DB 한 파일을 migrate·seed·runserver가 공유하도록 절대경로를 $GITHUB_ENV로 고정한다.
+      # ($PWD=server/ 이므로 `sqlite:///$PWD/...` = 4-슬래시 절대 URL = django-environ 절대 sqlite 폼.)
+      - name: Configure server DB (shared sqlite for migrate/seed/runserver)
+        working-directory: server
+        run: echo "DATABASE_URL=sqlite:///$PWD/e2e.sqlite3" >> "$GITHUB_ENV"
+      # 이 리포는 앱 전 migration-less — 스키마는 --run-syncdb로 만든다(server 메모리 정본).
+      - name: Migrate (run-syncdb)
+        working-directory: server
+        run: uv run python manage.py migrate --run-syncdb
+      - name: Seed demo data
+        working-directory: server
+        run: uv run python manage.py seed_demo
+
+      # Django를 백그라운드로 띄우고 /healthz 200을 폴링해 준비될 때까지 대기(같은 스텝 내에서
+      # 기동+대기 → 이후 스텝까지 프로세스 유지). --noreload로 리로더 서브프로세스 없이 단일 프로세스.
+      - name: Start Django (background) and wait for /healthz
+        working-directory: server
+        run: |
+          uv run python manage.py runserver 127.0.0.1:8000 --noreload > "$GITHUB_WORKSPACE/django.log" 2>&1 &
+          echo "django pid $!"
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000/healthz > /dev/null; then echo "django ready"; break; fi
+            if [ "$i" -eq 60 ]; then echo "django failed to become ready"; cat "$GITHUB_WORKSPACE/django.log"; exit 1; fi
+            sleep 1
+          done
+
+      # --- 웹(Next, live) 부트스트랩 --------------------------------------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web dependencies
+        working-directory: web
+        run: npm install --legacy-peer-deps
+      # 저니·모바일 두 프로젝트 모두 chromium 브라우저만 쓴다.
+      - name: Install Playwright chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # live 빌드(NEXT_PUBLIC_API_URL 세팅 → 인증 미들웨어 활성·mock 번들 제거). 빌드 뒤 함정①의
+      # standalone 자산 복사(.next/static·public)를 수행해 자립 서버가 클라이언트 JS를 서빙하게 한다.
+      - name: Build web (live) and stage standalone assets
+        working-directory: web
+        env:
+          NEXT_PUBLIC_API_URL: /api
+          API_INTERNAL_URL: http://127.0.0.1:8000/api
+          API_PROXY_TARGET: http://127.0.0.1:8000
+        run: |
+          npm run build
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -r public .next/standalone/public; fi
+
+      # standalone 서버 기동(런타임 env: SSR은 API_INTERNAL_URL 직접 호출, 브라우저 /api/*는
+      # API_PROXY_TARGET로 rewrite). /login 200을 폴링해 준비 대기.
+      - name: Start Next standalone (background) and wait for /login
+        working-directory: web
+        env:
+          API_INTERNAL_URL: http://127.0.0.1:8000/api
+          API_PROXY_TARGET: http://127.0.0.1:8000
+          PORT: "3000"
+          HOSTNAME: 127.0.0.1
+        run: |
+          node .next/standalone/server.js > "$GITHUB_WORKSPACE/web-server.log" 2>&1 &
+          echo "web pid $!"
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/login > /dev/null; then echo "web ready"; break; fi
+            if [ "$i" -eq 60 ]; then echo "web failed to become ready"; cat "$GITHUB_WORKSPACE/web-server.log"; exit 1; fi
+            sleep 1
+          done
+
+      # 함정③: visual 제외, chromium(저니)+mobile(스모크)만 게이트. baseURL은 바인드와 일치하는
+      # 127.0.0.1로 명시(러너의 localhost→::1 해석 회피).
+      - name: Run Playwright (chromium journey + mobile smoke)
+        working-directory: web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: npx playwright test --project=chromium --project=mobile
+
+      # 실패 시 트레이스/리포트/서버 로그를 업로드해 원격 디버깅을 돕는다.
+      - name: Upload Playwright report + traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 7
+      - name: Upload server/web logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-server-logs
+          path: |
+            django.log
+            web-server.log
+          retention-days: 7
