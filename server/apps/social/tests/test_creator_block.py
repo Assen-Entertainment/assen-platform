@@ -382,7 +382,19 @@ def test_order_of_blocked_creator_product_is_422_and_unblock_restores(client: Cl
     client.delete(f"{BLOCKS}/{blocked.id}", headers=_bearer(fan))
     reorder = client.post(
         "/api/orders",
-        data=json.dumps({"product_id": str(product.id)}),
+        data=json.dumps(
+            {
+                "product_id": str(product.id),
+                # goods order needs a delivery address (R5-W1A).
+                "shipping": {
+                    "recipient_name": "받는이",
+                    "recipient_phone": "010-1234-5678",
+                    "postal_code": "06236",
+                    "address1": "서울시 강남구 테헤란로 1",
+                    "address2": "101호",
+                },
+            }
+        ),
         content_type="application/json",
         headers=_bearer(fan),
     )

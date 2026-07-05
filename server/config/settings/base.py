@@ -74,6 +74,12 @@ FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", defaul
 # fails safe to in-memory rather than crash the request path — see get_rate_limiter.
 RATELIMIT_BACKEND: str = env("RATELIMIT_BACKEND", default="memory")
 
+# Number of trusted reverse-proxy hops in front of the app, for client-IP
+# extraction in the rate limiters (config.clientip). Default 0 keeps REMOTE_ADDR
+# (dev/no-proxy). Behind an ALB set TRUSTED_PROXY_HOPS=1 so the limiter keys on the
+# real client from X-Forwarded-For instead of bucketing all traffic under the ALB.
+TRUSTED_PROXY_HOPS: int = env.int("TRUSTED_PROXY_HOPS", default=0)
+
 # Django contrib + third-party apps.
 DJANGO_APPS = [
     "django.contrib.admin",

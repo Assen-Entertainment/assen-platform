@@ -292,6 +292,115 @@ def test_liked_flag_is_isolated_per_user(client: Client) -> None:
     assert body["like_count"] == 1
 
 
+# --- post edit / delete (creator owner guard, R5-W1A) ------------------------ #
+
+
+def test_update_post_owner_edits_fields(client: Client) -> None:
+    """The owning creator can patch body/media_url/adult; the response reflects it."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="mio", name="Mio", owner=fan)
+    post = Post.objects.create(creator=creator, body="원본", media_url="")
+    resp = client.patch(
+        f"{POSTS}/{post.id}",
+        data=json.dumps({"body": "수정본", "media_url": "/uploads/b.png", "is_adult": True}),
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert resp.status_code == 200
+    row = resp.json()
+    assert row["body"] == "수정본"
+    assert row["media_url"] == "/uploads/b.png"
+    assert row["is_adult"] is True
+    post.refresh_from_db()
+    assert post.body == "수정본" and post.adult_only is True
+
+
+def test_update_post_returns_fresh_counts(client: Client) -> None:
+    """An edit response carries the post's real like/comment counts, not zeros."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="mio", name="Mio", owner=fan)
+    post = Post.objects.create(creator=creator, body="x")
+    Like.objects.create(post=post, user=_fan("liker"))
+    Comment.objects.create(post=post, author_name="팬", body="좋아요")
+    resp = client.patch(
+        f"{POSTS}/{post.id}",
+        data=json.dumps({"body": "y"}),
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["like_count"] == 1
+    assert resp.json()["comment_count"] == 1
+
+
+def test_update_post_not_owned_is_404(client: Client) -> None:
+    """Patching another creator's post is a 404 (no existence leak); nothing changes."""
+    owner = _fan()
+    Creator.objects.create(handle="mio", name="Mio", owner=owner)
+    stranger_creator = _creator("rabbit")
+    post = Post.objects.create(creator=stranger_creator, body="남의 글")
+    resp = client.patch(
+        f"{POSTS}/{post.id}",
+        data=json.dumps({"body": "탈취"}),
+        content_type="application/json",
+        headers=_bearer(owner),
+    )
+    assert resp.status_code == 404
+    post.refresh_from_db()
+    assert post.body == "남의 글"
+
+
+def test_update_post_by_non_creator_is_404(client: Client) -> None:
+    """A caller who operates no creator owns no post, so a patch 404s."""
+    post = Post.objects.create(creator=_creator(), body="x")
+    resp = client.patch(
+        f"{POSTS}/{post.id}",
+        data=json.dumps({"body": "y"}),
+        content_type="application/json",
+        headers=_bearer(_fan()),
+    )
+    assert resp.status_code == 404
+
+
+def test_update_post_rejects_bad_media_url(client: Client) -> None:
+    """A non-http(s)/non-relative media_url is rejected on edit too (A5, 422)."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="mio", name="Mio", owner=fan)
+    post = Post.objects.create(creator=creator, body="x")
+    resp = client.patch(
+        f"{POSTS}/{post.id}",
+        data=json.dumps({"media_url": "javascript:alert(1)"}),
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert resp.status_code == 422
+
+
+def test_delete_post_owner_hard_deletes_with_cascade(client: Client) -> None:
+    """The owner hard-deletes their post; its comments and likes CASCADE away."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="mio", name="Mio", owner=fan)
+    post = Post.objects.create(creator=creator, body="지울 글")
+    Like.objects.create(post=post, user=_fan("liker"))
+    Comment.objects.create(post=post, author_name="팬", body="댓글")
+    resp = client.delete(f"{POSTS}/{post.id}", headers=_bearer(fan))
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+    assert not Post.objects.filter(id=post.id).exists()
+    assert Like.objects.filter(post_id=post.id).count() == 0
+    assert Comment.objects.filter(post_id=post.id).count() == 0
+
+
+def test_delete_post_not_owned_is_404(client: Client) -> None:
+    """Deleting another creator's post is a 404; the post survives."""
+    owner = _fan()
+    Creator.objects.create(handle="mio", name="Mio", owner=owner)
+    post = Post.objects.create(creator=_creator("rabbit"), body="남의 글")
+    resp = client.delete(f"{POSTS}/{post.id}", headers=_bearer(owner))
+    assert resp.status_code == 404
+    assert Post.objects.filter(id=post.id).exists()
+
+
 def test_comment_notifies_post_creator_owner(client: Client) -> None:
     """Commenting on a post appends a comment notification to the creator owner."""
     from apps.content.models import Post

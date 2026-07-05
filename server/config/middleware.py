@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
+from config.clientip import client_ip
 from config.observability import bind_request_id, unbind_request_id
 from config.ratelimit import RateLimiter, get_rate_limiter
 
@@ -97,9 +98,14 @@ class InMemoryRateLimitMiddleware:
         self._limiter: RateLimiter = get_rate_limiter()
 
     def _client_key(self, request: HttpRequest) -> str:
-        """Identify the client for bucketing (remote address at this layer)."""
-        # request.META values are typed Any; coerce to str for a stable dict key.
-        return str(request.META.get("REMOTE_ADDR", "unknown"))
+        """Identify the client for bucketing.
+
+        Uses :func:`~config.clientip.client_ip` so the key is the real caller
+        behind a trusted proxy chain (TRUSTED_PROXY_HOPS) rather than the shared
+        load-balancer address — with the default 0 hops this is REMOTE_ADDR, so
+        dev/no-proxy behaviour is unchanged.
+        """
+        return client_ip(request)
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         """Reject the request with 429 if the per-window limit is exceeded."""
@@ -109,5 +115,8 @@ class InMemoryRateLimitMiddleware:
             window_seconds=self.WINDOW_SECONDS,
         )
         if not allowed:
-            return JsonResponse({"detail": "Rate limit exceeded."}, status=429)
+            response = JsonResponse({"detail": "Rate limit exceeded."}, status=429)
+            # Advise the client how long to back off (the fixed window length).
+            response["Retry-After"] = str(self.WINDOW_SECONDS)
+            return response
         return self.get_response(request)

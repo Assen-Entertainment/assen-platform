@@ -62,6 +62,19 @@ class InteractionBlockedError(Schema):
 _INTERACTION_BLOCKED_DETAIL = "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요."
 
 
+def _validated_media_url(value: str) -> str:
+    """Reject non-http(s) / non-relative media URLs (A5).
+
+    A post's ``media_url`` is echoed straight into the feed, so an attacker-supplied
+    ``javascript:``/``data:`` scheme could drive XSS on a naive renderer. Accept only
+    an absolute http(s) URL or a site-relative path (leading ``/``); anything else
+    fails schema validation (422). Empty stays allowed (no media).
+    """
+    if value == "" or value.startswith(("/", "http://", "https://")):
+        return value
+    raise ValueError("media_url must be an http(s) URL or a site-relative path.")
+
+
 class PostOut(Schema):
     """Feed post (maps to the frontend ``Post`` type)."""
 
@@ -128,17 +141,28 @@ class PostIn(Schema):
     @field_validator("media_url")
     @classmethod
     def _validate_media_url(cls, value: str) -> str:
-        """Reject non-http(s) / non-relative media URLs (A5).
+        """Reject non-http(s) / non-relative media URLs (A5)."""
+        return _validated_media_url(value)
 
-        A post's ``media_url`` is echoed straight into the feed, so an attacker-
-        supplied ``javascript:``/``data:`` scheme could drive XSS on a naive
-        renderer. Accept only an absolute http(s) URL or a site-relative path
-        (leading ``/``); anything else fails schema validation (422). Empty stays
-        allowed (no media).
-        """
-        if value == "" or value.startswith(("/", "http://", "https://")):
-            return value
-        raise ValueError("media_url must be an http(s) URL or a site-relative path.")
+
+class PostPatch(Schema):
+    """Request body to update a post; only the provided fields are applied."""
+
+    body: str | None = Field(default=None, max_length=2000)
+    media_url: str | None = Field(default=None, max_length=500)
+    is_adult: bool | None = None
+
+    @field_validator("media_url")
+    @classmethod
+    def _validate_media_url(cls, value: str | None) -> str | None:
+        """Validate media_url only when provided (A5, mirrors ``PostIn``)."""
+        return None if value is None else _validated_media_url(value)
+
+
+class PostAck(Schema):
+    """Bare status ack for a post mutation that returns no body (delete)."""
+
+    status: str
 
 
 def _adult_allowed(viewer: Account | None) -> bool:
@@ -279,6 +303,91 @@ def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | Erro
     # liked to False, which is correct for a just-created post. ``post.creator`` is
     # already the in-memory creator (passed to create), so no extra query.
     return 201, _post_out(post)
+
+
+def _owned_post(account: Account, post_id: uuid.UUID) -> Post | None:
+    """The post ``post_id`` iff it belongs to the creator ``account`` operates.
+
+    Owner guard for post management (mirrors ``create_post``): the scope is always
+    the caller's own creator, so a post that is unknown or owned by someone else is
+    indistinguishable (``None`` → 404, no existence leak). An account that operates
+    no creator owns no posts, so it always gets ``None``.
+    """
+    creator = Creator.objects.filter(owner=account).first()
+    if creator is None:
+        return None
+    return Post.objects.filter(id=post_id, creator=creator).first()
+
+
+def _annotated_post(post_id: uuid.UUID, account: Account) -> Post:
+    """Reload a post with like/comment counts and the caller's ``is_liked`` flag.
+
+    Used after an owner edit to return fresh aggregates. Bypasses the 19+ read gate
+    (the owner manages their own post, including one they just marked adult) but
+    stays scoped to a known-owned id, so nothing is leaked.
+    """
+    return (
+        Post.objects.select_related("creator")
+        .annotate(
+            like_count=Count("likes", distinct=True),
+            comment_count=Count("comments", distinct=True),
+            is_liked=Exists(Like.objects.filter(post=OuterRef("pk"), user=account)),
+        )
+        .get(id=post_id)
+    )
+
+
+@posts_router.patch(
+    "/{post_id}",
+    response={200: PostOut, 404: ErrorOut},
+    auth=fan_auth,
+    throttle=user_write_throttle("6/min"),
+)
+def update_post(
+    request: HttpRequest, post_id: uuid.UUID, data: PostPatch
+) -> tuple[int, PostOut | ErrorOut]:
+    """Update fields on the caller's own post; 404 if unknown or not theirs (no leak).
+
+    Owner guard identical to ``create_post`` (scope is the caller's creator). Only
+    the provided fields (``body``/``media_url``/``is_adult``) are applied; the
+    ``media_url`` scheme is re-validated (A5). The response reflects fresh
+    like/comment counts and the caller's ``liked`` flag.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    post = _owned_post(account, post_id)
+    if post is None:
+        return 404, ErrorOut(detail="post not found")
+    if data.body is not None:
+        post.body = data.body
+    if data.media_url is not None:
+        post.media_url = data.media_url
+    if data.is_adult is not None:
+        post.adult_only = data.is_adult
+    post.save()
+    return 200, _post_out(_annotated_post(post.id, account))
+
+
+@posts_router.delete(
+    "/{post_id}",
+    response={200: PostAck, 404: ErrorOut},
+    auth=fan_auth,
+    throttle=user_write_throttle("6/min"),
+)
+def delete_post(
+    request: HttpRequest, post_id: uuid.UUID
+) -> tuple[int, PostAck | ErrorOut]:
+    """Hard-delete the caller's own post; 404 if unknown or not theirs (no leak).
+
+    Owner guard identical to ``create_post``. Unlike an order/tier, a post has no
+    history constraint, so deletion is a hard delete — its comments and likes
+    CASCADE (``Comment.post`` / ``Like.post`` are ``on_delete=CASCADE``).
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    post = _owned_post(account, post_id)
+    if post is None:
+        return 404, ErrorOut(detail="post not found")
+    post.delete()
+    return 200, PostAck(status="deleted")
 
 
 @posts_router.put(

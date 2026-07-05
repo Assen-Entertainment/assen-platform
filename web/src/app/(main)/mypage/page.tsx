@@ -12,11 +12,16 @@ const MENU = [
   { label: "계정 설정", href: "/settings/account" },
 ];
 
+/** raw UUID(핸들 미설정 시 id 폴백) 판별 — 이 경우 @핸들을 노출하지 않는다. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function MyPage() {
   const { user } = useSession();
   const name = user?.name ?? "게스트";
-  const handle = user?.handle ?? "guest";
   const initial = name.slice(0, 1);
+  // 핸들이 raw UUID(=id 폴백)면 @UUID 노출 대신 미표기 — 닉네임만 보여준다.
+  const rawHandle = user?.handle ?? "";
+  const showHandle = Boolean(rawHandle) && rawHandle !== user?.id && !UUID_RE.test(rawHandle);
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -24,7 +29,9 @@ export default function MyPage() {
         <Avatar fallback={initial} size="xl" />
         <div className="flex min-w-0 flex-col gap-1">
           <span className="text-title-l text-on-surface">{name}</span>
-          <span className="text-body-s text-on-surface-variant">@{handle} · 팔로잉 24 · 구독 2</span>
+          <span className="text-body-s text-on-surface-variant">
+            {showHandle ? `@${rawHandle} · ` : ""}팔로잉 24 · 구독 2
+          </span>
         </div>
         <Button variant="outline" className="ml-auto" asChild>
           <Link href="/settings">프로필 편집</Link>

@@ -346,6 +346,12 @@ class SubscribeIn(Schema):
     tier_id: uuid.UUID
 
 
+class ChangeTierIn(Schema):
+    """Fan payload to switch an active subscription to another tier (up/downgrade)."""
+
+    tier_id: uuid.UUID
+
+
 def _subscription_out(sub: Subscription) -> SubscriptionOut:
     """Build the subscription response from a subscription with tier/creator loaded."""
     tier = sub.tier
@@ -460,6 +466,60 @@ def cancel_subscription(
         )
     sub.cancelled_at = timezone.now()
     sub.save(update_fields=["cancelled_at"])
+    return 200, _subscription_out(sub)
+
+
+@subscriptions_router.patch(
+    "/{subscription_id}",
+    response={200: SubscriptionOut, 404: SubscriptionError, 422: SubscriptionError},
+)
+def change_subscription_tier(
+    request: HttpRequest, subscription_id: uuid.UUID, payload: ChangeTierIn
+) -> tuple[int, SubscriptionOut | SubscriptionError]:
+    """Switch the fan's own active subscription to another tier (up/downgrade).
+
+    The new tier must be an *active* tier of the **same creator** — the membership
+    is a relationship with one creator, so a cross-creator swap is not a tier change
+    but a different subscription. A tier that is unknown, inactive, or belongs to
+    another creator collapses to 422 ``TierNotFound`` (no cross-creator existence
+    leak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).
+    Idempotent: switching to the tier already held is a 200 no-op.
+    """
+    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    sub = (
+        Subscription.objects.select_related("tier", "tier__creator")
+        .filter(id=subscription_id, fan=account)
+        .first()
+    )
+    if sub is None:
+        return 404, SubscriptionError(
+            detail="구독을 찾을 수 없어요.", code=ErrorCode.SUBSCRIPTION_NOT_FOUND.value
+        )
+    if sub.status != SubscriptionStatus.ACTIVE.value:
+        return 422, SubscriptionError(
+            detail="활성 구독만 등급을 변경할 수 있어요.",
+            code=ErrorCode.SUBSCRIPTION_NOT_ACTIVE.value,
+        )
+    # No-op when already on the requested tier (idempotent).
+    if sub.tier_id == payload.tier_id:
+        return 200, _subscription_out(sub)
+    # Scope the lookup to the subscription's own creator so a foreign tier is
+    # indistinguishable from an unknown one (422, no existence leak). A creatorless
+    # (global) subscription matches only other creatorless tiers.
+    candidates = MembershipTier.objects.select_related("creator").filter(
+        id=payload.tier_id, active=True
+    )
+    if sub.creator_id is None:
+        candidates = candidates.filter(creator__isnull=True)
+    else:
+        candidates = candidates.filter(creator_id=sub.creator_id)
+    new_tier = candidates.first()
+    if new_tier is None:
+        return 422, SubscriptionError(
+            detail="변경할 수 있는 멤버십 등급이 아니에요.", code=ErrorCode.TIER_NOT_FOUND.value
+        )
+    sub.tier = new_tier
+    sub.save(update_fields=["tier"])
     return 200, _subscription_out(sub)
 
 

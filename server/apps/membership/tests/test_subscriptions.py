@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Any
 
 import pytest
 from django.db import IntegrityError
@@ -191,3 +192,110 @@ def test_subscribe_requires_auth(client: Client) -> None:
         content_type=JSON,
     )
     assert res.status_code == 401
+
+
+# --- tier change (up/downgrade, R5-W1A) --------------------------------------- #
+
+
+def _subscribe(client: Client, fan: Account, tier: MembershipTier) -> str:
+    """Subscribe ``fan`` to ``tier`` and return the subscription id."""
+    sub_id: str = client.post(
+        BASE,
+        data=json.dumps({"tier_id": str(tier.id)}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()["id"]
+    return sub_id
+
+
+def _change(client: Client, fan: Account, sub_id: str, tier: MembershipTier) -> Any:
+    """PATCH the subscription's tier."""
+    return client.patch(
+        f"{BASE}/{sub_id}",
+        data=json.dumps({"tier_id": str(tier.id)}),
+        content_type=JSON,
+        headers=_auth(fan),
+    )
+
+
+def test_change_tier_same_creator_succeeds(client: Client) -> None:
+    """A fan can up/downgrade to another active tier of the same creator."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    light = _tier(creator=creator, name="라이트", price=5000, sort_order=0)
+    premium = _tier(creator=creator, name="프리미엄", price=15000, sort_order=1)
+    sub_id = _subscribe(client, fan, light)
+
+    res = _change(client, fan, sub_id, premium)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["tier_name"] == "프리미엄"
+    assert body["price"] == 15000
+    assert Subscription.objects.get(id=sub_id).tier_id == premium.id
+
+
+def test_change_tier_is_idempotent_noop(client: Client) -> None:
+    """Switching to the tier already held is a 200 no-op."""
+    fan = _fan()
+    tier = _tier()
+    sub_id = _subscribe(client, fan, tier)
+    res = _change(client, fan, sub_id, tier)
+    assert res.status_code == 200
+    assert res.json()["tier_id"] == str(tier.id)
+
+
+def test_change_tier_cross_creator_is_422(client: Client) -> None:
+    """A tier belonging to another creator is not a valid target (422, no leak)."""
+    fan = _fan()
+    mine = Creator.objects.create(handle="stellar", name="별빛")
+    other = Creator.objects.create(handle="rabbit", name="토끼")
+    my_tier = _tier(creator=mine, name="라이트")
+    foreign = _tier(creator=other, name="남의등급")
+    sub_id = _subscribe(client, fan, my_tier)
+
+    res = _change(client, fan, sub_id, foreign)
+    assert res.status_code == 422
+    assert res.json()["code"] == "TierNotFound"
+    assert Subscription.objects.get(id=sub_id).tier_id == my_tier.id
+
+
+def test_change_tier_to_inactive_is_422(client: Client) -> None:
+    """An inactive (archived) target tier cannot be switched to."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    active = _tier(creator=creator, name="라이트")
+    archived = _tier(creator=creator, name="보관", active=False)
+    sub_id = _subscribe(client, fan, active)
+
+    res = _change(client, fan, sub_id, archived)
+    assert res.status_code == 422
+    assert res.json()["code"] == "TierNotFound"
+
+
+def test_change_tier_on_non_active_subscription_is_422(client: Client) -> None:
+    """A cancelled subscription cannot change tiers."""
+    fan = _fan()
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    tier_a = _tier(creator=creator, name="라이트", sort_order=0)
+    tier_b = _tier(creator=creator, name="프리미엄", sort_order=1)
+    sub = Subscription.objects.create(
+        fan=fan,
+        tier=tier_a,
+        status=SubscriptionStatus.CANCELLED,
+        next_billing_date=date.today(),
+    )
+    res = _change(client, fan, str(sub.id), tier_b)
+    assert res.status_code == 422
+    assert res.json()["code"] == "SubscriptionNotActive"
+
+
+def test_change_tier_another_fans_subscription_is_404(client: Client) -> None:
+    """Changing someone else's subscription is a 404 (no existence leak)."""
+    owner = _fan()
+    other = _fan()
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    tier_a = _tier(creator=creator, name="라이트", sort_order=0)
+    tier_b = _tier(creator=creator, name="프리미엄", sort_order=1)
+    sub_id = _subscribe(client, owner, tier_a)
+    res = _change(client, other, sub_id, tier_b)
+    assert res.status_code == 404

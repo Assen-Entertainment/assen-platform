@@ -38,7 +38,7 @@ function ThemeToggle() {
 export function WebShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const router = useRouter();
-  const { user } = useSession();
+  const { user, mounted } = useSession();
   // 실시간 알림 소켓(R4-W4) — 셸에서 1회 마운트. wsUrl 미설정/비로그인이면 no-op(0 반환·회귀 0).
   const unread = useNotificationSocket();
   const [q, setQ] = React.useState("");
@@ -65,6 +65,7 @@ export function WebShell({ children }: { children: React.ReactNode }) {
         brand={<span className="text-title-l text-primary">Assen</span>}
         items={NAV}
         activeHref={active}
+        linkComponent={Link}
         footer={
           <Button className="w-full" asChild>
             <Link href="/studio">크리에이터 스튜디오</Link>
@@ -109,9 +110,16 @@ export function WebShell({ children }: { children: React.ReactNode }) {
                   </span>
                 ) : null}
               </Link>
-              <Link href="/mypage" aria-label="내 페이지">
-                <Avatar fallback={initial} size="sm" />
-              </Link>
+              {/* 비로그인 동선(P0) — 아바타 대신 로그인 버튼. next=현재경로로 복귀. */}
+              {mounted && !user ? (
+                <Button size="sm" asChild>
+                  <Link href={`/login?next=${encodeURIComponent(pathname || "/discovery")}`}>로그인</Link>
+                </Button>
+              ) : (
+                <Link href="/mypage" aria-label="내 페이지">
+                  <Avatar fallback={initial} size="sm" />
+                </Link>
+              )}
             </>
           }
         />
@@ -121,6 +129,7 @@ export function WebShell({ children }: { children: React.ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-40 lg:hidden"
         items={BOTTOM_NAV}
         activeHref={active}
+        linkComponent={Link}
       />
     </div>
   );

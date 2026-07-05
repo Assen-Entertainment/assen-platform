@@ -23,6 +23,7 @@ import {
   WritingIcon,
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
+import { useSession } from "@/lib/session";
 import type { Creator, Product } from "@/lib/api";
 
 const CATS = [
@@ -55,6 +56,7 @@ function creatorMeta(c: Creator): string {
 
 export function DiscoveryView({ creators, products }: { creators: Creator[]; products: Product[] }) {
   const router = useRouter();
+  const { user } = useSession();
   const [cat, setCat] = React.useState("all");
   const creatorsQ = useCreators(creators);
   const productsQ = useProducts(undefined, products);
@@ -112,10 +114,10 @@ export function DiscoveryView({ creators, products }: { creators: Creator[]; pro
         ))}
       </Shelf>
 
-      {/* 추천 상품 선반 — 추천 근거 라벨(#9). */}
+      {/* 추천 상품 선반 — 개인화 카피는 로그인 시에만. 비로그인은 일반 카피(#9·P0 비로그인 동선). */}
       <Shelf
-        title="회원님을 위한 추천 상품"
-        description="팔로우한 취향을 바탕으로 골랐어요"
+        title={user ? "회원님을 위한 추천 상품" : "지금 주목받는 상품"}
+        description={user ? "팔로우한 취향을 바탕으로 골랐어요" : "많은 팬이 함께 보고 있는 상품이에요"}
         action={
           <Link href="/store" className="text-body-s text-primary hover:underline">
             더보기

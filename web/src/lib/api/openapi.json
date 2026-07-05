@@ -1153,7 +1153,7 @@
             }
           }
         },
-        "description": "Place a mock order for one product.\n\nMOCK: records a ``paid`` order and snapshots the line item, but **no real\npayment is taken and no money moves** (B7 gated). Stock is *validated* but not\ndecremented (inventory movement is out of B4 scope).\n\nIdempotency (B1): if the caller supplies ``idempotency_key`` and already has an\norder for it, the existing order is returned (200) rather than duplicated. The\norder + its line are written in one ``transaction.atomic`` block so a failure\ncan never leave a header without its item; the (buyer, key) unique constraint\ncloses the concurrent-retry race (both requests pass the pre-check, one insert\nwins, the loser catches ``IntegrityError`` and returns the winner's order). The\nfan notification is sent only *after* the transaction commits, so a rolled-back\norder never emits a stray \"order received\" notice.",
+        "description": "Place a mock order for one product.\n\nMOCK: records a ``paid`` order and snapshots the line item, but **no real\npayment is taken and no money moves** (B7 gated). The order amounts\n(``subtotal``/``shipping_fee``/``total``, ``total = subtotal + shipping_fee``)\nare computed server-side so the fan is charged exactly what is shown; shipping\nis a fixed mock ``0`` until the fee policy is set (대표·재무 게이트). A physical\n(``goods``) order must carry a delivery address, else 422.\n\nStock (B7 precursor): a stock-tracked product is decremented atomically with a\n``stock >= qty`` conditional UPDATE inside the transaction — 0 rows means a\nconcurrent buyer took the last unit (TOCTOU-sealed → 422), and taking the last\nunit flips ``sold_out``. Cancelling the order restores it (see ``cancel_order``).\n\nIdempotency (B1): if the caller supplies ``idempotency_key`` and already has an\norder for it, the existing order is returned (200) rather than duplicated. The\nstock deduction, order, and its line are written in one ``transaction.atomic``\nblock so a failure can never leave a header without its item or a decrement\nwithout an order; the (buyer, key) unique constraint closes the concurrent-retry\nrace (both requests pass the pre-check, one insert wins, the loser catches\n``IntegrityError`` — which also rolls back its decrement — and returns the\nwinner's order). The fan notification is sent only *after* the transaction\ncommits, so a rolled-back order never emits a stray \"order received\" notice.",
         "tags": [
           "commerce-orders"
         ],
@@ -1337,7 +1337,7 @@
             }
           }
         },
-        "description": "Cancel one of the fan's own orders (only while paid/shipping).",
+        "description": "Cancel one of the fan's own orders (only while paid/shipping).\n\nCancelling returns the reserved stock: each stock-tracked line's product is\nincremented by its ``qty`` and its ``sold_out`` flag cleared, atomically with\nthe status flip (``F`` expression, so no lost update). The cancellable-state\nguard makes this a one-shot transition, so a cancelled order can't be cancelled\nagain to inflate stock. A since-deleted product line (SET_NULL) has nothing to\nrestore and is skipped.",
         "tags": [
           "commerce-orders"
         ],
@@ -1585,6 +1585,116 @@
         "description": "Fetch a single post; 404 if unknown.",
         "tags": [
           "content"
+        ]
+      },
+      "patch": {
+        "operationId": "apps_content_api_update_post",
+        "summary": "Update Post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update fields on the caller's own post; 404 if unknown or not theirs (no leak).\n\nOwner guard identical to ``create_post`` (scope is the caller's creator). Only\nthe provided fields (``body``/``media_url``/``is_adult``) are applied; the\n``media_url`` scheme is re-validated (A5). The response reflects fresh\nlike/comment counts and the caller's ``liked`` flag.",
+        "tags": [
+          "content"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "apps_content_api_delete_post",
+        "summary": "Delete Post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "post_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Post Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostAck"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Hard-delete the caller's own post; 404 if unknown or not theirs (no leak).\n\nOwner guard identical to ``create_post``. Unlike an order/tier, a post has no\nhistory constraint, so deletion is a hard delete — its comments and likes\nCASCADE (``Comment.post`` / ``Like.post`` are ``on_delete=CASCADE``).",
+        "tags": [
+          "content"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
         ]
       }
     },
@@ -4297,6 +4407,78 @@
         "tags": [
           "membership-subscriptions"
         ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/subscriptions/{subscription_id}": {
+      "patch": {
+        "operationId": "apps_membership_api_change_subscription_tier",
+        "summary": "Change Subscription Tier",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "schema": {
+              "format": "uuid",
+              "title": "Subscription Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Switch the fan's own active subscription to another tier (up/downgrade).\n\nThe new tier must be an *active* tier of the **same creator** — the membership\nis a relationship with one creator, so a cross-creator swap is not a tier change\nbut a different subscription. A tier that is unknown, inactive, or belongs to\nanother creator collapses to 422 ``TierNotFound`` (no cross-creator existence\nleak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).\nIdempotent: switching to the tier already held is a 200 no-op.",
+        "tags": [
+          "membership-subscriptions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTierIn"
+              }
+            }
+          },
+          "required": true
+        },
         "security": [
           {
             "FanBearerAuth": []
@@ -8718,7 +8900,7 @@
         "type": "object"
       },
       "OrderOut": {
-        "description": "A fan's order (maps to the frontend ``Order`` type).\n\n``subtotal``/``shipping``/``total`` are display snapshots (shipping is a mock\n``0`` — no real fulfilment cost is computed). NOT settlement figures.",
+        "description": "A fan's order (maps to the frontend ``Order`` type).\n\n``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots\ncomputed server-side (``total = subtotal + shipping_fee``; shipping is a mock\n``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and\n``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field\nthe web consumes; ``shipping_fee`` is the explicit alias matching the model.\n``shipping_address`` echoes the delivery snapshot for goods orders (``None`` for\norders that need none), safe because a fan only ever sees their own orders.",
         "properties": {
           "id": {
             "title": "Id",
@@ -8748,9 +8930,23 @@
             "title": "Shipping",
             "type": "integer"
           },
+          "shipping_fee": {
+            "title": "Shipping Fee",
+            "type": "integer"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
+          },
+          "shipping_address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderShippingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "creator_name": {
             "anyOf": [
@@ -8781,6 +8977,7 @@
           "items",
           "subtotal",
           "shipping",
+          "shipping_fee",
           "total"
         ],
         "title": "OrderOut",
@@ -8805,6 +9002,40 @@
         "title": "OrderRefundOut",
         "type": "object"
       },
+      "OrderShippingOut": {
+        "description": "Delivery-address snapshot echoed on a physical (goods) order (own orders only).",
+        "properties": {
+          "recipient_name": {
+            "title": "Recipient Name",
+            "type": "string"
+          },
+          "recipient_phone": {
+            "title": "Recipient Phone",
+            "type": "string"
+          },
+          "postal_code": {
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "address1": {
+            "title": "Address1",
+            "type": "string"
+          },
+          "address2": {
+            "title": "Address2",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipient_name",
+          "recipient_phone",
+          "postal_code",
+          "address1",
+          "address2"
+        ],
+        "title": "OrderShippingOut",
+        "type": "object"
+      },
       "CreateOrderIn": {
         "description": "Fan payload to place a (mock) order for one product.",
         "properties": {
@@ -8826,6 +9057,16 @@
             "title": "Option",
             "type": "string"
           },
+          "shipping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShippingIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "idempotency_key": {
             "anyOf": [
               {
@@ -8843,6 +9084,43 @@
           "product_id"
         ],
         "title": "CreateOrderIn",
+        "type": "object"
+      },
+      "ShippingIn": {
+        "description": "Delivery address for a physical (goods) order (required for ``type=goods``).",
+        "properties": {
+          "recipient_name": {
+            "default": "",
+            "maxLength": 60,
+            "title": "Recipient Name",
+            "type": "string"
+          },
+          "recipient_phone": {
+            "default": "",
+            "maxLength": 32,
+            "title": "Recipient Phone",
+            "type": "string"
+          },
+          "postal_code": {
+            "default": "",
+            "maxLength": 16,
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "address1": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Address1",
+            "type": "string"
+          },
+          "address2": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Address2",
+            "type": "string"
+          }
+        },
+        "title": "ShippingIn",
         "type": "object"
       },
       "OrderPage": {
@@ -9033,6 +9311,62 @@
           "body"
         ],
         "title": "PostIn",
+        "type": "object"
+      },
+      "PostPatch": {
+        "description": "Request body to update a post; only the provided fields are applied.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "media_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Url"
+          },
+          "is_adult": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Adult"
+          }
+        },
+        "title": "PostPatch",
+        "type": "object"
+      },
+      "PostAck": {
+        "description": "Bare status ack for a post mutation that returns no body (delete).",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PostAck",
         "type": "object"
       },
       "LikeOut": {
@@ -10916,6 +11250,21 @@
           "tier_id"
         ],
         "title": "SubscribeIn",
+        "type": "object"
+      },
+      "ChangeTierIn": {
+        "description": "Fan payload to switch an active subscription to another tier (up/downgrade).",
+        "properties": {
+          "tier_id": {
+            "format": "uuid",
+            "title": "Tier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier_id"
+        ],
+        "title": "ChangeTierIn",
         "type": "object"
       },
       "ForbiddenOut": {

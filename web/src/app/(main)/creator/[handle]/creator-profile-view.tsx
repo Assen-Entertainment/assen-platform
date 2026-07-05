@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Button,
   Tabs, TabsList, TabsTrigger, TabsContent,
@@ -16,6 +16,8 @@ import { creatorAccentVars } from "@/lib/creator-accent";
 import { gradientStyle } from "@/lib/placeholder";
 import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator } from "@/lib/api/queries";
 import { ApiError, apiErrorMessage, type Creator, type Post, type Product, type MembershipTier } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { savePendingAction, readPendingAction, clearPendingAction } from "@/lib/auth-return";
 
 /** CreatorProfile 뷰 — 동적 + React Query. 팔로우=낙관적 뮤테이션(캐시 즉시 반영). */
 export function CreatorProfileView({
@@ -30,6 +32,8 @@ export function CreatorProfileView({
   tiers: MembershipTier[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const { user, mounted } = useSession();
   const { toast } = useToast();
   const [tab, setTab] = React.useState("posts");
   const [giftOpen, setGiftOpen] = React.useState(false);
@@ -38,6 +42,31 @@ export function CreatorProfileView({
   const follow = useToggleFollow(creator.handle);
   const accent = c.accentColor;
   const initial = c.name.slice(0, 1);
+
+  // 팔로우 클릭 — 비로그인이면 미완료 액션을 저장하고 로그인으로(성공 시 복귀+자동 재실행).
+  const from = pathname || `/creator/${creator.handle}`;
+  const onToggleFollow = () => {
+    if (mounted && !user) {
+      savePendingAction({ action: "follow", handle: creator.handle, from });
+      router.push(`/login?next=${encodeURIComponent(from)}`);
+      return;
+    }
+    follow.mutate(!c.following);
+  };
+
+  // 로그인 복귀 후 미완료 팔로우 자동 재실행(팔로우만 — 좋아요·구독은 후속).
+  //  clear 후 readPendingAction()은 null이라 후속 렌더의 재실행은 no-op(멱등).
+  React.useEffect(() => {
+    if (!mounted || !user) return;
+    const pending = readPendingAction();
+    if (pending?.action !== "follow" || pending.handle !== creator.handle) return;
+    clearPendingAction();
+    if (!c.following) {
+      follow.mutate(true, {
+        onSuccess: () => toast({ title: `${c.name}님을 팔로우했어요` }),
+      });
+    }
+  }, [mounted, user, creator.handle, c.following, c.name, follow, toast]);
 
   // 포스트 좋아요 — 공용 useToggleLike(캐시 통일). 프로필 포스트도 ["posts", creatorId]
   // 캐시로 하이드레이트 → 뮤테이션이 즉시 UI에 반영되고 피드·상세와 동일 경로.
@@ -114,7 +143,7 @@ export function CreatorProfileView({
         accent={Boolean(accent)}
         following={c.following}
         followPending={follow.isPending}
-        onToggleFollow={() => follow.mutate(!c.following)}
+        onToggleFollow={onToggleFollow}
         onGift={() => setGiftOpen(true)}
         followersHref={`/creator/${c.handle}/followers`}
         goal={{ label: "이번 달 팔로워 목표", value: c.followers, max: goalMax }}

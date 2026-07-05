@@ -102,7 +102,19 @@ def main() -> None:
         None,
     )
     expect(orderable is not None, "orderable product exists")
-    status, order = call("POST", "/api/orders", {"product_id": orderable["id"], "qty": 1}, token=token)
+    # 물리 상품(goods)은 배송지 필수(R5-W1A) — 어떤 유형이 뽑혀도 안전하게 배송지 동봉.
+    order_body = {
+        "product_id": orderable["id"],
+        "qty": 1,
+        "shipping": {
+            "recipient_name": "데모 수령인",
+            "recipient_phone": "010-0000-0001",
+            "postal_code": "06236",
+            "address1": "서울시 강남구 테헤란로 1",
+            "address2": "101동 1001호",
+        },
+    }
+    status, order = call("POST", "/api/orders", order_body, token=token)
     expect(status == 201 and str(order.get("id", "")).startswith("ASN-"), "order create", (status, order))
     order_id = order["id"]
     status, detail = call("GET", f"/api/orders/{order_id}", token=token)

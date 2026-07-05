@@ -51,10 +51,21 @@ def _product(**kwargs: Any) -> Product:
     return Product.objects.create(**defaults)
 
 
+# Delivery address for goods orders (required since R5-W1A); the gating tests use
+# goods products, so every order body carries it.
+SHIPPING = {
+    "recipient_name": "받는이",
+    "recipient_phone": "010-1234-5678",
+    "postal_code": "06236",
+    "address1": "서울시 강남구 테헤란로 1",
+    "address2": "101동 1001호",
+}
+
+
 def _order(client: Client, product_id: Any, account: Account) -> Any:
     return client.post(
         ORDERS,
-        data=json.dumps({"product_id": str(product_id)}),
+        data=json.dumps({"product_id": str(product_id), "shipping": SHIPPING}),
         content_type=JSON,
         headers=_auth(account),
     )

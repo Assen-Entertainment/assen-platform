@@ -8,6 +8,7 @@ import type { Creator, Post } from "@/lib/api";
 // next/navigation·next/link — jsdom 렌더용 경량 목(라우팅 부수효과 제거).
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+  usePathname: () => "/creator/stellar",
 }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...p }: { href: unknown; children: React.ReactNode }) => (
