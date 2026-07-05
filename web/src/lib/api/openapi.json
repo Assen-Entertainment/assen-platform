@@ -1092,7 +1092,7 @@
             }
           }
         },
-        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).\n\nA product with order history can't be hard-deleted: ``OrderItem.product`` is\nSET_NULL, so deleting it would sever the historical order lines' attribution\nback to this creator (breaking dashboard/stats counts and order provenance).\nInstead of deleting, the owner should archive it (``status=\"hidden\"``), which\nremoves it from public listings while keeping order history intact. A product\nwith no order history has nothing to preserve, so it deletes as before.",
+        "description": "Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).\n\nA product with order history can't be hard-deleted: ``OrderItem.product`` is\nSET_NULL, so deleting it would sever the historical order lines' attribution\nback to this creator (breaking dashboard/stats counts and order provenance).\nInstead of deleting, the owner should archive it (``status=\"hidden\"``), which\nremoves it from public listings while keeping order history intact. A product\nwith no order history has nothing to preserve, so it deletes as before.\n\nConcurrency (F5): the owner check, the reload under ``select_for_update`` and the\n``order_items`` re-check run in one ``transaction.atomic`` block so the\ncheck→delete window is narrowed — the product row is locked for the duration, so\na second concurrent *delete* cannot slip between the check and the delete. NOT a\ncomplete seal: an in-flight ``create_order`` does not lock the product row, so an\norder committing during this block can still leave a just-deleted product with a\ndangling (SET_NULL) line. Fully closing that needs the order path to lock the\nproduct too (a broader change deferred), so the residual window is documented,\nnot hidden.",
         "tags": [
           "studio-commerce"
         ],
@@ -1624,6 +1624,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionBlockedError"
+                }
+              }
+            }
           }
         },
         "description": "Like a post; idempotent (a second like is a no-op, still 200).",
@@ -1671,6 +1681,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionBlockedError"
                 }
               }
             }
@@ -1797,6 +1817,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionBlockedError"
                 }
               }
             }
@@ -3889,7 +3919,7 @@
             }
           }
         },
-        "description": "List *active* membership tiers, optionally filtered to one creator.\n\nInactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from\nthis consumer surface, mirroring draft/hidden products in the catalog.",
+        "description": "List *active* membership tiers, optionally filtered to one creator.\n\nInactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from\nthis consumer surface, mirroring draft/hidden products in the catalog.\n\nPersonal-block gating (F8 — the 6th aggregate surface, aligning with\n``content.list_posts`` / ``commerce.list_products``): the global (unfiltered)\nbrowse excludes tiers from creators the authenticated caller has personally\nblocked. An explicit ``?creator_id=`` visit is creator-scoped navigation and is\nNOT hidden (a personal block is not existence hiding); an anonymous caller blocks\nnothing.",
         "tags": [
           "membership"
         ]
@@ -9032,6 +9062,25 @@
           "like_count"
         ],
         "title": "LikeOut",
+        "type": "object"
+      },
+      "InteractionBlockedError": {
+        "description": "422 body when a fan interacts with a personally-blocked creator's content.\n\nCarries the stable :class:`~config.errors.ErrorCode` value the web branches on\n(``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the\n``{detail, code}`` shape used by commerce/membership.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "InteractionBlockedError",
         "type": "object"
       },
       "CommentOut": {

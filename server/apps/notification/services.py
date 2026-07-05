@@ -20,6 +20,8 @@ import logging
 from collections.abc import Mapping
 from datetime import date
 
+from django.db import transaction
+
 from apps.identity.models import Account
 from apps.notification.adapters import NotificationAdapter, PushMessage, SendResult
 from apps.notification.models import Notification
@@ -90,11 +92,16 @@ def notify(recipient: Account, kind: str, title: str, href: str = "") -> Notific
     This is separate from :func:`send_notification`, the policy-guarded push
     transport — notify records the in-app row and, best-effort, fans it out over
     the realtime WebSocket (ASS-240) so an open web client updates without polling.
+
+    The realtime fan-out is deferred to :func:`transaction.on_commit` (F7): outside a
+    transaction Django runs it immediately, but inside one it fires only *after* the
+    commit — so a caller that creates the row inside an atomic block which later rolls
+    back never emits a push for a notification that does not durably exist.
     """
     notification = Notification.objects.create(
         recipient=recipient, kind=kind, title=title, href=href
     )
-    _push_realtime(notification)
+    transaction.on_commit(lambda: _push_realtime(notification))
     return notification
 
 

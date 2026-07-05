@@ -1,11 +1,36 @@
 import { ApiError } from "./client";
 
 /**
+ * 서버 `config.errors.ErrorCode` 미러 — 안정 code 식별자 단일 출처.
+ * 뷰(로그인 등)의 code 분기는 매직스트링 대신 이 상수를 참조해 문구 매핑과 일원화한다.
+ */
+export const ERROR_CODES = {
+  AccountNotRegistered: "AccountNotRegistered",
+  OtpInvalid: "OtpInvalid",
+  OwnerRequired: "OwnerRequired",
+  ProductNotOrderable: "ProductNotOrderable",
+  OutOfStock: "OutOfStock",
+  InsufficientStock: "InsufficientStock",
+  MembershipOnlyProduct: "MembershipOnlyProduct",
+  OrderNotCancellable: "OrderNotCancellable",
+  OrderNotRefundable: "OrderNotRefundable",
+  OpenRefundExists: "OpenRefundExists",
+  DuplicateSubscription: "DuplicateSubscription",
+  SubscriptionNotCancellable: "SubscriptionNotCancellable",
+  TierNotFound: "TierNotFound",
+  TierInUse: "TierInUse",
+  PaymentCardInvalid: "PaymentCardInvalid",
+  PaymentMethodNotFound: "PaymentMethodNotFound",
+  InteractionBlocked: "InteractionBlocked",
+} as const;
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+/**
  * 서버 계약 error code → 한국어 사용자 문구(기본 매핑).
  *
- * 서버 `config.errors.ErrorCode`를 미러한다. 뷰별 특화 문구는 `apiErrorMessage`의
- * `fallbackMap` 인자로 오버라이드하고, 여기에 없는 code는 서버 `detail`(표시용)로 폴백한다.
- * ※문자열 부분일치 분기는 취약 — 분기·문구는 전부 이 안정 code 기준으로 일원화한다.
+ * 키는 `ERROR_CODES`(서버 `config.errors.ErrorCode` 미러)와 일치한다. 뷰별 특화 문구는
+ * `apiErrorMessage`의 `fallbackMap` 인자로 오버라이드하고, 여기에 없는 code는 서버 `detail`(표시용)로
+ * 폴백한다. ※문자열 부분일치 분기는 취약 — 분기·문구는 전부 이 안정 code 기준으로 일원화한다.
  */
 export const ERROR_CODE_MESSAGES: Record<string, string> = {
   // 인증(identity)
@@ -28,6 +53,8 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   // 결제수단
   PaymentCardInvalid: "카드 정보가 올바르지 않아요. 다시 확인해 주세요.",
   PaymentMethodNotFound: "결제수단을 찾을 수 없어요.",
+  // 개인 차단(R4): 차단한 크리에이터 콘텐츠에 like/댓글/주문 시 서버가 422로 거부.
+  InteractionBlocked: "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요.",
 };
 
 /**

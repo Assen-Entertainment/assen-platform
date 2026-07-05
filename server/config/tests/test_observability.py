@@ -116,6 +116,49 @@ def test_scrub_event_redacts_pii_secrets_and_forbidden_keys() -> None:
     assert event["user"]["id"] == "u1"
 
 
+def test_scrub_event_redacts_free_text_pii_in_values() -> None:
+    """Value-based scrub catches PII/secrets embedded in string values (benign keys).
+
+    Key-based redaction cannot see a phone number or token inside an exception
+    message or a URL query, so the value pass must sanitise them in place while
+    keeping the surrounding text.
+    """
+    event: dict[str, Any] = {
+        "exception": {
+            "values": [
+                {"type": "ValueError", "value": "otp fail 010-1234-5678 token=abc123DEF456"}
+            ]
+        },
+        "request": {
+            "url": "https://api.assen.example/fan/login?token=secretVALUE0&foo=bar",
+            "query_string": "phone=+82-10-9876-5432&page=2",
+        },
+        # A benign key (not in the forbidden/PII key set) so the *value* pass — not
+        # key-based redaction — is what must catch the embedded Bearer credential.
+        "extra": {"trace": "auth header was Bearer eyJhbGciOi.JIUzI1NiIs"},
+    }
+
+    _scrub_event(cast(Any, event), cast(Any, {}))
+
+    exc_value = event["exception"]["values"][0]["value"]
+    assert "010-1234-5678" not in exc_value  # phone redacted
+    assert "abc123DEF456" not in exc_value  # token value redacted
+    assert exc_value.startswith("otp fail ")  # surrounding text preserved
+    assert "[Filtered]" in exc_value
+
+    url = event["request"]["url"]
+    assert "secretVALUE0" not in url  # ?token= value redacted
+    assert "foo=bar" in url  # benign query param preserved
+
+    qs = event["request"]["query_string"]
+    assert "+82-10-9876-5432" not in qs  # +82 phone form redacted
+    assert "page=2" in qs
+
+    trace = event["extra"]["trace"]
+    assert "eyJhbGciOi.JIUzI1NiIs" not in trace  # Bearer credential redacted
+    assert "Bearer [Filtered]" in trace  # scheme kept, credential redacted
+
+
 # --------------------------------------------------------------------------- #
 # Structured JSON logging
 # --------------------------------------------------------------------------- #
@@ -190,6 +233,7 @@ def test_request_id_defaults_outside_request() -> None:
 
 def test_git_sha_prefers_git_sha_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """GIT_SHA wins over COMMIT_SHA and the git subprocess."""
+    git_sha.cache_clear()  # memoised (lru_cache); clear so this env is re-read
     monkeypatch.setenv("GIT_SHA", "deadbeef")
     monkeypatch.setenv("COMMIT_SHA", "cafef00d")
     assert git_sha() == "deadbeef"
@@ -197,6 +241,17 @@ def test_git_sha_prefers_git_sha_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_git_sha_falls_back_to_commit_sha(monkeypatch: pytest.MonkeyPatch) -> None:
     """COMMIT_SHA is used when GIT_SHA is unset (existing Docker convention)."""
+    git_sha.cache_clear()  # memoised (lru_cache); clear so this env is re-read
     monkeypatch.delenv("GIT_SHA", raising=False)
     monkeypatch.setenv("COMMIT_SHA", "cafef00d")
     assert git_sha() == "cafef00d"
+
+
+def test_git_sha_is_memoised(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After the first read the value is cached — a later env change is ignored."""
+    git_sha.cache_clear()
+    monkeypatch.setenv("GIT_SHA", "first000")
+    assert git_sha() == "first000"
+    monkeypatch.setenv("GIT_SHA", "second00")
+    assert git_sha() == "first000"  # cached; not re-read until cache_clear()
+    git_sha.cache_clear()  # leave the cache clean for other tests

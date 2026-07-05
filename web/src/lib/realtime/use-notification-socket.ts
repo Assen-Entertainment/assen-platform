@@ -17,6 +17,7 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import { qk } from "@/lib/api/queries";
+import { onNotificationsRead } from "@/lib/api/notification-events";
 import { useSession } from "@/lib/session";
 import { useToast } from "@/components/ui/use-toast";
 import type { NotificationKind } from "@/lib/api";
@@ -43,6 +44,14 @@ export function useNotificationSocket(): number {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [unreadCount, setUnreadCount] = React.useState(0);
+
+  // 읽음 뮤테이션 통지 구독(셸 1회 마운트) — 소켓 카운트를 감소/재동기해 스테일-하이를 막는다.
+  // WS 미설정 시 unreadCount는 항상 0이라 감소도 no-op → 회귀 0(기존 뱃지 동작 보존).
+  React.useEffect(() => {
+    return onNotificationsRead((e) => {
+      setUnreadCount((c) => (e.type === "all" ? 0 : Math.max(0, c - 1)));
+    });
+  }, []);
 
   React.useEffect(() => {
     // 게이트: WS URL 미설정(기본) 또는 비로그인 → 완전 no-op. 로그아웃 시 뱃지도 리셋.

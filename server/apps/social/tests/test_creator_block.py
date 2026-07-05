@@ -23,6 +23,7 @@ from apps.content.models import Post
 from apps.creator.models import Creator
 from apps.identity.models import Account, Role
 from apps.identity.services import issue_token_pair
+from apps.membership.models import MembershipTier
 from apps.social.models import CreatorBlock, Follow
 
 pytestmark = pytest.mark.django_db
@@ -276,3 +277,114 @@ def test_unblock_restores_visibility(client: Client) -> None:
     client.delete(f"{BLOCKS}/{blocked.id}", headers=_bearer(fan))
     assert str(post.id) in _ids(client.get("/api/feed", headers=_bearer(fan)))
     assert "blocked" in _handles(client.get("/api/creators", headers=_bearer(fan)))
+
+
+# --------------------------------------------------------------------------- #
+# Write-interaction guard (F4): no new like/comment/order against a blocked creator;
+# direct reads stay allowed. Unblocking restores the interaction.
+# --------------------------------------------------------------------------- #
+def test_like_on_blocked_creator_post_is_422_and_unblock_restores(client: Client) -> None:
+    """A blocked creator's post can be *read* but not liked (422); unblock re-allows it."""
+    fan = _fan()
+    blocked = _creator("blocked", "차단")
+    post = Post.objects.create(creator=blocked, body="글")
+    _block(client, fan, blocked)
+
+    # Direct single read is still allowed (a personal block is not existence hiding).
+    assert client.get(f"/api/posts/{post.id}", headers=_bearer(fan)).status_code == 200
+
+    liked = client.put(f"/api/posts/{post.id}/like", headers=_bearer(fan))
+    assert liked.status_code == 422
+    assert liked.json()["code"] == "InteractionBlocked"
+
+    # Unblock → the like now succeeds.
+    client.delete(f"{BLOCKS}/{blocked.id}", headers=_bearer(fan))
+    reliked = client.put(f"/api/posts/{post.id}/like", headers=_bearer(fan))
+    assert reliked.status_code == 200
+    assert reliked.json()["liked"] is True
+
+
+def test_comment_on_blocked_creator_post_is_422_and_unblock_restores(client: Client) -> None:
+    """A comment on a blocked creator's post is refused (422); unblock re-allows it."""
+    fan = _fan()
+    blocked = _creator("blocked", "차단")
+    post = Post.objects.create(creator=blocked, body="글")
+    _block(client, fan, blocked)
+
+    body = json.dumps({"body": "댓글"})
+    blocked_resp = client.post(
+        f"/api/posts/{post.id}/comments",
+        data=body,
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert blocked_resp.status_code == 422
+    assert blocked_resp.json()["code"] == "InteractionBlocked"
+
+    client.delete(f"{BLOCKS}/{blocked.id}", headers=_bearer(fan))
+    ok = client.post(
+        f"/api/posts/{post.id}/comments",
+        data=body,
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert ok.status_code == 201
+
+
+def test_order_of_blocked_creator_product_is_422_and_unblock_restores(client: Client) -> None:
+    """Ordering a blocked creator's product is refused (422); unblock re-allows it."""
+    fan = _fan()
+    blocked = _creator("blocked", "차단")
+    product = Product.objects.create(
+        creator=blocked, type="goods", title="차단상품", price=1000
+    )
+    _block(client, fan, blocked)
+
+    # The catalog single read is still allowed.
+    assert client.get(f"/api/products/{product.id}", headers=_bearer(fan)).status_code == 200
+
+    order = client.post(
+        "/api/orders",
+        data=json.dumps({"product_id": str(product.id)}),
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert order.status_code == 422
+    assert order.json()["code"] == "InteractionBlocked"
+
+    client.delete(f"{BLOCKS}/{blocked.id}", headers=_bearer(fan))
+    reorder = client.post(
+        "/api/orders",
+        data=json.dumps({"product_id": str(product.id)}),
+        content_type="application/json",
+        headers=_bearer(fan),
+    )
+    assert reorder.status_code == 201
+
+
+# --------------------------------------------------------------------------- #
+# Membership /tiers global-browse gating (F8): the 6th aggregate surface.
+# --------------------------------------------------------------------------- #
+def test_global_tiers_exclude_blocked_but_explicit_creator_id_does_not(client: Client) -> None:
+    """Global /tiers hides a blocked creator's tier; ?creator_id= and anon do not."""
+    fan = _fan()
+    blocked = _creator("blocked", "차단")
+    shown = _creator("shown", "노출")
+    t_blocked = MembershipTier.objects.create(creator=blocked, name="차단등급", price=9900)
+    t_shown = MembershipTier.objects.create(creator=shown, name="노출등급", price=9900)
+    _block(client, fan, blocked)
+
+    def _tier_ids(resp: Any) -> set[str]:
+        return {row["id"] for row in resp.json()}
+
+    # Global (unfiltered) browse excludes the blocked creator's tier for the blocker.
+    global_ids = _tier_ids(client.get("/api/tiers", headers=_bearer(fan)))
+    assert str(t_shown.id) in global_ids
+    assert str(t_blocked.id) not in global_ids
+
+    # Explicit ?creator_id= visit is not hidden (creator-scoped navigation).
+    scoped = client.get(f"/api/tiers?creator_id={blocked.id}", headers=_bearer(fan))
+    assert str(t_blocked.id) in _tier_ids(scoped)
+
+    # Anonymous browse is unaffected — a personal block never touches an anon read.
+    assert str(t_blocked.id) in _tier_ids(client.get("/api/tiers"))

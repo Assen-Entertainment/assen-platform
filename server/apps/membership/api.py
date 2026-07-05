@@ -19,9 +19,10 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.creator.models import Creator
-from apps.identity.auth import fan_auth
+from apps.identity.auth import fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
+from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.throttle import user_write_throttle
@@ -76,11 +77,20 @@ def list_tiers(
 
     Inactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from
     this consumer surface, mirroring draft/hidden products in the catalog.
+
+    Personal-block gating (F8 — the 6th aggregate surface, aligning with
+    ``content.list_posts`` / ``commerce.list_products``): the global (unfiltered)
+    browse excludes tiers from creators the authenticated caller has personally
+    blocked. An explicit ``?creator_id=`` visit is creator-scoped navigation and is
+    NOT hidden (a personal block is not existence hiding); an anonymous caller blocks
+    nothing.
     """
-    del request
     queryset = MembershipTier.objects.filter(active=True).order_by("sort_order", "price")
     if creator_id is not None:
         queryset = queryset.filter(creator_id=creator_id)
+    else:
+        account = resolve_optional_account(request)
+        queryset = queryset.exclude(creator_id__in=blocked_creator_ids(account))
     return [_tier_out(t) for t in queryset[:_MAX_TIERS]]
 
 

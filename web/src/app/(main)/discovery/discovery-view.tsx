@@ -9,6 +9,7 @@ import {
   ErrorState,
   CategoryIconRow,
   Shelf,
+  Button,
   type CategoryItem,
 } from "@/components/ui";
 import {
@@ -57,6 +58,7 @@ export function DiscoveryView({ creators, products }: { creators: Creator[]; pro
   const [cat, setCat] = React.useState("all");
   const creatorsQ = useCreators(creators);
   const productsQ = useProducts(undefined, products);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = creatorsQ;
   const cList = creatorsQ.data ?? creators;
   const pList = productsQ.data ?? products;
   const isError = (creatorsQ.isError && !creatorsQ.data) || (productsQ.isError && !productsQ.data);
@@ -162,6 +164,14 @@ export function DiscoveryView({ creators, products }: { creators: Creator[]; pro
             />
           ))}
         </div>
+        {/* 더보기 — 커서 다음 페이지가 있을 때만(무한 쿼리). 카테고리 필터는 로드된 전체에 적용. */}
+        {hasNextPage ? (
+          <div className="flex justify-center">
+            <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              {isFetchingNextPage ? "불러오는 중…" : "더보기"}
+            </Button>
+          </div>
+        ) : null}
       </section>
     </div>
   );

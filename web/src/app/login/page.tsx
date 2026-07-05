@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { TextField, Button, Divider, OTPInput } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
-import { ApiError } from "@/lib/api";
+import { ApiError, ERROR_CODES } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 /**
@@ -56,9 +56,9 @@ function OtpLogin() {
       //  · code=OtpInvalid → 인증번호 오류 안내.
       //  · 그 외 422는 서버 detail(표시용)로 폴백.
       if (e instanceof ApiError && e.status === 422) {
-        if (e.code === "AccountNotRegistered") {
+        if (e.code === ERROR_CODES.AccountNotRegistered) {
           setNotice("가입되지 않은 번호예요. 아래에서 회원가입을 진행해 주세요.");
-        } else if (e.code === "OtpInvalid") {
+        } else if (e.code === ERROR_CODES.OtpInvalid) {
           setNotice("인증번호가 올바르지 않아요. 다시 확인해 주세요.");
         } else {
           setNotice(e.detail ?? "인증번호가 올바르지 않아요. 다시 확인해 주세요.");

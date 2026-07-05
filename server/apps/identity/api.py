@@ -94,6 +94,15 @@ def _otp_sender() -> OtpSender | None:
     production) so its reproducible codes can never back a real signup/login. With
     no SMS adapter yet, production returns ``None`` and the surface fails closed
     with 503 rather than trust an unverifiable code (Fan_Signup_Privacy_Policy).
+
+    Runtime caveat (F3): a **new** :class:`MockOtpSender` is built on every call, so
+    it carries no armed-code state between the ``/signup/otp`` send and the later
+    ``/signup``·``/login`` verify — the verify takes the mock's stateless
+    deterministic fallback, which does NOT enforce expiry / single-use / lockout
+    (those are proven by unit tests against one shared instance, and are the real
+    SMS adapter + shared-store's job, not the mock's). This is not a production
+    exposure: prod runs ``ENABLE_MOCK_FAN_OTP=False`` → ``None`` → 503 fail-closed,
+    so the un-enforced mock path never executes outside dev/test.
     """
     if settings.ENABLE_MOCK_FAN_OTP:
         return MockOtpSender()

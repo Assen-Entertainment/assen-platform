@@ -93,6 +93,10 @@ class ErrorCode(StrEnum):
     # from operator moderation (apps.safety.UserBlock). Raised only when the block
     # target creator does not exist; blocking is otherwise idempotent.
     BLOCK_TARGET_NOT_FOUND = "BlockTargetNotFound"
+    # A write interaction (like/comment/order) against content owned by a creator
+    # the actor has personally blocked is refused (422). Direct *reads* stay allowed
+    # (a personal block is not existence hiding) — only new interactions are denied.
+    INTERACTION_BLOCKED = "InteractionBlocked"
 
     # --- gating (adult 19+) -------------------------------------------------
     # Reserved: the 19+ gate currently *hides* gated items (404 / filtered out) so

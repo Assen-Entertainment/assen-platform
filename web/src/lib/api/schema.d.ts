@@ -302,10 +302,24 @@ export interface paths {
         post?: never;
         /**
          * Studio Delete Product
-         * @description Delete the caller's own product; 403 (no creator) / 404 (not theirs).
+         * @description Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).
          *
-         *     Historical order lines keep their snapshot (``OrderItem.product`` is SET_NULL),
-         *     so removing a catalog listing never rewrites a fan's order history.
+         *     A product with order history can't be hard-deleted: ``OrderItem.product`` is
+         *     SET_NULL, so deleting it would sever the historical order lines' attribution
+         *     back to this creator (breaking dashboard/stats counts and order provenance).
+         *     Instead of deleting, the owner should archive it (``status="hidden"``), which
+         *     removes it from public listings while keeping order history intact. A product
+         *     with no order history has nothing to preserve, so it deletes as before.
+         *
+         *     Concurrency (F5): the owner check, the reload under ``select_for_update`` and the
+         *     ``order_items`` re-check run in one ``transaction.atomic`` block so the
+         *     check→delete window is narrowed — the product row is locked for the duration, so
+         *     a second concurrent *delete* cannot slip between the check and the delete. NOT a
+         *     complete seal: an in-flight ``create_order`` does not lock the product row, so an
+         *     order committing during this block can still leave a just-deleted product with a
+         *     dangling (SET_NULL) line. Fully closing that needs the order path to lock the
+         *     product too (a broader change deferred), so the residual window is documented,
+         *     not hidden.
          */
         delete: operations["apps_commerce_api_studio_delete_product"];
         options?: never;
@@ -1404,6 +1418,13 @@ export interface paths {
          *
          *     Inactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from
          *     this consumer surface, mirroring draft/hidden products in the catalog.
+         *
+         *     Personal-block gating (F8 — the 6th aggregate surface, aligning with
+         *     ``content.list_posts`` / ``commerce.list_products``): the global (unfiltered)
+         *     browse excludes tiers from creators the authenticated caller has personally
+         *     blocked. An explicit ``?creator_id=`` visit is creator-scoped navigation and is
+         *     NOT hidden (a personal block is not existence hiding); an anonymous caller blocks
+         *     nothing.
          */
         get: operations["apps_membership_api_list_tiers"];
         put?: never;
@@ -3286,6 +3307,20 @@ export interface components {
             like_count: number;
         };
         /**
+         * InteractionBlockedError
+         * @description 422 body when a fan interacts with a personally-blocked creator's content.
+         *
+         *     Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+         *     (``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the
+         *     ``{detail, code}`` shape used by commerce/membership.
+         */
+        InteractionBlockedError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
          * CommentOut
          * @description A comment (maps to the frontend ``Comment`` type; ``author`` is a display name).
          */
@@ -3597,8 +3632,10 @@ export interface components {
          *     - ``posts``: the creator's feed posts.
          *     - ``products``: catalog products the creator owns (all statuses).
          *     - ``products_selling``: the subset currently ``selling`` (public on-sale).
-         *     - ``orders``: distinct orders that contain at least one of the creator's
-         *       products (order **count**, never an amount).
+         *     - ``orders``: distinct **non-cancelled** orders that contain at least one of
+         *       the creator's products (order **count**, never an amount). A cancelled
+         *       order never happened commercially, so it is excluded from the dashboard
+         *       "order count" the same way a cancelled order is excluded everywhere else.
          *     - ``subscribers``: the creator's active subscribers (``status = active``).
          */
         StudioStatsOut: {
@@ -6068,6 +6105,15 @@ export interface operations {
                     "application/json": components["schemas"]["CommerceError"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
         };
     };
     apps_commerce_api_studio_update_product: {
@@ -6429,6 +6475,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
+                };
+            };
         };
     };
     apps_content_api_unlike_post: {
@@ -6458,6 +6513,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
                 };
             };
         };
@@ -6527,6 +6591,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
                 };
             };
         };

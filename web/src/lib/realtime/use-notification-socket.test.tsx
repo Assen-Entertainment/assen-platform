@@ -30,7 +30,8 @@ vi.mock("@/components/ui/use-toast", () => ({
 }));
 
 import { useNotificationSocket } from "./use-notification-socket";
-import { qk } from "@/lib/api/queries";
+import { qk, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/lib/api/queries";
+import type { Notification } from "@/lib/api/types";
 
 // --- mock WebSocket — jsdom 미구현이라 전역 대체. 인스턴스를 수집해 메시지/종료를 주입한다. ---
 class MockWebSocket {
@@ -148,6 +149,59 @@ describe("useNotificationSocket (메시지 처리)", () => {
     });
     expect(result.current).toBe(0);
     expect(toastSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("useNotificationSocket (읽음 뮤테이션 연동 — 스테일-하이 해소·M2)", () => {
+  // 미읽음 알림 시드(읽음 뮤테이션이 캐시에서 미읽음 여부를 판정).
+  const unread = (id: string): Notification => ({ id, kind: "like", title: id, time: "", group: "today", read: false });
+
+  it("단건 읽음 뮤테이션 성공 시 실시간 뱃지가 1 감소한다", async () => {
+    mockState.wsUrl = "ws://test/ws/notifications";
+    const { qc, Wrapper } = makeWrapper();
+    // 소켓 + 읽음 뮤테이션을 같은 QueryClient/이벤트 버스에서 마운트.
+    qc.setQueryData(qk.notifications, [unread("n1"), unread("n2")]);
+    const socket = renderHook(() => useNotificationSocket(), { wrapper: Wrapper });
+    const mark = renderHook(() => useMarkNotificationRead(), { wrapper: Wrapper });
+    // 서버 authoritative 미읽음 = 3(소켓 카운트).
+    act(() => {
+      latest().emitMessage({ type: "unread_count", count: 3 });
+    });
+    expect(socket.result.current).toBe(3);
+    // n1 읽음 → 소켓 뱃지 2로 감소(캐시 read=true와 무관하게 소켓 소스도 동기).
+    await act(async () => {
+      await mark.result.current.mutateAsync("n1");
+    });
+    expect(socket.result.current).toBe(2);
+  });
+
+  it("모두 읽음 뮤테이션 성공 시 실시간 뱃지가 0으로 재동기된다", async () => {
+    mockState.wsUrl = "ws://test/ws/notifications";
+    const { qc, Wrapper } = makeWrapper();
+    qc.setQueryData(qk.notifications, [unread("n1")]);
+    const socket = renderHook(() => useNotificationSocket(), { wrapper: Wrapper });
+    const mark = renderHook(() => useMarkAllNotificationsRead(), { wrapper: Wrapper });
+    act(() => {
+      latest().emitMessage({ type: "unread_count", count: 7 });
+    });
+    expect(socket.result.current).toBe(7);
+    await act(async () => {
+      await mark.result.current.mutateAsync();
+    });
+    expect(socket.result.current).toBe(0);
+  });
+
+  it("WS 미설정(no-op) 경로에서 읽음 통지는 뱃지에 영향이 없다(회귀 0)", async () => {
+    mockState.wsUrl = "";
+    const { Wrapper } = makeWrapper();
+    const socket = renderHook(() => useNotificationSocket(), { wrapper: Wrapper });
+    const mark = renderHook(() => useMarkAllNotificationsRead(), { wrapper: Wrapper });
+    expect(socket.result.current).toBe(0);
+    await act(async () => {
+      await mark.result.current.mutateAsync();
+    });
+    expect(socket.result.current).toBe(0);
+    expect(MockWebSocket.instances).toHaveLength(0);
   });
 });
 

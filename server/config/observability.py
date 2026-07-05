@@ -5,8 +5,10 @@ Three fail-safe, gate-driven concerns live here (R4-W2, ASS-242/B8):
 - **Sentry** (:func:`init_sentry`) — a *no-op unless* ``SENTRY_DSN`` is set, so dev
   and test are never touched and production only reports when explicitly wired.
   A ``before_send`` scrubber (:func:`_scrub_event`) redacts PII / secrets / raw
-  report narrative before anything leaves the process, reusing the same forbidden
-  key list the event pipeline enforces (``FORBIDDEN_SAFETY_PROPERTY_KEYS``).
+  report narrative before anything leaves the process — both by *key* (reusing the
+  forbidden key list the event pipeline enforces, ``FORBIDDEN_SAFETY_PROPERTY_KEYS``)
+  and by *value* (regex over string leaves, so a phone number / token embedded in an
+  exception message or ``request.url`` is caught even under a benign key).
 - **Request-id log correlation** — a :class:`contextvars.ContextVar` bound by
   ``RequestIDMiddleware`` and read back by :class:`RequestIDLogFilter`, so every
   log line can be traced to the request that produced it.
@@ -25,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from collections.abc import Callable
 from contextvars import ContextVar, Token
@@ -101,6 +104,7 @@ class JsonLogFormatter(logging.Formatter):
 # --------------------------------------------------------------------------- #
 
 
+@lru_cache(maxsize=1)
 def git_sha() -> str:
     """Return the running commit hash for health/version surfaces.
 
@@ -108,6 +112,10 @@ def git_sha() -> str:
     Docker build arg), then a local ``git`` call, then ``"unknown"``. In a
     container both env vars are absent-or-set at build time, so the subprocess is
     only ever hit in a working tree.
+
+    Memoised (:func:`functools.lru_cache`): the commit hash is fixed for the life of
+    the process, so a health/version surface polled per request need not re-read the
+    env or re-fork ``git`` each time. Tests that vary the env call ``git_sha.cache_clear()``.
     """
     for var in ("GIT_SHA", "COMMIT_SHA"):
         value = os.environ.get(var)
@@ -189,6 +197,42 @@ _HIGH_SIGNAL_TOKENS: tuple[str, ...] = (
     "cvv",
 )
 
+# Value-based (free-text) scrubbers — key-based redaction cannot catch PII/secrets
+# embedded inside a *string value* under a benign key: an exception message
+# (``exception.values[].value``), a ``request.url`` / ``query_string``, or a
+# breadcrumb narrative. These patterns redact the sensitive span in place while
+# leaving the surrounding text intact, so error signal survives and PII does not.
+#
+# Korean mobile number: ``010-1234-5678`` and separator/format variants, plus the
+# ``+82`` international form (``+82-10-1234-5678``). Deliberately anchored on the
+# ``01x`` / ``+82 1x`` mobile prefix so it does not devour arbitrary digit runs.
+_PHONE_VALUE_RE = re.compile(r"(?:\+82[-.\s]?|0)1[0-9][-.\s]?\d{3,4}[-.\s]?\d{4}")
+
+# ``Bearer <token>`` in a header/message → keep the scheme, redact the credential.
+_BEARER_VALUE_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]+")
+
+# ``key=value`` secrets in a URL query string or a free-text message
+# (``?token=abc123``, ``?phone=010...``, ``otp=123456``) → keep the key, redact the
+# value up to the next separator. Covers the exact leak surfaces called out in the
+# task (``?token=`` / ``?phone=`` on ``request.url`` / ``query_string``).
+_KV_SECRET_VALUE_RE = re.compile(
+    r"(?i)\b((?:access_token|refresh_token|api[_-]?key|token|secret|password|passwd|otp|phone|code)"
+    r"=)[^&\s\"']+"
+)
+
+
+def _scrub_text(value: str) -> str:
+    """Redact phone numbers / bearer tokens / ``key=secret`` spans inside a string.
+
+    Applied to every string leaf the recursive scrubber reaches (values under
+    benign keys — key-based redaction handles the sensitive keys). Order matters:
+    the ``Bearer``/``key=`` credential is redacted before the phone pass so a token
+    that happens to contain a digit run is never partially matched as a number.
+    """
+    value = _BEARER_VALUE_RE.sub("Bearer [Filtered]", value)
+    value = _KV_SECRET_VALUE_RE.sub(r"\1[Filtered]", value)
+    return _PHONE_VALUE_RE.sub(_REDACTED, value)
+
 
 @lru_cache(maxsize=1)
 def _forbidden_keys() -> frozenset[str]:
@@ -215,27 +259,48 @@ def _is_sensitive_key(key: str, forbidden: frozenset[str]) -> bool:
 
 
 def _redact_in_place(obj: Any, is_sensitive: Callable[[str], bool], depth: int) -> None:
-    """Recursively blank out sensitive values in a nested dict/list, in place."""
+    """Recursively scrub a nested dict/list in place (key-based + value-based).
+
+    A value under a sensitive *key* is blanked wholesale; every other string leaf is
+    passed through :func:`_scrub_text`, which redacts embedded PII/secret spans
+    (phone numbers, bearer tokens, ``key=secret`` query params) while keeping the
+    rest of the text — so an exception message or ``request.url`` is sanitised, not
+    dropped. The depth guard bounds a pathological/cyclic structure.
+    """
     if depth > _MAX_SCRUB_DEPTH:
         return
     if isinstance(obj, dict):
         for key, value in list(obj.items()):
             if isinstance(key, str) and is_sensitive(key):
                 obj[key] = _REDACTED
+            elif isinstance(value, str):
+                obj[key] = _scrub_text(value)
             else:
                 _redact_in_place(value, is_sensitive, depth + 1)
     elif isinstance(obj, list):
-        for item in obj:
-            _redact_in_place(item, is_sensitive, depth + 1)
+        for index, item in enumerate(obj):
+            if isinstance(item, str):
+                obj[index] = _scrub_text(item)
+            else:
+                _redact_in_place(item, is_sensitive, depth + 1)
 
 
 def _scrub_event(event: Event, hint: Hint) -> Event:
     """Sentry ``before_send`` hook: redact PII / secrets / raw narrative in place.
 
-    Belt-and-suspenders on top of ``send_default_pii=False``: walks the whole
-    event (request headers/body, extra, breadcrumbs, contexts) and blanks any key
-    that matches the forbidden/PII set. Always returns the event — scrubbing must
-    never drop error signal, only sanitise it.
+    Belt-and-suspenders on top of ``send_default_pii=False``. Two enforcement
+    passes run together as the event is walked (request headers/body, extra,
+    breadcrumbs, contexts, ``exception.values``):
+
+    - **Key-based** — any value under a forbidden/PII *key* is blanked wholesale.
+    - **Value-based** — every remaining string leaf is run through
+      :func:`_scrub_text`, catching free-text PII/secrets a key check misses: a
+      phone number or ``token=``/``Bearer`` credential inside an exception message
+      (``exception.values[].value``) or a ``?token=``/``?phone=`` query on
+      ``request.url`` / ``query_string``.
+
+    Always returns the event — scrubbing must never drop error signal, only
+    sanitise it.
     """
     del hint  # unused; present to match the Sentry before_send signature
     forbidden = _forbidden_keys()

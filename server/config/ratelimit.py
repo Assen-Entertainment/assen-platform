@@ -29,7 +29,7 @@ from django.conf import settings
 
 
 class RateLimiter(ABC):
-    """A fixed-window rate-limit decision, keyed by an opaque client identifier."""
+    """A sliding-window rate-limit decision, keyed by an opaque client identifier."""
 
     @abstractmethod
     def allow(self, *, key: str, limit: int, window_seconds: int) -> bool:
@@ -42,11 +42,12 @@ class RateLimiter(ABC):
 
 
 class InMemoryRateLimiter(RateLimiter):
-    """Per-process fixed-window limiter (default; the prior middleware behaviour).
+    """Per-process sliding-window limiter (default; the extracted middleware boundary).
 
-    In-memory and per-process, so it is *not* correct across workers — it exists to
-    provide a working contract and nail the abstraction. The real limiter shares
-    state in Redis (see :class:`RedisRateLimiter`).
+    ``allow`` counts only the hits inside the trailing ``window_seconds`` (a sliding
+    window), not calendar-aligned buckets. In-memory and per-process, so it is *not*
+    correct across workers — it exists to provide a working contract and nail the
+    abstraction. The real limiter shares state in Redis (see :class:`RedisRateLimiter`).
     """
 
     def __init__(self) -> None:

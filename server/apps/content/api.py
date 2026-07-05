@@ -32,6 +32,7 @@ from apps.identity.models import Account
 from apps.notification.services import notify
 from apps.social.models import blocked_creator_ids
 from config.api import api
+from config.errors import ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -43,6 +44,22 @@ class ErrorOut(Schema):
     """Stable error shape for content endpoints."""
 
     detail: str
+
+
+class InteractionBlockedError(Schema):
+    """422 body when a fan interacts with a personally-blocked creator's content.
+
+    Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+    (``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the
+    ``{detail, code}`` shape used by commerce/membership.
+    """
+
+    detail: str
+    code: str
+
+
+# 422 copy shared by every blocked write interaction (like/comment/order).
+_INTERACTION_BLOCKED_DETAIL = "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요."
 
 
 class PostOut(Schema):
@@ -266,13 +283,13 @@ def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | Erro
 
 @posts_router.put(
     "/{post_id}/like",
-    response={200: LikeOut, 404: ErrorOut},
+    response={200: LikeOut, 404: ErrorOut, 422: InteractionBlockedError},
     auth=fan_auth,
     throttle=user_write_throttle("60/min"),
 )
 def like_post(
     request: HttpRequest, post_id: uuid.UUID
-) -> tuple[int, LikeOut | ErrorOut]:
+) -> tuple[int, LikeOut | ErrorOut | InteractionBlockedError]:
     """Like a post; idempotent (a second like is a no-op, still 200)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     # 19+ gate (same funnel as reads): an adult post the caller may not see 404s here
@@ -280,6 +297,12 @@ def like_post(
     post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
+    # Personal-block consistency (F4): the read stays allowed, but a new write
+    # interaction against a creator this fan has blocked is refused. One set query.
+    if post.creator_id in blocked_creator_ids(account):
+        return 422, InteractionBlockedError(
+            detail=_INTERACTION_BLOCKED_DETAIL, code=ErrorCode.INTERACTION_BLOCKED.value
+        )
     # No notification is emitted on a like (B6): likes are high-volume and would
     # spam the creator's feed. Only comments notify. The web mock's like-notification
     # is demo-only and intentionally not mirrored server-side.
@@ -295,19 +318,25 @@ def like_post(
 
 @posts_router.delete(
     "/{post_id}/like",
-    response={200: LikeOut, 404: ErrorOut},
+    response={200: LikeOut, 404: ErrorOut, 422: InteractionBlockedError},
     auth=fan_auth,
     throttle=user_write_throttle("60/min"),
 )
 def unlike_post(
     request: HttpRequest, post_id: uuid.UUID
-) -> tuple[int, LikeOut | ErrorOut]:
+) -> tuple[int, LikeOut | ErrorOut | InteractionBlockedError]:
     """Unlike a post; idempotent (unliking a non-liked post is a no-op)."""
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     # 19+ gate (same funnel as reads): a gated adult post 404s here too.
     post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
+    # Personal-block consistency (F4): no new interaction (incl. toggling like state)
+    # against a blocked creator's content. One set query.
+    if post.creator_id in blocked_creator_ids(account):
+        return 422, InteractionBlockedError(
+            detail=_INTERACTION_BLOCKED_DETAIL, code=ErrorCode.INTERACTION_BLOCKED.value
+        )
     Like.objects.filter(post=post, user=account).delete()
     return 200, LikeOut(liked=False, like_count=Like.objects.filter(post=post).count())
 
@@ -338,13 +367,13 @@ def list_comments(
 
 @posts_router.post(
     "/{post_id}/comments",
-    response={201: CommentOut, 404: ErrorOut},
+    response={201: CommentOut, 404: ErrorOut, 422: InteractionBlockedError},
     auth=fan_auth,
     throttle=user_write_throttle("10/min"),
 )
 def create_comment(
     request: HttpRequest, post_id: uuid.UUID, data: CommentIn
-) -> tuple[int, CommentOut | ErrorOut]:
+) -> tuple[int, CommentOut | ErrorOut | InteractionBlockedError]:
     """Add a comment to a post as the authenticated fan; 404 if the post is unknown.
 
     ``author`` is the account; ``author_name`` denormalises the display nickname so
@@ -357,6 +386,12 @@ def create_comment(
     post = _post_qs(account).select_related("creator__owner").filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
+    # Personal-block consistency (F4): reads stay allowed, but a new comment on a
+    # blocked creator's post is refused. One set query.
+    if post.creator_id in blocked_creator_ids(account):
+        return 422, InteractionBlockedError(
+            detail=_INTERACTION_BLOCKED_DETAIL, code=ErrorCode.INTERACTION_BLOCKED.value
+        )
     comment = Comment.objects.create(
         post=post, author=account, author_name=account.nickname, body=data.body
     )

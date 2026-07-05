@@ -7,10 +7,22 @@ deterministic mock — the signup flow can be built and tested without an SMS
 account or storing a real phone number.
 
 Security contract (ASS-257): the three controls a production adapter MUST enforce
-are now codified on the boundary *and implemented by the mock* so they are
-testable before a real adapter exists — **code expiry** (short TTL), **single
-use** (a verified code is burned), and **attempt lockout** (bounded wrong guesses
-per number, then a temporary lock). See :class:`OtpSender` for the full contract.
+are codified on the boundary *and implemented by the mock* so they are testable
+before a real adapter exists — **code expiry** (short TTL), **single use** (a
+verified code is burned), and **attempt lockout** (bounded wrong guesses per
+number, then a temporary lock). See :class:`OtpSender` for the full contract.
+
+Runtime honesty — NOT enforced by the live mock flow (F3): the three controls are
+verified by unit tests against a *single* :class:`MockOtpSender` instance, but the
+live API builds a **fresh** sender per request (:func:`apps.identity.api._otp_sender`),
+so no armed-code state survives from ``send`` to a later ``verify`` — the verify
+falls back to the stateless deterministic comparison (:meth:`MockOtpSender.verify`),
+which has no expiry, no single-use burn, and no lockout. Real enforcement therefore
+belongs to the production SMS adapter backed by a **shared store** (Redis/DB) that
+holds the armed state across requests and workers — never to this mock. This is not a
+production exposure: prod runs with ``ENABLE_MOCK_FAN_OTP=False``, so the mock is never
+constructed and the signup/login surface fails closed (503) instead of trusting an
+unenforced code — security impact of the mock's un-enforced runtime path is zero.
 
 Privacy: the phone number is never persisted by this layer; callers store only a
 hash (개인정보 최소 수집). The mock derives a deterministic code from the number

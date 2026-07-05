@@ -443,6 +443,16 @@ def studio_delete_product(
     Instead of deleting, the owner should archive it (``status="hidden"``), which
     removes it from public listings while keeping order history intact. A product
     with no order history has nothing to preserve, so it deletes as before.
+
+    Concurrency (F5): the owner check, the reload under ``select_for_update`` and the
+    ``order_items`` re-check run in one ``transaction.atomic`` block so the
+    check→delete window is narrowed — the product row is locked for the duration, so
+    a second concurrent *delete* cannot slip between the check and the delete. NOT a
+    complete seal: an in-flight ``create_order`` does not lock the product row, so an
+    order committing during this block can still leave a just-deleted product with a
+    dangling (SET_NULL) line. Fully closing that needs the order path to lock the
+    product too (a broader change deferred), so the residual window is documented,
+    not hidden.
     """
     account = cast(Account, request.auth)  # type: ignore[attr-defined]
     creator = _owner_creator(account)
@@ -450,17 +460,22 @@ def studio_delete_product(
         return 403, CommerceError(
             detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
         )
-    product = Product.objects.filter(id=product_id, creator=creator).first()
-    if product is None:
-        return 404, CommerceError(
-            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+    with transaction.atomic():
+        product = (
+            Product.objects.select_for_update()
+            .filter(id=product_id, creator=creator)
+            .first()
         )
-    if product.order_items.exists():
-        return 422, CommerceError(
-            detail="판매 이력이 있는 상품은 삭제할 수 없어요. 숨김(hidden) 처리해 주세요.",
-            code=ErrorCode.PRODUCT_HAS_ORDERS.value,
-        )
-    product.delete()
+        if product is None:
+            return 404, CommerceError(
+                detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+            )
+        if product.order_items.exists():
+            return 422, CommerceError(
+                detail="주문 이력이 있는 상품은 삭제할 수 없어요. 숨김(hidden) 처리해 주세요.",
+                code=ErrorCode.PRODUCT_HAS_ORDERS.value,
+            )
+        product.delete()
     return 200, StudioAck(status="deleted")
 
 
@@ -623,6 +638,14 @@ def create_order(
     if product is None:
         return 404, CommerceError(
             detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
+    # Personal-block consistency (F4): the catalog read stays allowed (a personal
+    # block is not existence hiding), but placing a new order against a creator this
+    # buyer has blocked is refused. One set query, before the stock/state checks.
+    if product.creator_id in blocked_creator_ids(account):
+        return 422, CommerceError(
+            detail="차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요.",
+            code=ErrorCode.INTERACTION_BLOCKED.value,
         )
     # Only a live 'selling' listing is orderable; a 'soldout'-status listing stays
     # publicly visible but cannot be purchased.

@@ -8,6 +8,7 @@ import {
   getCommentsPage,
   getOrdersPage,
   getNotificationsPage,
+  getCreatorsPage,
   type Page,
 } from "./index";
 
@@ -31,6 +32,10 @@ describe("커서 fetcher mock 폴백은 단일 페이지", () => {
     expect((await getOrdersPage()).nextCursor).toBeUndefined();
     expect((await getNotificationsPage()).nextCursor).toBeUndefined();
     expect((await getCommentsPage("po1")).nextCursor).toBeUndefined();
+    // F6: 크리에이터 커서 페이지도 mock은 단일 페이지(디스커버리 회귀 0).
+    const creatorsPage = await getCreatorsPage();
+    expect(creatorsPage.items.length).toBeGreaterThan(0);
+    expect(creatorsPage.nextCursor).toBeUndefined();
   });
 
   it("getProductsPage는 creatorId 스코프를 존중한다(mock)", async () => {

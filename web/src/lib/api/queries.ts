@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import {
-  getCreators,
+  getCreatorsPage,
   getCreator,
   getProduct,
   getProductsPage,
@@ -65,6 +65,7 @@ import {
 } from "./index";
 import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, BlockedCreator, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
+import { emitNotificationRead, emitAllNotificationsRead } from "./notification-events";
 
 /** 라이브 백엔드 연동 여부 — false면 뮤테이션은 낙관 로직만(sleep) 유지(오프라인·테스트). */
 const USE_API = Boolean(config.apiUrl);
@@ -130,6 +131,13 @@ function countListCache<T>(data: ListCache<T> | undefined): number {
   return data.pages.reduce((n, pg) => n + pg.items.length, 0);
 }
 
+/** 리스트 캐시에 조건 만족 항목이 있는지(배열/InfiniteData 공용). 읽음 전 미읽음 여부 판정용. */
+function someListCache<T>(data: ListCache<T> | undefined, pred: (item: T) => boolean): boolean {
+  if (!data) return false;
+  if (Array.isArray(data)) return data.some(pred);
+  return data.pages.some((pg) => pg.items.some(pred));
+}
+
 /** 쿼리 키 */
 export const qk = {
   creators: ["creators"] as const,
@@ -153,8 +161,22 @@ export const qk = {
   studioTiers: ["studio-tiers"] as const,
 };
 
+/**
+ * 크리에이터 목록 — 커서 무한 쿼리(디스커버리). select로 평탄화해 소비처는 배열만 보고
+ * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
+ * SSR 배열 시드는 initialDataUpdatedAt:0으로 즉시 stale → 마운트 refetch가 커서 포함 첫 페이지로
+ * 교체(전역 staleTime 60s여도 21번째+ 도달 가능).
+ */
 export function useCreators(initialData?: Creator[]) {
-  return useQuery({ queryKey: qk.creators, queryFn: getCreators, initialData });
+  return useInfiniteQuery({
+    queryKey: qk.creators,
+    queryFn: ({ pageParam }) => getCreatorsPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextPageParam,
+    initialData: seedInfinite(initialData),
+    initialDataUpdatedAt: 0,
+    select: flattenPages,
+  });
 }
 export function useCreator(handle: string, initialData?: Creator) {
   return useQuery({ queryKey: qk.creator(handle), queryFn: () => getCreator(handle), initialData });
@@ -170,6 +192,9 @@ export function useProducts(creatorId?: string, initialData?: Product[]) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -184,6 +209,9 @@ export function usePosts(id?: string, initialData?: Post[]) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -198,6 +226,9 @@ export function useFeed(initialData?: Post[]) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -221,6 +252,9 @@ export function useComments(postId: string, initialData?: Comment[]) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -236,6 +270,9 @@ export function useOrders(initialData?: Order[]) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -251,6 +288,9 @@ export function useNotifications(initialData?: Notification[]) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
+    // SSR 배열 시드는 nextCursor가 없어 hasNextPage=false — initialDataUpdatedAt:0으로 즉시 stale
+    // 처리해 전역 staleTime(60s)에도 마운트 refetch가 커서 포함 첫 페이지로 교체(더보기 노출). 시드 없으면 무효과.
+    initialDataUpdatedAt: 0,
     select: flattenPages,
   });
 }
@@ -546,13 +586,19 @@ export function useMarkNotificationRead() {
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: qk.notifications });
       const prev = qc.getQueryData<ListCache<Notification>>(qk.notifications);
+      // 캐시에서 이미 읽음으로 확인되는 경우만 감소 생략(중복 감소 방지) — 그 외엔 미읽음으로 간주.
+      const wasUnread = !someListCache(prev, (n) => n.id === id && n.read === true);
       qc.setQueryData<ListCache<Notification>>(qk.notifications, (d) =>
         mapListCache(d, (n) => (n.id === id ? { ...n, read: true } : n)),
       );
-      return { prev };
+      return { prev, wasUnread };
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.notifications, ctx.prev);
+    },
+    onSuccess: (_data, _id, ctx) => {
+      // 실시간 뱃지(useNotificationSocket) 스테일-하이 해소 — 읽은 만큼 소켓 카운트 감소.
+      if (ctx?.wasUnread) emitNotificationRead();
     },
     onSettled: () => {
       if (USE_API) qc.invalidateQueries({ queryKey: qk.notifications });
@@ -579,6 +625,10 @@ export function useMarkAllNotificationsRead() {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.notifications, ctx.prev);
+    },
+    onSuccess: () => {
+      // 서버 read-all은 전체를 읽음 처리 → 실시간 뱃지도 0으로 재동기(스테일-하이 해소).
+      emitAllNotificationsRead();
     },
     onSettled: () => {
       if (USE_API) qc.invalidateQueries({ queryKey: qk.notifications });

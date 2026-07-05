@@ -38,7 +38,8 @@ import {
 
 export * from "./types";
 export { apiFetch, ApiError } from "./client";
-export { apiErrorMessage, ERROR_CODE_MESSAGES } from "./error-messages";
+export { apiErrorMessage, ERROR_CODE_MESSAGES, ERROR_CODES } from "./error-messages";
+export type { ErrorCode } from "./error-messages";
 
 const USE_API = Boolean(config.apiUrl);
 interface RawCreator {
@@ -585,6 +586,11 @@ function toPage<R, T>(raw: Paginated<R>, map: (r: R) => T): Page<T> {
 export async function getCreators(): Promise<Creator[]> {
   if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);
   return CREATORS;
+}
+/** 크리에이터 커서 페이지 — 디스커버리 무한 로드(21번째+ 도달). mock은 단일 페이지(nextCursor 없음). */
+export async function getCreatorsPage(cursor?: string): Promise<Page<Creator>> {
+  if (USE_API) return toPage(await apiFetch<Paginated<RawCreator>>(`/creators${pageQuery(cursor)}`), mapCreator);
+  return { items: CREATORS };
 }
 export async function getCreator(handle: string): Promise<Creator | undefined> {
   if (USE_API) {
