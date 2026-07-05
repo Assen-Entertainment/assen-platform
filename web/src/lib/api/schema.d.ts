@@ -455,6 +455,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ops/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops List Refunds
+         * @description List open refund requests (requested/reviewing), newest first, cursor-paginated.
+         *
+         *     Not caller-scoped: the whole platform's pending refund queue is an operator
+         *     surface (the ``operator_required`` guard is the access control).
+         */
+        get: operations["apps_commerce_api_ops_list_refunds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds/{refund_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops Review Refund
+         * @description Move a refund requested→reviewing (operator+). 422 if not in ``requested``.
+         */
+        post: operations["apps_commerce_api_ops_review_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds/{refund_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops Accept Refund
+         * @description Accept a refund (operator+): resolve it, cancel + restock the order, notify the fan.
+         *
+         *     The refund requested/reviewing→accepted transition is the rowcount gate: 0 rows
+         *     means a concurrent accept/reject already resolved it → 422 (so a double accept
+         *     cannot re-run the restock). The order is cancelled + restocked only when it is
+         *     still in a refundable (active) state — a second, independent rowcount gate — so a
+         *     refund accepted on an order a fan already cancelled does not double-restore stock
+         *     (the fan cancel restocked it then). Money never moves (mock, B7). The fan
+         *     notification is sent after commit so a rolled-back accept emits nothing.
+         */
+        post: operations["apps_commerce_api_ops_accept_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds/{refund_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops Reject Refund
+         * @description Reject a refund requested/reviewing→rejected (operator+); reason mandatory.
+         *
+         *     The reason is required (schema) and recorded on the audit entry so a refusal
+         *     always answers "why". The rowcount gate makes it single-winner (a concurrent
+         *     accept/reject leaves the loser with 0 rows → 422). The order is left untouched
+         *     (only accept cancels/restocks). The fan is notified of the outcome after commit.
+         */
+        post: operations["apps_commerce_api_ops_reject_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/posts": {
         parameters: {
             query?: never;
@@ -3381,6 +3477,61 @@ export interface components {
              * @default
              */
             detail: string;
+        };
+        /**
+         * OpsRefundOut
+         * @description A refund request as seen in the operator review queue.
+         *
+         *     Carries the request fields plus the minimal owning-order context an operator
+         *     tool needs to triage (buyer's public fan id, current order status, order total
+         *     — a display snapshot, never a settlement figure).
+         */
+        OpsRefundOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Order Id */
+            order_id: string;
+            /** Status */
+            status: string;
+            /** Reason */
+            reason: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Buyer Fan Id
+             * Format: uuid
+             */
+            buyer_fan_id: string;
+            /** Order Status */
+            order_status: string;
+            /** Order Total */
+            order_total: number;
+        };
+        /**
+         * OpsRefundPage
+         * @description One page of the operator refund queue plus the next cursor.
+         */
+        OpsRefundPage: {
+            /** Items */
+            items: components["schemas"]["OpsRefundOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * OpsRefundRejectIn
+         * @description Operator payload to reject a refund; a reason is mandatory (audited).
+         */
+        OpsRefundRejectIn: {
+            /** Reason */
+            reason: string;
         };
         /**
          * PostOut
@@ -6534,6 +6685,153 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_list_refunds: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundPage"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_review_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_accept_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_reject_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpsRefundRejectIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundOut"];
                 };
             };
             /** @description Not Found */

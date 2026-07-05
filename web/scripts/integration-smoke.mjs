@@ -1,4 +1,7 @@
 /**
+ * ⚠️ 정본은 e2e/journey.spec.ts (Playwright Test — 단언·auto-wait·trace·재시도)다.
+ *    이 스크립트는 의존성 없이 돌릴 수 있는 경량 호환용으로 유지한다(동일 14스텝 저니).
+ *
  * 통합 스모크 — 웹(Next, live 모드) + 서버(Django, seed_demo) 결합 저니.
  * 전제: Django 127.0.0.1:8000(dev·mock OTP·seed_demo), Next 3000(NEXT_PUBLIC_API_URL=/api·rewrites).
  * 저니: OTP 로그인 → 세션 → 팔로우 토글 → 포스트 좋아요·댓글 → 상품 구매(주문) → 주문 목록 → 알림 → 로그아웃

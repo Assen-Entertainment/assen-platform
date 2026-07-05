@@ -9,7 +9,11 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   OTPInput, StepIndicator, ConsentGroup, Breadcrumb, Pagination, RightRail,
   TimeLabel, CountLabel,
+  Sheet, SheetTrigger, SheetClose, SheetContent, SheetTitle, SheetDescription,
+  DatePicker, Sidebar, TopBar, BottomNav,
 } from "@/components/ui";
+import { useToast } from "@/components/ui/use-toast";
+import { HomeIcon, FeedIcon, StoreIcon, HeartIcon, PersonIcon, BellIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
 
 /** DS 갤러리 — WSL `pnpm dev` → /gallery 에서 스크린샷↔Figma 시각비교용. 라이트/다크/액센트 포함. */
@@ -30,6 +34,15 @@ export default function Gallery() {
   const [otp, setOtp] = React.useState("");
   const [consent, setConsent] = React.useState<string[]>([]);
   const [pageN, setPageN] = React.useState(1);
+  const [date, setDate] = React.useState<Date | null>(null);
+  const { toast } = useToast();
+  // 셸 데모용 대표 네비 항목(default linkComponent="a" — 앵커 렌더).
+  const shellNav = [
+    { icon: <HomeIcon />, label: "홈", href: "#home" },
+    { icon: <FeedIcon />, label: "피드", href: "#feed" },
+    { icon: <StoreIcon />, label: "스토어", href: "#store" },
+    { icon: <HeartIcon />, label: "멤버십", href: "#membership" },
+  ];
   return (
     <div className={dark ? "dark" : ""}>
       <TooltipProvider>
@@ -135,6 +148,83 @@ export default function Gallery() {
                   <DropdownMenuItem destructive>삭제</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            </Section>
+
+            <Section title="Overlays — Sheet / Toast">
+              <Sheet>
+                <SheetTrigger asChild><Button variant="outline">시트 (bottom)</Button></SheetTrigger>
+                <SheetContent>
+                  <SheetTitle>정렬 옵션</SheetTitle>
+                  <SheetDescription>목록 정렬 기준을 선택하세요.</SheetDescription>
+                  <div className="flex flex-col gap-1">
+                    <SheetClose asChild><Button variant="ghost" className="justify-start">최신순</Button></SheetClose>
+                    <SheetClose asChild><Button variant="ghost" className="justify-start">인기순</Button></SheetClose>
+                    <SheetClose asChild><Button variant="ghost" className="justify-start">가격순</Button></SheetClose>
+                  </div>
+                </SheetContent>
+              </Sheet>
+              <Sheet>
+                <SheetTrigger asChild><Button variant="outline">시트 (side)</Button></SheetTrigger>
+                <SheetContent side="right">
+                  <SheetTitle>필터</SheetTitle>
+                  <SheetDescription>우측 사이드 시트(웹 데스크톱).</SheetDescription>
+                  <SheetClose asChild><Button className="mt-2">적용</Button></SheetClose>
+                </SheetContent>
+              </Sheet>
+              <Button onClick={() => toast({ title: "저장되었어요", description: "변경 사항이 반영되었습니다." })}>
+                토스트 띄우기
+              </Button>
+            </Section>
+
+            <Section title="Date Picker">
+              <DatePicker value={date} onChange={setDate} aria-label="날짜" />
+              <DatePicker
+                value={date}
+                onChange={setDate}
+                min={new Date(2026, 6, 1)}
+                max={new Date(2026, 6, 31)}
+                defaultMonth={new Date(2026, 6, 1)}
+                placeholder="7월만 선택 (min/max)"
+                aria-label="7월 한정 날짜"
+              />
+              <span className="self-center text-body-s text-on-surface-variant">
+                선택: {date ? `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일` : "없음"}
+              </span>
+            </Section>
+
+            <Section title="Shell — 대표 레이아웃">
+              <div className="relative flex h-[420px] w-full overflow-hidden rounded-lg border border-outline">
+                <Sidebar
+                  brand={<span className="text-title-l text-primary">Assen</span>}
+                  items={shellNav}
+                  activeHref="#home"
+                  footer={<Button className="w-full" size="sm">크리에이터 스튜디오</Button>}
+                />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <TopBar
+                    search={<SearchField className="w-full max-w-xs" placeholder="크리에이터·상품 검색" aria-label="검색" />}
+                    actions={
+                      <>
+                        <span className="flex size-9 items-center justify-center rounded-full text-on-surface-variant [&>svg]:size-5"><BellIcon /></span>
+                        <Avatar fallback="나" size="sm" />
+                      </>
+                    }
+                  />
+                  <div className="flex-1 overflow-auto p-6">
+                    <h3 className="text-headline text-on-surface">콘텐츠 영역</h3>
+                    <p className="mt-2 text-body-m text-on-surface-variant">
+                      Sidebar(lg+) + TopBar + BottomNav(&lt;lg)로 구성된 웹 셸. 실제 셸은 (main) 레이아웃에서 마운트됩니다.
+                    </p>
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" />
+                    </div>
+                  </div>
+                  <BottomNav
+                    items={[...shellNav, { icon: <PersonIcon />, label: "마이", href: "#my" }]}
+                    activeHref="#home"
+                  />
+                </div>
+              </div>
             </Section>
 
             <Section title="Tabs / List">

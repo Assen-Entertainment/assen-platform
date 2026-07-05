@@ -69,6 +69,30 @@ def test_counts_are_derived(client: Client) -> None:
     assert body["followers"] == 1
 
 
+def test_counts_stay_independent_with_many_followers_and_posts(client: Client) -> None:
+    """Follower and post counts do not multiply each other (subquery, not join fan-out).
+
+    With F followers and P posts a two-relation join produces F×P intermediate rows;
+    the per-relation subquery counts must report F and P exactly, so this pins that
+    they stay independent (a fan-out bug would surface as F×P or a collapsed value).
+    """
+    creator = _creator("stellar")
+    for i in range(3):
+        Post.objects.create(creator=creator, body=f"post-{i}")
+    for _ in range(4):
+        Follow.objects.create(follower=Account.objects.create(role=Role.FAN.value), creator=creator)
+    body = client.get(f"{BASE}/stellar").json()
+    assert body["posts"] == 3
+    assert body["followers"] == 4
+
+    # A creator with neither relation reports 0/0 (Coalesce of the empty subquery),
+    # and it does not leak the other creator's counts.
+    _creator("lonely")
+    other = client.get(f"{BASE}/lonely").json()
+    assert other["posts"] == 0
+    assert other["followers"] == 0
+
+
 def test_pagination_cursor(client: Client) -> None:
     """A limit produces a cursor; following it returns the remainder."""
     for handle in ("a", "b", "c"):

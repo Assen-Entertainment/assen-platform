@@ -18,6 +18,7 @@
   --color-outline: var(--outline);
   --color-outline-variant: var(--outline-variant);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-on-primary: var(--on-primary);
   --color-primary-container: var(--primary-container);
   --color-on-primary-container: var(--on-primary-container);
@@ -33,6 +34,7 @@
   --color-warning-container: var(--warning-container);
   --color-on-warning-container: var(--on-warning-container);
   --color-creator-accent: var(--creator-accent);
+  --color-creator-accent-hover: var(--creator-accent-hover);
   --color-on-creator-accent: var(--on-creator-accent);
   --color-creator-accent-container: var(--creator-accent-container);
   --color-on-creator-accent-container: var(--on-creator-accent-container);

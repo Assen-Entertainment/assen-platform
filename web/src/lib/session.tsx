@@ -9,6 +9,7 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { track } from "@/lib/analytics";
 
 const USE_API = Boolean(config.apiUrl);
 
@@ -126,11 +127,17 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = React.useCallback(
-    (u?: Partial<SessionUser>) => persist({ ...DEFAULT_USER, ...u }),
+    (u?: Partial<SessionUser>) => {
+      persist({ ...DEFAULT_USER, ...u });
+      track("login_completed", { method: "mock" });
+    },
     [persist],
   );
   const signup = React.useCallback(
-    (u?: Partial<SessionUser>) => persist({ ...DEFAULT_USER, ...u }),
+    (u?: Partial<SessionUser>) => {
+      persist({ ...DEFAULT_USER, ...u });
+      track("signup_completed", { method: "mock" });
+    },
     [persist],
   );
   const logout = React.useCallback(() => persist(null), [persist]);
@@ -215,6 +222,7 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ phone, otp_code: otp, web: true }),
       });
       await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      track("login_completed", { method: "otp" });
     },
     [qc],
   );
@@ -233,6 +241,7 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
         }),
       });
       await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      track("signup_completed", { method: "otp" });
     },
     [qc],
   );

@@ -12,10 +12,11 @@ broken). Auth is resolved silently with
 from __future__ import annotations
 
 import uuid
-from typing import cast
+from typing import Any, cast
 
 from django.conf import settings
-from django.db.models import Count, Exists, OuterRef, Q, QuerySet
+from django.db.models import Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field
@@ -91,20 +92,41 @@ class SearchOut(Schema):
     products: list[ProductBrief]
 
 
-def _annotated(account: Account | None = None) -> QuerySet[Creator]:
-    """Creators with derived follower/post counts (distinct to avoid join fan-out).
+def _creator_relation_count(relation: QuerySet[Any]) -> Coalesce:
+    """A correlated ``COUNT(*)`` of ``relation`` rows for the outer creator, 0 when none.
 
-    ``distinct=True`` keeps both counts correct despite the two-relation join
-    fan-out. At scale the intermediate row explosion is a perf cost — move to
-    subquery counts or denormalised counters then (tracked, non-blocking for B2).
+    ``relation`` is a queryset over a model with a ``creator`` FK (``Follow`` /
+    ``Post``). Grouping by that FK under a ``creator=OuterRef("pk")`` filter yields one
+    aggregate row per creator, so the subquery returns a single scalar; ``Coalesce(…,
+    0)`` maps the "no related rows" NULL to 0.
+    """
+    per_creator = (
+        relation.filter(creator=OuterRef("pk"))
+        .order_by()
+        .values("creator")
+        .annotate(count=Count("*"))
+        .values("count")
+    )
+    return Coalesce(Subquery(per_creator, output_field=IntegerField()), 0)
+
+
+def _annotated(account: Account | None = None) -> QuerySet[Creator]:
+    """Creators with derived follower/post counts via per-relation subqueries.
+
+    Each count is a correlated scalar subquery (:func:`_creator_relation_count`), so
+    the follower and post counts stay independent instead of multiplying into one
+    another. The previous ``Count(..., distinct=True)`` over a double join was correct
+    but paid an O(followers × posts) intermediate row explosion per creator before the
+    ``DISTINCT`` collapse; the subqueries make each an O(followers)+O(posts) indexed
+    aggregate that no longer degrades as either relation grows.
 
     When ``account`` is given, per-user ``is_following`` / ``is_blocked`` flags are
     annotated via single ``Exists`` subqueries — no extra per-row query. Anonymous
     callers pass ``None`` and get no annotation (``following`` / ``blocked`` False).
     """
     queryset = Creator.objects.annotate(
-        followers_count=Count("followers", distinct=True),
-        posts_count=Count("posts", distinct=True),
+        followers_count=_creator_relation_count(Follow.objects.all()),
+        posts_count=_creator_relation_count(Post.objects.all()),
     )
     if account is not None:
         queryset = queryset.annotate(

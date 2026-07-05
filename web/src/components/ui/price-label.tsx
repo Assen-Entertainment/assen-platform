@@ -17,17 +17,9 @@ function fmt(a: number | string): string {
   return typeof a === "number" ? a.toLocaleString("ko-KR") : a;
 }
 
-export function PriceLabel({
-  amount,
-  currency = "₩",
-  suffix,
-  originalAmount,
-  discountPercent,
-  className,
-  ...props
-}: PriceLabelProps) {
-  return (
-    <span className={cn("inline-flex items-baseline gap-1 tabular-nums", className)} {...props}>
+export const PriceLabel = React.forwardRef<HTMLSpanElement, PriceLabelProps>(
+  ({ amount, currency = "₩", suffix, originalAmount, discountPercent, className, ...props }, ref) => (
+    <span ref={ref} className={cn("inline-flex items-baseline gap-1 tabular-nums", className)} {...props}>
       {discountPercent ? (
         <span className="text-title-m font-bold text-error">{discountPercent}%</span>
       ) : null}
@@ -43,5 +35,6 @@ export function PriceLabel({
         </span>
       ) : null}
     </span>
-  );
-}
+  ),
+);
+PriceLabel.displayName = "PriceLabel";

@@ -83,6 +83,14 @@ class AuditAction(models.TextChoices):
     COUPON_EXPIRED = "coupon_expired", "coupon_expired"
     POINT_GRANTED = "point_granted", "point_granted"
     POINT_ADJUSTED = "point_adjusted", "point_adjusted"
+    # Operator-driven refund review (commerce, R6-W1A). A refund request moves
+    # requested→reviewing (REVIEWED), reviewing/requested→accepted (ACCEPTED, which
+    # also cancels+restocks the order), or →rejected (REJECTED). Money never moves
+    # (mock order flow, B7-gated) — these audit the operator's decision, not a
+    # settlement.
+    REFUND_REVIEWED = "refund_reviewed", "refund_reviewed"
+    REFUND_ACCEPTED = "refund_accepted", "refund_accepted"
+    REFUND_REJECTED = "refund_rejected", "refund_rejected"
 
 
 class AuditEntry(models.Model):

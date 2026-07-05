@@ -121,6 +121,19 @@ class Account(models.Model):
                 condition=~models.Q(auth_subject_hash=""),
                 name="uniq_fan_auth_subject",
             ),
+            # One staff account per username, but only for populated usernames:
+            # operator login resolves the account with ``.get(username=…)``
+            # (identity.services.authenticate_operator), which would raise
+            # MultipleObjectsReturned → 500 if two staff rows shared a username.
+            # Fan rows leave username at the default "" and stay unconstrained, so
+            # any number of them coexist (the partial ``username != ''`` condition
+            # mirrors the auth_subject_hash pattern above). Migration-less app —
+            # materialised by ``migrate --run-syncdb``.
+            models.UniqueConstraint(
+                fields=["username"],
+                condition=~models.Q(username=""),
+                name="uniq_staff_username",
+            ),
         ]
 
     @property
