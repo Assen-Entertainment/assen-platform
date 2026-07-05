@@ -1,3 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ESLint 게이트 활성화(빌드 시 lint 실행). 규칙은 eslint.config.mjs.
@@ -36,6 +41,26 @@ const nextConfig = {
       },
     ];
   },
+  // mock 번들 격리(R6-W2C) — 라이브 빌드(NEXT_PUBLIC_API_URL 설정) 전용. USE_API 빌드타임 상수만으로는
+  // SWC 미니파이어가 각 함수의 mock 폴백 return문까지 사병 제거하지 못함을 실측(라이브 빌드에도 mock
+  // 문자열 잔존) → lib/api/mock/data(실 데이터)를 data.stub(빈 값)으로 물리 치환해 확정적으로 제거한다.
+  // USE_API=true 런타임 경로는 이 값을 절대 참조하지 않으므로(if(USE_API) 분기가 먼저 반환) 무해하다.
+  webpack(config, { webpack }) {
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(/^\.\/mock\/data$/, (resource) => {
+          resource.request = path.resolve(__dirname, "src/lib/api/mock/data.stub.ts");
+        }),
+      );
+    }
+    return config;
+  },
+  // 위 스텁 치환과 짝 — Next의 standalone 파일트레이싱이 실행되지 않는 원본 mock/data.ts 소스를
+  // .next/standalone/src로 그대로 복사하는 부작용이 실측 확인됐다(컴파일 산출물엔 미포함·실행 안 됨이나
+  // 배포 이미지 파일시스템엔 잔존). 라이브 빌드에서는 트레이싱 대상에서 제외해 이미지에서도 제거한다.
+  ...(process.env.NEXT_PUBLIC_API_URL
+    ? { outputFileTracingExcludes: { "/**": ["./src/lib/api/mock/data.ts"] } }
+    : {}),
 };
 
 export default nextConfig;

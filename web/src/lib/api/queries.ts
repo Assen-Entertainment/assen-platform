@@ -7,7 +7,6 @@ import {
   keepPreviousData,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { config } from "@/lib/config";
 import {
   getCreatorsPage,
   getCreator,
@@ -71,9 +70,13 @@ import {
 import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, ShippingAddress, BlockedCreator, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
 import { emitNotificationRead, emitAllNotificationsRead } from "./notification-events";
+import { track } from "@/lib/analytics";
 
-/** 라이브 백엔드 연동 여부 — false면 뮤테이션은 낙관 로직만(sleep) 유지(오프라인·테스트). */
-const USE_API = Boolean(config.apiUrl);
+/**
+ * 라이브 백엔드 연동 여부 — false면 뮤테이션은 낙관 로직만(sleep) 유지(오프라인·테스트).
+ * 빌드타임 상수(NEXT_PUBLIC_API_URL 인라인)라 mock 분기(mockSetBlocked 등)가 라이브 빌드에서 DCE된다.
+ */
+const USE_API = Boolean(process.env.NEXT_PUBLIC_API_URL);
 
 /** 네트워크 지연 시뮬레이션(목업 경로 전용). */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -336,6 +339,8 @@ export function useToggleFollow(handle: string) {
       if (ctx?.prev) qc.setQueryData(qk.creator(handle), ctx.prev);
     },
     onSuccess: (result) => {
+      // 계측(단일 발화) — mock=boolean, 실 경로=FollowResult. following 상태만(PII 없음).
+      track("follow_toggled", { following: typeof result === "object" ? result.following : result });
       // 서버 응답의 실 카운트/상태로 정정(팔로워 수는 서버 권위).
       if (USE_API && typeof result === "object") {
         qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
@@ -391,6 +396,8 @@ export function useToggleLike() {
       ctx.prevLists?.forEach(([key, data]) => qc.setQueryData(key, data));
     },
     onSuccess: (data) => {
+      // 계측(단일 발화) — 좋아요 토글 상태(liked)만. mock/실 경로 공통 data.next.
+      track("post_liked", { liked: data.next });
       if (!USE_API || !("result" in data) || !data.result) return;
       const { id, result } = data;
       const fix = (p: Post): Post =>
@@ -443,6 +450,8 @@ export function useAddComment(postId: string) {
       if (ctx?.prevPost) qc.setQueryData(qk.post(postId), ctx.prevPost);
     },
     onSuccess: (data, _body, ctx) => {
+      // 계측(단일 발화) — 대상 포스트 id만(댓글 본문은 담지 않는다·PII 차단).
+      track("comment_created", { postId });
       // 임시 댓글(tmp-…)을 서버 실 댓글로 치환(id·작성자·시각 정정).
       if (USE_API && typeof data === "object" && ctx?.tmpId) {
         const real = data as Comment;
@@ -466,7 +475,9 @@ export function useCreateOrder() {
       await sleep(400);
       return null;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // 계측(단일 발화) — 상품 id·수량만. 배송지 등 PII는 담지 않는다.
+      track("order_created", { productId: variables.productId, qty: variables.qty });
       if (USE_API) qc.invalidateQueries({ queryKey: qk.orders });
     },
   });
@@ -550,7 +561,8 @@ export function useSubscribe() {
       await sleep(400);
       return null;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      track("subscription_started", { tierId: variables.tierId });
       if (USE_API) qc.invalidateQueries({ queryKey: qk.subscriptions });
     },
   });
@@ -613,7 +625,8 @@ export function useChangeSubscriptionTier() {
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.subscriptions, ctx.prev);
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      track("tier_changed", { tierId: variables.tierId });
       // 실 경로: 서버 Subscription(가격·티어명 반영)으로 해당 구독 전체 교체. mock({id,tierId})은 낙관값 유지.
       if (USE_API && typeof data === "object" && "tierName" in data) {
         const sub = data as Subscription;
@@ -701,6 +714,10 @@ export function useReport() {
       await sleep(200);
       return null;
     },
+    onSuccess: (_data, variables) => {
+      // 계측(단일 발화) — 신고 유형 코드만. 서술(narrative)은 담지 않는다(PII·자유 텍스트 차단).
+      track("report_submitted", { reportType: variables.reportType });
+    },
   });
 }
 
@@ -751,6 +768,7 @@ export function useBlockCreator() {
       ctx?.prevLists?.forEach(([key, data]) => qc.setQueryData(key, data));
     },
     onSuccess: (result, { handle }) => {
+      track("block_toggled", { blocked: true });
       // 서버 응답(BlockResult)으로 정정 — blocked 반영 + 자동 언팔 유지.
       if (USE_API && result && handle) {
         qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
@@ -802,6 +820,9 @@ export function useUnblockCreator() {
     onError: (_e, _v, ctx) => {
       if (ctx?.handle && ctx.prevCreator) qc.setQueryData(qk.creator(ctx.handle), ctx.prevCreator);
       if (ctx?.prevBlocks) qc.setQueryData(qk.blocks, ctx.prevBlocks);
+    },
+    onSuccess: () => {
+      track("block_toggled", { blocked: false });
     },
     onSettled: (_d, _e, { handle }) => {
       if (USE_API) {

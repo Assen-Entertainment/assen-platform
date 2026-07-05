@@ -5,6 +5,7 @@ import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, Error
 import { SearchIcon } from "@/lib/icons";
 import { useSearch } from "@/lib/api/queries";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { track } from "@/lib/analytics";
 import type { Creator, Product } from "@/lib/api";
 
 const RECENT_KEY = "assen.recentSearches";
@@ -104,6 +105,8 @@ export function SearchView({
     addRecent(t);
     setOpen(false);
     setHighlight(-1);
+    // 검색어 원문은 담지 않는다(PII·자유 텍스트 차단) — 길이만 계측.
+    track("search_performed", { queryLength: t.length });
     router.push(`/search?q=${encodeURIComponent(t)}`);
   };
   const goto = (href: string) => {
