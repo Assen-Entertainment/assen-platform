@@ -15,10 +15,17 @@ name: e2e
 #   ③ 시각 회귀(visual) 베이스라인은 win32 접미사 스냅샷이라 Linux CI에서 매칭 불가 →
 #      게이트는 --project=chromium --project=mobile 만. visual은 로컬 전용 게이트(README/절차 문서화).
 on:
+  # push는 통합 브랜치(dev/main)로 좁힌다(W4) — PR 브랜치 push가 pull_request와 이중 실행되는 낭비를 막는다.
+  # (ci.yml의 branches:[dev,main] 패턴 미러.) 기능 브랜치 회귀는 pull_request 이벤트가 커버.
   push:
+    branches: [dev, main]
     paths: ["web/**", "server/**", ".github/workflows/e2e.yml"]
   pull_request:
     paths: ["web/**", "server/**", ".github/workflows/e2e.yml"]
+
+# 최소 권한(W4) — 이 워크플로는 체크아웃·아티팩트 업로드만 하므로 read 로 충분(GITHUB_TOKEN 남용 표면 축소).
+permissions:
+  contents: read
 
 # 같은 ref의 이전 실행은 취소해 러너 분을 아낀다(ci.yml 패턴 미러).
 concurrency:

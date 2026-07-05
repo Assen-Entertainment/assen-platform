@@ -45,3 +45,12 @@ export const MOCK_BLOCKED = new Set<string>();
 export function mockSetBlocked(_creatorId: string, _blocked: boolean): void {
   /* 라이브 빌드 전용 스텁 — USE_API=true 경로는 이 함수를 호출하지 않는다(no-op). */
 }
+
+/**
+ * 타입 패리티 가드(R6-W2) — emit 되지 않는 타입 전용 검사(런타임 무영향).
+ * 이 스텁의 export 시그니처가 실 data 모듈과 어긋나면(누락·타입 드리프트) tsc 가 실패한다.
+ * · data 에 export 추가/타입 변경 → 여기서 컴파일 실패(스텁이 실 모듈에 assign 불가).
+ * · 스텁에만 남은 오래된 export → data.test.ts 의 키 파리티 테스트가 포착(런타임).
+ */
+type _AssertAssignable<A extends B, B> = A extends B ? true : never;
+type _StubMirrorsData = _AssertAssignable<typeof import("./data.stub"), typeof import("./data")>;

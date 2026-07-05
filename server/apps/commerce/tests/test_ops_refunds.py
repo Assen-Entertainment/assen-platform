@@ -153,6 +153,29 @@ def test_review_unknown_refund_is_404(client: Client) -> None:
     assert res.json()["code"] == "RefundNotFound"
 
 
+def test_review_rolls_back_transition_when_audit_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failing audit write rolls back the requested→reviewing transition (atomic).
+
+    The transition and the audit record live in one ``transaction.atomic`` block
+    (symmetric with accept/reject), so an audit backend failure must not leave the
+    refund advanced to ``reviewing`` with no audit trail.
+    """
+    op = _operator()
+    _, refund = _order_with_open_refund(buyer=_fan(), product=_product())
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("audit backend down")
+
+    monkeypatch.setattr("apps.commerce.api.record_audit", _boom)
+    # A non-raising client so the injected 500 becomes a response we can assert on
+    # rather than propagating out of the request and failing the test.
+    safe_client = Client(raise_request_exception=False)
+    res = safe_client.post(f"{BASE}/{refund.id}/review", content_type=JSON, headers=_auth(op))
+    assert res.status_code >= 500  # the audit failure is not swallowed
+    refund.refresh_from_db()
+    assert refund.status == RefundStatus.REQUESTED.value  # transition rolled back, not committed
+
+
 # --- accept ----------------------------------------------------------------- #
 
 

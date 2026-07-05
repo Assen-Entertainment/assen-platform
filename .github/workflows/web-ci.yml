@@ -1,9 +1,16 @@
 name: web-ci
 on:
+  # push는 통합 브랜치(dev/main)로 좁혀 PR 브랜치 push+pull_request 이중 실행을 막는다(W4, e2e.yml과 동일 패턴).
   push:
+    branches: [dev, main]
     paths: ["web/**"]
   pull_request:
     paths: ["web/**"]
+
+# 최소 권한(W4) — 빌드/테스트/도커 패키징만 하며 쓰기 권한 불요.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

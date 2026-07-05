@@ -16,9 +16,16 @@ seamless. ``paginate(queryset, *, cursor, limit) -> (items, next_cursor)``,
 (base64 offset) cursor falls back to "start from the beginning" exactly as before.
 
 The ordering is read from the queryset's own ``order_by`` (or the model's
-``Meta.ordering``), so any deterministic ordering a caller sets — ``("-created_at",
-"id")``, ``("handle",)``, ascending or descending, single or compound — is
-supported without the caller changing anything. The caller MUST pass a deterministic
+``Meta.ordering``), so any ordering a caller sets over **concrete, non-null model
+fields** — ``("-created_at", "id")``, ``("handle",)``, ascending or descending,
+single or compound — is supported without the caller changing anything. A ``pk``
+tiebreak is auto-appended when the ordering does not already carry the primary key,
+so even a non-unique leading key (``("handle",)``) becomes a total order and the seek
+can never skip or duplicate a tied row across a page boundary. An ordering key a seek
+cannot drive — an annotation alias, a relation path (``foo__bar``), a nullable field
+that is actually ``None``, or a non-string ``F()``/``OrderBy`` expression — degrades
+safely: the cursor is dropped (the next page reads as the last, a malformed inbound
+cursor starts from the beginning), never a 500. The caller MUST pass a deterministic
 ordering (every current caller does); if none is present a stable ``pk`` ordering is
 imposed so the seek is always well-defined.
 """
@@ -38,6 +45,16 @@ from django.db.models import Field, Model, Q, QuerySet
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
 
+# Upper bound on an inbound cursor's character length, checked *before* any base64
+# decode or JSON parse so an attacker can't hand us an arbitrarily large token to
+# expand and walk. A legitimate cursor is a base64 JSON array of a handful of
+# sort-key values (a datetime is ~32 chars, a UUID ~36) — tens of characters, and
+# under a hundred even for a compound ordering. 512 leaves generous headroom for any
+# real ordering while rejecting oversized payloads (e.g. a deeply nested-JSON bomb)
+# outright; an over-length token degrades to "start from the beginning" like any
+# other malformed cursor.
+MAX_CURSOR_LEN = 512
+
 
 def clamp_limit(limit: int | None) -> int:
     """Bound a client-supplied page size to ``[1, MAX_LIMIT]`` (default when None)."""
@@ -47,19 +64,28 @@ def clamp_limit(limit: int | None) -> int:
 
 
 def _ordering_of(queryset: QuerySet[Any]) -> list[tuple[str, bool]]:
-    """Extract the ordering as ``[(field_name, descending), …]`` from ``queryset``.
+    """Extract the seek ordering as ``[(field_name, descending), …]`` from ``queryset``.
 
     Reads the queryset's explicit ``order_by`` first, then the model's
-    ``Meta.ordering``. Each entry is a plain field name with an optional leading
-    ``-`` (descending); ``pk`` is resolved to the concrete primary-key field name so
-    the value can be read off a row and coerced back. A non-string ordering
-    expression (``F()`` / ``OrderBy``) cannot drive a seek, so the extraction returns
-    empty — the caller then imposes a deterministic ``pk`` fallback.
+    ``Meta.ordering``. Each entry must be a plain field name with an optional leading
+    ``-`` (descending); ``pk`` resolves to the concrete primary-key field name. Both
+    sources are treated symmetrically: a single non-string ordering expression
+    (``F()`` / ``OrderBy``) in *either* one cannot drive a seek, so the whole
+    extraction returns empty — the caller then imposes a deterministic ``pk``-only
+    fallback rather than silently keeping a partial ordering the SQL would not seek by
+    (which would desync the seek from the actual ``ORDER BY`` and skip rows).
+
+    A ``pk`` tiebreak is appended unless the primary key is already among the keys, so
+    a non-unique leading key (e.g. ``("created_at",)`` or ``("handle",)``) can never
+    skip or duplicate a tied row across a page boundary: the final key is always unique.
     """
     model = queryset.model
+    pk = model._meta.pk
+    if pk is None:
+        return []
     raw: list[Any] = list(queryset.query.order_by)
     if not raw:
-        raw = [entry for entry in (model._meta.ordering or []) if isinstance(entry, str)]
+        raw = list(model._meta.ordering or [])
     fields: list[tuple[str, bool]] = []
     for entry in raw:
         if not isinstance(entry, str):
@@ -67,11 +93,12 @@ def _ordering_of(queryset: QuerySet[Any]) -> list[tuple[str, bool]]:
         descending = entry.startswith("-")
         name = entry[1:] if descending else entry
         if name == "pk":
-            pk = model._meta.pk
-            if pk is None:
-                return []
             name = pk.name
         fields.append((name, descending))
+    # pk tiebreak: guarantee a unique final key so the seek is a total order and a
+    # tied non-unique key cannot skip/duplicate a row at a page boundary.
+    if pk.name not in {name for name, _ in fields}:
+        fields.append((pk.name, False))
     return fields
 
 
@@ -93,9 +120,25 @@ def _encode_value(value: Any) -> Any:
     return str(value)
 
 
-def _encode(last_item: Model, ordering: list[tuple[str, bool]]) -> str:
-    """Encode the last row's ordering values as an opaque cursor token."""
-    payload = [_encode_value(getattr(last_item, name)) for name, _ in ordering]
+def _encode(last_item: Model, ordering: list[tuple[str, bool]]) -> str | None:
+    """Encode the last row's ordering values as an opaque cursor token, or ``None``.
+
+    Returns ``None`` (→ no next cursor; the page reads as the last) when a sort key
+    cannot yield a usable seek value: a relation-path / annotation-alias key raises
+    ``AttributeError`` on ``getattr``, and a nullable field can be ``None`` — neither
+    can seat a ``> value`` seek, so the cursor is dropped instead of surfacing a 500
+    or emitting a ``"None"`` token that would mis-seek on the next request. Concrete
+    non-null values (int/str/datetime/date/UUID) encode normally.
+    """
+    payload: list[Any] = []
+    for name, _ in ordering:
+        try:
+            value = getattr(last_item, name)
+        except AttributeError:
+            return None
+        if value is None:
+            return None
+        payload.append(_encode_value(value))
     return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
 
 
@@ -115,10 +158,18 @@ def _decode(
     """
     if not cursor:
         return None
+    # Guard the size *before* decoding: reject an over-length token outright (see
+    # ``MAX_CURSOR_LEN``) so a hostile caller can't force us to base64-decode and
+    # JSON-parse a large payload.
+    if len(cursor) > MAX_CURSOR_LEN:
+        return None
     try:
         decoded = base64.urlsafe_b64decode(cursor.encode()).decode()
         data = json.loads(decoded)
-    except (ValueError, binascii.Error):
+    # ``RecursionError`` guards a deeply nested-JSON bomb (base64 of ``[[[…]]]``),
+    # which ``json.loads`` raises rather than a ``ValueError`` — an uncaught one
+    # would surface as a 500 instead of the "start from the beginning" fallback.
+    except (ValueError, binascii.Error, RecursionError):
         return None
     if not isinstance(data, list) or len(data) != len(ordering):
         return None
@@ -168,16 +219,23 @@ def paginate[M: Model](
     Seeks past the cursor row (keyset), then fetches ``limit + 1`` rows to detect
     whether more remain without a second count query. The queryset must carry a
     deterministic ``order_by`` (or ``Meta.ordering``); if it carries none a stable
-    ``pk`` ordering is imposed so the seek is well-defined. Deep pages are O(1): the
-    seek predicate uses indexed comparisons instead of a growing ``OFFSET``.
+    ``pk`` ordering is imposed so the seek is well-defined. A ``pk`` tiebreak is
+    appended (see :func:`_ordering_of`) and the ordering re-applied to the queryset so
+    the SQL ``ORDER BY`` and the seek predicate stay in lockstep. Deep pages are O(1):
+    the seek predicate uses indexed comparisons instead of a growing ``OFFSET``.
     """
     size = clamp_limit(limit)
     ordering = _ordering_of(queryset)
     if not ordering:
         pk = queryset.model._meta.pk
         pk_name = pk.name if pk is not None else "id"
-        queryset = queryset.order_by(pk_name)
         ordering = [(pk_name, False)]
+    # Re-apply the (pk-tie-broken) ordering so the SQL ``ORDER BY`` matches the seek
+    # predicate exactly: an appended pk tiebreak the database did not actually order
+    # by would let a tied row duplicate or skip at a page boundary.
+    queryset = queryset.order_by(
+        *(f"-{name}" if descending else name for name, descending in ordering)
+    )
     values = _decode(cursor, queryset.model, ordering)
     if values is not None:
         queryset = queryset.filter(_seek_predicate(ordering, values))

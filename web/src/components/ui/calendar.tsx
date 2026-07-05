@@ -25,8 +25,22 @@ function startOfMonth(d: Date): Date {
 function addDays(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 }
+/**
+ * n개월 이동 — day-of-month 보존, 대상 월에 그 날이 없으면 말일로 클램프(APG 관례).
+ * 예: 7/31 +1월 → 8/31, 1/31 +1월 → 2/28(비윤년)·2/29(윤년).
+ * `new Date(y, m+1, 0)` = 대상 월(m)의 말일 → daysInMonth 재사용(그리드 계산과 동일 공식).
+ */
 function addMonths(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const y = d.getFullYear();
+  const m = d.getMonth() + n;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, Math.min(d.getDate(), lastDay));
+}
+/** 날짜를 [min, max] 범위(경계 포함)로 클램프 — PageUp/Down이 범위 밖으로 포커스를 넘기지 않게. */
+function clampToRange(d: Date, min?: Date, max?: Date): Date {
+  if (min && dayKey(d) < dayKey(min)) return new Date(min.getFullYear(), min.getMonth(), min.getDate());
+  if (max && dayKey(d) > dayKey(max)) return new Date(max.getFullYear(), max.getMonth(), max.getDate());
+  return d;
 }
 /** 한국어 전체 날짜 라벨(스크린리더용). */
 function fullLabel(d: Date): string {
@@ -126,15 +140,12 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>(
           break;
         case "PageUp":
           e.preventDefault();
-          setViewMonth((m) => addMonths(m, -1));
-          focusMovedByKeyboard.current = true;
-          setFocused((f) => addMonths(f, -1));
+          // day-of-month 보존(말일 클램프) 후 [min,max] 클램프. moveFocus가 viewMonth 동기화·DOM 포커스 처리.
+          moveFocus(clampToRange(addMonths(focused, -1), min, max));
           break;
         case "PageDown":
           e.preventDefault();
-          setViewMonth((m) => addMonths(m, 1));
-          focusMovedByKeyboard.current = true;
-          setFocused((f) => addMonths(f, 1));
+          moveFocus(clampToRange(addMonths(focused, 1), min, max));
           break;
         case "Enter":
         case " ":

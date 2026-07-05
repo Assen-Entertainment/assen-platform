@@ -1124,20 +1124,24 @@ def ops_review_refund(
         return 404, CommerceError(
             detail="환불 신청을 찾을 수 없어요.", code=ErrorCode.REFUND_NOT_FOUND.value
         )
-    transitioned = RefundRequest.objects.filter(
-        id=refund.id, status=RefundStatus.REQUESTED.value
-    ).update(status=RefundStatus.REVIEWING.value)
-    if transitioned == 0:
-        return 422, CommerceError(
-            detail="검토로 전환할 수 없는 상태예요.",
-            code=ErrorCode.REFUND_NOT_TRANSITIONABLE.value,
+    # Transition + audit are one atomic unit (symmetric with accept/reject): if the
+    # audit write fails, the requested→reviewing transition rolls back rather than
+    # leaving a state change with no audit trail.
+    with transaction.atomic():
+        transitioned = RefundRequest.objects.filter(
+            id=refund.id, status=RefundStatus.REQUESTED.value
+        ).update(status=RefundStatus.REVIEWING.value)
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="검토로 전환할 수 없는 상태예요.",
+                code=ErrorCode.REFUND_NOT_TRANSITIONABLE.value,
+            )
+        record_audit(
+            actor=_ops_actor(request),
+            action=AuditAction.REFUND_REVIEWED.value,
+            target=str(refund.id),
         )
     refund.status = RefundStatus.REVIEWING.value
-    record_audit(
-        actor=_ops_actor(request),
-        action=AuditAction.REFUND_REVIEWED.value,
-        target=str(refund.id),
-    )
     return 200, _ops_refund_out(refund)
 
 
@@ -1182,6 +1186,11 @@ def ops_accept_refund(
         if order_cancelled:
             _restock_order_lines(order)
             order.status = OrderStatus.CANCELLED.value
+        else:
+            # The order already left the refundable window (e.g. a fan cancel raced in
+            # first), so reload its committed status — the value read at load time may
+            # be stale, and the response echoes ``order_status``.
+            order.refresh_from_db(fields=["status"])
         record_audit(
             actor=_ops_actor(request),
             action=AuditAction.REFUND_ACCEPTED.value,

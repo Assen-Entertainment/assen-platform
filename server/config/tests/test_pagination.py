@@ -13,11 +13,19 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 
-from apps.identity.models import AnonymousSession
-from config.pagination import DEFAULT_LIMIT, MAX_LIMIT, clamp_limit, paginate
+from apps.identity.models import Account, AnonymousSession
+from config.pagination import (
+    DEFAULT_LIMIT,
+    MAX_CURSOR_LEN,
+    MAX_LIMIT,
+    clamp_limit,
+    paginate,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -100,6 +108,43 @@ def test_legacy_offset_cursor_falls_back_to_start() -> None:
     assert len(items) == 3  # arity mismatch (bare int, not a list) → start from beginning
 
 
+def test_oversized_nested_json_bomb_cursor_falls_back_to_start() -> None:
+    """The demonstrated exploit — a huge nested-JSON bomb — degrades to the first page.
+
+    base64 of a deeply nested ``[[[…]]]`` array is the reported crash vector: the
+    length guard rejects it *before* any base64 decode or JSON parse, so a hostile
+    caller can't force an expensive expand/parse. Over-length ⇒ treated as "start"
+    like any other malformed cursor, never an unhandled 500.
+    """
+    _seed(2)
+    queryset = AnonymousSession.objects.order_by("id")
+    depth = 60_000
+    bomb = base64.urlsafe_b64encode(b"[" * depth + b"]" * depth).decode()
+    assert len(bomb) > MAX_CURSOR_LEN  # rejected by the length guard, never decoded
+    items, _ = paginate(queryset, cursor=bomb, limit=10)
+    assert len(items) == 2  # tolerated → treated as "start", no 500
+
+
+def test_recursion_error_during_decode_is_caught(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A nested-JSON bomb reaching ``json.loads`` is caught (RecursionError), not a 500.
+
+    ``json.loads`` raises ``RecursionError`` (not ``ValueError``) on a deeply nested
+    array, so that type must be in the decode ``except`` clause. The length guard
+    normally stops such a token first; here the bound is lifted so the bomb reaches
+    ``json.loads`` and exercises the ``except`` clause directly — defence in depth
+    behind the length guard.
+    """
+    _seed(2)
+    monkeypatch.setattr("config.pagination.MAX_CURSOR_LEN", 10_000_000)
+    queryset = AnonymousSession.objects.order_by("id")
+    depth = 60_000
+    bomb = base64.urlsafe_b64encode(b"[" * depth + b"]" * depth).decode()
+    items, _ = paginate(queryset, cursor=bomb, limit=10)
+    assert len(items) == 2  # RecursionError caught → treated as "start", no 500
+
+
 def test_keyset_is_stable_when_rows_are_inserted_between_pages() -> None:
     """Keyset walk never duplicates or skips a row when the list moves mid-walk.
 
@@ -122,3 +167,84 @@ def test_keyset_is_stable_when_rows_are_inserted_between_pages() -> None:
     walked = [s.pk for s in (*page1, *page2)]
     assert walked == [4, 3, 2, 1]  # no duplicate, no skip across the boundary
     assert len(set(walked)) == 4
+
+
+def test_pk_tiebreak_prevents_skip_on_a_non_unique_key() -> None:
+    """A non-unique single sort key never skips a tied row: pk is appended as tiebreak.
+
+    Five rows share one ``nickname``; ordered by that single non-unique key alone, a
+    seek on ``nickname`` would (after page 1) find no ``nickname > v`` row and stop,
+    silently dropping rows 3–5. The auto-appended ``pk`` tiebreak makes the seek a
+    total order, so the walk covers every row exactly once, no skip and no duplicate.
+    """
+    accounts = [Account.objects.create(nickname="dup") for _ in range(5)]
+    queryset = Account.objects.filter(nickname="dup").order_by("nickname")
+    walked: list[int] = []
+    cursor: str | None = None
+    for _ in range(10):  # generous bound; the walk terminates well before this
+        page, cursor = paginate(queryset, cursor=cursor, limit=2)
+        walked.extend(a.pk for a in page)
+        if cursor is None:
+            break
+    assert sorted(walked) == sorted(a.pk for a in accounts)  # all 5, none skipped
+    assert len(walked) == len(set(walked))  # none duplicated
+
+
+def test_datetime_tie_across_a_page_boundary_is_not_skipped() -> None:
+    """A datetime tie straddling a page boundary keeps both rows (pk tiebreak).
+
+    Rows carry ``created_at`` ``[t0, t1, t1, t2]``; paged ascending by ``created_at``
+    at size 2 the boundary lands *inside* the ``t1`` tie. A seek on ``created_at``
+    alone resumes at ``created_at > t1`` and skips the second ``t1`` row; the appended
+    ``pk`` tiebreak resumes at ``(created_at = t1 AND pk > last)`` and keeps it.
+    """
+    sessions = [AnonymousSession.objects.create() for _ in range(4)]
+    base = timezone.now()
+    one, two = base + timedelta(seconds=1), base + timedelta(seconds=2)
+    stamps = [base, one, one, two]  # rows 2 and 3 tie at ``one``
+    for session, stamp in zip(sessions, stamps, strict=True):
+        # ``created_at`` is auto_now_add; a bare UPDATE bypasses it to seat the tie.
+        AnonymousSession.objects.filter(pk=session.pk).update(created_at=stamp)
+    queryset = AnonymousSession.objects.order_by("created_at")
+    page1, cursor1 = paginate(queryset, cursor=None, limit=2)
+    assert cursor1 is not None  # more remains after the tie boundary
+    page2, _ = paginate(queryset, cursor=cursor1, limit=2)
+    walked = [s.pk for s in (*page1, *page2)]
+    assert sorted(walked) == sorted(s.pk for s in sessions)  # the t1 tie stays intact
+    assert len(walked) == 4 and len(set(walked)) == 4  # no skip, no duplicate
+
+
+def test_uuid_sort_key_round_trips_through_the_cursor() -> None:
+    """A ``UUID`` ordering value survives the encode→decode round trip (no dup/skip).
+
+    ``anonymous_id`` is a ``UUIDField``; the cursor encodes it as its canonical string
+    and ``Field.to_python`` rebuilds the ``UUID`` on decode, so the seek compares real
+    UUIDs. Walking the whole list in unit pages visits every row exactly once.
+    """
+    sessions = [AnonymousSession.objects.create() for _ in range(5)]
+    queryset = AnonymousSession.objects.order_by("anonymous_id")
+    walked: list[int] = []
+    cursor: str | None = None
+    for _ in range(10):
+        page, cursor = paginate(queryset, cursor=cursor, limit=1)
+        walked.extend(s.pk for s in page)
+        if cursor is None:
+            break
+    assert sorted(walked) == sorted(s.pk for s in sessions)
+    assert len(walked) == len(set(walked)) == 5
+
+
+def test_nullable_sort_key_drops_cursor_instead_of_500() -> None:
+    """A nullable leading sort key that is ``None`` drops the cursor, never 500s.
+
+    ``_encode`` cannot seat a ``> value`` seek on a ``None`` value, so it returns no
+    cursor: the page degrades to "last page" (the safe fallback for an ordering a seek
+    cannot drive) rather than emitting a ``"None"`` token or raising. ``kyc_verified_at``
+    defaults to ``None`` on a fresh account.
+    """
+    for _ in range(5):
+        Account.objects.create()  # kyc_verified_at defaults to None
+    queryset = Account.objects.order_by("kyc_verified_at")
+    items, next_cursor = paginate(queryset, cursor=None, limit=2)
+    assert len(items) == 2  # a page still returns — no crash
+    assert next_cursor is None  # None sort value → cursor dropped (no 500, no "None" token)

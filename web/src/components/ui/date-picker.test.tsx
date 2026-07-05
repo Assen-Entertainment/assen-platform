@@ -48,6 +48,46 @@ describe("Calendar (ASS-209)", () => {
     expect((onSelect.mock.calls[0][0] as Date).getDate()).toBe(2);
   });
 
+  it("PageDown 은 day-of-month 를 보존한다(7/31 → 8/31, APG 관례)", () => {
+    render(<Calendar value={new Date(2026, 6, 31)} defaultMonth={JULY} />);
+    const grid = screen.getByRole("grid");
+    fireEvent.keyDown(grid, { key: "PageDown" });
+    expect(screen.getByText("2026년 8월")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: /2026년 8월 31일/ })).toHaveFocus();
+  });
+
+  it("PageDown 은 대상 월에 그 날이 없으면 말일로 클램프한다(1/31 → 2/28 비윤년)", () => {
+    render(<Calendar value={new Date(2025, 0, 31)} defaultMonth={new Date(2025, 0, 1)} />);
+    const grid = screen.getByRole("grid");
+    fireEvent.keyDown(grid, { key: "PageDown" });
+    expect(screen.getByText("2025년 2월")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: /2025년 2월 28일/ })).toHaveFocus();
+  });
+
+  it("PageDown 말일 클램프는 윤년 2월 29일을 인식한다(1/31 → 2/29)", () => {
+    render(<Calendar value={new Date(2024, 0, 31)} defaultMonth={new Date(2024, 0, 1)} />);
+    const grid = screen.getByRole("grid");
+    fireEvent.keyDown(grid, { key: "PageDown" });
+    expect(screen.getByText("2024년 2월")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: /2024년 2월 29일/ })).toHaveFocus();
+  });
+
+  it("PageDown 이 max 를 넘으면 max 로 포커스를 클램프한다", () => {
+    render(<Calendar value={new Date(2026, 6, 31)} max={new Date(2026, 7, 10)} defaultMonth={JULY} />);
+    const grid = screen.getByRole("grid");
+    fireEvent.keyDown(grid, { key: "PageDown" }); // 8/31 목표 → max(8/10)로 클램프
+    expect(screen.getByText("2026년 8월")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: /2026년 8월 10일/ })).toHaveFocus();
+  });
+
+  it("PageUp 이 min 보다 이르면 min 으로 포커스를 클램프한다", () => {
+    render(<Calendar value={new Date(2026, 6, 31)} min={new Date(2026, 6, 15)} defaultMonth={JULY} />);
+    const grid = screen.getByRole("grid");
+    fireEvent.keyDown(grid, { key: "PageUp" }); // 6/30 목표 → min(7/15)로 클램프(여전히 7월)
+    expect(screen.getByText("2026년 7월")).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: /2026년 7월 15일/ })).toHaveFocus();
+  });
+
   it("min/max 밖 날짜는 aria-disabled 이고 선택되지 않는다", () => {
     const onSelect = vi.fn();
     render(

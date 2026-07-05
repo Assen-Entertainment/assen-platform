@@ -14,14 +14,32 @@ import { otpFor } from "./helpers/otp";
 const PHONE = "01000000001"; // seed_demo 데모팬(010-0000-0001) — OTP 로그인 결정적.
 const NEWNICK = "스모크수정";
 
-/** 익명 세션 프로브(/fan/me)의 의도된 401, favicon 404는 비-에러 노이즈 — 실패로 치지 않는다. */
-function isRelevantConsoleError(text: string): boolean {
-  return !text.includes("favicon") && !text.includes("status of 401");
+/**
+ * 로그인 전 익명 상태에서 의도적으로 401 이 나는 프로브 URL 화이트리스트.
+ * 이 URL 의 401 만 무시하고, 로그인 이후 다른 URL 의 401 은 진짜 회귀로 실패시킨다.
+ */
+const ANON_401_PROBES = ["/fan/me"];
+
+/**
+ * favicon 404, 그리고 익명 프로브(ANON_401_PROBES)의 의도된 401 만 비-에러 노이즈로 무시한다.
+ * `entry` 는 콘솔 핸들러가 만든 "메시지 @ URL" 형태 — 401 은 실패 리소스 URL 로 화이트리스트를 판정한다
+ * (모든 401 을 뭉뚱그려 삼키면 로그인 후 인증 회귀를 놓치므로 URL 로 좁힌다).
+ */
+function isRelevantConsoleError(entry: string): boolean {
+  if (entry.includes("favicon")) return false;
+  if (entry.includes("status of 401")) return !ANON_401_PROBES.some((u) => entry.includes(u));
+  return true;
 }
 
 test("팬 저니 — 로그인부터 로그아웃까지(14스텝)", async ({ page }) => {
   const consoleErrors: string[] = [];
-  page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
+  // 리소스 401 등 네트워크 실패는 실패 URL 이 m.location().url 에 담긴다 → "메시지 @ URL" 로 보존해
+  // isRelevantConsoleError 가 익명 프로브 화이트리스트를 URL 로 판정할 수 있게 한다.
+  page.on("console", (m) => {
+    if (m.type() !== "error") return;
+    const url = m.location().url;
+    consoleErrors.push(url ? `${m.text()} @ ${url}` : m.text());
+  });
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
 
   // 1. OTP 로그인 -----------------------------------------------------------
@@ -186,8 +204,14 @@ test("팬 저니 — 로그인부터 로그아웃까지(14스텝)", async ({ pag
   // 8. 로그아웃 → 세션 소거.
   await test.step("로그아웃", async () => {
     await page.goto("/settings", { waitUntil: "networkidle" });
+    // 하드 sleep 대신 로그아웃 POST(서버 쿠키 소거) 완료를 조건 대기 — 그래야 이후 /mypage 재조회가
+    // 확정적으로 미인증(쿠키 없음)이 된다. 응답 대기 등록 후 클릭해 경합을 없앤다.
+    const logoutDone = page.waitForResponse(
+      (r) => r.url().includes("/fan/logout") && r.request().method() === "POST",
+      { timeout: 15_000 },
+    );
     await page.getByText("로그아웃").first().click();
-    await page.waitForTimeout(1_500);
+    await logoutDone;
     await page.goto("/mypage", { waitUntil: "networkidle" });
     await expect(page.getByText(NEWNICK)).toHaveCount(0);
   });

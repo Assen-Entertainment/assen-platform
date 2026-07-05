@@ -47,10 +47,17 @@ const nextConfig = {
   // USE_API=true 런타임 경로는 이 값을 절대 참조하지 않으므로(if(USE_API) 분기가 먼저 반환) 무해하다.
   webpack(config, { webpack }) {
     if (process.env.NEXT_PUBLIC_API_URL) {
+      // 치환 대상 계약: mock 실데이터 모듈(src/lib/api/mock/data.ts)의 import 스펙만 매칭한다.
+      // 현재 유일 소비처 index.ts는 상대경로 `./mock/data`를 쓰지만, alias `@/lib/api/mock/data`
+      // 임포트가 추가돼도 치환을 놓치지 않도록(→ 라이브 번들 mock 잔존) 두 형태를 모두 커버한다.
+      // `$` 앵커로 data.stub/data.test 는 매칭하지 않는다.
       config.plugins.push(
-        new webpack.NormalModuleReplacementPlugin(/^\.\/mock\/data$/, (resource) => {
-          resource.request = path.resolve(__dirname, "src/lib/api/mock/data.stub.ts");
-        }),
+        new webpack.NormalModuleReplacementPlugin(
+          /^(?:\.\/mock\/data|@\/lib\/api\/mock\/data)$/,
+          (resource) => {
+            resource.request = path.resolve(__dirname, "src/lib/api/mock/data.stub.ts");
+          },
+        ),
       );
     }
     return config;

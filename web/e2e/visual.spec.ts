@@ -37,7 +37,8 @@ const PUBLIC_SCREENS = [
  *    (index.ts relativeTime — 방금/N분·시간·일 전).
  */
 function dynamicMasks(page: Page): Locator[] {
-  return [page.locator("time"), page.getByText(/방금|\d+분 전|\d+시간 전|\d+일 전/)];
+  // 주/개월 형태도 포함 — 오래된 시드 DB 로 재실행하면 "3일 전"이 "N주 전"·"N개월 전"으로 드리프트한다.
+  return [page.locator("time"), page.getByText(/방금|\d+분 전|\d+시간 전|\d+일 전|\d+주 전|\d+개월 전/)];
 }
 
 async function loginAsCreator(page: Page): Promise<void> {
