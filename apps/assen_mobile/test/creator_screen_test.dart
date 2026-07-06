@@ -69,6 +69,7 @@ void main() {
     expect(creator.followers, 1284);
     expect(creator.posts, 37);
     expect(creator.following, isTrue);
+    expect(creator.blocked, isFalse); // defaults false for a non-blocked row
     // Empty descriptors degrade to null.
     expect(creator.avatarUrl, isNull);
     expect(creator.coverUrl, isNull);
@@ -94,6 +95,22 @@ void main() {
     expect(find.text('1,284'), findsOneWidget); // grouped follower count
     expect(find.text('팔로워'), findsOneWidget);
     expect(find.byIcon(Icons.verified), findsOneWidget); // verified badge
+  });
+
+  testWidgets('a blocked creator shows the blocked state, not the profile', (
+    tester,
+  ) async {
+    // The server returns the row (not a 404) with blocked=true when the caller
+    // has personally blocked the creator; the screen must hide the profile.
+    final creator = Creator.fromJson({..._profileRow(), 'blocked': true});
+    await tester.pumpWidget(_host(creator));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('차단한 크리에이터예요'), findsOneWidget);
+    // Profile content is hidden.
+    expect(find.text('버추얼 크리에이터입니다.'), findsNothing);
+    expect(find.text('팔로워'), findsNothing);
   });
 
   testWidgets('a 404 shows the unknown-creator state', (tester) async {

@@ -2,13 +2,47 @@
 // server shape, a 401 (NotificationsAuthRequiredException) shows the login
 // empty state, and an authenticated feed renders its rows. No network.
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:assen_mobile/src/notifications/app_notification.dart';
 import 'package:assen_mobile/src/notifications/notifications_repository.dart';
 import 'package:assen_mobile/src/notifications/notifications_screen.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ui_kit/ui_kit.dart';
+
+/// A [Dio] adapter that answers every request with a fixed JSON [payload], so
+/// the real repository's parse path runs in-process without a socket.
+class _EnvelopeAdapter implements HttpClientAdapter {
+  _EnvelopeAdapter(this.payload);
+
+  final Map<String, dynamic> payload;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      jsonEncode(payload),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+Dio _dioReturning(Map<String, dynamic> payload) =>
+    Dio(BaseOptions(baseUrl: 'http://localhost:8000'))
+      ..httpClientAdapter = _EnvelopeAdapter(payload);
 
 /// A repository stand-in returning a fixed feed or the auth-required error.
 class _FakeNotificationsRepository implements NotificationsRepository {
@@ -66,6 +100,26 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
   });
+
+  test('fetchNotifications throws when the items array is missing', () async {
+    // A missing `items` key is a NotificationPage contract violation (field
+    // drift), so the repository throws rather than showing an empty feed.
+    final repo = NotificationsRepository(_dioReturning({'next_cursor': null}));
+    await expectLater(
+      repo.fetchNotifications(),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test(
+    'fetchNotifications reads an empty items array as an empty feed',
+    () async {
+      final repo = NotificationsRepository(
+        _dioReturning({'items': <dynamic>[]}),
+      );
+      expect(await repo.fetchNotifications(), isEmpty);
+    },
+  );
 
   testWidgets('a 401 shows the login-required empty state', (tester) async {
     await tester.pumpWidget(_host(_FakeNotificationsRepository.authRequired()));

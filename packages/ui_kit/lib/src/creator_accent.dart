@@ -22,6 +22,10 @@ const double _aaUi = 3;
 /// - [onAccentContainer]: the base darkened/lightened to clear AA text contrast
 ///   on [accentContainer].
 ///
+/// This is a four-field set: the web `creator-accent.ts` also derives a fifth
+/// `accentHover` for its CSS hover state, which this port omits (mobile has no
+/// hover surface).
+///
 /// Apply it to creator-scoped chrome only (profile cover, follow CTA, verified
 /// tint); global app chrome keeps the brand rose. An absent or unparseable base
 /// falls back to a caller-supplied brand colour, so a bad `accent_color` never

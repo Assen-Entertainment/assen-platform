@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/api/api_providers.dart';
+import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/notifications/app_notification.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,13 +36,19 @@ class NotificationsRepository {
   /// a follow-up). A 401 is translated into a
   /// [NotificationsAuthRequiredException] so the screen shows the
   /// login-required state; other transport errors propagate to the error state.
+  ///
+  /// The envelope is parsed strictly: the `items` array must be present (an
+  /// empty array is the empty feed), but a *missing* key is a contract
+  /// violation and throws (an [ArgumentError] via [requireList]) rather than
+  /// silently showing an empty feed. The discovery repository stays lenient
+  /// (R7); only the newer search/notifications envelopes are strict.
   Future<List<AppNotification>> fetchNotifications() async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/notifications',
       );
       final body = response.data ?? const <String, dynamic>{};
-      final items = body['items'] as List<dynamic>? ?? const <dynamic>[];
+      final items = requireList(body, 'items');
       return items
           .map((item) => AppNotification.fromJson(item as Map<String, dynamic>))
           .toList();

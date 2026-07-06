@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/creator/creator_controller.dart';
 import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
@@ -17,7 +18,9 @@ import 'package:ui_kit/ui_kit.dart';
 /// 404 ([CreatorNotFoundException]) and [AssenErrorState] (with retry) on any
 /// other failure. On success it paints the [AssenCoverHeader] (cover wash
 /// tinted by the creator's parsed [CreatorAccent]), the follower/post
-/// [AssenStatRow], and the bio.
+/// [AssenStatRow], and the bio — unless the caller has personally blocked the
+/// creator ([Creator.blocked]), in which case a 차단 empty state replaces the
+/// profile content (unblocking is a social/settings gate, not built here yet).
 class CreatorScreen extends ConsumerWidget {
   /// Creates the profile screen for the creator identified by [handle].
   const CreatorScreen({required this.handle, super.key});
@@ -51,7 +54,12 @@ class CreatorScreen extends ConsumerWidget {
                     .read(creatorControllerProvider(handle).notifier)
                     .refresh(),
               ),
-        data: (creator) => _CreatorProfile(creator: creator),
+        data: (creator) => creator.blocked
+            ? const AssenEmptyState(
+                title: '차단한 크리에이터예요',
+                message: '내가 차단한 크리에이터라 프로필을 표시하지 않아요.',
+              )
+            : _CreatorProfile(creator: creator),
       ),
     );
   }
@@ -100,8 +108,11 @@ class _CreatorProfile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: SpacingTokens.s4),
           child: AssenStatRow(
             stats: [
-              AssenStat(value: _formatCount(creator.followers), label: '팔로워'),
-              AssenStat(value: _formatCount(creator.posts), label: '게시물'),
+              AssenStat(
+                value: formatThousands(creator.followers),
+                label: '팔로워',
+              ),
+              AssenStat(value: formatThousands(creator.posts), label: '게시물'),
             ],
           ),
         ),
@@ -121,17 +132,6 @@ class _CreatorProfile extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  /// Formats a count with thousands separators (e.g. `1,284`).
-  static String _formatCount(int value) {
-    final digits = value.toString();
-    final buffer = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
-      buffer.write(digits[i]);
-    }
-    return buffer.toString();
   }
 }
 

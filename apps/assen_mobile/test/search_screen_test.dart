@@ -4,6 +4,7 @@
 
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/search/product.dart';
+import 'package:assen_mobile/src/search/search_controller.dart';
 import 'package:assen_mobile/src/search/search_repository.dart';
 import 'package:assen_mobile/src/search/search_result.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
@@ -21,6 +22,30 @@ class _FakeSearchRepository implements SearchRepository {
   @override
   Future<SearchResult> search(String query) async => _result;
 }
+
+/// A repository that resolves each query after a per-term delay, so a test can
+/// force a slow stale request to complete after a fast newer one.
+class _DelayedSearchRepository implements SearchRepository {
+  _DelayedSearchRepository(this._results, this._delays);
+
+  final Map<String, SearchResult> _results;
+  final Map<String, Duration> _delays;
+
+  @override
+  Future<SearchResult> search(String query) async {
+    await Future<void>.delayed(_delays[query] ?? Duration.zero);
+    return _results[query] ?? const SearchResult.empty();
+  }
+}
+
+/// A single-creator result whose sole creator carries [handle], used to tell
+/// which query's result won the race.
+SearchResult _creatorResult(String handle) => SearchResult(
+  creators: [
+    Creator.fromJson({'id': handle, 'handle': handle, 'name': handle}),
+  ],
+  products: const [],
+);
 
 Widget _host(SearchResult result) => ProviderScope(
   overrides: [
@@ -81,6 +106,48 @@ void main() {
 
   test('SearchResult.empty is empty', () {
     expect(const SearchResult.empty().isEmpty, isTrue);
+  });
+
+  test('SearchResult.fromJson throws when an envelope array is missing', () {
+    // A backend field-name drift (here: no `creators` key) is a contract
+    // violation, not a silently-empty result.
+    expect(
+      () => SearchResult.fromJson(const {'products': <dynamic>[]}),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('a late stale query does not overwrite a newer result', () async {
+    // `mi` resolves slowly and `mio` quickly: `mi` was requested first but
+    // completes last, yet the newer `mio` result must win (no stale overwrite).
+    final container = ProviderContainer(
+      overrides: [
+        searchRepositoryProvider.overrideWithValue(
+          _DelayedSearchRepository(
+            {
+              'mi': _creatorResult('mi_stale'),
+              'mio': _creatorResult('mio_new'),
+            },
+            {
+              'mi': const Duration(milliseconds: 60),
+              'mio': const Duration(milliseconds: 10),
+            },
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // Settle the initial (empty) build, then fire the two overlapping searches.
+    await container.read(searchControllerProvider.future);
+    final controller = container.read(searchControllerProvider.notifier);
+    final slow = controller.search('mi');
+    final fast = controller.search('mio');
+    await Future.wait([slow, fast]);
+
+    final result = container.read(searchControllerProvider).value;
+    expect(result, isNotNull);
+    expect(result!.creators.single.handle, 'mio_new');
   });
 
   testWidgets('shows guidance for an empty query', (tester) async {

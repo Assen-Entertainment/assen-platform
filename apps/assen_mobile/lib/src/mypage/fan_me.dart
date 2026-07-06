@@ -1,3 +1,4 @@
+import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:flutter/foundation.dart';
 
 /// The authenticated fan's identity summary shown on the 마이 tab.
@@ -42,15 +43,12 @@ class FanMe {
       id: rawId.toString(),
       nickname: nickname,
       role: role,
-      handle: _nonEmpty(json['handle'] as String?),
-      avatarUrl: _nonEmpty(json['avatar_url'] as String?),
+      handle: nonEmpty(json['handle'] as String?),
+      avatarUrl: nonEmpty(json['avatar_url'] as String?),
       adultVerified: json['adult_verified'] as bool? ?? false,
       kycStatus: json['kyc_status'] as String? ?? 'unverified',
     );
   }
-
-  static String? _nonEmpty(String? value) =>
-      (value != null && value.isNotEmpty) ? value : null;
 
   /// The account's stable fan id (server `id`).
   final String id;

@@ -1,3 +1,4 @@
+import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:flutter/foundation.dart';
 
 /// A creator surfaced on the discovery feed, in search, and on the profile
@@ -30,6 +31,7 @@ class Creator {
     this.followers = 0,
     this.posts = 0,
     this.following = false,
+    this.blocked = false,
   });
 
   /// Builds a [Creator] from a backend `CreatorOut` JSON object.
@@ -41,8 +43,9 @@ class Creator {
   /// numeric PK is accepted. The optional descriptors degrade gracefully:
   /// [displayName] falls back to [handle] when `name` is absent/empty, and
   /// [category]/[avatarUrl]/[bio]/[coverUrl]/[accentColor] become null when the
-  /// server sends an empty string. [verified]/[following] default to false and
-  /// [followers]/[posts] to 0 when absent or the wrong type.
+  /// server sends an empty string. [verified]/[following]/[blocked] default to
+  /// false when absent, and [followers]/[posts] to 0 when absent or the wrong
+  /// type.
   factory Creator.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
     final handle = json['handle'] as String?;
@@ -58,35 +61,18 @@ class Creator {
       id: rawId.toString(),
       handle: handle,
       displayName: (name != null && name.isNotEmpty) ? name : handle,
-      category: _nonEmpty(json['category'] as String?),
-      avatarUrl: _nonEmpty(json['avatar_url'] as String?),
-      bio: _nonEmpty(json['bio'] as String?),
-      coverUrl: _nonEmpty(json['cover_url'] as String?),
-      accentColor: _nonEmpty(json['accent_color'] as String?),
+      category: nonEmpty(json['category'] as String?),
+      avatarUrl: nonEmpty(json['avatar_url'] as String?),
+      bio: nonEmpty(json['bio'] as String?),
+      coverUrl: nonEmpty(json['cover_url'] as String?),
+      accentColor: nonEmpty(json['accent_color'] as String?),
       verified: json['verified'] as bool? ?? false,
-      followers: _asInt(json['followers']),
-      posts: _asInt(json['posts']),
+      followers: asInt(json['followers']),
+      posts: asInt(json['posts']),
       following: json['following'] as bool? ?? false,
+      blocked: json['blocked'] as bool? ?? false,
     );
   }
-
-  /// Returns [value] when it is a non-empty string, otherwise null.
-  ///
-  /// The server sends `""` (not omission) for an unset descriptor; an empty
-  /// avatar URL or category should read as absent — an initials fallback and no
-  /// subtitle — rather than a broken image or a dangling separator.
-  static String? _nonEmpty(String? value) =>
-      (value != null && value.isNotEmpty) ? value : null;
-
-  /// Coerces a count field to a non-negative int, defaulting to 0.
-  ///
-  /// Accepts the server's `int` and degrades a missing/`null`/wrong-typed value
-  /// to 0 so a stat never renders as a crash or a stray "null".
-  static int _asInt(Object? value) => switch (value) {
-    final int v => v,
-    final num v => v.toInt(),
-    _ => 0,
-  };
 
   /// Stable server identifier (a string UUID in the current contract).
   final String id;
@@ -128,4 +114,13 @@ class Creator {
   /// Whether the authenticated caller follows this creator (server `following`;
   /// always false for anonymous reads).
   final bool following;
+
+  /// Whether the authenticated caller has personally blocked this creator
+  /// (server `blocked`; always false for anonymous reads).
+  ///
+  /// Discovery and search already exclude blocked creators, so this is only
+  /// meaningful on an explicit profile navigation (`GET /api/creators/{handle}`
+  /// returns the row instead of a 404); the profile screen renders a blocked
+  /// state rather than the creator's content when it is true.
+  final bool blocked;
 }

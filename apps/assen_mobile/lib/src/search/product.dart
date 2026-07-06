@@ -1,3 +1,4 @@
+import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:flutter/foundation.dart';
 
 /// A product surfaced in search results.
@@ -22,8 +23,8 @@ class Product {
   /// The contract requires [id] and [title]; a payload missing either violates
   /// the server contract and throws. [id] is read through `toString()` so a
   /// string UUID or a numeric PK both parse. [type] degrades to an empty string
-  /// (no tag) and [price] to 0 when absent/wrong-typed; [meta] becomes null
-  /// when the server sends an empty string.
+  /// (no tag) when absent and [price] to 0 when absent/wrong-typed; [meta]
+  /// becomes null when the server sends an empty string.
   factory Product.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
     final title = json['title'] as String?;
@@ -38,19 +39,10 @@ class Product {
       id: rawId.toString(),
       type: json['type'] as String? ?? '',
       title: title,
-      price: _asInt(json['price']),
-      meta: _nonEmpty(json['meta'] as String?),
+      price: asInt(json['price']),
+      meta: nonEmpty(json['meta'] as String?),
     );
   }
-
-  static String? _nonEmpty(String? value) =>
-      (value != null && value.isNotEmpty) ? value : null;
-
-  static int _asInt(Object? value) => switch (value) {
-    final int v => v,
-    final num v => v.toInt(),
-    _ => 0,
-  };
 
   /// Stable server identifier (a string UUID in the current contract).
   final String id;
@@ -85,15 +77,5 @@ class Product {
   ///
   /// A local formatter (the app has no `intl` dependency) so a price always
   /// renders grouped rather than as a bare run of digits.
-  String get priceLabel => '₩${_grouped(price)}';
-
-  static String _grouped(int value) {
-    final digits = value.abs().toString();
-    final buffer = StringBuffer(value < 0 ? '-' : '');
-    for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
-      buffer.write(digits[i]);
-    }
-    return buffer.toString();
-  }
+  String get priceLabel => '₩${formatThousands(price)}';
 }

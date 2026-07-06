@@ -10,6 +10,11 @@ import 'package:ui_kit/src/atoms/badges.dart';
 /// line, and a [priceLabel]. Domain-agnostic — the host formats the price and
 /// picks the tag; every colour/spacing/radius is a token. [onTap] makes the
 /// whole card tappable.
+///
+/// Partial parity: this is a browse-only card. Unlike the web `MonetizableItem`
+/// it has no type-derived action CTA (web maps `type` → 구매/예약/받기/구독) and no
+/// creator slot under the title; [onTap] navigates to the item, and there is no
+/// inline purchase/reserve/subscribe action here yet.
 class AssenProductCard extends StatelessWidget {
   /// Creates a product card titled [title] priced [priceLabel].
   ///

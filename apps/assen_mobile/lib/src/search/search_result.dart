@@ -1,3 +1,4 @@
+import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/search/product.dart';
 import 'package:flutter/foundation.dart';
@@ -18,11 +19,15 @@ class SearchResult {
 
   /// Builds a [SearchResult] from a backend `SearchOut` JSON object.
   ///
-  /// A missing `creators`/`products` array is treated as an empty list rather
-  /// than an error, so a partial payload still renders whichever side arrived.
+  /// The envelope contract requires both the `creators` and `products` arrays:
+  /// an empty array is the no-results state, but a *missing* key is a contract
+  /// violation and throws (an [ArgumentError] via [requireList]) so a backend
+  /// field-name drift surfaces as a load error rather than a silently
+  /// half-empty result. (The discovery repository stays deliberately lenient —
+  /// R7 — so only the newer search/notifications envelopes are strict here.)
   factory SearchResult.fromJson(Map<String, dynamic> json) {
-    final creators = json['creators'] as List<dynamic>? ?? const <dynamic>[];
-    final products = json['products'] as List<dynamic>? ?? const <dynamic>[];
+    final creators = requireList(json, 'creators');
+    final products = requireList(json, 'products');
     return SearchResult(
       creators: creators
           .map((item) => Creator.fromJson(item as Map<String, dynamic>))
