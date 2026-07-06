@@ -5,9 +5,11 @@ import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/icon_button.dart';
 import 'package:ui_kit/src/organisms/app_bar.dart';
 import 'package:ui_kit/src/organisms/bottom_cta.dart';
+import 'package:ui_kit/src/organisms/cover_header.dart';
 import 'package:ui_kit/src/organisms/empty_state.dart';
 import 'package:ui_kit/src/organisms/error_state.dart';
 import 'package:ui_kit/src/organisms/membership_card.dart';
+import 'package:ui_kit/src/organisms/product_card.dart';
 
 /// A single-screen gallery of every Organism for visual review.
 ///
@@ -122,6 +124,30 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
                   onSecondary: () {},
                 ),
               ],
+            ),
+          ),
+          _Section(
+            title: 'CoverHeader (프로필 커버 + 아바타)',
+            child: AssenCoverHeader(
+              title: '미오',
+              subtitle: '@mio · 버추얼',
+              accent: colors.lavenderBg,
+              avatar: const AssenAvatar(
+                name: '미오',
+                size: AssenAvatarSize.l,
+                hue: AssenBadgeHue.lavender,
+              ),
+              badge: Icon(Icons.verified, color: colors.skyInk, size: 20),
+            ),
+          ),
+          _Section(
+            title: 'ProductCard (수익 아이템)',
+            child: AssenProductCard(
+              title: '한정 아크릴 스탠드',
+              priceLabel: '₩18,000',
+              tagLabel: '굿즈',
+              meta: '선착순 100개',
+              onTap: () {},
             ),
           ),
         ],

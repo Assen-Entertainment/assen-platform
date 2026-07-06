@@ -12,6 +12,7 @@ import 'package:ui_kit/src/molecules/search_field.dart';
 import 'package:ui_kit/src/molecules/section_header.dart';
 import 'package:ui_kit/src/molecules/segmented_tabs.dart';
 import 'package:ui_kit/src/molecules/stat_card.dart';
+import 'package:ui_kit/src/molecules/stat_row.dart';
 import 'package:ui_kit/src/molecules/step_indicator.dart';
 import 'package:ui_kit/src/molecules/stepper.dart';
 import 'package:ui_kit/src/molecules/text_field.dart';
@@ -155,6 +156,15 @@ class _MoleculeCatalogState extends State<MoleculeCatalog> {
               title: '획득한 체키',
               actionLabel: '전체보기',
               onAction: () {},
+            ),
+          ),
+          const _Section(
+            title: 'StatRow (프로필 지표)',
+            child: AssenStatRow(
+              stats: [
+                AssenStat(value: '1,284', label: '팔로워'),
+                AssenStat(value: '37', label: '게시물'),
+              ],
             ),
           ),
           const _Section(

@@ -6,6 +6,7 @@
 import 'package:assen_mobile/src/app/app.dart';
 import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
+import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,14 @@ import 'package:flutter_test/flutter_test.dart';
 class _EmptyDiscoveryRepository implements DiscoveryRepository {
   @override
   Future<List<Creator>> fetchCreators() async => const [];
+}
+
+/// A creator repository stand-in returning a minimal profile without a network,
+/// so the deep-link test can open the profile route without a real fetch.
+class _FakeCreatorRepository implements CreatorRepository {
+  @override
+  Future<Creator> fetchCreator(String handle) async =>
+      Creator(id: '1', handle: handle, displayName: handle);
 }
 
 /// An [AuthController] reporting a signed-in session, so the guard's
@@ -31,6 +40,7 @@ ProviderContainer _container({bool authenticated = false}) {
       discoveryRepositoryProvider.overrideWithValue(
         _EmptyDiscoveryRepository(),
       ),
+      creatorRepositoryProvider.overrideWithValue(_FakeCreatorRepository()),
       if (authenticated)
         authControllerProvider.overrideWith(_AuthedController.new),
     ],
@@ -90,7 +100,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // CreatorScreen titles itself with the handle from the path parameter.
-    expect(find.text('@hoshino'), findsOneWidget);
+    // The profile opened for the path handle: '@hoshino' appears in the app-bar
+    // title and again in the header subtitle, so at least one is present.
+    expect(find.text('@hoshino'), findsWidgets);
   });
 }
