@@ -1,0 +1,3 @@
+# Inherits the workspace ruleset (very_good_analysis + strict typing), the same
+# as every other workspace member, so the app is held to the same lint bar.
+include: ../../analysis_options.yaml

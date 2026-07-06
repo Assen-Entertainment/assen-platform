@@ -6,8 +6,9 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
-  # The heavier app build-smoke steps (assen_mobile web/android) run on demand
-  # or on the weekly schedule below, not per-PR.
+  # The assen_mobile web build-smoke runs on every PR/push (catches packaging
+  # breaks that analyze/test miss); the heavier android apk build-smoke runs on
+  # demand or on the weekly schedule below.
   workflow_dispatch:
   schedule:
     # Weekly, Mondays 03:00 UTC — drives the on-demand app build-smoke steps.
@@ -66,11 +67,13 @@ jobs:
         run: dart run melos run analyze --no-select
       - name: Test
         run: dart run melos run test --no-select
-      # 메이드 앱(fan_app/operator_app)은 플랫폼 피벗에서 제거됨(B9/M10). 신방향
-      # 앱 apps/assen_mobile의 빌드 스모크는 앱 스캐폴딩(M3) 완료 후 추가한다.
-      # 재사용 패키지(core_tokens·ui_kit·api_client)는 위 analyze/test가 계속 게이트.
+      # 메이드 앱(fan_app/operator_app)은 플랫폼 피벗에서 제거됨(B9/M10). 신방향 앱
+      # apps/assen_mobile의 웹 빌드 스모크는 매 PR/push에서 실행해 analyze/test는
+      # green인데 패키징(웹 번들)이 깨지는 갭을 차단한다. android apk 빌드는 비용상
+      # 수동 dispatch/주간 schedule에서만 실행한다. 재사용 패키지(core_tokens·
+      # ui_kit·api_client)는 위 analyze/test가 계속 게이트한다.
       - name: Web build smoke (assen_mobile)
-        if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
+        if: ${{ hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
         working-directory: apps/assen_mobile
         run: flutter build web --no-pub
       - name: Android build smoke (assen_mobile, debug)

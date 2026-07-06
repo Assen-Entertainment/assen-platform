@@ -48,8 +48,14 @@ API flow stays self-contained.
 server, so they have their own config (`playwright.web.config.ts`). Bring up the
 shell first, then run the web suite:
 
+> ⚠️ The `fan-*.web.spec.ts` specs (and the `fan_app` widget tests they cite)
+> were written against the archived fan_app web shell, removed in the M10 pivot.
+> The shell now serves `apps/assen_mobile` at `/app/`, so these specs need
+> re-derivation before they pass again — treat the descriptions below as
+> historical until then.
+
 ```sh
-# 1. Build + serve the composed shell (landing + fan_app /app + operator /ops).
+# 1. Build + serve the composed shell (landing at / + assen_mobile at /app/).
 scripts/build-web-local.sh
 WEB_PORT=8080 scripts/serve-web-local.sh &   # background
 

@@ -21,7 +21,9 @@ environment:
 # contract packages below survive and are the foundation the new-direction app
 # (apps/assen_mobile) builds on.
 workspace:
-  # apps/assen_mobile — added when the new-direction app is scaffolded (M3).
+  # The new-direction app (M3, Linear ASS-244/E12) — scaffolded on top of the
+  # reusable design-system and contract packages below.
+  - apps/assen_mobile
   - packages/core_tokens
   - packages/ui_kit
   - packages/api_client

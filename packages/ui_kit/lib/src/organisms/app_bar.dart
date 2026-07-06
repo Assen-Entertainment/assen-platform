@@ -82,7 +82,7 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
 ///
 /// The [icon]/[activeIcon] pair lets the active tab swap to a filled glyph
 /// (a common Korean B2C convention for the home indicator). [badgeCount]
-/// overlays an [AssenCountBadge] for unread markers (e.g. 체키, 알림).
+/// overlays an [AssenCountBadge] for unread markers (e.g. notifications).
 class AssenTabItem {
   /// Creates a tab destination.
   const AssenTabItem({
@@ -105,18 +105,18 @@ class AssenTabItem {
   final int badgeCount;
 }
 
-/// The bottom navigation bar (`TabBar(Bottom) — 5탭, active 표시`).
+/// The bottom navigation bar (`TabBar(Bottom) — active 표시`).
 ///
-/// Covers the Navigation/TabBar row of `components.md` and the fan app's five
-/// destinations (홈/출근표/예약/체키/마이 — screens.md). The active tab is shown
+/// Covers the Navigation/TabBar row of `components.md`. A domain-neutral bottom
+/// nav: the host app supplies its own destinations. The active tab is shown
 /// with the rose action colour and a filled glyph; inactive tabs use the
 /// secondary ink. It wraps Material [BottomNavigationBar] so every tab keeps a
-/// 44pt+ target and reads its colours from the tokens. Badges (e.g. unread 체키)
-/// ride on top via [AssenCountBadge].
+/// 44pt+ target and reads its colours from the tokens. Unread badges ride on
+/// top via [AssenCountBadge].
 class AssenTabBar extends StatelessWidget {
   /// Creates the bottom tab bar.
   ///
-  /// [items] are the destinations (the fan app uses five). [currentIndex] is
+  /// [items] are the destinations supplied by the host app. [currentIndex] is
   /// the selected tab; [onChanged] reports taps. Asserts two+ destinations.
   const AssenTabBar({
     required this.items,
@@ -125,7 +125,7 @@ class AssenTabBar extends StatelessWidget {
     super.key,
   }) : assert(items.length >= 2, 'A tab bar needs at least two destinations');
 
-  /// The tab destinations (홈/출근표/예약/체키/마이 in the fan app).
+  /// The tab destinations supplied by the host app.
   final List<AssenTabItem> items;
 
   /// The currently selected tab index.

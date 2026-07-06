@@ -1,0 +1,45 @@
+name: assen_mobile
+description: >-
+  Assen Platform mobile app (the new-direction fan app, Linear ASS-244/E12).
+  Built on the reusable core_tokens/ui_kit/api_client packages. M1 theme, M3
+  app shell (go_router + 4-tab bottom nav), and M4 api_client wiring land here;
+  the full 13-screen surface (M5) and gate features (social login, secure token
+  storage, payments — E6) are out of scope and marked with TODOs.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+# Resolve against the single workspace lockfile (CONSTRAINTS #17). The path deps
+# below still name the local packages so the app builds outside the workspace
+# too (same pattern as ui_kit -> core_tokens).
+resolution: workspace
+
+dependencies:
+  # Reusable contract + design-system packages. The app themes and calls the
+  # backend only through these (no hard-coded colours, no ad-hoc HTTP models).
+  api_client:
+    path: ../../packages/api_client
+  core_tokens:
+    path: ../../packages/core_tokens
+  cupertino_icons: ^1.0.8
+  # HTTP client with interceptors. The api_client generated layer is P6; the
+  # home screen wires a real Dio call against ApiClientConfig for now.
+  dio: ^5.7.0
+  flutter:
+    sdk: flutter
+  # State management: Riverpod 3.x only (AGENTS.md / CONSTRAINTS #34/#40).
+  flutter_riverpod: ^3.0.0
+  # Routing: go_router 16.x (declarative routes, deep links, auth-guard redirect).
+  go_router: ^16.0.0
+  ui_kit:
+    path: ../../packages/ui_kit
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
