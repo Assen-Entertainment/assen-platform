@@ -14,14 +14,17 @@ environment:
   sdk: ^3.12.1
 
 # Workspace members. Order is irrelevant; pub builds the dependency graph.
+#
+# The 메이드-era apps (fan_app/operator_app) and their domain feature packages
+# (features/operator_features) were removed in the platform pivot (Linear B9/M10,
+# ASS-243/254) — git history is their archive. The reusable design-system and
+# contract packages below survive and are the foundation the new-direction app
+# (apps/assen_mobile) builds on.
 workspace:
-  - apps/fan_app
-  - apps/operator_app
+  # apps/assen_mobile — added when the new-direction app is scaffolded (M3).
   - packages/core_tokens
   - packages/ui_kit
   - packages/api_client
-  - packages/features
-  - packages/operator_features
   - packages/test_fixtures
 
 # Shared dev tooling resolved once for the whole workspace.

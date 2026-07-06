@@ -6,10 +6,11 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
-  # ios-smoke is also reachable on demand / on a weekly schedule (see below).
+  # The heavier app build-smoke steps (assen_mobile web/android) run on demand
+  # or on the weekly schedule below, not per-PR.
   workflow_dispatch:
   schedule:
-    # Weekly, Mondays 03:00 UTC — drives the macOS ios-smoke job only.
+    # Weekly, Mondays 03:00 UTC — drives the on-demand app build-smoke steps.
     - cron: "0 3 * * 1"
 
 # Cancel superseded runs on the same ref to save minutes.
@@ -65,39 +66,17 @@ jobs:
         run: dart run melos run analyze --no-select
       - name: Test
         run: dart run melos run test --no-select
-      # 레거시 메이드 앱(fan_app/operator_app)은 M10 아카이브 예정 — 상시 PR
-      # 게이트에서 제외하고 iOS smoke처럼 수동/주간으로만 빌드한다(SDLC 11 §7).
+      # 메이드 앱(fan_app/operator_app)은 플랫폼 피벗에서 제거됨(B9/M10). 신방향
+      # 앱 apps/assen_mobile의 빌드 스모크는 앱 스캐폴딩(M3) 완료 후 추가한다.
       # 재사용 패키지(core_tokens·ui_kit·api_client)는 위 analyze/test가 계속 게이트.
-      - name: Web build smoke (fan_app)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        working-directory: apps/fan_app
+      - name: Web build smoke (assen_mobile)
+        if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
+        working-directory: apps/assen_mobile
         run: flutter build web --no-pub
-      - name: Web build smoke (operator_app)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        working-directory: apps/operator_app
-        run: flutter build web --no-pub
-      - name: Android build smoke (fan_app, debug)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        working-directory: apps/fan_app
+      - name: Android build smoke (assen_mobile, debug)
+        if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
+        working-directory: apps/assen_mobile
         run: flutter build apk --debug --no-pub
-
-  ios-smoke:
-    name: iOS build smoke (fan_app)
-    # macOS minutes bill at ~10x, so this is intentionally NOT run per-PR.
-    # It runs only on manual dispatch or the weekly schedule above.
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Bootstrap workspace
-        run: dart pub get
-      - name: iOS build smoke (fan_app, no codesign)
-        working-directory: apps/fan_app
-        run: flutter build ios --debug --no-codesign --no-pub
 
   compose:
     name: docker compose validate + boot smoke
