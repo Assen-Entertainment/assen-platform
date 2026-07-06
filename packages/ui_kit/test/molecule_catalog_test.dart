@@ -21,13 +21,13 @@ void main() {
     expect(find.text('Molecules'), findsOneWidget);
     expect(find.textContaining('TextField'), findsWidgets);
 
-    // Scroll the outer ListView so the lazily-built domain/motif sections
-    // (tickets, cheki, stat cards) also mount and paint at least once.
+    // Scroll the outer ListView so the lazily-built lower sections (banner,
+    // stat cards) also mount and paint at least once.
     await tester.dragUntilVisible(
-      find.textContaining('EntryTicket'),
+      find.textContaining('StatCard'),
       find.byType(Scrollable).first,
       const Offset(0, -400),
     );
-    expect(find.textContaining('EntryTicket'), findsOneWidget);
+    expect(find.textContaining('StatCard'), findsOneWidget);
   });
 }
