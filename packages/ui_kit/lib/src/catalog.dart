@@ -33,7 +33,7 @@ class _AtomCatalogState extends State<AtomCatalog> {
   bool _favorite = true;
   int _radio = 0;
   int _page = 0;
-  final Set<String> _filters = {'체키'};
+  final Set<String> _filters = {'인기'};
   AssenTimeSlotState _slot = AssenTimeSlotState.available;
 
   @override
@@ -137,11 +137,11 @@ class _AtomCatalogState extends State<AtomCatalog> {
             child: Wrap(
               spacing: SpacingTokens.s2,
               children: [
-                for (final f in const ['체키', '게임', '이벤트'])
+                for (final f in const ['인기', '게임', '이벤트'])
                   AssenFilterChip(
                     label: f,
                     selected: _filters.contains(f),
-                    count: f == '체키' ? 12 : null,
+                    count: f == '인기' ? 12 : null,
                     onSelected: (sel) => setState(() {
                       if (sel) {
                         _filters.add(f);

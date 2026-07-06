@@ -17,12 +17,17 @@ class DiscoveryRepository {
 
   /// Loads the creators shown on the discovery feed.
   ///
-  /// Calls `GET /api/v1/creators` and maps the JSON array into [Creator]s. A
-  /// missing body is treated as an empty feed rather than an error.
+  /// Calls `GET /api/creators`, which returns a `CreatorPage` envelope
+  /// (`{items: [...], next_cursor}`), and maps `items` into [Creator]s. A
+  /// missing body or a missing `items` array is treated as an empty feed rather
+  /// than an error. `next_cursor` carries the keyset cursor for the next page;
+  /// consuming it (infinite scroll) is a follow-up (M5) — only the first page
+  /// is read here.
   Future<List<Creator>> fetchCreators() async {
-    final response = await _dio.get<List<dynamic>>('/api/v1/creators');
-    final data = response.data ?? const <dynamic>[];
-    return data
+    final response = await _dio.get<Map<String, dynamic>>('/api/creators');
+    final body = response.data ?? const <String, dynamic>{};
+    final items = body['items'] as List<dynamic>? ?? const <dynamic>[];
+    return items
         .map((item) => Creator.fromJson(item as Map<String, dynamic>))
         .toList();
   }

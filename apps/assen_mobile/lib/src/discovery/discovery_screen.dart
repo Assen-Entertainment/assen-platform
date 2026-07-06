@@ -62,10 +62,12 @@ class _CreatorList extends StatelessWidget {
           title: creator.displayName,
           subtitle:
               '@${creator.handle}'
-              '${creator.tagline == null ? '' : ' · ${creator.tagline}'}',
+              '${creator.category == null ? '' : ' · ${creator.category}'}',
           leading: AssenAvatar(
             name: creator.displayName,
-            isOnline: creator.isLive,
+            imageProvider: creator.avatarUrl == null
+                ? null
+                : NetworkImage(creator.avatarUrl!),
           ),
           onTap: () => context.go(RoutePaths.creator(creator.handle)),
         );

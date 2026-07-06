@@ -48,7 +48,7 @@ Useful overrides:
 
 ```sh
 BUILD_ANDROID_DEBUG=0 scripts/build-local.sh
-FLUTTER_APP=operator_app BUILD_BACKEND_IMAGE=0 scripts/build-local.sh
+FLUTTER_APP=assen_mobile BUILD_BACKEND_IMAGE=0 scripts/build-local.sh
 ```
 
 Start the local backend stack, apply local migrations, and run smoke checks:

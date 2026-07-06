@@ -26,7 +26,7 @@ Flutter는 pub workspace + Melos 7. 스크립트는 루트 `pubspec.yaml`의 `me
 
 - Flutter (repo 루트): `dart pub get` → `dart run melos run format` → `dart run melos run analyze` → `dart run melos run test`
   - 개별 파일: `flutter test packages/<pkg>/test/<file>_test.dart`
-  - 빌드 스모크(CI): `flutter build web` · `flutter build apk --debug` (fan_app). iOS는 macOS 비용 10x라 주간 cron/수동 dispatch만.
+  - 빌드 스모크(CI): `flutter build web`(assen_mobile — 매 PR/push) · `flutter build apk --debug`(assen_mobile — 수동 dispatch/주간 cron). iOS는 macOS 비용 10x라 주간 cron/수동 dispatch만.
 - Django (`server/`): `uv sync` → `uv run ruff check .` → `uv run mypy .` → `uv run pytest` → `uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test`
   - 개별 테스트: `uv run pytest apps/<domain>/tests/test_smoke.py::<name>`
 - docker compose는 로컬 부재 → CI에서 `docker compose config -q` + postgres/redis/celery-worker 기동 스모크로 검증.

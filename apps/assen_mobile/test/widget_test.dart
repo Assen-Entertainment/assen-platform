@@ -20,8 +20,8 @@ class _FakeDiscoveryRepository implements DiscoveryRepository {
 }
 
 const List<Creator> _twoCreators = [
-  Creator(id: '1', handle: 'mio', displayName: '미오', tagline: '버추얼 크리에이터'),
-  Creator(id: '2', handle: 'yuki', displayName: '유키', tagline: '게임 방송'),
+  Creator(id: '1', handle: 'mio', displayName: '미오', category: '버추얼'),
+  Creator(id: '2', handle: 'yuki', displayName: '유키', category: '게임'),
 ];
 
 void main() {
