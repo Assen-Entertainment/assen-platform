@@ -1,3 +1,4 @@
+import 'package:assen_mobile/src/api/api_providers.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,4 +27,5 @@ class DiscoveryController extends AsyncNotifier<List<Creator>> {
 final discoveryControllerProvider =
     AsyncNotifierProvider<DiscoveryController, List<Creator>>(
       DiscoveryController.new,
+      retry: noRetry,
     );

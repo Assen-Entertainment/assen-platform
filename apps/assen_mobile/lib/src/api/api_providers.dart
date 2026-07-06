@@ -33,6 +33,14 @@ final apiClientConfigProvider = Provider<ApiClientConfig>(
   (ref) => ApiClientConfig(baseUrl: _resolveBaseUrl()),
 );
 
+/// A Riverpod retry policy that never retries.
+///
+/// Passed as the `retry` of the screen controllers so a failed fetch surfaces
+/// its error state immediately — the screens offer a manual retry (and a 404/401
+/// must not loop) — instead of Riverpod 3.x's default exponential-backoff
+/// auto-retry, which would also keep a backoff timer pending.
+Duration? noRetry(int retryCount, Object error) => null;
+
 /// The configured [Dio] HTTP client.
 ///
 /// Points at [apiClientConfigProvider]'s base URL and installs the
