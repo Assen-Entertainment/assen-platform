@@ -34,7 +34,7 @@ class AssenMembershipCard extends StatelessWidget {
   /// [memberNumber] is the formatted membership id (shown in the pixel face).
   /// [points] is the loyalty balance. [tierLabel] names the tier on the strip
   /// (e.g. "하츠코이"). [avatar] is the member's [AssenAvatar]; [onShowQr] opens
-  /// the full QR (the `AssenQrDisplay`). [skin] picks the pastel hue.
+  /// the full-screen QR surface. [skin] picks the pastel hue.
   const AssenMembershipCard({
     required this.name,
     required this.memberNumber,
@@ -61,7 +61,7 @@ class AssenMembershipCard extends StatelessWidget {
   /// The member avatar.
   final AssenAvatar avatar;
 
-  /// Opens the full-screen QR (`AssenQrDisplay`); null hides the QR button.
+  /// Opens the full-screen QR surface; null hides the QR button.
   final VoidCallback? onShowQr;
 
   /// The pastel skin — see [AssenMembershipSkin].

@@ -4,10 +4,6 @@ import 'package:ui_kit/src/atoms/avatar.dart';
 import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/molecules/agreement_cell.dart';
 import 'package:ui_kit/src/molecules/banner_card.dart';
-import 'package:ui_kit/src/molecules/cheki_frame.dart';
-import 'package:ui_kit/src/molecules/collection_cell.dart';
-import 'package:ui_kit/src/molecules/coupon_ticket_set.dart';
-import 'package:ui_kit/src/molecules/entry_ticket.dart';
 import 'package:ui_kit/src/molecules/key_value_row.dart';
 import 'package:ui_kit/src/molecules/list_item.dart';
 import 'package:ui_kit/src/molecules/notice_bar.dart';
@@ -26,7 +22,7 @@ import 'package:ui_kit/src/molecules/underline_tabs.dart';
 /// A single-screen gallery of every Molecule for visual review.
 ///
 /// The human-facing review surface for the ASS-88 Molecules layer: it renders
-/// all 20 molecules (each in its relevant variants/states) on the cream surface
+/// all 16 molecules (each in its relevant variants/states) on the cream surface
 /// so reviewers and the `flutter build web` smoke test exercise the whole layer
 /// at once — the same pattern as `AtomCatalog`. It is stateful so interactive
 /// molecules (fields, steppers, tabs, toggles) actually respond in the gallery.
@@ -236,60 +232,6 @@ class _MoleculeCatalogState extends State<MoleculeCatalog> {
             ),
           ),
           _Section(
-            title: 'ChekiFrame (54:86)',
-            child: SizedBox(
-              width: 140,
-              child: AssenChekiFrame(
-                image: ColoredBox(color: colors.strawberryBg),
-                caption: 'first cheki ♥',
-              ),
-            ),
-          ),
-          _Section(
-            title: 'CollectionCell (획득 · 미획득 · NEW)',
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 96,
-                  child: AssenCollectionCell(
-                    artwork: ColoredBox(color: colors.skyBg),
-                    label: '봄 체키',
-                    badge: const AssenBadge(label: 'NEW'),
-                    onTap: () {},
-                  ),
-                ),
-                const SizedBox(width: SpacingTokens.s3),
-                SizedBox(
-                  width: 96,
-                  child: AssenCollectionCell(
-                    artwork: ColoredBox(color: colors.lemonBg),
-                    label: '여름 체키',
-                    state: AssenCollectionState.locked,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _Section(
-            title: 'CouponTicketSet (사용가능 · 사용완료)',
-            child: Column(
-              children: [
-                AssenCouponTicketSet(
-                  title: '디저트 1+1',
-                  subtitle: '음료 주문 시',
-                  validity: '~2026.07.31 까지',
-                  onRedeem: () {},
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                const AssenCouponTicketSet(
-                  title: '웰컴 음료',
-                  validity: '2026.05.01 사용',
-                  state: AssenCouponState.used,
-                ),
-              ],
-            ),
-          ),
-          _Section(
             title: 'BannerCard (이벤트 배너)',
             child: AssenBannerCard(
               title: '6월 콜라보 이벤트',
@@ -318,24 +260,6 @@ class _MoleculeCatalogState extends State<MoleculeCatalog> {
                     label: '대기 인원',
                     delta: '-4',
                     trend: AssenStatTrend.down,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const _Section(
-            title: 'EntryTicket (대기중 · 호출됨 · 입장완료)',
-            child: Row(
-              children: [
-                Expanded(
-                  child: AssenEntryTicket(title: '본점', number: 'A-23'),
-                ),
-                SizedBox(width: SpacingTokens.s3),
-                Expanded(
-                  child: AssenEntryTicket(
-                    title: '본점',
-                    number: 'A-22',
-                    state: AssenEntryState.called,
                   ),
                 ),
               ],

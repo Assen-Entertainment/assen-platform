@@ -5,26 +5,19 @@ import 'package:ui_kit/src/atoms/badges.dart';
 import 'package:ui_kit/src/atoms/icon_button.dart';
 import 'package:ui_kit/src/organisms/app_bar.dart';
 import 'package:ui_kit/src/organisms/bottom_cta.dart';
-import 'package:ui_kit/src/organisms/cast_profile_card.dart';
 import 'package:ui_kit/src/organisms/empty_state.dart';
 import 'package:ui_kit/src/organisms/error_state.dart';
-import 'package:ui_kit/src/organisms/event_card.dart';
 import 'package:ui_kit/src/organisms/membership_card.dart';
-import 'package:ui_kit/src/organisms/qr_display.dart';
-import 'package:ui_kit/src/organisms/reservation_card.dart';
-import 'package:ui_kit/src/organisms/safety_report_entry.dart';
-import 'package:ui_kit/src/organisms/schedule_calendar.dart';
-import 'package:ui_kit/src/organisms/stamp_card.dart';
 
 /// A single-screen gallery of every Organism for visual review.
 ///
 /// The human-facing review surface for the ASS-88 Organisms layer: it renders
-/// all 15 organisms (each in its relevant variants/states) on the cream surface
-/// so reviewers and the `flutter build web` smoke test exercise the whole layer
-/// at once — the same pattern as `AtomCatalog`/`MoleculeCatalog`. It is stateful
-/// so interactive organisms (tab bar, schedule, report picker) respond live.
-/// AppBar, TabBar, BottomCTA, BottomSheet and Dialog also frame this screen so
-/// the navigation organisms are exercised in their real chrome roles.
+/// the domain-agnostic organisms (MembershipCard, EmptyState, ErrorState,
+/// BottomCTA — each in its relevant variants/states) on the cream surface so
+/// reviewers and the `flutter build web` smoke test exercise the layer at
+/// once — the same review pattern as `AtomCatalog`/`MoleculeCatalog`. It is
+/// stateful so the interactive TabBar responds live; AppBar and TabBar frame
+/// the screen so the navigation organisms run in their real chrome roles.
 class OrganismCatalog extends StatefulWidget {
   /// Creates the organism catalogue screen.
   const OrganismCatalog({super.key});
@@ -35,55 +28,6 @@ class OrganismCatalog extends StatefulWidget {
 
 class _OrganismCatalogState extends State<OrganismCatalog> {
   int _tab = 0;
-  int _scheduleDay = 2;
-  AssenSafetyReportType? _reportType = AssenSafetyReportType.harassment;
-  bool _favorite = true;
-
-  static const List<AssenScheduleDay> _week = [
-    AssenScheduleDay(
-      weekday: '월',
-      day: 9,
-      casts: [
-        AssenScheduleCast(
-          name: '미오',
-          shift: '12:00–18:00',
-          hue: AssenBadgeHue.strawberry,
-        ),
-      ],
-    ),
-    AssenScheduleDay(weekday: '화', day: 10, isClosed: true),
-    AssenScheduleDay(
-      weekday: '수',
-      day: 11,
-      hasEvent: true,
-      casts: [
-        AssenScheduleCast(
-          name: '유키',
-          shift: '13:00–19:00',
-          hue: AssenBadgeHue.sky,
-        ),
-        AssenScheduleCast(
-          name: '모카',
-          shift: '16:00–22:00',
-          hue: AssenBadgeHue.peach,
-        ),
-      ],
-    ),
-    AssenScheduleDay(
-      weekday: '목',
-      day: 12,
-      casts: [
-        AssenScheduleCast(
-          name: '베리',
-          shift: '12:00–18:00',
-          hue: AssenBadgeHue.lavender,
-        ),
-      ],
-    ),
-    AssenScheduleDay(weekday: '금', day: 13, hasEvent: true),
-    AssenScheduleDay(weekday: '토', day: 14),
-    AssenScheduleDay(weekday: '일', day: 15, isClosed: true),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -148,139 +92,6 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
                   avatar: AssenAvatar(name: '유키', hue: AssenBadgeHue.sky),
                 ),
               ],
-            ),
-          ),
-          const _Section(
-            title: 'StampCard (8칸 — 채움/빈칸/리워드)',
-            child: AssenStampCard(
-              title: '방문 스탬프',
-              filled: 5,
-              rewardLabel: '체키',
-            ),
-          ),
-          _Section(
-            title: 'QRDisplay (활성 — 갱신 타이머)',
-            child: AssenQrDisplay(
-              memberNumber: '0000 1234 5678',
-              remainingLabel: '29초',
-              progress: 0.72,
-              onRefresh: () {},
-            ),
-          ),
-          _Section(
-            title: 'QRDisplay (만료)',
-            child: AssenQrDisplay(
-              memberNumber: '0000 1234 5678',
-              status: AssenQrStatus.expired,
-              onRefresh: () {},
-            ),
-          ),
-          _Section(
-            title: 'ScheduleCalendar (주간 출근표)',
-            child: AssenScheduleCalendar(
-              days: _week,
-              selectedIndex: _scheduleDay,
-              todayIndex: 3,
-              onSelect: (i) => setState(() => _scheduleDay = i),
-            ),
-          ),
-          _Section(
-            title: 'ReservationCard (다가옴 · 방문완료 · 취소)',
-            child: Column(
-              children: [
-                AssenReservationCard(
-                  venue: '하츠코이 본점',
-                  dateTime: '6월 14일 (토) 14:00',
-                  partySize: '2명',
-                  status: AssenReservationStatus.upcoming,
-                  ddayLabel: 'D-2',
-                  primaryLabel: '예약 변경',
-                  onPrimary: () {},
-                  secondaryLabel: '취소',
-                  onSecondary: () {},
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                const AssenReservationCard(
-                  venue: '하츠코이 본점',
-                  dateTime: '5월 28일 (수) 19:00',
-                  partySize: '1명',
-                  status: AssenReservationStatus.visited,
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                const AssenReservationCard(
-                  venue: '하츠코이 2호점',
-                  dateTime: '5월 20일 (화) 13:00',
-                  partySize: '3명',
-                  status: AssenReservationStatus.cancelled,
-                ),
-              ],
-            ),
-          ),
-          _Section(
-            title: 'EventCard (예정 · 종료)',
-            child: Column(
-              children: [
-                AssenEventCard(
-                  title: '6월 콜라보 이벤트',
-                  period: '6.10 – 6.30',
-                  status: AssenEventStatus.upcoming,
-                  ddayLabel: 'D-5',
-                  slot: ColoredBox(color: colors.lavenderBg),
-                  casts: const [
-                    AssenScheduleCastRef(
-                      name: '미오',
-                      hue: AssenBadgeHue.strawberry,
-                    ),
-                    AssenScheduleCastRef(name: '유키', hue: AssenBadgeHue.sky),
-                    AssenScheduleCastRef(name: '모카', hue: AssenBadgeHue.peach),
-                  ],
-                  ctaLabel: '예약하기',
-                  onCta: () {},
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                AssenEventCard(
-                  title: '봄 한정 디저트',
-                  period: '4.1 – 4.30',
-                  status: AssenEventStatus.ended,
-                  slot: ColoredBox(color: colors.peachBg),
-                ),
-              ],
-            ),
-          ),
-          _Section(
-            title: 'CastProfileCard (기본 · 최애♥ · 출근중)',
-            child: Column(
-              children: [
-                AssenCastProfileCard(
-                  name: '모카',
-                  hue: AssenBadgeHue.peach,
-                  tagline: '달콤한 디저트 담당',
-                  isOnShift: true,
-                  isFavorite: _favorite,
-                  onFavoriteChanged: (v) => setState(() => _favorite = v),
-                  onTap: () {},
-                ),
-                const SizedBox(height: SpacingTokens.s3),
-                AssenCastProfileCard(
-                  name: '베리',
-                  hue: AssenBadgeHue.lavender,
-                  tagline: '게임 마스터',
-                  isFavorite: false,
-                  onFavoriteChanged: (_) {},
-                  onTap: () {},
-                ),
-              ],
-            ),
-          ),
-          _Section(
-            title: 'SafetyReportEntry (상시 노출)',
-            child: AssenSafetyReportEntry(onTap: () {}),
-          ),
-          _Section(
-            title: 'SafetyReportTypeList (유형 9종)',
-            child: AssenSafetyReportTypeList(
-              selected: _reportType,
-              onSelect: (t) => setState(() => _reportType = t),
             ),
           ),
           const _Section(
