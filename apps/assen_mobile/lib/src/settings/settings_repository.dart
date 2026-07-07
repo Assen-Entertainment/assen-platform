@@ -51,7 +51,10 @@ class SettingsRepository {
   /// a fan only ever edits their own profile; nickname is the sole display PII
   /// (already stored) so no new PII is introduced. The 1–40 length is validated
   /// client-side before this is called and re-enforced by the server. Returns
-  /// the refreshed [FanMe]; a 401 becomes a [SettingsAuthRequiredException].
+  /// the refreshed [FanMe]. A 401 — or a 403, which the `/api/fan/me` PATCH only
+  /// ever returns for a missing/expired session (it has no owner-scoped 403) —
+  /// becomes a [SettingsAuthRequiredException] so a session expiring mid-edit
+  /// drops to the login-required state instead of a stale generic error.
   Future<FanMe> updateNickname(String nickname) async {
     try {
       final response = await _dio.patch<Map<String, dynamic>>(
@@ -60,7 +63,8 @@ class SettingsRepository {
       );
       return FanMe.fromJson(response.data ?? const <String, dynamic>{});
     } on DioException catch (error) {
-      if (error.response?.statusCode == 401) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
         throw const SettingsAuthRequiredException();
       }
       rethrow;

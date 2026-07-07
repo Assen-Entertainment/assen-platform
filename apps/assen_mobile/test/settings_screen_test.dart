@@ -14,10 +14,13 @@ import 'package:ui_kit/ui_kit.dart';
 /// A repository stand-in: returns a fixed profile (or the 401 error) and keeps
 /// the nickname PATCH so the edit test can assert the request was made.
 class _FakeSettingsRepository implements SettingsRepository {
-  _FakeSettingsRepository(FanMe me) : _me = me;
-  _FakeSettingsRepository.authRequired() : _me = null;
+  _FakeSettingsRepository(FanMe me, {this.updateThrowsAuth = false}) : _me = me;
+  _FakeSettingsRepository.authRequired() : _me = null, updateThrowsAuth = false;
 
   FanMe? _me;
+
+  /// When true, [updateNickname] throws as if the PATCH returned 401/403.
+  final bool updateThrowsAuth;
 
   /// The nickname passed to the last [updateNickname] call, or null if none.
   String? patchedNickname;
@@ -31,6 +34,7 @@ class _FakeSettingsRepository implements SettingsRepository {
 
   @override
   Future<FanMe> updateNickname(String nickname) async {
+    if (updateThrowsAuth) throw const SettingsAuthRequiredException();
     patchedNickname = nickname;
     final current = _me!;
     final updated = FanMe(
@@ -108,5 +112,36 @@ void main() {
     expect(repo.patchedNickname, '지민');
     expect(find.text('지민'), findsWidgets);
     expect(find.text('민지'), findsNothing);
+  });
+
+  testWidgets('a 401/403 on nickname save drops to the login-required state', (
+    tester,
+  ) async {
+    // A session that expires mid-edit must not leave a stale, still-signed-in
+    // profile behind a generic error — the screen drops to "로그인이 필요해요".
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = _FakeSettingsRepository(
+      const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+      updateThrowsAuth: true,
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('닉네임'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '지민');
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    // Login-required state shows; no generic inline error, no PATCH recorded.
+    expect(find.text('로그인이 필요해요'), findsOneWidget);
+    expect(find.text('닉네임을 변경하지 못했어요. 다시 시도해 주세요.'), findsNothing);
+    expect(repo.patchedNickname, isNull);
   });
 }

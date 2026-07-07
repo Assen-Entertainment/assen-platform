@@ -169,22 +169,25 @@ class Order {
   /// Builds an [Order] from a backend `OrderOut` JSON object.
   ///
   /// The contract-required fields — `id`, `status`, a parseable `created_at`,
-  /// `items`, `subtotal`, `shipping_fee`, `total` — are parsed strictly: a
-  /// missing key or wrong type throws [ArgumentError] so a backend field drift
-  /// surfaces as a load error rather than a silent blank. [id] is read through
-  /// `toString()` so a string code or numeric PK both parse. The
+  /// `items`, `subtotal`, `shipping`, `shipping_fee`, `total` — are parsed
+  /// strictly: a missing key or wrong type throws [ArgumentError] so a backend
+  /// field drift surfaces as a load error rather than a silent blank. [id] is
+  /// read through `toString()` so a string code or numeric PK both parse. The
   /// server-optional `shipping_address`/`creator_name`/`refund` degrade to null
-  /// when absent.
+  /// when absent. The error message embeds only the failing key name (never the
+  /// payload) so a parse failure cannot leak the nested shipping PII.
   factory Order.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
     final createdAt = DateTime.tryParse(json['created_at'] as String? ?? '');
     if (rawId == null || createdAt == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
+      throw ArgumentError(
         'order payload is missing a required "id"/"created_at" field',
       );
     }
+    // The server sends `shipping` and `shipping_fee` as duplicate required
+    // fields (same value); validate `shipping`'s presence/type as a drift guard
+    // even though only `shipping_fee` is stored (server: OrderOut.shipping).
+    requireInt(json, 'shipping');
     final dynamic rawShipping = json['shipping_address'];
     final dynamic rawRefund = json['refund'];
     return Order(

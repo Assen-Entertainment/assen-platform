@@ -85,6 +85,24 @@ void main() {
     );
   });
 
+  test('Order.fromJson throws when the required shipping field is absent', () {
+    // The server sends `shipping` and `shipping_fee` as duplicate required
+    // fields (same value); a missing `shipping` is contract drift and must
+    // throw rather than silently pass on `shipping_fee` alone.
+    expect(
+      () => Order.fromJson(const {
+        'id': 'ASN-3',
+        'status': 'paid',
+        'created_at': '2026-07-06T09:00:00Z',
+        'items': <dynamic>[],
+        'subtotal': 0,
+        'shipping_fee': 0,
+        'total': 0,
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
   test('Order.summary condenses multiple lines', () {
     final order = Order.fromJson(const {
       'id': 'ASN-2',

@@ -34,6 +34,18 @@ class SettingsController extends AsyncNotifier<FanMe> {
         .updateNickname(nickname);
     state = AsyncValue.data(updated);
   }
+
+  /// Drops the screen to the "로그인이 필요해요" state (session expired mid-edit).
+  ///
+  /// Called by the nickname editor when a save returns a
+  /// [SettingsAuthRequiredException] so a stale, signed-out profile is not left
+  /// on screen behind a generic error.
+  void markAuthRequired() {
+    state = AsyncValue.error(
+      const SettingsAuthRequiredException(),
+      StackTrace.current,
+    );
+  }
 }
 
 /// Exposes the fan profile [AsyncValue] and its [SettingsController].

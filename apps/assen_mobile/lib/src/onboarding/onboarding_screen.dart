@@ -81,7 +81,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _finish() => context.go(RoutePaths.discovery);
+  /// Leaves onboarding: pop back to the entry point (설정, when pushed) if there
+  /// is one, otherwise go to discovery (a direct/deep-link entry).
+  void _finish() {
+    context.canPop() ? context.pop() : context.go(RoutePaths.discovery);
+  }
 
   @override
   Widget build(BuildContext context) {

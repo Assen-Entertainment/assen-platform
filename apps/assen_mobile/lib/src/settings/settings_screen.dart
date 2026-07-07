@@ -179,7 +179,8 @@ class _SettingsBody extends ConsumerWidget {
         const AssenSectionHeader(title: '앱'),
         AssenListItem(
           title: '앱 소개 다시 보기',
-          onTap: () => context.go(RoutePaths.onboarding),
+          // Pushed (not go) so onboarding's finish/skip can pop back to 설정.
+          onTap: () => context.push(RoutePaths.onboarding),
         ),
 
         const SizedBox(height: SpacingTokens.s8),
@@ -227,7 +228,10 @@ class _NicknameEditorState extends ConsumerState<_NicknameEditor> {
 
   Future<void> _save() async {
     final nickname = _controller.text.trim();
-    if (nickname.isEmpty || nickname.length > 40) {
+    // Measure in code points (runes), matching the server's Pydantic
+    // `max_length`, so an emoji or other astral character is not over-counted
+    // by Dart's UTF-16 code-unit `String.length`.
+    if (nickname.isEmpty || nickname.runes.length > 40) {
       setState(() => _errorText = '닉네임은 1~40자로 입력해 주세요.');
       return;
     }
@@ -240,6 +244,13 @@ class _NicknameEditorState extends ConsumerState<_NicknameEditor> {
           .read(settingsControllerProvider.notifier)
           .updateNickname(nickname);
       if (!mounted) return;
+      Navigator.of(context).pop();
+    } on SettingsAuthRequiredException {
+      // The session expired mid-edit: drop the settings screen to the
+      // login-required state rather than showing a stale, still-authenticated
+      // profile behind a generic "변경 실패" error.
+      if (!mounted) return;
+      ref.read(settingsControllerProvider.notifier).markAuthRequired();
       Navigator.of(context).pop();
     } on Exception {
       if (!mounted) return;
