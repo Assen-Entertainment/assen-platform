@@ -121,6 +121,22 @@ class ErrorCode(StrEnum):
     # for a future surface that returns an explicit "blocked by age gate" error.
     ADULT_GATE_BLOCKED = "AdultGateBlocked"
 
+    # --- uploads (media) ----------------------------------------------------
+    # A multipart image upload was rejected (apps.uploads.api): the declared
+    # content-type is not an allowed image family (415 → UPLOAD_TYPE_UNSUPPORTED,
+    # also covers SVG/HTML); the bytes are not a real image or are scriptable
+    # markup — magic-byte sniff (422 → UPLOAD_INVALID); or the file exceeds the size
+    # ceiling (413 → UPLOAD_TOO_LARGE).
+    UPLOAD_TYPE_UNSUPPORTED = "UploadTypeUnsupported"
+    UPLOAD_INVALID = "UploadInvalid"
+    UPLOAD_TOO_LARGE = "UploadTooLarge"
+    # The upload surface is fail-closed off (503): no real object-storage backend is
+    # wired yet, so the endpoint only accepts writes in an environment that also
+    # serves the stored bytes locally (settings.SERVE_LOCAL_MEDIA). With that off
+    # (prod) an accepted upload would write to a local disk nothing can serve — so it
+    # refuses instead, guarding against un-renderable objects and disk exhaustion.
+    UPLOAD_STORAGE_UNAVAILABLE = "UploadStorageUnavailable"
+
 
 class ApiError(HttpError):
     """An ``HttpError`` that also carries a stable :class:`ErrorCode`.
