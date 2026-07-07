@@ -1,9 +1,11 @@
+import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/mypage/fan_me.dart';
 import 'package:assen_mobile/src/mypage/mypage_controller.dart';
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 /// The 마이 (my page) tab: the signed-in fan's account summary.
@@ -85,6 +87,22 @@ class _MyPageBody extends ConsumerWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: SpacingTokens.s6),
+        AssenListItem(
+          title: '주문 내역',
+          leading: Icon(Icons.receipt_long_outlined, color: colors.ink700),
+          onTap: () => context.go(RoutePaths.orders),
+        ),
+        AssenListItem(
+          title: '스튜디오',
+          leading: Icon(Icons.dashboard_outlined, color: colors.ink700),
+          onTap: () => context.go(RoutePaths.studio),
+        ),
+        AssenListItem(
+          title: '설정',
+          leading: Icon(Icons.settings_outlined, color: colors.ink700),
+          onTap: () => context.go(RoutePaths.settings),
         ),
         const SizedBox(height: SpacingTokens.s8),
         AssenButton(

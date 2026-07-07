@@ -6,10 +6,14 @@ import 'package:assen_mobile/src/feed/feed_screen.dart';
 import 'package:assen_mobile/src/login/login_screen.dart';
 import 'package:assen_mobile/src/mypage/mypage_screen.dart';
 import 'package:assen_mobile/src/notifications/notifications_screen.dart';
+import 'package:assen_mobile/src/onboarding/onboarding_screen.dart';
+import 'package:assen_mobile/src/orders/orders_screen.dart';
 import 'package:assen_mobile/src/post/post_screen.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
+import 'package:assen_mobile/src/settings/settings_screen.dart';
 import 'package:assen_mobile/src/store/product_screen.dart';
 import 'package:assen_mobile/src/store/store_screen.dart';
+import 'package:assen_mobile/src/studio/studio_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +43,18 @@ abstract final class RoutePaths {
 
   /// The global store / product catalog (reached from the discovery shortcut).
   static const String store = '/store';
+
+  /// The signed-in fan's own orders (reached from the 마이 tab).
+  static const String orders = '/orders';
+
+  /// The creator owner's studio dashboard (reached from the 마이 tab).
+  static const String studio = '/studio';
+
+  /// The account settings screen (reached from the 마이 tab).
+  static const String settings = '/settings';
+
+  /// The app intro / onboarding (reached from 설정 → "앱 소개 다시 보기").
+  static const String onboarding = '/onboarding';
 
   /// Builds the deep-linkable creator profile location for [handle].
   static String creator(String handle) => '/creator/$handle';
@@ -150,6 +166,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             ProductScreen(productId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: RoutePaths.orders,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const OrdersScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.studio,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const StudioScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settings,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.onboarding,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const OnboardingScreen(),
       ),
       GoRoute(
         path: RoutePaths.login,
