@@ -31,6 +31,7 @@ class AssenAvatar extends StatelessWidget {
   const AssenAvatar({
     required this.name,
     this.imageProvider,
+    this.semanticLabel,
     this.size = AssenAvatarSize.m,
     this.hue,
     this.isOnline = false,
@@ -42,6 +43,13 @@ class AssenAvatar extends StatelessWidget {
 
   /// Optional avatar image. When null, initials are shown instead.
   final ImageProvider<Object>? imageProvider;
+
+  /// Optional screen-reader description for the photo (e.g. "미오 프로필 사진").
+  ///
+  /// Domain-agnostic: the host passes the label so no product wording is
+  /// hard-coded here. Applied only when [imageProvider] is set — the initials
+  /// fallback is already announced as its letter.
+  final String? semanticLabel;
 
   /// Avatar diameter bucket — see [AssenAvatarSize].
   final AssenAvatarSize size;
@@ -98,6 +106,9 @@ class AssenAvatar extends StatelessWidget {
       );
     }
 
+    if (imageProvider != null && semanticLabel != null) {
+      return Semantics(image: true, label: semanticLabel, child: avatar);
+    }
     return avatar;
   }
 

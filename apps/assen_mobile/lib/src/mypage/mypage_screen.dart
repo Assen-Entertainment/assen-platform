@@ -2,6 +2,7 @@ import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/mypage/fan_me.dart';
 import 'package:assen_mobile/src/mypage/mypage_controller.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,7 +60,8 @@ class _MyPageBody extends ConsumerWidget {
               size: AssenAvatarSize.l,
               imageProvider: fan.avatarUrl == null
                   ? null
-                  : NetworkImage(fan.avatarUrl!),
+                  : CachedNetworkImageProvider(fan.avatarUrl!),
+              semanticLabel: '${fan.nickname} 프로필 사진',
             ),
             const SizedBox(width: SpacingTokens.s4),
             Expanded(

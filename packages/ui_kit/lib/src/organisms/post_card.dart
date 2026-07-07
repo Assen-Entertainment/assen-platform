@@ -191,10 +191,13 @@ class _Header extends StatelessWidget {
                   ),
                   if (verified) ...[
                     const SizedBox(width: SpacingTokens.s1),
-                    Icon(
-                      Icons.verified,
-                      size: SpacingTokens.s4,
-                      color: colors.skyInk,
+                    Semantics(
+                      label: '인증된 크리에이터',
+                      child: Icon(
+                        Icons.verified,
+                        size: SpacingTokens.s4,
+                        color: colors.skyInk,
+                      ),
                     ),
                   ],
                 ],
@@ -247,18 +250,29 @@ class _CountFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _Count(
-          icon: liked ? Icons.favorite : Icons.favorite_border,
-          iconColor: liked ? colors.roseMain : colors.ink500,
-          label: '$likeCount',
-          colors: colors,
+        // Merge the icon + number into one screen-reader phrase ("좋아요 128").
+        Semantics(
+          label: '좋아요 $likeCount',
+          child: ExcludeSemantics(
+            child: _Count(
+              icon: liked ? Icons.favorite : Icons.favorite_border,
+              iconColor: liked ? colors.roseMain : colors.ink500,
+              label: '$likeCount',
+              colors: colors,
+            ),
+          ),
         ),
         const SizedBox(width: SpacingTokens.s5),
-        _Count(
-          icon: Icons.chat_bubble_outline,
-          iconColor: colors.ink500,
-          label: '$commentCount',
-          colors: colors,
+        Semantics(
+          label: '댓글 $commentCount',
+          child: ExcludeSemantics(
+            child: _Count(
+              icon: Icons.chat_bubble_outline,
+              iconColor: colors.ink500,
+              label: '$commentCount',
+              colors: colors,
+            ),
+          ),
         ),
       ],
     );

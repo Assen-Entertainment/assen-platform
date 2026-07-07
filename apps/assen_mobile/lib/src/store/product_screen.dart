@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/cached_media.dart';
 import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/store/product.dart';
 import 'package:assen_mobile/src/store/store_controller.dart';
@@ -76,12 +77,9 @@ class _ProductDetail extends StatelessWidget {
             color: colors.cream200,
             child: product.mediaUrl == null
                 ? null
-                : Image.network(
-                    product.mediaUrl!,
-                    fit: BoxFit.cover,
-                    // The enclosing cream ColoredBox is the load-failure
-                    // placeholder, so suppress Flutter's default error box.
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                : CachedMedia(
+                    url: product.mediaUrl!,
+                    semanticLabel: product.title,
                   ),
           ),
         ),

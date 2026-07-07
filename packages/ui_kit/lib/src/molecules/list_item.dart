@@ -10,7 +10,8 @@ import 'package:flutter/material.dart';
 /// badge trailing). When [onTap] is set and no [trailing] is given, a chevron
 /// is shown so the row reads as navigable (the common case).
 ///
-/// Touch target: the row is pinned to a 44pt minimum height (Korean B2C / HIG).
+/// Touch target: the row is pinned to a 48dp minimum height (Material
+/// accessibility; also clears the 44pt Apple HIG / Korean B2C floor).
 class AssenListItem extends StatelessWidget {
   /// Creates a list row titled [title].
   ///
@@ -103,7 +104,7 @@ class AssenListItem extends StatelessWidget {
     );
 
     final constrained = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44),
+      constraints: const BoxConstraints(minHeight: 48),
       child: row,
     );
 

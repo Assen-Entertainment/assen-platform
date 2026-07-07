@@ -59,12 +59,15 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
               semanticLabel: '뒤로',
               onPressed: onBack,
             ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: TypographyTokens.titleLSize,
-          fontWeight: FontWeight.w700,
-          color: colors.ink900,
+      title: Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: TypographyTokens.titleLSize,
+            fontWeight: FontWeight.w700,
+            color: colors.ink900,
+          ),
         ),
       ),
       actions: actions,

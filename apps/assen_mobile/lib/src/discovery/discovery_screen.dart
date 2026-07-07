@@ -1,6 +1,7 @@
 import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_controller.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -82,7 +83,8 @@ class _CreatorList extends StatelessWidget {
             name: creator.displayName,
             imageProvider: creator.avatarUrl == null
                 ? null
-                : NetworkImage(creator.avatarUrl!),
+                : CachedNetworkImageProvider(creator.avatarUrl!),
+            semanticLabel: '${creator.displayName} 프로필 사진',
           ),
           onTap: () => context.go(RoutePaths.creator(creator.handle)),
         );
