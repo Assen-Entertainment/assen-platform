@@ -9,10 +9,15 @@ an attacker renaming ``payload.svg`` to ``avatar.png`` / setting a fake
 content-type: the bytes decide, and the stored object's extension + content-type
 are derived from the sniff, never from the upload.
 
-:func:`looks_scriptable` is a defence-in-depth reject for SVG/HTML/XML/script
-markup (an XSS vector if ever served inline) — redundant with the sniff today
-(such files never match a raster magic number) but explicit so the intent is
-clear and the guard survives any future widening of the allowed set.
+:func:`looks_scriptable` is *secondary* defence-in-depth: the primary XSS control
+is that the stored object's content-type is derived from the magic-byte sniff (never
+the client) and every response carries ``X-Content-Type-Options: nosniff`` (set
+globally by SecurityMiddleware / SecurityHeadersMiddleware), so the browser will not
+re-interpret a stored raster as active markup — even a polyglot crafted to smuggle
+script past the 64-byte sniff window. The scan is a redundant early reject for
+SVG/HTML/XML/script markup (such files never match a raster magic number anyway) but
+explicit so the intent is clear and the guard survives any future widening of the
+allowed set.
 
 Pure functions only (no Django, no I/O) so they are cheap to unit-test.
 """

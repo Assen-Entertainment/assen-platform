@@ -11,8 +11,10 @@ name is a server UUID (no user filename leaks); and the endpoint requires auth.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import PropertyMock, patch
 
 import pytest
+from django.core.files.base import File
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, override_settings
@@ -138,6 +140,30 @@ def test_oversize_rejected_413(client: Client) -> None:
     res = _upload(client, big, headers=_auth(fan))
     assert res.status_code == 413
     assert res.json()["code"] == "UploadTooLarge"
+    assert Upload.objects.count() == 0
+
+
+@override_settings(UPLOAD_MAX_BYTES=16)
+def test_oversize_via_chunk_path_when_size_unknown_413(client: Client) -> None:
+    # When the reported size is absent (file.size is None) the step-2 fast path is
+    # skipped, so the bounded chunk read must still abort the oversize payload.
+    fan = _fan()
+    big = PNG + b"\x00" * 4096
+    with patch.object(File, "size", new_callable=PropertyMock, return_value=None):
+        res = _upload(client, big, headers=_auth(fan))
+    assert res.status_code == 413
+    assert res.json()["code"] == "UploadTooLarge"
+    assert Upload.objects.count() == 0
+
+
+@override_settings(SERVE_LOCAL_MEDIA=False)
+def test_upload_disabled_when_storage_unavailable_503(client: Client) -> None:
+    # Fail closed: with no local serving (and no real object store wired) the endpoint
+    # refuses rather than write bytes nothing can serve. Valid PNG still gets a 503.
+    fan = _fan()
+    res = _upload(client, PNG, headers=_auth(fan))
+    assert res.status_code == 503
+    assert res.json()["code"] == "UploadStorageUnavailable"
     assert Upload.objects.count() == 0
 
 

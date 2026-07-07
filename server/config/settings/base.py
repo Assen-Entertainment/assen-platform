@@ -247,11 +247,20 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --- Media (user-uploaded images) ---------------------------------------------
 # Uploaded images (avatars, post/product media) are written through Django's
 # storage abstraction (STORAGES["default"]) so no call site knows the backend.
-# dev/demo/test use the local filesystem under MEDIA_ROOT; dev serves it via
-# config.urls (DEBUG-only). Values are env-tunable so a container can relocate the
-# volume without a code change.
+# dev/demo/test use the local filesystem under MEDIA_ROOT and serve it via
+# config.urls (gated on SERVE_LOCAL_MEDIA below). Values are env-tunable so a
+# container can relocate the volume without a code change.
 MEDIA_URL = env("DJANGO_MEDIA_URL", default="/media/")
 MEDIA_ROOT = env("DJANGO_MEDIA_ROOT", default=str(BASE_DIR / "media"))
+
+# Whether Django itself serves the local-filesystem MEDIA_ROOT (config.urls) — and,
+# because no real object-storage backend is wired yet, whether the upload endpoint
+# accepts writes at all (apps.uploads.api fails closed with 503 when this is off).
+# Hardcoded False here (prod-safe, NOT env-driven) so a stray production env var
+# cannot turn on local media serving; only dev/test/demo opt in. Real production
+# serves MEDIA_URL from S3/CDN (never through Django) and would instead implement an
+# object-storage backend + relax this gate — a separate 후행 infra step.
+SERVE_LOCAL_MEDIA: bool = False
 
 # Hard ceiling on a single uploaded file (bytes); 10 MiB default, env-tunable. The
 # upload endpoint (apps.uploads.api) rejects anything larger BEFORE the bytes are
@@ -271,6 +280,18 @@ UPLOAD_MAX_BYTES: int = env.int("UPLOAD_MAX_BYTES", default=10 * 1024 * 1024)
 # production backend MUST serve objects with a safe image Content-Type + an
 # attachment/inline Content-Disposition from a non-executable (private) bucket, and
 # gated media should use signed reads (see config.storage.SignedUrlAdapter).
+#
+# REQUIRED GATES BEFORE FLIPPING SERVE_LOCAL_MEDIA ON IN A REAL (non-demo) SERVING
+# PATH (후행 — NOT implemented; the current header-sniff + nosniff boundary is a
+# skeleton two security lanes flagged as not yet production-grade):
+#   1. Full magic-byte decode, not just a header sniff — Pillow ``verify()`` with a
+#      ``MAX_IMAGE_PIXELS`` decompression-bomb guard and a dimension cap (a valid
+#      polyglot outside the 64-byte sniff window is only defused today because the
+#      served Content-Type is sniff-derived + X-Content-Type-Options: nosniff).
+#   2. Real object-storage hardening: private bucket, forced image Content-Type +
+#      Content-Disposition, signed reads for gated media (above).
+#   3. Real content moderation (see apps.uploads.api._moderation_accepts) — a
+#      대표·법무 gate, HUMAN-REVIEW-REQUIRED.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},

@@ -27,3 +27,9 @@ ENABLE_MOCK_FAN_OTP = True
 ENABLE_MOCK_KYC = True
 ENABLE_MOCK_PAYMENT = True
 ENABLE_ADULT_CONTENT = True
+
+# DEMO ONLY: serve uploaded media off the local filesystem (config.urls) and enable
+# the upload endpoint. prod (DEBUG off) keeps this False — real prod serves media
+# from S3/CDN, never through Django. Demo-grade like every other mock gate above;
+# the deferred hardening gates in base.py STORAGES still apply before real serving.
+SERVE_LOCAL_MEDIA = True

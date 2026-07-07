@@ -7,6 +7,10 @@ from config.settings.base import *  # noqa: F403
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 
+# Serve uploaded media off the local filesystem (config.urls) and enable the upload
+# endpoint — dev has no S3 backend, so local serving is the whole media path here.
+SERVE_LOCAL_MEDIA = True
+
 # Fan signup uses the deterministic mock OTP locally (no SMS provider wired).
 ENABLE_MOCK_FAN_OTP = True
 
