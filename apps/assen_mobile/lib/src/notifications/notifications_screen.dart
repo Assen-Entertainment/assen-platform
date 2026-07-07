@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/relative_time.dart';
 import 'package:assen_mobile/src/notifications/app_notification.dart';
 import 'package:assen_mobile/src/notifications/notifications_controller.dart';
 import 'package:assen_mobile/src/notifications/notifications_repository.dart';
@@ -85,7 +86,7 @@ class _NotificationTile extends StatelessWidget {
 
     return AssenListItem(
       title: notification.title,
-      subtitle: _relativeTime(notification.createdAt, now),
+      subtitle: relativeTime(notification.createdAt, now),
       showChevron: false,
       leading: Container(
         width: SpacingTokens.s10,
@@ -146,16 +147,3 @@ class _NotificationsSkeleton extends StatelessWidget {
     );
   }
 }
-
-/// Formats [time] relative to [now] (방금 전 / N분 전 / N시간 전 / N일 전 / 날짜).
-String _relativeTime(DateTime time, DateTime now) {
-  final diff = now.difference(time);
-  if (diff.inMinutes < 1) return '방금 전';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
-  if (diff.inHours < 24) return '${diff.inHours}시간 전';
-  if (diff.inDays < 7) return '${diff.inDays}일 전';
-  return '${time.year}.${_two(time.month)}.${_two(time.day)}';
-}
-
-/// Zero-pads a month/day to two digits.
-String _two(int value) => value.toString().padLeft(2, '0');

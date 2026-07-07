@@ -9,6 +9,7 @@ import 'package:ui_kit/src/organisms/cover_header.dart';
 import 'package:ui_kit/src/organisms/empty_state.dart';
 import 'package:ui_kit/src/organisms/error_state.dart';
 import 'package:ui_kit/src/organisms/membership_card.dart';
+import 'package:ui_kit/src/organisms/post_card.dart';
 import 'package:ui_kit/src/organisms/product_card.dart';
 
 /// A single-screen gallery of every Organism for visual review.
@@ -147,6 +148,24 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
               priceLabel: '₩18,000',
               tagLabel: '굿즈',
               meta: '선착순 100개',
+              onTap: () {},
+            ),
+          ),
+          _Section(
+            title: 'PostCard (피드 포스트 — 브라우즈 전용)',
+            child: AssenPostCard(
+              creatorName: '미오',
+              creatorMeta: '@mio',
+              timeLabel: '3시간 전',
+              verified: true,
+              avatar: const AssenAvatar(
+                name: '미오',
+                hue: AssenBadgeHue.strawberry,
+              ),
+              body: '오늘 방송 고마웠어요! 다음 주에 또 만나요 🍓',
+              likeCount: 128,
+              commentCount: 16,
+              liked: true,
               onTap: () {},
             ),
           ),

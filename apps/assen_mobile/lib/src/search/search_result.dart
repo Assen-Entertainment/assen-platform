@@ -1,6 +1,6 @@
 import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
-import 'package:assen_mobile/src/search/product.dart';
+import 'package:assen_mobile/src/store/product.dart';
 import 'package:flutter/foundation.dart';
 
 /// The parsed result of a `GET /api/search` call: matching creators + products.

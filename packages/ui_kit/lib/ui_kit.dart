@@ -58,6 +58,7 @@ export 'src/organisms/dialog.dart';
 export 'src/organisms/empty_state.dart';
 export 'src/organisms/error_state.dart';
 export 'src/organisms/membership_card.dart';
+export 'src/organisms/post_card.dart';
 export 'src/organisms/product_card.dart';
 export 'src/theme.dart';
 export 'src/token_swatch.dart';

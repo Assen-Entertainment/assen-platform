@@ -5,6 +5,8 @@
 import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/creator/creator_screen.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
+import 'package:assen_mobile/src/membership/membership_repository.dart';
+import 'package:assen_mobile/src/membership/tier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +32,13 @@ class _FakeCreatorRepository implements CreatorRepository {
   }
 }
 
+/// A membership repository stand-in reporting no tiers, so the profile's
+/// membership section stays silent (and issues no network call) in these tests.
+class _EmptyMembershipRepository implements MembershipRepository {
+  @override
+  Future<List<Tier>> fetchTiers(String creatorId) async => const [];
+}
+
 /// One full `CreatorOut` profile row as the server serializes it.
 Map<String, dynamic> _profileRow() => {
   'id': 'a1b2',
@@ -51,6 +60,9 @@ Widget _host(Creator creator) => ProviderScope(
   overrides: [
     creatorRepositoryProvider.overrideWithValue(
       _FakeCreatorRepository.data(creator),
+    ),
+    membershipRepositoryProvider.overrideWithValue(
+      _EmptyMembershipRepository(),
     ),
   ],
   child: MaterialApp(

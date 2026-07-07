@@ -3,11 +3,11 @@
 // through a fake repository (debounced, no network).
 
 import 'package:assen_mobile/src/discovery/creator.dart';
-import 'package:assen_mobile/src/search/product.dart';
 import 'package:assen_mobile/src/search/search_controller.dart';
 import 'package:assen_mobile/src/search/search_repository.dart';
 import 'package:assen_mobile/src/search/search_result.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
+import 'package:assen_mobile/src/store/product.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

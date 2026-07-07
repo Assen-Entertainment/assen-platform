@@ -9,6 +9,8 @@ import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_repository.dart';
+import 'package:assen_mobile/src/membership/membership_repository.dart';
+import 'package:assen_mobile/src/membership/tier.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +28,14 @@ class _FakeCreatorRepository implements CreatorRepository {
       Creator(id: '1', handle: handle, displayName: handle);
 }
 
+/// A membership repository stand-in reporting no tiers, so the profile's
+/// membership section stays silent (and issues no network call) on the deep
+/// link into the creator route.
+class _EmptyMembershipRepository implements MembershipRepository {
+  @override
+  Future<List<Tier>> fetchTiers(String creatorId) async => const [];
+}
+
 /// An [AuthController] reporting a signed-in session, so the guard's
 /// authenticated branch is exercisable without the (deferred) real login.
 class _AuthedController extends AuthController {
@@ -41,6 +51,9 @@ ProviderContainer _container({bool authenticated = false}) {
         _EmptyDiscoveryRepository(),
       ),
       creatorRepositoryProvider.overrideWithValue(_FakeCreatorRepository()),
+      membershipRepositoryProvider.overrideWithValue(
+        _EmptyMembershipRepository(),
+      ),
       if (authenticated)
         authControllerProvider.overrideWith(_AuthedController.new),
     ],
