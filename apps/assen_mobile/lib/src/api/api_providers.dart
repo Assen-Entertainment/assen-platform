@@ -68,12 +68,15 @@ final dioProvider = Provider<Dio>((ref) {
 ///
 /// The token is read from [authControllerProvider]; signed out, no header is
 /// added (public endpoints still resolve). On a 401 for an authorized request
-/// it asks [AuthController.refreshSession] to rotate the refresh token
-/// (single-flight — a burst of 401s shares one rotation) and replays the
-/// original request exactly once with the fresh token; a failed rotation clears
-/// the session and the original 401 surfaces. Auth endpoints (login/signup/
-/// refresh/logout) and an already-retried request are excluded, so a rotation
-/// never recurses or loops.
+/// it either replays with the current token (when another request has already
+/// rotated the token out from under this one — a stale 401) or asks
+/// [AuthController.refreshSession] to rotate the refresh token (single-flight —
+/// a burst of concurrent 401s shares one rotation) and replays the original
+/// request exactly once with the fresh token; a failed rotation clears the
+/// session and the original 401 surfaces. Auth endpoints (login/signup/refresh/
+/// logout) and an already-retried request are excluded, so a rotation never
+/// recurses or loops, and any unexpected error still completes the handler so a
+/// request never hangs.
 class AuthInterceptor extends Interceptor {
   /// Creates an interceptor reading auth state from [_ref] and replaying a
   /// rotated request through [_dio] (the instance it is installed on).
@@ -86,11 +89,18 @@ class AuthInterceptor extends Interceptor {
   /// retry surfaces instead of triggering an endless refresh loop.
   static const String _retriedKey = 'assen.auth.retried';
 
+  /// Records the access token this request was actually sent with, so a late
+  /// 401 can tell "the token I used is still current" (genuine — rotate) from
+  /// "someone already refreshed past my token" (stale — just replay with the
+  /// current token, no second rotation).
+  static const String _sentTokenKey = 'assen.auth.sent_token';
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final token = _ref.read(authControllerProvider).accessToken;
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
+      options.extra[_sentTokenKey] = token;
     }
     handler.next(options);
   }
@@ -98,37 +108,65 @@ class AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final options = err.requestOptions;
-    final canRotate =
+    final canRecover =
         err.response?.statusCode == 401 &&
         !_isAuthEndpoint(options.path) &&
         options.extra[_retriedKey] != true;
-    if (!canRotate) {
+    if (!canRecover) {
       handler.next(err);
       return;
     }
     unawaited(_rotateAndReplay(err, handler));
   }
 
-  /// Rotates the token once (single-flight) and replays the failed request.
+  /// Recovers a 401 and replays the failed request exactly once.
+  ///
+  /// If another in-flight request already rotated the token, this 401 is stale:
+  /// replay with the now-current token without a second rotation. Otherwise
+  /// rotate once (single-flight) and replay with the fresh token. Every path
+  /// completes [handler] exactly once — including on any unexpected error,
+  /// where the original 401 is surfaced — so a request can never dangle.
   Future<void> _rotateAndReplay(
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    final token = await _ref
-        .read(authControllerProvider.notifier)
-        .refreshSession();
+    final options = err.requestOptions;
+    final String? token;
+    try {
+      final sentToken = options.extra[_sentTokenKey];
+      final currentToken = _ref.read(authControllerProvider).accessToken;
+      if (currentToken != null && currentToken != sentToken) {
+        // A concurrent request already refreshed: this 401 raced a completed
+        // rotation. Replay with the current token — no redundant rotation.
+        token = currentToken;
+      } else {
+        // The token we sent is still current (or we hold none): rotate once.
+        token = await _ref
+            .read(authControllerProvider.notifier)
+            .refreshSession();
+      }
+    } on Object {
+      // refreshSession is contractually non-throwing, but guard defensively:
+      // any failure deciding the replay token surfaces the original 401 rather
+      // than leaving the request hung on a handler that never completes.
+      handler.next(err);
+      return;
+    }
     if (token == null) {
       // Rotation failed: the session is already cleared — surface the 401.
       handler.next(err);
       return;
     }
-    final options = err.requestOptions
+    options
       ..extra[_retriedKey] = true
       ..headers['Authorization'] = 'Bearer $token';
     try {
       handler.resolve(await _dio.fetch<dynamic>(options));
     } on DioException catch (retryError) {
       handler.next(retryError);
+    } on Object {
+      // A non-Dio replay failure must not hang the request: surface the 401.
+      handler.next(err);
     }
   }
 

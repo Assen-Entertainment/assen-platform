@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -36,46 +38,65 @@ abstract class TokenStore {
 
 /// Platform-secure [TokenStore] backed by [FlutterSecureStorage].
 ///
-/// Stores the two opaque tokens in the OS keystore (iOS Keychain / Android
+/// Stores the opaque token pair in the OS keystore (iOS Keychain / Android
 /// Keystore / Windows DPAPI). Only the tokens are written — never PII — and the
-/// values are never logged. Reads fail closed: a missing/undecryptable entry
-/// reads as signed out rather than throwing into the session restore.
+/// values are never logged. The pair is persisted as a single JSON value under
+/// one key so a write is atomic: an interrupted save can never leave an
+/// old-refresh/new-access mix — a read sees either the complete new pair or the
+/// prior complete pair, never a spliced one. Reads fail closed: a missing or
+/// corrupt entry reads as signed out rather than throwing into the session
+/// restore.
 class SecureTokenStore implements TokenStore {
   /// Creates a store over [_storage].
   const SecureTokenStore(this._storage);
 
   final FlutterSecureStorage _storage;
 
-  /// Keystore key for the access token. Namespaced to avoid colliding with any
-  /// other secure entry the app may add later.
-  static const String _accessKey = 'assen.auth.access_token';
+  /// The single keystore key holding the JSON-encoded token pair. Namespaced to
+  /// avoid colliding with any other secure entry the app may add later. One key
+  /// (not two) is what makes writes atomic — see the class doc.
+  static const String _pairKey = 'assen.auth.token_pair';
 
-  /// Keystore key for the refresh token.
-  static const String _refreshKey = 'assen.auth.refresh_token';
+  /// JSON field for the access token within the stored pair.
+  static const String _accessField = 'access_token';
+
+  /// JSON field for the refresh token within the stored pair.
+  static const String _refreshField = 'refresh_token';
 
   @override
   Future<AuthTokens?> read() async {
-    final access = await _storage.read(key: _accessKey);
-    final refresh = await _storage.read(key: _refreshKey);
-    if (access == null ||
-        access.isEmpty ||
-        refresh == null ||
-        refresh.isEmpty) {
+    final raw = await _storage.read(key: _pairKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final access = decoded[_accessField];
+      final refresh = decoded[_refreshField];
+      if (access is! String ||
+          access.isEmpty ||
+          refresh is! String ||
+          refresh.isEmpty) {
+        return null;
+      }
+      return AuthTokens(accessToken: access, refreshToken: refresh);
+    } on FormatException {
+      // A corrupt/garbled value: fail closed (signed out) rather than throw.
       return null;
     }
-    return AuthTokens(accessToken: access, refreshToken: refresh);
   }
 
   @override
   Future<void> save(AuthTokens tokens) async {
-    await _storage.write(key: _accessKey, value: tokens.accessToken);
-    await _storage.write(key: _refreshKey, value: tokens.refreshToken);
+    final value = jsonEncode(<String, String>{
+      _accessField: tokens.accessToken,
+      _refreshField: tokens.refreshToken,
+    });
+    await _storage.write(key: _pairKey, value: value);
   }
 
   @override
   Future<void> clear() async {
-    await _storage.delete(key: _accessKey);
-    await _storage.delete(key: _refreshKey);
+    await _storage.delete(key: _pairKey);
   }
 }
 

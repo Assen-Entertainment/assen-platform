@@ -42,6 +42,17 @@ class AuthController extends Notifier<AuthState> {
   /// awaits the same future so only one `POST /fan/refresh` is ever sent.
   Future<String?>? _refreshInFlight;
 
+  /// Monotonic session epoch guarding against stale async writes.
+  ///
+  /// Bumped on every session-identity change — a successful login/signup/
+  /// rotation and on [signOut]. Each result-applying flow ([_restore],
+  /// [_startSession], [_rotate]) captures this at its start and applies its
+  /// result (flip to authenticated / persist tokens) only when the epoch is
+  /// still current. A slow in-flight op whose epoch has moved is discarded, so
+  /// a late refresh can neither revive a signed-out session nor clobber a
+  /// fresher one — in particular, [signOut] always beats an in-flight refresh.
+  int _generation = 0;
+
   @override
   AuthState build() {
     unawaited(_restore());
@@ -54,21 +65,30 @@ class AuthController extends Notifier<AuthState> {
   /// under `flutter test`) leaves the app signed out. Never surfaces token
   /// material.
   Future<void> _restore() async {
+    final generation = _generation;
     try {
       final tokens = await ref.read(tokenStoreProvider).read();
-      if (tokens != null) {
-        state = AuthState(
-          isAuthenticated: true,
-          accessToken: tokens.accessToken,
-        );
-      }
+      if (tokens == null) return;
+      // A login or sign-out that raced ahead of this restore already owns the
+      // session: discard the stale restore rather than overwrite it.
+      if (generation != _generation) return;
+      state = AuthState(isAuthenticated: true, accessToken: tokens.accessToken);
     } on Object {
-      // Secure storage unavailable or unreadable: remain signed out.
-      state = const AuthState.unauthenticated();
+      // Secure storage unavailable or unreadable: remain signed out — unless a
+      // newer session was established while the read was in flight.
+      if (generation == _generation) {
+        state = const AuthState.unauthenticated();
+      }
     }
   }
 
   /// Sends a signup/login OTP to [phone] (`POST /fan/signup/otp`).
+  ///
+  /// DEFERRED (real-SMS hardening): the mock sender issues a deterministic code
+  /// that the same phone can reuse across a login attempt and a subsequent
+  /// signup. A single-use / step-bound OTP is gated behind the real SMS adapter
+  /// (mock disabled in production via `ENABLE_MOCK_FAN_OTP=False`), so this is
+  /// not exploitable on a shipped build.
   Future<void> requestOtp(String phone) =>
       ref.read(authApiProvider).requestOtp(phone);
 
@@ -106,7 +126,12 @@ class AuthController extends Notifier<AuthState> {
 
   /// Persists [tokens] and flips the session to authenticated.
   Future<void> _startSession(AuthTokens tokens) async {
+    final generation = _generation;
     await ref.read(tokenStoreProvider).save(tokens);
+    // A sign-out (or another session) advanced the epoch while persisting:
+    // discard so a stale login cannot resurrect a session the user just left.
+    if (generation != _generation) return;
+    _generation++;
     state = AuthState(isAuthenticated: true, accessToken: tokens.accessToken);
   }
 
@@ -115,8 +140,14 @@ class AuthController extends Notifier<AuthState> {
   /// Single-flight: concurrent callers (a burst of 401s) share one in-flight
   /// rotation so only one `POST /fan/refresh` is sent; the rest await its
   /// result. A null result means the family is dead and the session has been
-  /// cleared — the interceptor then surfaces the original 401. Called by the
-  /// API auth interceptor; not for direct UI use.
+  /// cleared — the interceptor then surfaces the original 401. Never throws
+  /// (fail-closed: any error resolves to null), so callers never dangle. Called
+  /// by the API auth interceptor; not for direct UI use.
+  ///
+  /// DEFERRED (proactive scheduling): rotation is purely 401-reactive — we do
+  /// not parse the access token's expiry to refresh ahead of time. The reactive
+  /// path is correct (a request that would 401 triggers exactly one rotation);
+  /// a pre-emptive scheduler is a latency optimization only.
   Future<String?> refreshSession() {
     final existing = _refreshInFlight;
     if (existing != null) return existing;
@@ -133,22 +164,39 @@ class AuthController extends Notifier<AuthState> {
   }
 
   /// Performs one refresh-token rotation.
+  ///
+  /// Fail-closed and epoch-guarded. Any failure — a rejected rotation
+  /// (expired/revoked/reused → 401), an unreadable/unwritable store, or a
+  /// malformed refresh body — drops the session and returns null (never
+  /// throws). If the session epoch advanced while the network call was in
+  /// flight (a concurrent [signOut] or a newer login), the result is discarded
+  /// without touching state or storage, so a stale rotation cannot revive a
+  /// signed-out session or overwrite a fresher one.
   Future<String?> _rotate() async {
-    final refreshToken =
-        (await ref.read(tokenStoreProvider).read())?.refreshToken;
-    if (refreshToken == null || refreshToken.isEmpty) {
-      await _clearSession();
-      return null;
-    }
+    final generation = _generation;
     try {
+      final refreshToken =
+          (await ref.read(tokenStoreProvider).read())?.refreshToken;
+      if (refreshToken == null || refreshToken.isEmpty) {
+        if (generation == _generation) await _clearSession();
+        return null;
+      }
       final next = await ref.read(authApiProvider).refresh(refreshToken);
+      if (generation != _generation) {
+        // A sign-out or newer login superseded this rotation while it was in
+        // flight: discard its result. Do NOT clear here — that would wipe the
+        // fresher session's tokens.
+        return null;
+      }
       await ref.read(tokenStoreProvider).save(next);
+      _generation++;
       state = AuthState(isAuthenticated: true, accessToken: next.accessToken);
       return next.accessToken;
-    } on DioException {
-      // Rotation was rejected (expired/revoked/reused → 401): the whole family
-      // is dead, so drop the session and forget the stored tokens.
-      await _clearSession();
+    } on Object {
+      // Fail-closed: the family can no longer be trusted, so drop the session
+      // and forget the stored tokens — unless a newer epoch already replaced
+      // this one, in which case leave that fresher session intact.
+      if (generation == _generation) await _clearSession();
       return null;
     }
   }
@@ -159,6 +207,9 @@ class AuthController extends Notifier<AuthState> {
   /// The local state flips synchronously so the router releases the auth-gated
   /// tabs at once; the network revoke is best-effort.
   void signOut() {
+    // Advance the epoch first so any refresh already in flight is invalidated:
+    // its completion can no longer re-authenticate this now-signed-out session.
+    _generation++;
     final token = state.accessToken;
     state = const AuthState.unauthenticated();
     unawaited(_endSession(token));

@@ -1,6 +1,9 @@
 // Tests for SecureTokenStore against a mocked flutter_secure_storage channel:
-// a save→read round-trip returns the pair, clear forgets it, and a store
-// missing either token reads as signed out (null). No real keystore is touched.
+// a save→read round-trip returns the pair, clear forgets it, a corrupt stored
+// value reads as signed out (null, fail-closed), and — because the pair is
+// persisted atomically under a single key — an interrupted write leaves the
+// prior complete pair intact rather than a spliced old/new mix. No real
+// keystore is touched.
 
 import 'package:assen_mobile/src/auth/token_store.dart';
 import 'package:flutter/services.dart';
@@ -15,14 +18,22 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Map<String, String> backing;
+  // When set, the next channel `write` throws (simulating a process kill /
+  // channel error mid-write) and leaves the backing store untouched.
+  late bool failNextWrite;
 
   setUp(() {
     backing = {};
+    failNextWrite = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, (call) async {
           final args = (call.arguments as Map).cast<String, dynamic>();
           switch (call.method) {
             case 'write':
+              if (failNextWrite) {
+                failNextWrite = false;
+                throw Exception('secure storage write interrupted');
+              }
               backing[args['key'] as String] = args['value'] as String;
               return null;
             case 'read':
@@ -69,11 +80,32 @@ void main() {
     expect(backing, isEmpty);
   });
 
-  test('a half-written store reads as signed out (fail-closed)', () async {
-    // Only the access token present (e.g. an interrupted write): treated as no
-    // session rather than a malformed pair.
-    backing['assen.auth.access_token'] = 'orphan';
+  test('a corrupt stored value reads as signed out (fail-closed)', () async {
+    // A garbled/non-JSON entry (e.g. an aborted write or keystore corruption)
+    // is treated as no session rather than throwing into the session restore.
+    backing['assen.auth.token_pair'] = 'not-json{';
 
     expect(await store.read(), isNull);
+  });
+
+  test('an interrupted write keeps the prior pair intact (atomic)', () async {
+    // Seed a complete pair, then fail the next write mid-flight.
+    await store.save(
+      const AuthTokens(accessToken: 'old-a', refreshToken: 'old-r'),
+    );
+    failNextWrite = true;
+
+    await expectLater(
+      store.save(
+        const AuthTokens(accessToken: 'new-a', refreshToken: 'new-r'),
+      ),
+      throwsA(anything),
+    );
+
+    // The single-key JSON design makes the write atomic: the next load sees the
+    // prior *complete* pair, never a new-access + old-refresh splice.
+    final read = await store.read();
+    expect(read?.accessToken, 'old-a');
+    expect(read?.refreshToken, 'old-r');
   });
 }
