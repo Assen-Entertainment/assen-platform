@@ -127,6 +127,10 @@ LOCAL_APPS = [
     # Saved payment methods (R3): brand + last4 + mock PG token only — never a card
     # PAN/expiry/cvc. Migration-less like the rest (`migrate --run-syncdb`).
     "apps.payments",
+    # Image uploads (R11): validated image → storage (local FS mock now, S3 후행).
+    # Tracks only a server-minted media URL + content-type + owner (no filename/PII).
+    # Migration-less like the rest (`migrate --run-syncdb`).
+    "apps.uploads",
 ]
 
 # daphne must precede django.contrib.staticfiles so Channels' ASGI runserver
@@ -239,6 +243,38 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Media (user-uploaded images) ---------------------------------------------
+# Uploaded images (avatars, post/product media) are written through Django's
+# storage abstraction (STORAGES["default"]) so no call site knows the backend.
+# dev/demo/test use the local filesystem under MEDIA_ROOT; dev serves it via
+# config.urls (DEBUG-only). Values are env-tunable so a container can relocate the
+# volume without a code change.
+MEDIA_URL = env("DJANGO_MEDIA_URL", default="/media/")
+MEDIA_ROOT = env("DJANGO_MEDIA_ROOT", default=str(BASE_DIR / "media"))
+
+# Hard ceiling on a single uploaded file (bytes); 10 MiB default, env-tunable. The
+# upload endpoint (apps.uploads.api) rejects anything larger BEFORE the bytes are
+# read into memory or written to storage.
+UPLOAD_MAX_BYTES: int = env.int("UPLOAD_MAX_BYTES", default=10 * 1024 * 1024)
+
+# Django 5 storage backends. default = local filesystem for dev/demo/test.
+#
+# S3 PLUGIN POINT (후행 — NOT implemented here): a real deployment installs
+# django-storages[s3] and overrides STORAGES["default"] in prod (env-driven) to an
+# S3/GCS backend — e.g.
+#     STORAGES["default"] = {
+#         "BACKEND": "storages.backends.s3.S3Storage",
+#         "OPTIONS": {"bucket_name": ..., "querystring_auth": True, ...},
+#     }
+# The upload call sites use ``default_storage`` only, so nothing else changes. The
+# production backend MUST serve objects with a safe image Content-Type + an
+# attachment/inline Content-Disposition from a non-executable (private) bucket, and
+# gated media should use signed reads (see config.storage.SignedUrlAdapter).
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 # CORS — fail-closed: no origin is allowed unless the environment says so.
 # dev.py opts in localhost web origins; prod supplies the real web origin(s).

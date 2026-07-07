@@ -55,6 +55,8 @@ venv/
 db.sqlite3
 # Django collected static
 server/staticfiles/
+# User-uploaded media (dev local FS storage; prod serves from S3/CDN)
+server/media/
 # Celery Beat runtime schedule + pid (the dev stack writes these into ./server)
 server/celerybeat-schedule*
 server/celerybeat.pid

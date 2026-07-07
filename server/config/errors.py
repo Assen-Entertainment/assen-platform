@@ -121,6 +121,16 @@ class ErrorCode(StrEnum):
     # for a future surface that returns an explicit "blocked by age gate" error.
     ADULT_GATE_BLOCKED = "AdultGateBlocked"
 
+    # --- uploads (media) ----------------------------------------------------
+    # A multipart image upload was rejected (apps.uploads.api): the declared
+    # content-type is not an allowed image family (415 → UPLOAD_TYPE_UNSUPPORTED,
+    # also covers SVG/HTML); the bytes are not a real image or are scriptable
+    # markup — magic-byte sniff (422 → UPLOAD_INVALID); or the file exceeds the size
+    # ceiling (413 → UPLOAD_TOO_LARGE).
+    UPLOAD_TYPE_UNSUPPORTED = "UploadTypeUnsupported"
+    UPLOAD_INVALID = "UploadInvalid"
+    UPLOAD_TOO_LARGE = "UploadTooLarge"
+
 
 class ApiError(HttpError):
     """An ``HttpError`` that also carries a stable :class:`ErrorCode`.

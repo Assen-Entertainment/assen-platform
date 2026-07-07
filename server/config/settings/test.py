@@ -7,7 +7,13 @@ nor the broker).
 
 from __future__ import annotations
 
+import tempfile
+
 from config.settings.base import *  # noqa: F403
+
+# Uploaded media goes to a throwaway temp dir so the suite never writes into the
+# repo tree (and each machine/run gets an isolated, disposable location).
+MEDIA_ROOT = tempfile.mkdtemp(prefix="assen-test-media-")
 
 DATABASES = {
     "default": {

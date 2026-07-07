@@ -6,6 +6,8 @@ routers attach to that NinjaAPI from inside each app's api.py (CONSTRAINTS #38).
 
 from __future__ import annotations
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.db import connection
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -57,3 +59,10 @@ urlpatterns = [
     path("healthz", healthz),
     path("readyz", readyz),
 ]
+
+# dev-only: serve user-uploaded media from the local filesystem so the feed/catalog
+# can render freshly uploaded images without a CDN. ``static()`` returns [] unless
+# DEBUG, so this is a no-op in prod (where S3/CDN serves MEDIA_URL) — media is never
+# served through Django in production.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

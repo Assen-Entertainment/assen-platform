@@ -87,5 +87,6 @@ from apps.reservation import api as reservation_api  # noqa: E402,F401
 from apps.safety import api as safety_api  # noqa: E402,F401
 from apps.schedule import api as schedule_api  # noqa: E402,F401
 from apps.social import api as social_api  # noqa: E402,F401
+from apps.uploads import api as uploads_api  # noqa: E402,F401
 from apps.visit import api as visit_api  # noqa: E402,F401
 from apps.visit_guide import api as visit_guide_api  # noqa: E402,F401
