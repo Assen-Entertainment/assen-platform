@@ -38,7 +38,7 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
     <div
       ref={ref}
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-lg border bg-surface-container",
+        "flex w-full flex-col overflow-hidden rounded-lg border bg-surface-container transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-3 motion-reduce:transform-none motion-reduce:transition-none",
         featured ? (accent ? "border-creator-accent shadow-2" : "border-primary shadow-2") : "border-outline",
         className,
       )}

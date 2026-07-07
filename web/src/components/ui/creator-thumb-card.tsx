@@ -29,11 +29,11 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
     <a
       ref={ref}
       style={accentColor ? { ...creatorAccentVars(accentColor), ...style } : style}
-      className={cn("group flex flex-col gap-1.5", className)}
+      className={cn("group flex flex-col gap-2", className)}
       {...props}
     >
       <div
-        className="relative aspect-square w-full overflow-hidden rounded-md bg-surface-container-high"
+        className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface-container-high shadow-1 ring-1 ring-inset ring-on-surface/10 transition-shadow duration-200 group-hover:shadow-3 motion-reduce:transition-none"
         style={
           cover
             ? undefined
@@ -48,12 +48,21 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
             alt={name}
             loading="lazy"
             sizes={sizes}
-            className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.03] motion-reduce:transition-none"
+            className="size-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.05] motion-reduce:transition-none"
           />
         ) : null}
+        {/* 하단 스크림 — hover 시 깊이/가독성. gradient·이미지 커버 공통. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/25 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 motion-reduce:transition-none"
+        />
       </div>
-      <span className="line-clamp-1 text-title-m text-on-surface">{name}</span>
-      {meta ? <span className="line-clamp-1 text-caption text-on-surface-variant">{meta}</span> : null}
+      <div className="flex flex-col gap-0.5 px-0.5">
+        <span className="line-clamp-1 text-title-m text-on-surface transition-colors group-hover:text-primary motion-reduce:transition-none">
+          {name}
+        </span>
+        {meta ? <span className="line-clamp-1 text-caption text-on-surface-variant">{meta}</span> : null}
+      </div>
     </a>
     );
   },

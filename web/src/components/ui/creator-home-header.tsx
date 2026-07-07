@@ -61,13 +61,17 @@ export function CreatorHomeHeader({
   return (
     <header className="flex flex-col">
       <div
-        className="h-40 w-full rounded-lg sm:h-48"
+        className="relative h-44 w-full overflow-hidden rounded-xl sm:h-56"
         style={
           accent
             ? { backgroundImage: "linear-gradient(135deg, var(--creator-accent), var(--creator-accent-container))" }
             : { backgroundImage: "var(--gradient-brand)" }
         }
-      />
+      >
+        {/* 커버 광원·깊이 모티프 — 크리에이터 색이 살아 있는 히어로. */}
+        <div aria-hidden className="pointer-events-none absolute -right-12 -top-16 size-56 rounded-full bg-white/10 blur-2xl" />
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 to-transparent" />
+      </div>
 
       <div className="-mt-12 flex flex-wrap items-end gap-4 px-2">
         <Avatar fallback={initial} size="xl" tone={handle} className="rounded-full shadow-2 ring-4 ring-surface" />

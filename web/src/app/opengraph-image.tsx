@@ -24,6 +24,24 @@ export default function OpengraphImage() {
           color: "#ffffff",
         }}
       >
+        {/* 브랜드 마크(상승하는 A 모노그램) — 파비콘·Logo 컴포넌트와 형태 공유. */}
+        <div
+          style={{
+            display: "flex",
+            width: 104,
+            height: 104,
+            borderRadius: 28,
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(255,255,255,0.15)",
+            border: "2px solid rgba(255,255,255,0.4)",
+            marginBottom: 28,
+          }}
+        >
+          <svg width="56" height="56" viewBox="0 0 32 32" fill="none" stroke="#ffffff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 23 L16 8.5 L22 23 M12.6 17.6 H19.4" />
+          </svg>
+        </div>
         <div style={{ fontSize: 132, fontWeight: 700, letterSpacing: -4 }}>Assen</div>
         <div style={{ marginTop: 16, fontSize: 34, opacity: 0.9 }}>creator platform</div>
       </div>

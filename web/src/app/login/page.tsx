@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { TextField, Button, Divider, OTPInput } from "@/components/ui";
+import { TextField, Button, Divider, OTPInput, Logo } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError, ERROR_CODES } from "@/lib/api";
@@ -92,7 +92,9 @@ function OtpLogin({ next }: { next: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="text-center text-display-m text-primary">Assen</h1>
+        <h1 className="flex justify-center">
+          <Logo size="lg" />
+        </h1>
         <p className="text-center text-body-s text-on-surface-variant">크리에이터의 세계관을 팬과 잇는 무대</p>
 
         {step === "phone" ? (
@@ -174,7 +176,9 @@ function MockLogin({ next }: { next: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
       <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="text-center text-display-m text-primary">Assen</h1>
+        <h1 className="flex justify-center">
+          <Logo size="lg" />
+        </h1>
         <p className="text-center text-body-s text-on-surface-variant">크리에이터의 세계관을 팬과 잇는 무대</p>
         <TextField label="이메일" type="email" placeholder="you@assen.kr" />
         <TextField label="비밀번호" type="password" placeholder="••••••••" />

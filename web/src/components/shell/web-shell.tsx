@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Sidebar, TopBar, SearchField, Button, Avatar, BottomNav } from "@/components/ui";
+import { Sidebar, TopBar, SearchField, Button, Avatar, BottomNav, Logo } from "@/components/ui";
 import { HomeIcon, FeedIcon, StoreIcon, HeartIcon, BellIcon, PersonIcon, SunIcon, MoonIcon } from "@/lib/icons";
 import { useTheme } from "@/components/theme-provider";
 import { useSession } from "@/lib/session";
@@ -53,7 +53,7 @@ export function WebShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-surface">
+    <div className="flex min-h-screen bg-canvas">
       {/* 건너뛰기 링크(루브릭 #51) — 키보드 포커스 시에만 노출, 본문으로 이동. */}
       <a
         href="#main"
@@ -63,7 +63,15 @@ export function WebShell({ children }: { children: React.ReactNode }) {
       </a>
       <Sidebar
         className="hidden lg:flex"
-        brand={<span className="text-title-l text-primary">Assen</span>}
+        brand={
+          <Link
+            href="/discovery"
+            aria-label="Assen 홈"
+            className="inline-flex rounded-md text-on-surface transition-opacity hover:opacity-80"
+          >
+            <Logo size="md" />
+          </Link>
+        }
         items={NAV}
         activeHref={active}
         linkComponent={Link}
@@ -79,8 +87,8 @@ export function WebShell({ children }: { children: React.ReactNode }) {
         <TopBar
           className="px-4 sm:px-6"
           logo={
-            <Link href="/discovery" className="text-title-l text-primary lg:hidden">
-              Assen
+            <Link href="/discovery" aria-label="Assen 홈" className="inline-flex rounded-md lg:hidden">
+              <Logo variant="mark" size="md" />
             </Link>
           }
           search={

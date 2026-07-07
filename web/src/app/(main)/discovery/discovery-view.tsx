@@ -99,10 +99,28 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
-      <section className="flex flex-col gap-4">
-        <h1 className="text-headline text-on-surface">크리에이터 발견</h1>
-        <CategoryIconRow items={CATEGORY_ICONS} onSelect={goSearch} />
+      {/* 히어로 — 편집형 프론트도어(시그니처 gradient.brand 모먼트). 진입 시 살짝 떠오름(reduced-motion 가드). */}
+      <section
+        className="relative overflow-hidden rounded-xl px-6 py-10 [animation:fade-up_500ms_ease-out] sm:px-10 sm:py-12"
+        style={{ backgroundImage: "var(--gradient-brand)" }}
+      >
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-white/10 blur-2xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-white/10 blur-3xl" />
+        {/* 좌측 다크 스크림 — 브랜드 그라디언트를 유지하면서 텍스트 대비 AA 보장. */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/20 via-black/5 to-transparent" />
+        <div className="relative flex max-w-2xl flex-col gap-3 text-white">
+          <span className="text-label font-semibold uppercase tracking-[0.16em] text-white/90">크리에이터 커머스</span>
+          <h1 className="text-display-m font-bold leading-[1.15] tracking-tight text-white sm:text-display-xl">
+            취향에 맞는 크리에이터를 발견하세요
+          </h1>
+          <p className="max-w-xl text-body-l text-white/90">
+            팔로우부터 멤버십·굿즈까지, 크리에이터의 세계를 한 곳에서 만나보세요.
+          </p>
+        </div>
       </section>
+
+      {/* 카테고리 탐색(#7) — 콜드스타트 진입점. */}
+      <CategoryIconRow items={CATEGORY_ICONS} onSelect={goSearch} />
 
       {/* 인기 크리에이터 선반(#10) — 사회적 증거 메타 노출(#12). */}
       <Shelf

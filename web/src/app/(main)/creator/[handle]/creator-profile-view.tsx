@@ -220,7 +220,7 @@ export function CreatorProfileView({
         </TabsList>
 
         <TabsContent value="posts" className="pt-2">
-          <div className="overflow-hidden rounded-lg border border-outline">
+          <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
             {postList.map((p) => (
               <PostCard
                 key={p.id}

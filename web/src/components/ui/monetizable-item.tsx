@@ -1,7 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { gradientStyle } from "@/lib/placeholder";
 
 /**
@@ -48,28 +47,29 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
       <div
         ref={ref}
         className={cn(
-          "flex w-full flex-col overflow-hidden rounded-lg border border-outline bg-surface",
+          "group flex w-full flex-col overflow-hidden rounded-lg border border-outline bg-surface transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
           className,
         )}
         {...props}
       >
         <div
-          className="aspect-[5/3] w-full bg-surface-container-high"
+          className="relative aspect-[5/3] w-full overflow-hidden bg-surface-container-high"
           style={media ? undefined : gradientStyle(title)}
         >
           {media}
-        </div>
-        <div className="flex flex-col gap-2 p-3">
-          <Badge variant="primary" className="self-start">
+          {/* 타입 태그 — 미디어 위 프로스티드 칩(임의 커버색 위에서도 가독). */}
+          <span className="absolute left-2.5 top-2.5 rounded-full bg-surface/85 px-2.5 py-1 text-caption font-medium text-on-surface shadow-1 backdrop-blur-sm">
             {t.tag}
-          </Badge>
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5 p-3.5">
           <h3 className="line-clamp-1 text-title-m text-on-surface">{title}</h3>
           {creator ? <div className="line-clamp-1 text-body-s text-on-surface-variant">{creator}</div> : null}
           {meta ? (
             <p className="line-clamp-1 text-body-s text-on-surface-variant">{meta}</p>
           ) : null}
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <span className="text-title-m text-on-surface">{price}</span>
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <span className="text-title-l tabular-nums text-on-surface">{price}</span>
             <Button size="sm" onClick={onAction}>
               {ctaLabel ?? t.cta}
             </Button>
