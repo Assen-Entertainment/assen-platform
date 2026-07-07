@@ -37,9 +37,10 @@ int asInt(Object? value) => switch (value) {
 String requireString(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! String) {
-    throw ArgumentError.value(
-      json,
-      'json',
+    // Only the key name is embedded — never the value/payload — so a future
+    // crash reporter (Sentry/Crashlytics) or log interceptor cannot leak PII
+    // (e.g. an OrderShipping recipient phone/postal code) from a parse error.
+    throw ArgumentError(
       'required string field "$key" is missing or not a string',
     );
   }
@@ -56,11 +57,8 @@ int requireInt(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is int) return value;
   if (value is num) return value.toInt();
-  throw ArgumentError.value(
-    json,
-    'json',
-    'required int field "$key" is missing or not a number',
-  );
+  // Key name only (no value/payload) so a parse error cannot leak PII.
+  throw ArgumentError('required int field "$key" is missing or not a number');
 }
 
 /// Returns the required bool stored at [key], or throws on absence/wrong type.
@@ -71,11 +69,8 @@ int requireInt(Map<String, dynamic> json, String key) {
 bool requireBool(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! bool) {
-    throw ArgumentError.value(
-      json,
-      'json',
-      'required bool field "$key" is missing or not a bool',
-    );
+    // Key name only (no value/payload) so a parse error cannot leak PII.
+    throw ArgumentError('required bool field "$key" is missing or not a bool');
   }
   return value;
 }
@@ -99,11 +94,8 @@ List<String> stringList(Object? value) => value is List
 List<String> requireStringList(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! List) {
-    throw ArgumentError.value(
-      json,
-      'json',
-      'required list field "$key" is missing or not a list',
-    );
+    // Key name only (no value/payload) so a parse error cannot leak PII.
+    throw ArgumentError('required list field "$key" is missing or not a list');
   }
   return stringList(value);
 }
@@ -119,11 +111,8 @@ List<String> requireStringList(Map<String, dynamic> json, String key) {
 List<dynamic> requireList(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! List) {
-    throw ArgumentError.value(
-      json,
-      'json',
-      'envelope is missing the required "$key" array',
-    );
+    // Key name only (no value/payload) so a parse error cannot leak PII.
+    throw ArgumentError('envelope is missing the required "$key" array');
   }
   return value;
 }
