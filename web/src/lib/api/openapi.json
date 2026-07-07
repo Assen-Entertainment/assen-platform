@@ -8126,6 +8126,87 @@
           }
         ]
       }
+    },
+    "/api/uploads": {
+      "post": {
+        "operationId": "apps_uploads_api_create_upload",
+        "summary": "Create Upload",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request Entity Too Large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Validate + store a single uploaded image; return its media URL (drop-in media_url).\n\nHand-synced from apps.uploads.api (R11 POST /api/uploads) because the openapi export requires running Django; regenerate via `npm run gen:types`. fan_auth (401 if unauthenticated). Rejects: upload surface fail-closed off (503 UploadStorageUnavailable), non-image declared content-type (415 UploadTypeUnsupported), file over the size ceiling (413 UploadTooLarge), or bytes that are not a real allowed image / scriptable markup (422 UploadInvalid). Stored under a server-minted UUID; the returned URL is /media/uploads/<uuid>.<ext>.",
+        "tags": [
+          "uploads"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiPartBodyCreateUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -9713,6 +9794,35 @@
           "detail"
         ],
         "title": "ErrorOut",
+        "type": "object"
+      },
+      "UploadOut": {
+        "description": "The stored object's site-relative media URL (drop-in for a media_url).",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "UploadOut",
+        "type": "object"
+      },
+      "MultiPartBodyCreateUpload": {
+        "description": "Multipart form body for POST /api/uploads (a single image file).",
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "MultiPartBodyCreateUpload",
         "type": "object"
       },
       "PostIn": {

@@ -24,6 +24,11 @@ export const ERROR_CODES = {
   PaymentCardInvalid: "PaymentCardInvalid",
   PaymentMethodNotFound: "PaymentMethodNotFound",
   InteractionBlocked: "InteractionBlocked",
+  // 이미지 업로드(R12) — POST /api/uploads 실패 사유(서버 config.errors.ErrorCode 미러).
+  UploadTypeUnsupported: "UploadTypeUnsupported",
+  UploadTooLarge: "UploadTooLarge",
+  UploadInvalid: "UploadInvalid",
+  UploadStorageUnavailable: "UploadStorageUnavailable",
 } as const;
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
@@ -59,6 +64,11 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   PaymentMethodNotFound: "결제수단을 찾을 수 없어요.",
   // 개인 차단(R4): 차단한 크리에이터 콘텐츠에 like/댓글/주문 시 서버가 422로 거부.
   InteractionBlocked: "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요.",
+  // 이미지 업로드(R12): POST /api/uploads 실패 — 파일형식(415)·크기(413)·거부(422)·준비중(503).
+  UploadTypeUnsupported: "이미지 파일(PNG·JPEG·WEBP·GIF)만 올릴 수 있어요.",
+  UploadTooLarge: "파일이 너무 커요. 더 작은 이미지를 올려 주세요.",
+  UploadInvalid: "이미지를 올릴 수 없어요. 손상됐거나 허용되지 않는 파일이에요.",
+  UploadStorageUnavailable: "이미지 업로드가 아직 준비 중이에요. 잠시 후 다시 시도해 주세요.",
 };
 
 /**
