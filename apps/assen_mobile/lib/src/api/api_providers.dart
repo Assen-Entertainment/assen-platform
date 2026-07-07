@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:api_client/api_client.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:dio/dio.dart';
@@ -55,22 +57,34 @@ final dioProvider = Provider<Dio>((ref) {
       receiveTimeout: const Duration(seconds: 10),
     ),
   );
-  dio.interceptors.add(AuthInterceptor(ref));
+  // The interceptor replays a rotated request through this same [dio]; it is
+  // handed the instance directly (never `ref.read(dioProvider)`, which would be
+  // a self-dependency).
+  dio.interceptors.add(AuthInterceptor(ref, dio));
   return dio;
 });
 
-/// Attaches the opaque access token to requests and marks the refresh-rotation
-/// point on 401.
+/// Attaches the opaque access token to requests and rotates it on a 401.
 ///
 /// The token is read from [authControllerProvider]; signed out, no header is
-/// added (public endpoints still resolve). TODO(assen): on a 401, call the
-/// refresh endpoint, rotate the stored token, and retry the request once (E6
-/// gate — needs secure storage + the refresh contract).
+/// added (public endpoints still resolve). On a 401 for an authorized request
+/// it asks [AuthController.refreshSession] to rotate the refresh token
+/// (single-flight — a burst of 401s shares one rotation) and replays the
+/// original request exactly once with the fresh token; a failed rotation clears
+/// the session and the original 401 surfaces. Auth endpoints (login/signup/
+/// refresh/logout) and an already-retried request are excluded, so a rotation
+/// never recurses or loops.
 class AuthInterceptor extends Interceptor {
-  /// Creates an interceptor reading auth state from [_ref].
-  AuthInterceptor(this._ref);
+  /// Creates an interceptor reading auth state from [_ref] and replaying a
+  /// rotated request through [_dio] (the instance it is installed on).
+  AuthInterceptor(this._ref, this._dio);
 
   final Ref _ref;
+  final Dio _dio;
+
+  /// Marks a request already replayed after a rotation, so a second 401 on the
+  /// retry surfaces instead of triggering an endless refresh loop.
+  static const String _retriedKey = 'assen.auth.retried';
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -83,8 +97,46 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    // TODO(assen): refresh-token rotation point — swap the expired token and
-    // replay the request once before surfacing the error (E6 gate).
-    handler.next(err);
+    final options = err.requestOptions;
+    final canRotate =
+        err.response?.statusCode == 401 &&
+        !_isAuthEndpoint(options.path) &&
+        options.extra[_retriedKey] != true;
+    if (!canRotate) {
+      handler.next(err);
+      return;
+    }
+    unawaited(_rotateAndReplay(err, handler));
   }
+
+  /// Rotates the token once (single-flight) and replays the failed request.
+  Future<void> _rotateAndReplay(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final token = await _ref
+        .read(authControllerProvider.notifier)
+        .refreshSession();
+    if (token == null) {
+      // Rotation failed: the session is already cleared — surface the 401.
+      handler.next(err);
+      return;
+    }
+    final options = err.requestOptions
+      ..extra[_retriedKey] = true
+      ..headers['Authorization'] = 'Bearer $token';
+    try {
+      handler.resolve(await _dio.fetch<dynamic>(options));
+    } on DioException catch (retryError) {
+      handler.next(retryError);
+    }
+  }
+
+  /// Whether [path] is an auth endpoint that must not trigger a rotation-retry
+  /// (avoids recursing into `/refresh` and re-driving login/signup/logout).
+  bool _isAuthEndpoint(String path) =>
+      path.contains('/fan/refresh') ||
+      path.contains('/fan/login') ||
+      path.contains('/fan/signup') ||
+      path.contains('/fan/logout');
 }

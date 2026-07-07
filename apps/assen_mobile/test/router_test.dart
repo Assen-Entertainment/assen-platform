@@ -82,8 +82,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('로그인'), findsOneWidget); // login app-bar title
-    expect(find.text('로그인이 필요해요'), findsOneWidget);
+    expect(find.text('휴대폰 번호로 시작하기'), findsOneWidget); // login screen heading
+    expect(find.text('인증번호 받기'), findsOneWidget); // the OTP request CTA
   });
 
   testWidgets('an authenticated viewer is kept out of the login wall', (
@@ -98,7 +98,7 @@ void main() {
     await tester.pump();
 
     // Redirected back to discovery (home) — the login wall never renders.
-    expect(find.text('로그인이 필요해요'), findsNothing);
+    expect(find.text('휴대폰 번호로 시작하기'), findsNothing);
     expect(find.text('둘러보기'), findsOneWidget); // discovery app-bar title
   });
 
