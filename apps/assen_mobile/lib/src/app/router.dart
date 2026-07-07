@@ -2,10 +2,14 @@ import 'package:assen_mobile/src/app/app_shell.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/creator/creator_screen.dart';
 import 'package:assen_mobile/src/discovery/discovery_screen.dart';
+import 'package:assen_mobile/src/feed/feed_screen.dart';
 import 'package:assen_mobile/src/login/login_screen.dart';
 import 'package:assen_mobile/src/mypage/mypage_screen.dart';
 import 'package:assen_mobile/src/notifications/notifications_screen.dart';
+import 'package:assen_mobile/src/post/post_screen.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
+import 'package:assen_mobile/src/store/product_screen.dart';
+import 'package:assen_mobile/src/store/store_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,8 +34,20 @@ abstract final class RoutePaths {
   /// The login wall shown to guests hitting a protected route.
   static const String login = '/login';
 
+  /// The global feed of recent posts (reached from the discovery shortcut).
+  static const String feed = '/feed';
+
+  /// The global store / product catalog (reached from the discovery shortcut).
+  static const String store = '/store';
+
   /// Builds the deep-linkable creator profile location for [handle].
   static String creator(String handle) => '/creator/$handle';
+
+  /// Builds the post detail location for [id].
+  static String post(String id) => '/post/$id';
+
+  /// Builds the product detail location for [id].
+  static String product(String id) => '/product/$id';
 }
 
 // Root navigator key so pushed routes (creator, login) sit above the shell.
@@ -112,6 +128,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             CreatorScreen(handle: state.pathParameters['handle']!),
+      ),
+      GoRoute(
+        path: RoutePaths.feed,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const FeedScreen(),
+      ),
+      GoRoute(
+        path: '/post/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            PostScreen(postId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: RoutePaths.store,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const StoreScreen(),
+      ),
+      GoRoute(
+        path: '/product/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            ProductScreen(productId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: RoutePaths.login,

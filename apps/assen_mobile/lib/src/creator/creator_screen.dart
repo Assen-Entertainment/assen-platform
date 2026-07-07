@@ -3,6 +3,7 @@ import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/creator/creator_controller.dart';
 import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
+import 'package:assen_mobile/src/membership/membership_section.dart';
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -130,6 +131,9 @@ class _CreatorProfile extends StatelessWidget {
             ),
           ),
         ],
+        // The creator's membership tiers (self-loading; silent when there are
+        // none). Subscribing is a payment gate not built on mobile yet.
+        MembershipSection(creatorId: creator.id),
       ],
     );
   }

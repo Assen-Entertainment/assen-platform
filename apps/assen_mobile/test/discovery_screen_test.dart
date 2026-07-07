@@ -1,6 +1,7 @@
 // Verifies the discovery (home) screen renders the ui_kit empty state when the
-// feed comes back empty, exercising the AsyncNotifier -> ui_kit wiring in
-// isolation (no router, no network).
+// feed comes back empty — while still exposing the 피드·스토어 browse shortcuts —
+// exercising the AsyncNotifier -> ui_kit wiring in isolation (no router, no
+// network).
 
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_repository.dart';
@@ -37,5 +38,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('아직 크리에이터가 없어요'), findsOneWidget);
+    // The browse shortcuts stay reachable even with zero creators (IA gap fix).
+    expect(find.text('피드'), findsOneWidget);
+    expect(find.text('스토어'), findsOneWidget);
   });
 }

@@ -31,13 +31,25 @@ class DiscoveryScreen extends ConsumerWidget {
           onRetry: () =>
               ref.read(discoveryControllerProvider.notifier).refresh(),
         ),
+        // The 피드·스토어 shortcuts must stay reachable regardless of whether any
+        // creators exist, so they are shown in both branches: inline here for
+        // the empty feed, and at index 0 of [_CreatorList] for the populated
+        // feed.
         data: (creators) => creators.isEmpty
-            ? AssenEmptyState(
-                title: '아직 크리에이터가 없어요',
-                message: '곧 새로운 크리에이터가 이곳에 소개됩니다.',
-                actionLabel: '새로고침',
-                onAction: () =>
-                    ref.read(discoveryControllerProvider.notifier).refresh(),
+            ? Column(
+                children: [
+                  const _DiscoveryShortcuts(),
+                  Expanded(
+                    child: AssenEmptyState(
+                      title: '아직 크리에이터가 없어요',
+                      message: '곧 새로운 크리에이터가 이곳에 소개됩니다.',
+                      actionLabel: '새로고침',
+                      onAction: () => ref
+                          .read(discoveryControllerProvider.notifier)
+                          .refresh(),
+                    ),
+                  ),
+                ],
               )
             : _CreatorList(creators: creators),
       ),
@@ -45,7 +57,8 @@ class DiscoveryScreen extends ConsumerWidget {
   }
 }
 
-/// The loaded feed: a tappable list of creators.
+/// The loaded feed: the browse shortcuts (피드 · 스토어) over a tappable list of
+/// creators.
 class _CreatorList extends StatelessWidget {
   const _CreatorList({required this.creators});
 
@@ -55,9 +68,11 @@ class _CreatorList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s2),
-      itemCount: creators.length,
+      // Index 0 is the shortcuts block; the rest are creators (offset by one).
+      itemCount: creators.length + 1,
       itemBuilder: (context, index) {
-        final creator = creators[index];
+        if (index == 0) return const _DiscoveryShortcuts();
+        final creator = creators[index - 1];
         return AssenListItem(
           title: creator.displayName,
           subtitle:
@@ -72,6 +87,65 @@ class _CreatorList extends StatelessWidget {
           onTap: () => context.go(RoutePaths.creator(creator.handle)),
         );
       },
+    );
+  }
+}
+
+/// The discovery entry points into the global feed and store.
+class _DiscoveryShortcuts extends StatelessWidget {
+  const _DiscoveryShortcuts();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    return Column(
+      children: [
+        AssenListItem(
+          title: '피드',
+          subtitle: '크리에이터 소식 모아보기',
+          leading: _ShortcutIcon(
+            icon: Icons.dynamic_feed_outlined,
+            background: colors.strawberryBg,
+            foreground: colors.strawberryInk,
+          ),
+          onTap: () => context.go(RoutePaths.feed),
+        ),
+        AssenListItem(
+          title: '스토어',
+          subtitle: '상품 둘러보기',
+          leading: _ShortcutIcon(
+            icon: Icons.storefront_outlined,
+            background: colors.skyBg,
+            foreground: colors.skyInk,
+          ),
+          onTap: () => context.go(RoutePaths.store),
+        ),
+        const AssenDivider(),
+      ],
+    );
+  }
+}
+
+/// A round pastel icon used as a shortcut row's leading slot.
+class _ShortcutIcon extends StatelessWidget {
+  const _ShortcutIcon({
+    required this.icon,
+    required this.background,
+    required this.foreground,
+  });
+
+  final IconData icon;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: SpacingTokens.s12,
+      height: SpacingTokens.s12,
+      decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Icon(icon, size: SpacingTokens.s6, color: foreground),
     );
   }
 }

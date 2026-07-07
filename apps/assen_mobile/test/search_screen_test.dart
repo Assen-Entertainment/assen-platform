@@ -3,11 +3,11 @@
 // through a fake repository (debounced, no network).
 
 import 'package:assen_mobile/src/discovery/creator.dart';
-import 'package:assen_mobile/src/search/product.dart';
 import 'package:assen_mobile/src/search/search_controller.dart';
 import 'package:assen_mobile/src/search/search_repository.dart';
 import 'package:assen_mobile/src/search/search_result.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
+import 'package:assen_mobile/src/store/product.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,7 +65,7 @@ SearchResult _oneOfEach() => SearchResult(
     }),
   ],
   products: [
-    Product.fromJson(const {
+    Product.fromBrief(const {
       'id': 'p1',
       'type': 'goods',
       'title': '아크릴 스탠드',
@@ -76,8 +76,8 @@ SearchResult _oneOfEach() => SearchResult(
 );
 
 void main() {
-  test('Product.fromJson parses the ProductBrief shape', () {
-    final product = Product.fromJson(const {
+  test('Product.fromBrief parses the ProductBrief shape', () {
+    final product = Product.fromBrief(const {
       'id': 'p1',
       'type': 'ticket',
       'title': '팬미팅 티켓',
