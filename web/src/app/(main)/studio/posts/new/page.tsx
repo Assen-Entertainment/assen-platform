@@ -41,6 +41,14 @@ export default function PostComposerPage() {
   const uploadImage = useUploadImage();
   const live = Boolean(config.apiUrl);
 
+  // mock 폴백(USE_API=false)의 미리보기 URL은 URL.createObjectURL(blob:) — 교체/제거·언마운트 시
+  // 해제하지 않으면 브라우저에 objectURL이 누적된다. 이 cleanup은 mediaUrl이 blob:일 때만 revoke하며
+  // (라이브 서버 URL `/media/uploads/…`은 무영향), mediaUrl 변경(교체·undefined)·언마운트에서 이전 값을 해제한다.
+  React.useEffect(() => {
+    if (!mediaUrl || !mediaUrl.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(mediaUrl);
+  }, [mediaUrl]);
+
   const validation = validateComposerDraft({ title, body, visibility, adult });
   const visHint = VISIBILITY_OPTIONS.find((o) => o.value === visibility)?.hint;
 

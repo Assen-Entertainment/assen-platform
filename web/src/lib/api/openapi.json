@@ -8148,7 +8148,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
+                  "$ref": "#/components/schemas/UploadErrorOut"
                 }
               }
             }
@@ -8158,7 +8158,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
+                  "$ref": "#/components/schemas/UploadErrorOut"
                 }
               }
             }
@@ -8168,7 +8168,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
+                  "$ref": "#/components/schemas/UploadErrorOut"
                 }
               }
             }
@@ -8178,7 +8178,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
+                  "$ref": "#/components/schemas/UploadErrorOut"
                 }
               }
             }
@@ -9808,6 +9808,25 @@
           "url"
         ],
         "title": "UploadOut",
+        "type": "object"
+      },
+      "UploadErrorOut": {
+        "description": "Coded error shape for POST /api/uploads failures (ApiError: detail + stable code). Hand-synced from apps.uploads.api / config.errors.ErrorCode; the UI branches on `code` (UploadTypeUnsupported/UploadTooLarge/UploadInvalid/UploadStorageUnavailable — see error-messages.ts). Regenerate schema.d.ts via `npm run gen:types`.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "UploadErrorOut",
         "type": "object"
       },
       "MultiPartBodyCreateUpload": {

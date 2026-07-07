@@ -3627,6 +3627,16 @@ export interface components {
             url: string;
         };
         /**
+         * UploadErrorOut
+         * @description Coded error shape for POST /api/uploads failures (ApiError: detail + stable code). Hand-synced from apps.uploads.api / config.errors.ErrorCode; the UI branches on `code` (UploadTypeUnsupported/UploadTooLarge/UploadInvalid/UploadStorageUnavailable — see error-messages.ts). Regenerate schema.d.ts via `npm run gen:types`.
+         */
+        UploadErrorOut: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
          * MultiPartBodyCreateUpload
          * @description Multipart form body for POST /api/uploads (a single image file).
          */
@@ -10938,7 +10948,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorOut"];
+                    "application/json": components["schemas"]["UploadErrorOut"];
                 };
             };
             /** @description Unsupported Media Type */
@@ -10947,7 +10957,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorOut"];
+                    "application/json": components["schemas"]["UploadErrorOut"];
                 };
             };
             /** @description Unprocessable Entity */
@@ -10956,7 +10966,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorOut"];
+                    "application/json": components["schemas"]["UploadErrorOut"];
                 };
             };
             /** @description Service Unavailable */
@@ -10965,7 +10975,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorOut"];
+                    "application/json": components["schemas"]["UploadErrorOut"];
                 };
             };
         };
