@@ -51,10 +51,12 @@ export default defineConfig({
       testMatch: /visual\.spec\.ts$/,
     },
     {
-      // 정본 데스크톱 저니(1280) — 14스텝 팬 저니(상태 변형).
+      // 정본 데스크톱 저니(1280) — 14스텝 팬 저니(상태 변형) + 스튜디오 업로드 저니(R12).
+      // studio-upload는 저니와 동일 프로젝트에 묶어 같은 워커/순서(visual→journey→mobile)로 실행되게 한다
+      // → `npm run e2e` 대상에 포함(실행엔 Django+standalone 기동 필요, config 등록만으로 미실행 방지).
       name: "chromium",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } },
-      testMatch: /journey\.spec\.ts$/,
+      testMatch: [/journey\.spec\.ts$/, /studio-upload\.spec\.ts$/],
     },
     {
       // 모바일 스모크 서브셋(375) — 로그인·디스커버리·피드.

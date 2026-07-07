@@ -2834,6 +2834,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Validate + store a single uploaded image; return its media URL (drop-in media_url).
+         *
+         *     Hand-synced from apps.uploads.api (R11 POST /api/uploads) because the openapi export requires running Django; regenerate via `npm run gen:types`. fan_auth (401 if unauthenticated). Rejects: upload surface fail-closed off (503 UploadStorageUnavailable), non-image declared content-type (415 UploadTypeUnsupported), file over the size ceiling (413 UploadTooLarge), or bytes that are not a real allowed image / scriptable markup (422 UploadInvalid). Stored under a server-minted UUID; the returned URL is /media/uploads/<uuid>.<ext>.
+         */
+        post: operations["apps_uploads_api_create_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3595,6 +3617,35 @@ export interface components {
         ErrorOut: {
             /** Detail */
             detail: string;
+        };
+        /**
+         * UploadOut
+         * @description The stored object's site-relative media URL (drop-in for a media_url).
+         */
+        UploadOut: {
+            /** Url */
+            url: string;
+        };
+        /**
+         * UploadErrorOut
+         * @description Coded error shape for POST /api/uploads failures (ApiError: detail + stable code). Hand-synced from apps.uploads.api / config.errors.ErrorCode; the UI branches on `code` (UploadTypeUnsupported/UploadTooLarge/UploadInvalid/UploadStorageUnavailable — see error-messages.ts). Regenerate schema.d.ts via `npm run gen:types`.
+         */
+        UploadErrorOut: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * MultiPartBodyCreateUpload
+         * @description Multipart form body for POST /api/uploads (a single image file).
+         */
+        MultiPartBodyCreateUpload: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
         };
         /**
          * PostIn
@@ -10865,6 +10916,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GuideError"];
+                };
+            };
+        };
+    };
+    apps_uploads_api_create_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["MultiPartBodyCreateUpload"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadOut"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadErrorOut"];
+                };
+            };
+            /** @description Unsupported Media Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadErrorOut"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadErrorOut"];
                 };
             };
         };

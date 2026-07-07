@@ -904,6 +904,30 @@ export async function apiDeletePost(id: string): Promise<void> {
   await apiFetch<{ status: string }>(`/posts/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+// --- R12: 이미지 업로드(포스트·상품·아바타 media_url 소스) ----------------------
+/**
+ * 이미지 업로드 — USE_API면 `POST /api/uploads`에 multipart(`file` 필드)로 전송하고 서버가 검증·저장 후
+ * 반환하는 `{url}`(=`/media/uploads/<uuid>.<ext>`)을 그대로 media_url로 쓴다. apiFetch가 FormData 바디를
+ * 감지하면 JSON Content-Type을 생략해 boundary가 살아있고, 쿠키/CSRF/401 재발급은 다른 뮤테이션과 동일 적용된다.
+ * 실패는 서버 `{detail, code}`가 담긴 ApiError로 전파(415·413·422·503) → 호출측이 apiErrorMessage로 안내한다.
+ *
+ * mock 폴백(USE_API=false)은 실 업로드 없이 로컬 objectURL(미리보기용)만 반환한다 — 번들 격리 규율상
+ * 라이브 빌드에선 이 분기가 DCE되고, mock 발행(apiPublishPost)도 실제 저장이 없어 objectURL로 충분하다.
+ */
+export async function apiUpload(file: File): Promise<{ url: string }> {
+  if (USE_API) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<{ url: string }>("/uploads", { method: "POST", body: form });
+  }
+  // mock: 실 저장 없이 미리보기용 URL. objectURL 미가용(테스트/SSR 등)이면 플레이스홀더로 폴백.
+  const url =
+    typeof URL !== "undefined" && typeof URL.createObjectURL === "function"
+      ? URL.createObjectURL(file)
+      : "/media/uploads/mock-placeholder.png";
+  return { url };
+}
+
 // --- 게이트 기능(R3): KYC 본인인증 -------------------------------------------
 /**
  * 본인인증 시작(mock) — 서버 verifier 미배선 시 503. 성공은 pending 전이만 기록(PII 무전송).

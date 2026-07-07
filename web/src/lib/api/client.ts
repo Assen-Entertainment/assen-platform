@@ -151,8 +151,11 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
   const base = baseUrl(isServer);
   const verb = (method ?? "GET").toUpperCase();
 
+  // multipart 업로드(FormData)는 Content-Type을 직접 지정하면 boundary가 빠져 파싱이 깨진다 →
+  // JSON 기본 헤더를 생략하고 브라우저(fetch)가 boundary 포함 헤더를 설정하도록 맡긴다.
+  const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData;
   const finalHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(headers as Record<string, string> | undefined),
   };

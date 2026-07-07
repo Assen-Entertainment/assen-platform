@@ -43,6 +43,7 @@ import {
   apiPublishPost,
   apiUpdatePost,
   apiDeletePost,
+  apiUpload,
   type PostUpdate,
   apiStartVerify,
   apiConfirmVerify,
@@ -835,6 +836,15 @@ export function useUnblockCreator() {
       }
     },
   });
+}
+
+/**
+ * 이미지 업로드(R12) — 선택 파일을 apiUpload로 올리고 반환 URL을 media_url로 쓴다(포스트·상품·아바타 공용).
+ * 캐시 무관(단발 리소스 생성)이므로 mutationFn만 위임 — isPending으로 진행 상태, onError로 실패 토스트를 배선한다.
+ * mock 폴백(USE_API=false)은 apiUpload 내부에서 objectURL을 반환한다(실 업로드 없음·번들 격리).
+ */
+export function useUploadImage() {
+  return useMutation({ mutationFn: (file: File) => apiUpload(file) });
 }
 
 /** 포스트 발행(크리에이터 오너만 — 403 시 호출측에서 안내). isAdult=19+ 성인 등급(서버가 노출 통제). */

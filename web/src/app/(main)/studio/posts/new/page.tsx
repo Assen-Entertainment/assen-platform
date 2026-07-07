@@ -7,6 +7,7 @@ import {
   FileUpload,
   Switch,
   Button,
+  Spinner,
   Select,
   SelectTrigger,
   SelectValue,
@@ -16,14 +17,15 @@ import {
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
-import { ApiError } from "@/lib/api";
-import { usePublishPost } from "@/lib/api/queries";
+import { ApiError, apiErrorMessage } from "@/lib/api";
+import { usePublishPost, useUploadImage } from "@/lib/api/queries";
 import { validateComposerDraft, VISIBILITY_OPTIONS, type PostVisibility } from "@/lib/studio-mock";
 
 /**
  * Post Composer — Figma Web-Composer(154:90) / W3.
  * 제목·본문·이미지 슬롯·공개범위·19+ 토글 → 임시저장/발행(mock → 토스트 → /studio).
- * ※실 업로드/발행 백엔드 미연동(B2 게이트). 파일은 로컬 미리보기만.
+ * ※이미지는 선택 즉시 POST /api/uploads로 업로드해 media_url을 확보하고(라이브), mock 모드는
+ *   로컬 미리보기 URL만 쓴다. 발행 시 확보한 media_url을 PostIn에 실어 보낸다.
  */
 export default function PostComposerPage() {
   const router = useRouter();
@@ -32,22 +34,46 @@ export default function PostComposerPage() {
   const [body, setBody] = React.useState("");
   const [visibility, setVisibility] = React.useState<PostVisibility>("public");
   const [adult, setAdult] = React.useState(false);
-  const [files, setFiles] = React.useState<File[]>([]);
+  // 업로드 완료된 이미지 media_url(서버가 준 /media/uploads/… 또는 mock objectURL). 발행 시 PostIn에 실린다.
+  const [mediaUrl, setMediaUrl] = React.useState<string | undefined>(undefined);
   const [submitted, setSubmitted] = React.useState(false);
   const publishPost = usePublishPost();
+  const uploadImage = useUploadImage();
   const live = Boolean(config.apiUrl);
+
+  // mock 폴백(USE_API=false)의 미리보기 URL은 URL.createObjectURL(blob:) — 교체/제거·언마운트 시
+  // 해제하지 않으면 브라우저에 objectURL이 누적된다. 이 cleanup은 mediaUrl이 blob:일 때만 revoke하며
+  // (라이브 서버 URL `/media/uploads/…`은 무영향), mediaUrl 변경(교체·undefined)·언마운트에서 이전 값을 해제한다.
+  React.useEffect(() => {
+    if (!mediaUrl || !mediaUrl.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(mediaUrl);
+  }, [mediaUrl]);
 
   const validation = validateComposerDraft({ title, body, visibility, adult });
   const visHint = VISIBILITY_OPTIONS.find((o) => o.value === visibility)?.hint;
 
+  // 이미지 선택 즉시 업로드 → 반환 URL을 media_url로 확정(프리뷰). 실패는 코드 매핑 토스트로 안내.
+  const onPickImage = (picked: File[]) => {
+    const file = picked[0];
+    if (!file) return;
+    uploadImage.mutate(file, {
+      onSuccess: ({ url }) => setMediaUrl(url),
+      onError: (e) => {
+        // 401은 전역 세션 가드가 처리 → 그 외만 업로드 실패로 안내(서버 code→apiErrorMessage).
+        if (e instanceof ApiError && e.status === 401) return;
+        toast({ title: "이미지를 올리지 못했어요", description: apiErrorMessage(e) });
+      },
+    });
+  };
+
   const publish = () => {
     setSubmitted(true);
-    if (!validation.valid || publishPost.isPending) return;
+    if (!validation.valid || publishPost.isPending || uploadImage.isPending) return;
     // 제목은 본문 상단에 합성(서버 계약 PostIn={body, media_url?, is_adult} — 제목 필드 없음).
     const composed = title.trim() ? `${title.trim()}\n\n${body}` : body;
     // 19+ 등급은 실 전송하되, 실제 노출은 서버 ENABLE_ADULT_CONTENT=False가 통제(등급만 기록).
     publishPost.mutate(
-      { body: composed, isAdult: adult },
+      { body: composed, mediaUrl, isAdult: adult },
       {
         onSuccess: () => {
           toast({
@@ -103,27 +129,34 @@ export default function PostComposerPage() {
 
       <div className="flex flex-col gap-2">
         <span className="text-label text-on-surface">이미지</span>
-        <FileUpload accept="image/*" multiple onFiles={(f) => setFiles((prev) => [...prev, ...f])} />
-        {files.length > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="선택한 이미지">
-            {files.map((f, i) => (
-              <li
-                key={`${f.name}-${i}`}
-                className="flex items-center gap-2 rounded-md border border-outline bg-surface-container px-2.5 py-1.5 text-caption text-on-surface-variant"
-              >
-                <span className="max-w-40 truncate">{f.name}</span>
-                <button
-                  type="button"
-                  aria-label={`${f.name} 제거`}
-                  onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                  className="text-on-surface-variant hover:text-error"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {uploadImage.isPending ? (
+          <div
+            className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-outline p-8 text-body-s text-on-surface-variant"
+            aria-live="polite"
+          >
+            <Spinner className="size-5" /> 업로드 중…
+          </div>
+        ) : mediaUrl ? (
+          <div className="relative w-fit">
+            {/* 업로드된 이미지 프리뷰 — next/image 대신 <img>(objectURL/외부 media 오리진 모두 수용). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mediaUrl}
+              alt="업로드한 이미지 미리보기"
+              className="max-h-64 rounded-lg border border-outline object-contain"
+            />
+            <button
+              type="button"
+              aria-label="이미지 제거"
+              onClick={() => setMediaUrl(undefined)}
+              className="absolute right-2 top-2 rounded-full bg-surface/90 px-2 py-0.5 text-caption text-on-surface-variant shadow hover:text-error"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <FileUpload accept="image/png,image/jpeg,image/webp,image/gif" onFiles={onPickImage} />
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -180,11 +213,10 @@ export default function PostComposerPage() {
         <Button variant="outline" className="flex-1" onClick={saveDraft}>
           임시저장
         </Button>
-        <Button className="flex-1" onClick={publish} disabled={publishPost.isPending}>
+        <Button className="flex-1" onClick={publish} disabled={publishPost.isPending || uploadImage.isPending}>
           발행하기
         </Button>
       </div>
-      <p className="text-center text-caption text-on-surface-variant">※ 이미지 업로드는 준비 중 — 본문 위주로 발행돼요(업로드 게이트).</p>
     </div>
   );
 }
