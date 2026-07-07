@@ -28,6 +28,10 @@ dependencies:
   cached_network_image: ^3.4.1
   core_tokens:
     path: ../../packages/core_tokens
+  # Deterministic dev-only OTP hint (HMAC-SHA256, mirroring the server's
+  # MockOtpSender). Pure Dart, so it also runs under `flutter test`. Never
+  # invoked in a release build (guarded by kReleaseMode) — see dev_otp.dart.
+  crypto: ^3.0.3
   cupertino_icons: ^1.0.8
   # HTTP client with interceptors. The api_client generated layer is P6; the
   # home screen wires a real Dio call against ApiClientConfig for now.
@@ -36,6 +40,10 @@ dependencies:
     sdk: flutter
   # State management: Riverpod 3.x only (AGENTS.md / CONSTRAINTS #34/#40).
   flutter_riverpod: ^3.0.0
+  # Platform secure storage (iOS Keychain / Android Keystore / Windows DPAPI)
+  # for the auth token pair. Only the access/refresh tokens are stored — never
+  # a phone number or any other PII (E6 auth, CONSTRAINTS #26).
+  flutter_secure_storage: ^9.2.2
   # Routing: go_router 16.x (declarative routes, deep links, auth-guard redirect).
   go_router: ^16.0.0
   ui_kit:

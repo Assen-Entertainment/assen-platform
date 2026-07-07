@@ -16,6 +16,40 @@ class SettingsAuthRequiredException implements Exception {
   String toString() => 'SettingsAuthRequiredException';
 }
 
+/// Thrown when the (mock) 본인인증 verifier is not wired on the server (503).
+///
+/// A typed marker so the 설정 screen shows a "준비 중" notice for the KYC action
+/// rather than a generic failure — mirrors the server's fail-closed
+/// `KYC_UNAVAILABLE`.
+class KycUnavailableException implements Exception {
+  /// Creates the KYC-unavailable marker.
+  const KycUnavailableException();
+
+  @override
+  String toString() => 'KycUnavailableException';
+}
+
+/// The derived 인증 flags from confirming (mock) 본인인증 (`VerifyConfirmOut`).
+///
+/// Carries only the two server-derived flags — never PII (주민번호/생년월일 are
+/// never sent to or received from the mock).
+class VerifyResult {
+  /// Creates a verify result.
+  const VerifyResult({required this.adultVerified, required this.kycStatus});
+
+  /// Builds a result from a `VerifyConfirmOut` JSON object.
+  factory VerifyResult.fromJson(Map<String, dynamic> json) => VerifyResult(
+    adultVerified: json['adult_verified'] as bool? ?? false,
+    kycStatus: json['kyc_status'] as String? ?? 'unverified',
+  );
+
+  /// Whether the account passed 19+ 본인인증 (derived flag, not PII).
+  final bool adultVerified;
+
+  /// The KYC status string (server `kyc_status`).
+  final String kycStatus;
+}
+
 /// Reads and updates the signed-in fan's own profile for the 설정 screen.
 ///
 /// A thin repository over [Dio] owning the `/api/fan/me` endpoint (read via GET,
@@ -66,6 +100,33 @@ class SettingsRepository {
       final statusCode = error.response?.statusCode;
       if (statusCode == 401 || statusCode == 403) {
         throw const SettingsAuthRequiredException();
+      }
+      rethrow;
+    }
+  }
+
+  /// Runs the (mock) 성인/본인 인증 flow: `POST /verify/start` then
+  /// `POST /verify/confirm`, returning the derived flags.
+  ///
+  /// The mock is deterministic and handles no PII (no 주민번호/생년월일 crosses the
+  /// wire) — only the derived `adult_verified` / `kyc_status` come back. A
+  /// 401/403 (session expired) becomes a [SettingsAuthRequiredException]; a 503
+  /// (verifier unwired) becomes a [KycUnavailableException] so the screen can
+  /// explain it.
+  Future<VerifyResult> verifyAdult() async {
+    try {
+      await _dio.post<Map<String, dynamic>>('/api/fan/verify/start');
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/fan/verify/confirm',
+      );
+      return VerifyResult.fromJson(response.data ?? const <String, dynamic>{});
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        throw const SettingsAuthRequiredException();
+      }
+      if (statusCode == 503) {
+        throw const KycUnavailableException();
       }
       rethrow;
     }

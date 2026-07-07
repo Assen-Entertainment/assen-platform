@@ -35,6 +35,29 @@ class SettingsController extends AsyncNotifier<FanMe> {
     state = AsyncValue.data(updated);
   }
 
+  /// Runs the (mock) 본인인증 and reflects the refreshed 인증 flags in the profile.
+  ///
+  /// Merges the derived `adult_verified`/`kyc_status` from the verify flow into
+  /// the loaded profile so the settings badges update in place. Failures are
+  /// rethrown so the KYC section can surface them (the "준비 중" notice for a 503,
+  /// or the login-required drop for a 401) without clobbering the profile.
+  Future<void> verifyAdult() async {
+    final current = state.value;
+    final result = await ref.read(settingsRepositoryProvider).verifyAdult();
+    if (current == null) return;
+    state = AsyncValue.data(
+      FanMe(
+        id: current.id,
+        nickname: current.nickname,
+        role: current.role,
+        handle: current.handle,
+        avatarUrl: current.avatarUrl,
+        adultVerified: result.adultVerified,
+        kycStatus: result.kycStatus,
+      ),
+    );
+  }
+
   /// Drops the screen to the "로그인이 필요해요" state (session expired mid-edit).
   ///
   /// Called by the nickname editor when a save returns a

@@ -170,12 +170,7 @@ class _SettingsBody extends ConsumerWidget {
             label: _kycLabel(fan.kycStatus),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: SpacingTokens.s2),
-          child: AssenNoticeBar(
-            message: '본인인증은 준비 중이에요. 곧 앱에서 이용하실 수 있습니다.',
-          ),
-        ),
+        _KycAction(fan: fan),
 
         const SizedBox(height: SpacingTokens.s4),
         const AssenSectionHeader(title: '앱'),
@@ -196,6 +191,89 @@ class _SettingsBody extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+/// The 성인/본인 인증 action: a one-tap (mock) verify when not yet verified.
+///
+/// Replaces the old "준비 중" gate with the real (deterministic, PII-free) mock
+/// flow: `POST /verify/start` + `/verify/confirm` via [SettingsController]. On
+/// success the profile's derived flags update and the badges above flip; a 503
+/// (verifier unwired) shows the "준비 중" notice, and a session expiry drops to
+/// the login-required state. When already verified it shows a confirmation.
+class _KycAction extends ConsumerStatefulWidget {
+  const _KycAction({required this.fan});
+
+  final FanMe fan;
+
+  @override
+  ConsumerState<_KycAction> createState() => _KycActionState();
+}
+
+class _KycActionState extends ConsumerState<_KycAction> {
+  bool _verifying = false;
+  String? _noticeText;
+  String? _errorText;
+
+  Future<void> _verify() async {
+    setState(() {
+      _verifying = true;
+      _noticeText = null;
+      _errorText = null;
+    });
+    try {
+      await ref.read(settingsControllerProvider.notifier).verifyAdult();
+    } on KycUnavailableException {
+      if (!mounted) return;
+      setState(() => _noticeText = '본인인증은 준비 중이에요. 곧 앱에서 이용하실 수 있습니다.');
+    } on SettingsAuthRequiredException {
+      // Session expired mid-verify: drop to the login-required state.
+      if (!mounted) return;
+      ref.read(settingsControllerProvider.notifier).markAuthRequired();
+    } on Exception {
+      if (!mounted) return;
+      setState(() => _errorText = '본인인증에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    if (widget.fan.adultVerified) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: SpacingTokens.s2),
+        child: AssenNoticeBar(message: '성인(19+) 인증이 완료되었어요.'),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_noticeText != null) ...[
+            AssenNoticeBar(message: _noticeText!),
+            const SizedBox(height: SpacingTokens.s3),
+          ],
+          AssenButton(
+            label: '성인 인증하기 (19+)',
+            expand: true,
+            onPressed: _verifying ? null : _verify,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: SpacingTokens.s2),
+            Text(
+              _errorText!,
+              style: TextStyle(
+                fontSize: TypographyTokens.bodySSize,
+                color: colors.redMain,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -49,6 +49,10 @@ class _FakeSettingsRepository implements SettingsRepository {
     _me = updated;
     return updated;
   }
+
+  @override
+  Future<VerifyResult> verifyAdult() async =>
+      const VerifyResult(adultVerified: true, kycStatus: 'verified');
 }
 
 Widget _host(SettingsRepository repository) => ProviderScope(
@@ -112,6 +116,37 @@ void main() {
     expect(repo.patchedNickname, '지민');
     expect(find.text('지민'), findsWidgets);
     expect(find.text('민지'), findsNothing);
+  });
+
+  testWidgets('the mock 성인 인증 flips the profile to adult-verified', (
+    tester,
+  ) async {
+    // The KYC action sits below the identity + account rows, so give the
+    // ListView a tall surface to build them all.
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _host(
+        _FakeSettingsRepository(
+          const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('미인증'), findsWidgets); // 성인 badge starts unverified
+    await tester.tap(find.text('성인 인증하기 (19+)'));
+    await tester.pumpAndSettle();
+
+    // The derived flags updated in place: the confirmation notice shows and the
+    // badge flips (no reload, no PII — the mock result is deterministic).
+    expect(find.text('성인(19+) 인증이 완료되었어요.'), findsOneWidget);
+    expect(find.text('인증 완료'), findsWidgets);
+    expect(find.text('미인증'), findsNothing);
   });
 
   testWidgets('a 401/403 on nickname save drops to the login-required state', (

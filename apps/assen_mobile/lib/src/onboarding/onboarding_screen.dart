@@ -46,10 +46,10 @@ const List<_OnboardingPage> _pages = [
 /// Intro/value slides only — a [PageView] of app highlights ending in a
 /// "둘러보기 시작" CTA that opens discovery ([RoutePaths.discovery]). Reached from
 /// 설정 → "앱 소개 다시 보기"; it is intentionally NOT auto-shown on first launch
-/// (that needs local persistence, out of scope). The last slide carries a
-/// disabled "약관 동의·본인인증 (준비 중)" card ONLY: consent capture and 19+/KYC 인증 are
-/// 법무 gates, so this screen calls NO consent/verify endpoint and stores NO
-/// agreement — the card is purely informational.
+/// (that needs local persistence, out of scope). The last slide carries a card
+/// linking to [RoutePaths.login], where consent (약관 동의) is captured on signup
+/// and 19+ 본인인증 runs from 설정 — this screen itself calls NO consent/verify
+/// endpoint and stores NO agreement.
 class OnboardingScreen extends StatefulWidget {
   /// Creates the onboarding screen.
   const OnboardingScreen({super.key});
@@ -204,29 +204,29 @@ class _OnboardingSlide extends StatelessWidget {
   }
 }
 
-/// The final-slide notice: 약관 동의·본인인증 are 준비 중 (a 법무 gate).
+/// The final-slide card: a live CTA into the sign-in flow.
 ///
-/// A disabled card only — its button has no handler and this widget issues NO
-/// consent/verify request and persists NO agreement (法務 gate).
+/// Consent (약관 동의) is captured on the signup step of [RoutePaths.login] and
+/// 19+ 본인인증 runs from 설정 after sign-in, so this card no longer holds an inert
+/// gate — it routes to login. It issues NO consent/verify request itself and
+/// stores NO agreement; the login/settings flows own those (mock, PII-free).
 class _ConsentNoticeCard extends StatelessWidget {
   const _ConsentNoticeCard();
 
   @override
   Widget build(BuildContext context) {
-    return const AssenCard(
+    return AssenCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AssenNoticeBar(
-            message: '약관 동의와 본인인증은 서비스 준비 중이에요. 지금은 둘러보기만 가능합니다.',
+          const AssenNoticeBar(
+            message: '로그인 후 약관 동의와 본인인증(19+)을 진행할 수 있어요.',
           ),
-          SizedBox(height: SpacingTokens.s4),
-          // Disabled: consent capture / 19+·KYC 인증 are 법무 gates — no handler,
-          // no endpoint call, no stored agreement.
+          const SizedBox(height: SpacingTokens.s4),
           AssenButton(
-            label: '약관 동의 및 본인인증 (준비 중)',
+            label: '로그인하고 시작하기',
             expand: true,
-            onPressed: null,
+            onPressed: () => context.go(RoutePaths.login),
           ),
         ],
       ),
