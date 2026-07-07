@@ -22,8 +22,10 @@ dist/
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
-# Per-package lockfiles are noise in a workspace; the root lock is the source.
+# Per-package lockfiles are noise in a workspace; the root lock is the source
+# and IS tracked (an app needs a committed lockfile for reproducible builds).
 **/pubspec.lock
+!/pubspec.lock
 # IDE / Flutter scaffolding
 .idea/
 *.iml

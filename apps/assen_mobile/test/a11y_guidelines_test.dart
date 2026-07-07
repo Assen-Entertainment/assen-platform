@@ -1,9 +1,18 @@
 // Automated accessibility-guideline coverage for the primary screens (R10,
 // ASS-249): every tappable element clears the Material 48dp / iOS 44pt hit-area
 // floor and carries a label, and body text meets the contrast ratio. Fake
-// repositories feed server-shaped rows with empty image URLs so nothing touches
-// the network (the cached media/avatars degrade to placeholders).
+// repositories feed server-shaped rows with empty image URLs; those empty
+// strings map to null in the models (`nonEmpty`), so the screens skip building
+// the cached-media/avatar image widgets entirely — nothing touches the network
+// (no placeholder to degrade to; the widget simply is not created).
+//
+// The final group exercises CachedMedia's success-only image label (F1)
+// directly through its `imageBuilder` (buildLoadedImage), so the labelled path
+// is covered without a network fetch.
 
+import 'dart:convert';
+
+import 'package:assen_mobile/src/common/cached_media.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_repository.dart';
 import 'package:assen_mobile/src/discovery/discovery_screen.dart';
@@ -154,6 +163,71 @@ void main() {
       await tester.pump();
       await tester.pump();
       await _expectA11y(tester);
+      handle.dispose();
+    });
+  });
+
+  group('cached media image label rides only on a successful load', () {
+    const label = '게시물 이미지';
+    // A minimal valid 1x1 PNG so Image decodes locally, without any network.
+    final pngBytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4'
+      '2mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    );
+
+    testWidgets('labels the loaded image via imageBuilder', (tester) async {
+      final handle = tester.ensureSemantics();
+      const media = CachedMedia(
+        url: 'https://assen.test/a.jpg',
+        semanticLabel: label,
+      );
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) =>
+                media.buildLoadedImage(context, MemoryImage(pngBytes)),
+          ),
+        ),
+      );
+      expect(find.bySemanticsLabel(label), findsOneWidget);
+      expect(
+        tester.getSemantics(find.bySemanticsLabel(label)),
+        isSemantics(label: label, isImage: true),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('omits the label when semanticLabel is null', (tester) async {
+      final handle = tester.ensureSemantics();
+      const media = CachedMedia(url: 'https://assen.test/a.jpg');
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) =>
+                media.buildLoadedImage(context, MemoryImage(pngBytes)),
+          ),
+        ),
+      );
+      expect(find.bySemanticsLabel(label), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('cream fallback carries no image label before a load', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _app(
+          const CachedMedia(
+            url: 'https://assen.test/never.jpg',
+            semanticLabel: label,
+          ),
+        ),
+      );
+      // The first frame paints the cream placeholder (imageBuilder has not
+      // run), so the image label must be absent — a broken/pending load is
+      // never announced as the item.
+      expect(find.bySemanticsLabel(label), findsNothing);
       handle.dispose();
     });
   });
