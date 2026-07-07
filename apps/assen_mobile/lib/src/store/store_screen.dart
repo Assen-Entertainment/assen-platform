@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/cached_media.dart';
 import 'package:assen_mobile/src/store/product.dart';
 import 'package:assen_mobile/src/store/store_controller.dart';
 import 'package:core_tokens/core_tokens.dart';
@@ -67,23 +68,20 @@ class _ProductGrid extends StatelessWidget {
         rowSpacing: SpacingTokens.s4,
         children: [
           for (final product in products)
-            AssenProductCard(
-              title: product.title,
-              priceLabel: product.priceLabel,
-              tagLabel: product.typeLabel,
-              meta: product.meta,
-              media: product.mediaUrl == null
-                  ? null
-                  : Image.network(
-                      product.mediaUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, _, _) => ColoredBox(
-                        color: Theme.of(
-                          context,
-                        ).extension<AssenColors>()!.cream200,
+            RepaintBoundary(
+              child: AssenProductCard(
+                title: product.title,
+                priceLabel: product.priceLabel,
+                tagLabel: product.typeLabel,
+                meta: product.meta,
+                media: product.mediaUrl == null
+                    ? null
+                    : CachedMedia(
+                        url: product.mediaUrl!,
+                        semanticLabel: product.title,
                       ),
-                    ),
-              onTap: () => context.go(RoutePaths.product(product.id)),
+                onTap: () => context.go(RoutePaths.product(product.id)),
+              ),
             ),
         ],
       ),

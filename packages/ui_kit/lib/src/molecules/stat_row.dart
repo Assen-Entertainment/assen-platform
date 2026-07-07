@@ -64,30 +64,37 @@ class _StatCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          stat.value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: TypographyTokens.titleLSize,
-            fontWeight: FontWeight.w800,
-            color: colors.ink900,
-          ),
+    // Announce value + label as one phrase for screen readers (label-first
+    // reads clearer than the two loose nodes of the value-over-label layout).
+    return Semantics(
+      label: '${stat.label} ${stat.value}',
+      child: ExcludeSemantics(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              stat.value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: TypographyTokens.titleLSize,
+                fontWeight: FontWeight.w800,
+                color: colors.ink900,
+              ),
+            ),
+            const SizedBox(height: SpacingTokens.s1),
+            Text(
+              stat.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: TypographyTokens.bodySSize,
+                color: colors.ink500,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: SpacingTokens.s1),
-        Text(
-          stat.label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: TypographyTokens.bodySSize,
-            color: colors.ink500,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

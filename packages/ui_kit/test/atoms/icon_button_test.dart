@@ -54,7 +54,7 @@ void main() {
       expect(button.onPressed, isNull);
     });
 
-    testWidgets('meets the 44pt minimum touch target', (tester) async {
+    testWidgets('meets the 48dp minimum touch target', (tester) async {
       await tester.pumpWidget(
         _host(
           AssenIconButton(
@@ -65,8 +65,8 @@ void main() {
         ),
       );
       final size = tester.getSize(find.byType(IconButton));
-      expect(size.width, greaterThanOrEqualTo(44));
-      expect(size.height, greaterThanOrEqualTo(44));
+      expect(size.width, greaterThanOrEqualTo(48));
+      expect(size.height, greaterThanOrEqualTo(48));
     });
   });
 

@@ -22,6 +22,10 @@ dependencies:
   # backend only through these (no hard-coded colours, no ad-hoc HTTP models).
   api_client:
     path: ../../packages/api_client
+  # Disk + memory image cache with placeholder/error/fade-in (R10, ASS-249).
+  # Only the app depends on this: ui_kit stays domain- and dependency-agnostic
+  # and takes plain ImageProvider slots, so the app passes cached providers in.
+  cached_network_image: ^3.4.1
   core_tokens:
     path: ../../packages/core_tokens
   cupertino_icons: ^1.0.8

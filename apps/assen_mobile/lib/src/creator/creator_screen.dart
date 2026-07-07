@@ -4,6 +4,7 @@ import 'package:assen_mobile/src/creator/creator_controller.dart';
 import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/membership/membership_section.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,16 +94,21 @@ class _CreatorProfile extends StatelessWidget {
           accent: accent.accentContainer,
           coverImage: creator.coverUrl == null
               ? null
-              : NetworkImage(creator.coverUrl!),
+              : CachedNetworkImageProvider(creator.coverUrl!),
+          coverSemanticLabel: '${creator.displayName} 커버 이미지',
           avatar: AssenAvatar(
             name: creator.displayName,
             size: AssenAvatarSize.l,
             imageProvider: creator.avatarUrl == null
                 ? null
-                : NetworkImage(creator.avatarUrl!),
+                : CachedNetworkImageProvider(creator.avatarUrl!),
+            semanticLabel: '${creator.displayName} 프로필 사진',
           ),
           badge: creator.verified
-              ? Icon(Icons.verified, color: accent.accent, size: 20)
+              ? Semantics(
+                  label: '인증된 크리에이터',
+                  child: Icon(Icons.verified, color: accent.accent, size: 20),
+                )
               : null,
         ),
         Padding(

@@ -7,9 +7,10 @@ import 'package:flutter/material.dart';
 /// (`default / pressed / disabled`, mobile — no hover). Used for app-bar
 /// actions, close buttons, and inline controls where a label would be noise.
 ///
-/// The hit area is pinned to a 44×44 logical-pixel minimum (Korean B2C / Apple
-/// HIG) even when the glyph is small. Disabled is expressed with a null
-/// [onPressed]. Colours come from the ink ramp via tokens — never hard-coded.
+/// The hit area is pinned to a 48×48 logical-pixel minimum (Material
+/// accessibility; also clears the 44pt Apple HIG / Korean B2C floor) even when
+/// the glyph is small. Disabled is expressed with a null [onPressed]. Colours
+/// come from the ink ramp via tokens — never hard-coded.
 class AssenIconButton extends StatelessWidget {
   /// Creates an icon button showing [icon].
   ///
@@ -36,9 +37,10 @@ class AssenIconButton extends StatelessWidget {
   /// (primary on-surface ink). Pass a hue's ink step for tinted actions.
   final Color? color;
 
-  /// Hit-target floor (Apple HIG / Korean B2C). Not a spacing token — it is an
-  /// accessibility minimum, so it is a named constant.
-  static const double _minTouchTarget = 44;
+  /// Hit-target floor (Material 48dp; also clears the 44pt Apple HIG / Korean
+  /// B2C floor). Not a spacing token — it is an accessibility minimum, so it is
+  /// a named constant.
+  static const double _minTouchTarget = 48;
 
   @override
   Widget build(BuildContext context) {

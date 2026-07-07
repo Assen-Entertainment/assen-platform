@@ -23,6 +23,7 @@ class AssenCoverHeader extends StatelessWidget {
     this.avatar,
     this.badge,
     this.coverImage,
+    this.coverSemanticLabel,
     this.accent,
     this.coverHeight = 140,
     super.key,
@@ -43,6 +44,13 @@ class AssenCoverHeader extends StatelessWidget {
   /// Optional banner image; when null an [accent]/surface wash is shown.
   final ImageProvider<Object>? coverImage;
 
+  /// Optional screen-reader description for the banner (e.g. "미오 커버 이미지").
+  ///
+  /// Domain-agnostic: the host supplies the wording. When [coverImage] is set
+  /// and this is null the banner is treated as decorative and hidden from
+  /// screen readers; the fallback accent wash is always decorative.
+  final String? coverSemanticLabel;
+
   /// Optional accent colour for the banner fallback wash.
   final Color? accent;
 
@@ -53,20 +61,27 @@ class AssenCoverHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
+    Widget cover = SizedBox(
+      height: coverHeight,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: accent ?? colors.cream200,
+          image: coverImage == null
+              ? null
+              : DecorationImage(image: coverImage!, fit: BoxFit.cover),
+        ),
+      ),
+    );
+    // Label an informative banner for screen readers; a plain or unlabelled
+    // banner (including the fallback accent wash) is treated as decorative.
+    cover = coverImage != null && coverSemanticLabel != null
+        ? Semantics(image: true, label: coverSemanticLabel, child: cover)
+        : ExcludeSemantics(child: cover);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: coverHeight,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: accent ?? colors.cream200,
-              image: coverImage == null
-                  ? null
-                  : DecorationImage(image: coverImage!, fit: BoxFit.cover),
-            ),
-          ),
-        ),
+        cover,
         if (avatar != null)
           Transform.translate(
             offset: const Offset(0, -SpacingTokens.s6),
@@ -88,15 +103,18 @@ class AssenCoverHeader extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Flexible(
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: TypographyTokens.headlineSize,
-                        fontWeight: FontWeight.w800,
-                        color: colors.ink900,
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: TypographyTokens.headlineSize,
+                          fontWeight: FontWeight.w800,
+                          color: colors.ink900,
+                        ),
                       ),
                     ),
                   ),

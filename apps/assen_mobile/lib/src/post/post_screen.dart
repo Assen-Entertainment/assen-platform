@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/cached_media.dart';
 import 'package:assen_mobile/src/common/relative_time.dart';
 import 'package:assen_mobile/src/post/comment.dart';
 import 'package:assen_mobile/src/post/post.dart';
@@ -80,13 +81,7 @@ class _PostDetail extends ConsumerWidget {
           body: post.body,
           media: post.mediaUrl == null
               ? null
-              : Image.network(
-                  post.mediaUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, _, _) => ColoredBox(
-                    color: Theme.of(context).extension<AssenColors>()!.cream200,
-                  ),
-                ),
+              : CachedMedia(url: post.mediaUrl!, semanticLabel: '게시물 이미지'),
           likeCount: post.likeCount,
           commentCount: post.commentCount,
           liked: post.liked,
