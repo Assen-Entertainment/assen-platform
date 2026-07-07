@@ -39,8 +39,17 @@ class _FakePostRepository implements PostRepository {
   }
 }
 
+Map<String, dynamic> _commentRow() => {
+  'id': 'k1',
+  'post_id': 'p1',
+  'author': '유키',
+  'body': '최고예요!',
+  'created_at': '2026-07-02T00:00:00Z',
+};
+
 Post _post() => Post.fromJson(const {
   'id': 'p1',
+  'creator_id': 'c1',
   'creator_name': '미오',
   'creator_handle': 'mio',
   'verified': false,
@@ -51,13 +60,7 @@ Post _post() => Post.fromJson(const {
   'created_at': '2026-07-01T00:00:00Z',
 });
 
-Comment _comment() => Comment.fromJson(const {
-  'id': 'k1',
-  'post_id': 'p1',
-  'author': '유키',
-  'body': '최고예요!',
-  'created_at': '2026-07-02T00:00:00Z',
-});
+Comment _comment() => Comment.fromJson(_commentRow());
 
 Widget _host(PostRepository repo) => ProviderScope(
   overrides: [postRepositoryProvider.overrideWithValue(repo)],
@@ -76,13 +79,26 @@ void main() {
   });
 
   test('Comment.fromJson defaults a blank author to 익명', () {
-    final comment = Comment.fromJson(const {
-      'id': 'k2',
-      'author': '',
-      'body': 'hi',
-      'created_at': '2026-07-02T00:00:00Z',
-    });
+    // An empty author is a valid value that displays as the server default.
+    final comment = Comment.fromJson({..._commentRow(), 'author': ''});
     expect(comment.author, '익명');
+  });
+
+  test('Comment.fromJson throws when any required field is missing', () {
+    for (final key in const [
+      'id',
+      'post_id',
+      'author',
+      'body',
+      'created_at',
+    ]) {
+      final row = _commentRow()..remove(key);
+      expect(
+        () => Comment.fromJson(row),
+        throwsA(isA<ArgumentError>()),
+        reason: 'a missing "$key" must throw',
+      );
+    }
   });
 
   testWidgets('renders the post body and its comments', (tester) async {

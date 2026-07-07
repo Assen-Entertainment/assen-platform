@@ -12,9 +12,9 @@ class Post {
   /// Creates a post view model.
   const Post({
     required this.id,
+    required this.creatorId,
     required this.creatorName,
     required this.createdAt,
-    this.creatorId,
     this.creatorHandle = '',
     this.verified = false,
     this.body = '',
@@ -27,35 +27,42 @@ class Post {
 
   /// Builds a [Post] from a backend `PostOut` JSON object.
   ///
-  /// The contract requires [id] and a parseable `created_at`; a payload missing
-  /// either violates the contract and throws, so a malformed row surfaces as a
-  /// load error rather than an undated blank. [id] is read through `toString()`
-  /// so a string UUID or numeric PK both parse. [creatorName] falls back to the
-  /// handle when `creator_name` is absent/empty; [body] degrades to an empty
-  /// string, [mediaUrl] to null on an empty string, and the counts/flags to
-  /// 0/false when absent or the wrong type.
+  /// The contract-required fields — `id`, `creator_id`, `creator_name`,
+  /// `creator_handle`, `verified`, `body`, `media_url`, `like_count`,
+  /// `comment_count` and a parseable `created_at` — are parsed strictly: a
+  /// missing key or the wrong type throws [ArgumentError] so a backend
+  /// field-name drift surfaces as a load error rather than a silent `₩0`/blank.
+  /// Only `liked` and `is_adult` (server defaults) degrade to `false`. [id] is
+  /// read through `toString()` so a string UUID or numeric PK both parse;
+  /// [mediaUrl] degrades to null when the (required) `media_url` string is
+  /// empty. An empty `body`/`media_url` is a valid value, not an error.
   factory Post.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
-    final createdAt = DateTime.tryParse(json['created_at'] as String? ?? '');
-    if (rawId == null || createdAt == null) {
+    if (rawId == null) {
       throw ArgumentError.value(
         json,
         'json',
-        'post payload is missing the required "id"/"created_at" fields',
+        'post payload is missing the required "id" field',
       );
     }
-    final name = json['creator_name'] as String?;
-    final handle = json['creator_handle'] as String? ?? '';
+    final createdAt = DateTime.tryParse(requireString(json, 'created_at'));
+    if (createdAt == null) {
+      throw ArgumentError.value(
+        json,
+        'json',
+        'post "created_at" is not a valid ISO-8601 datetime',
+      );
+    }
     return Post(
       id: rawId.toString(),
-      creatorId: nonEmpty(json['creator_id']?.toString()),
-      creatorName: (name != null && name.isNotEmpty) ? name : handle,
-      creatorHandle: handle,
-      verified: json['verified'] as bool? ?? false,
-      body: json['body'] as String? ?? '',
-      mediaUrl: nonEmpty(json['media_url'] as String?),
-      likeCount: asInt(json['like_count']),
-      commentCount: asInt(json['comment_count']),
+      creatorId: requireString(json, 'creator_id'),
+      creatorName: requireString(json, 'creator_name'),
+      creatorHandle: requireString(json, 'creator_handle'),
+      verified: requireBool(json, 'verified'),
+      body: requireString(json, 'body'),
+      mediaUrl: nonEmpty(requireString(json, 'media_url')),
+      likeCount: requireInt(json, 'like_count'),
+      commentCount: requireInt(json, 'comment_count'),
       liked: json['liked'] as bool? ?? false,
       isAdult: json['is_adult'] as bool? ?? false,
       createdAt: createdAt,
@@ -65,11 +72,10 @@ class Post {
   /// Stable server identifier (a string UUID in the current contract).
   final String id;
 
-  /// Optional author-creator id (server `creator_id`); null when absent.
-  final String? creatorId;
+  /// The author-creator id (server `creator_id`, contract-required).
+  final String creatorId;
 
-  /// The author-creator display name (server `creator_name`; falls back to the
-  /// handle).
+  /// The author-creator display name (`creator_name`, contract-required).
   final String creatorName;
 
   /// The author-creator @-handle (server `creator_handle`).

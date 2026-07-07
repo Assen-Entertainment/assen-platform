@@ -1,6 +1,7 @@
-// Contract + render tests for the store catalog: Product.fromJson parses the
-// full ProductOut shape, and the screen renders the grid / empty / error states
-// through a fake repository (no network).
+// Contract + render tests for the store catalog: Product.fromDetail parses the
+// full ProductOut shape (and fromBrief the lean search brief), and the screen
+// renders the grid / empty / error states through a fake repository (no
+// network).
 
 import 'package:assen_mobile/src/store/product.dart';
 import 'package:assen_mobile/src/store/store_repository.dart';
@@ -56,8 +57,8 @@ Widget _host(StoreRepository repo) => ProviderScope(
 );
 
 void main() {
-  test('Product.fromJson parses the full ProductOut shape', () {
-    final product = Product.fromJson(_productRow());
+  test('Product.fromDetail parses the full ProductOut shape', () {
+    final product = Product.fromDetail(_productRow());
     expect(product.title, '한정 아크릴 스탠드');
     expect(product.typeLabel, '굿즈');
     expect(product.priceLabel, '₩18,000');
@@ -68,8 +69,54 @@ void main() {
     expect(product.mediaUrl, isNull); // empty media_url degrades to null
   });
 
-  test('Product.fromJson still parses a lean search brief', () {
-    final product = Product.fromJson(const {
+  test('Product.fromDetail throws when any required field is missing', () {
+    // The catalog shape demands the full ProductOut set; a dropped field is a
+    // load error, not a silent blank.
+    for (final key in const [
+      'id',
+      'type',
+      'title',
+      'price',
+      'meta',
+      'media_url',
+      'description',
+      'options',
+      'sold_out',
+      'locked',
+    ]) {
+      final row = _productRow()..remove(key);
+      expect(
+        () => Product.fromDetail(row),
+        throwsA(isA<ArgumentError>()),
+        reason: 'a missing "$key" must throw',
+      );
+    }
+  });
+
+  test('Product.fromDetail degrades the server-optional fields', () {
+    // creator_*/stock/is_adult are server-optional, so a bare required-only row
+    // still constructs with their defaults.
+    final product = Product.fromDetail(const {
+      'id': 'g2',
+      'type': 'goods',
+      'title': '스티커',
+      'price': 3000,
+      'meta': '',
+      'media_url': '',
+      'description': '',
+      'options': <String>[],
+      'sold_out': false,
+      'locked': false,
+    });
+    expect(product.creatorId, isNull);
+    expect(product.creatorName, '');
+    expect(product.stock, isNull);
+    expect(product.isAdult, isFalse);
+    expect(product.options, isEmpty); // an empty options list is valid
+  });
+
+  test('Product.fromBrief parses the lean search brief', () {
+    final product = Product.fromBrief(const {
       'id': 'p1',
       'type': 'ticket',
       'title': '팬미팅 티켓',
@@ -82,11 +129,28 @@ void main() {
     expect(product.stock, isNull);
   });
 
+  test('Product.fromBrief throws when any required field is missing', () {
+    for (final key in const ['id', 'type', 'title', 'price', 'meta']) {
+      final row = <String, dynamic>{
+        'id': 'p1',
+        'type': 'ticket',
+        'title': '팬미팅 티켓',
+        'price': 55000,
+        'meta': '',
+      }..remove(key);
+      expect(
+        () => Product.fromBrief(row),
+        throwsA(isA<ArgumentError>()),
+        reason: 'a missing "$key" must throw',
+      );
+    }
+  });
+
   testWidgets('renders the catalog grid parsed from the server row', (
     tester,
   ) async {
     await tester.pumpWidget(
-      _host(_FakeStoreRepository.data([Product.fromJson(_productRow())])),
+      _host(_FakeStoreRepository.data([Product.fromDetail(_productRow())])),
     );
     await tester.pump();
     await tester.pump();

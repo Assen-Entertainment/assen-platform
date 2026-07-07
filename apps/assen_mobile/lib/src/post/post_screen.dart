@@ -80,7 +80,13 @@ class _PostDetail extends ConsumerWidget {
           body: post.body,
           media: post.mediaUrl == null
               ? null
-              : Image(image: NetworkImage(post.mediaUrl!), fit: BoxFit.cover),
+              : Image.network(
+                  post.mediaUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, _, _) => ColoredBox(
+                    color: Theme.of(context).extension<AssenColors>()!.cream200,
+                  ),
+                ),
           likeCount: post.likeCount,
           commentCount: post.commentCount,
           liked: post.liked,

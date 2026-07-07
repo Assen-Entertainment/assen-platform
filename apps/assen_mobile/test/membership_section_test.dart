@@ -52,6 +52,37 @@ void main() {
     expect(tier.pricePeriodLabel, '₩9,900 / 월');
   });
 
+  test('Tier.fromJson throws when any required field is missing', () {
+    // creator_id is server-nullable; every other TierOut field is required, so
+    // a dropped one is a load error, not a silent default.
+    for (final key in const [
+      'id',
+      'name',
+      'price',
+      'period',
+      'benefits',
+      'badge',
+      'featured',
+      'sort_order',
+    ]) {
+      final row = _tierRow()..remove(key);
+      expect(
+        () => Tier.fromJson(row),
+        throwsA(isA<ArgumentError>()),
+        reason: 'a missing "$key" must throw',
+      );
+    }
+  });
+
+  test('Tier.fromJson accepts an empty benefits list and null creator_id', () {
+    final row = _tierRow()
+      ..remove('creator_id')
+      ..['benefits'] = <String>[];
+    final tier = Tier.fromJson(row);
+    expect(tier.creatorId, isNull); // server-nullable
+    expect(tier.benefits, isEmpty); // an empty list is valid
+  });
+
   testWidgets('renders the tier list with benefits', (tester) async {
     await tester.pumpWidget(
       _host(

@@ -31,13 +31,25 @@ class DiscoveryScreen extends ConsumerWidget {
           onRetry: () =>
               ref.read(discoveryControllerProvider.notifier).refresh(),
         ),
+        // The 피드·스토어 shortcuts must stay reachable regardless of whether any
+        // creators exist, so they are shown in both branches: inline here for
+        // the empty feed, and at index 0 of [_CreatorList] for the populated
+        // feed.
         data: (creators) => creators.isEmpty
-            ? AssenEmptyState(
-                title: '아직 크리에이터가 없어요',
-                message: '곧 새로운 크리에이터가 이곳에 소개됩니다.',
-                actionLabel: '새로고침',
-                onAction: () =>
-                    ref.read(discoveryControllerProvider.notifier).refresh(),
+            ? Column(
+                children: [
+                  const _DiscoveryShortcuts(),
+                  Expanded(
+                    child: AssenEmptyState(
+                      title: '아직 크리에이터가 없어요',
+                      message: '곧 새로운 크리에이터가 이곳에 소개됩니다.',
+                      actionLabel: '새로고침',
+                      onAction: () => ref
+                          .read(discoveryControllerProvider.notifier)
+                          .refresh(),
+                    ),
+                  ),
+                ],
               )
             : _CreatorList(creators: creators),
       ),

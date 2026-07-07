@@ -25,33 +25,32 @@ class Tier {
 
   /// Builds a [Tier] from a backend `TierOut` JSON object.
   ///
-  /// The contract requires [id] and [name]; a payload missing either violates
-  /// the server contract and throws, so a malformed row surfaces as a load
-  /// error rather than a blank card. [id] is read through `toString()` so a
-  /// string
-  /// UUID or numeric PK both parse. [price]/[sortOrder] degrade to 0 and
-  /// [period]/[badge] to an empty string when absent; [benefits] to an empty
-  /// list and [featured] to false.
+  /// The contract-required fields — `id`, `name`, `price`, `period`,
+  /// `benefits`, `badge`, `featured`, `sort_order` — are parsed strictly: a
+  /// missing key or the wrong type throws [ArgumentError] so a backend
+  /// field-name drift surfaces as a load error rather than a blank card. Only
+  /// `creator_id` (server-nullable) degrades to null. [id] is read through
+  /// `toString()` so a string UUID or numeric PK both parse. An empty `period`,
+  /// `badge` or `benefits` list is a valid value, not an error.
   factory Tier.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
-    final name = json['name'] as String?;
-    if (rawId == null || name == null) {
+    if (rawId == null) {
       throw ArgumentError.value(
         json,
         'json',
-        'tier payload is missing the required "id"/"name" fields',
+        'tier payload is missing the required "id" field',
       );
     }
     return Tier(
       id: rawId.toString(),
       creatorId: nonEmpty(json['creator_id']?.toString()),
-      name: name,
-      price: asInt(json['price']),
-      period: json['period'] as String? ?? '',
-      benefits: _stringList(json['benefits']),
-      badge: json['badge'] as String? ?? '',
-      featured: json['featured'] as bool? ?? false,
-      sortOrder: asInt(json['sort_order']),
+      name: requireString(json, 'name'),
+      price: requireInt(json, 'price'),
+      period: requireString(json, 'period'),
+      benefits: requireStringList(json, 'benefits'),
+      badge: requireString(json, 'badge'),
+      featured: requireBool(json, 'featured'),
+      sortOrder: requireInt(json, 'sort_order'),
     );
   }
 
@@ -92,12 +91,4 @@ class Tier {
   /// period is unset.
   String get pricePeriodLabel =>
       period.isEmpty ? priceLabel : '$priceLabel / $period';
-
-  /// Defensively coerces a JSON `benefits` value into a `List<String>`.
-  ///
-  /// The server sends `list[str]`, but a malformed row (a bare string or null)
-  /// must not split into characters or throw — it degrades to an empty list.
-  static List<String> _stringList(Object? value) => value is List
-      ? value.map((e) => e.toString()).toList(growable: false)
-      : const <String>[];
 }

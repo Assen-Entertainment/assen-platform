@@ -59,20 +59,35 @@ void main() {
     expect(post.handleLabel, '@mio');
   });
 
-  test('Post.fromJson throws when created_at is missing', () {
-    expect(
-      () => Post.fromJson(const {'id': 'p1'}),
-      throwsA(isA<ArgumentError>()),
-    );
+  test('Post.fromJson throws when any required field is missing', () {
+    // Every contract-required field must be present; a backend rename that
+    // drops one is a load error, not a silent ₩0/blank.
+    for (final key in const [
+      'id',
+      'creator_id',
+      'creator_name',
+      'creator_handle',
+      'verified',
+      'body',
+      'media_url',
+      'like_count',
+      'comment_count',
+      'created_at',
+    ]) {
+      final row = _postRow()..remove(key);
+      expect(
+        () => Post.fromJson(row),
+        throwsA(isA<ArgumentError>()),
+        reason: 'a missing "$key" must throw',
+      );
+    }
   });
 
-  test('Post.fromJson falls back to the handle for a missing name', () {
-    final post = Post.fromJson(const {
-      'id': 'p1',
-      'creator_handle': 'yuki',
-      'created_at': '2026-07-01T00:00:00Z',
-    });
-    expect(post.creatorName, 'yuki');
+  test('Post.fromJson accepts empty body and media_url', () {
+    // Empty strings are valid values (not a contract violation).
+    final post = Post.fromJson({..._postRow(), 'body': '', 'media_url': ''});
+    expect(post.body, '');
+    expect(post.mediaUrl, isNull); // empty media_url degrades to null
   });
 
   testWidgets('renders a post parsed from the server row', (tester) async {

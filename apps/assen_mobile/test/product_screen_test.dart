@@ -31,7 +31,7 @@ class _FakeStoreRepository implements StoreRepository {
 }
 
 Product _product({bool soldOut = false, bool locked = false}) =>
-    Product.fromJson({
+    Product.fromDetail({
       'id': 'g1',
       'type': 'goods',
       'title': '한정 아크릴 스탠드',

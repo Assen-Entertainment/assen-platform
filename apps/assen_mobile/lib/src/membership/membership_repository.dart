@@ -18,15 +18,24 @@ class MembershipRepository {
   ///
   /// Unlike the feed/store envelopes this endpoint returns a *bare* JSON array
   /// (`list[TierOut]`, already sorted by the server), so the list is read
-  /// directly. A null/absent body degrades to an empty tier list (the creator
-  /// offers no membership) rather than an error.
+  /// directly. The body is parsed strictly: a `null`/non-array body is a
+  /// contract violation and throws [ArgumentError] (consistent with the
+  /// `requireList` envelopes) rather than silently hiding the section; only a
+  /// real empty array `[]` means the creator offers no membership.
   Future<List<Tier>> fetchTiers(String creatorId) async {
-    final response = await _dio.get<List<dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/api/tiers',
       queryParameters: {'creator_id': creatorId},
     );
-    final items = response.data ?? const <dynamic>[];
-    return items
+    final data = response.data;
+    if (data is! List) {
+      throw ArgumentError.value(
+        data,
+        'response.data',
+        'GET /api/tiers must return a JSON array (bare list[TierOut])',
+      );
+    }
+    return data
         .map((item) => Tier.fromJson(item as Map<String, dynamic>))
         .toList();
   }

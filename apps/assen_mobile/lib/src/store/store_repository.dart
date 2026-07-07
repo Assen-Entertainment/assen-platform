@@ -48,7 +48,7 @@ class StoreRepository {
     final body = response.data ?? const <String, dynamic>{};
     final items = requireList(body, 'items');
     return items
-        .map((item) => Product.fromJson(item as Map<String, dynamic>))
+        .map((item) => Product.fromDetail(item as Map<String, dynamic>))
         .toList();
   }
 
@@ -62,7 +62,7 @@ class StoreRepository {
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/products/${Uri.encodeComponent(productId)}',
       );
-      return Product.fromJson(response.data ?? const <String, dynamic>{});
+      return Product.fromDetail(response.data ?? const <String, dynamic>{});
     } on DioException catch (error) {
       if (error.response?.statusCode == 404) {
         throw ProductNotFoundException(productId);

@@ -65,7 +65,7 @@ SearchResult _oneOfEach() => SearchResult(
     }),
   ],
   products: [
-    Product.fromJson(const {
+    Product.fromBrief(const {
       'id': 'p1',
       'type': 'goods',
       'title': '아크릴 스탠드',
@@ -76,8 +76,8 @@ SearchResult _oneOfEach() => SearchResult(
 );
 
 void main() {
-  test('Product.fromJson parses the ProductBrief shape', () {
-    final product = Product.fromJson(const {
+  test('Product.fromBrief parses the ProductBrief shape', () {
+    final product = Product.fromBrief(const {
       'id': 'p1',
       'type': 'ticket',
       'title': '팬미팅 티켓',

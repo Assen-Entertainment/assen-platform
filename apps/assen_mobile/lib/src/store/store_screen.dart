@@ -74,9 +74,14 @@ class _ProductGrid extends StatelessWidget {
               meta: product.meta,
               media: product.mediaUrl == null
                   ? null
-                  : Image(
-                      image: NetworkImage(product.mediaUrl!),
+                  : Image.network(
+                      product.mediaUrl!,
                       fit: BoxFit.cover,
+                      errorBuilder: (context, _, _) => ColoredBox(
+                        color: Theme.of(
+                          context,
+                        ).extension<AssenColors>()!.cream200,
+                      ),
                     ),
               onTap: () => context.go(RoutePaths.product(product.id)),
             ),

@@ -76,9 +76,12 @@ class _ProductDetail extends StatelessWidget {
             color: colors.cream200,
             child: product.mediaUrl == null
                 ? null
-                : Image(
-                    image: NetworkImage(product.mediaUrl!),
+                : Image.network(
+                    product.mediaUrl!,
                     fit: BoxFit.cover,
+                    // The enclosing cream ColoredBox is the load-failure
+                    // placeholder, so suppress Flutter's default error box.
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
           ),
         ),

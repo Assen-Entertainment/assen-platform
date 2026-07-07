@@ -33,7 +33,7 @@ class SearchResult {
           .map((item) => Creator.fromJson(item as Map<String, dynamic>))
           .toList(),
       products: products
-          .map((item) => Product.fromJson(item as Map<String, dynamic>))
+          .map((item) => Product.fromBrief(item as Map<String, dynamic>))
           .toList(),
     );
   }
