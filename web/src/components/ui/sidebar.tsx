@@ -18,26 +18,29 @@ export interface SidebarProps extends React.HTMLAttributes<HTMLElement> {
 
 export function Sidebar({ brand, items, activeHref, footer, className, linkComponent: LinkComponent = "a", ...props }: SidebarProps) {
   return (
-    <nav aria-label="주요 탐색" className={cn("flex h-full w-60 shrink-0 flex-col gap-1 border-r border-outline bg-surface p-3", className)} {...props}>
+    <nav aria-label="주요 탐색" className={cn("flex h-full w-60 shrink-0 flex-col border-r border-outline bg-surface p-3", className)} {...props}>
       {brand ? <div className="px-2 py-3">{brand}</div> : null}
-      {items.map((it) => {
-        const active = it.href === activeHref;
-        return (
-          <LinkComponent
-            key={it.href}
-            href={it.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2.5 text-label transition-colors [&>span>svg]:size-5",
-              active ? "bg-surface-container-high text-primary" : "text-on-surface hover:bg-surface-container-high",
-            )}
-          >
-            <span className="shrink-0">{it.icon}</span>
-            {it.label}
-          </LinkComponent>
-        );
-      })}
-      {footer ? <div className="mt-auto pt-2">{footer}</div> : null}
+      {/* 네비 항목 — 뷰포트가 짧으면 이 영역만 스크롤(brand·footer는 고정). 풀하이트 연속 셸 유지. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+        {items.map((it) => {
+          const active = it.href === activeHref;
+          return (
+            <LinkComponent
+              key={it.href}
+              href={it.href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2.5 text-label transition-colors [&>span>svg]:size-5",
+                active ? "bg-surface-container-high text-primary" : "text-on-surface hover:bg-surface-container-high",
+              )}
+            >
+              <span className="shrink-0">{it.icon}</span>
+              {it.label}
+            </LinkComponent>
+          );
+        })}
+      </div>
+      {footer ? <div className="pt-2">{footer}</div> : null}
     </nav>
   );
 }

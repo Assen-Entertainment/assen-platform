@@ -14,6 +14,7 @@ export { Spinner } from "./spinner";
 export { Skeleton } from "./skeleton";
 export { Divider, type DividerProps } from "./divider";
 export { PriceLabel, type PriceLabelProps } from "./price-label";
+export { Logo, type LogoProps } from "./logo";
 // Molecules
 export { MonetizableItem, type MonetizableItemProps, type MonetizableItemType } from "./monetizable-item";
 export { CreatorThumbCard, type CreatorThumbCardProps } from "./creator-thumb-card";

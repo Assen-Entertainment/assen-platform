@@ -8,6 +8,7 @@ import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme-provider";
 import { SessionProvider } from "@/lib/session";
 import { SessionGuard } from "@/components/session-guard";
 import { AnalyticsRouteTracker } from "@/components/analytics-route-tracker";
+import { MotionProvider } from "@/components/motion-provider";
 import { Toaster } from "@/components/ui/use-toast";
 
 /** Pretendard Variable — 자체 호스팅(next/font/local, FOIT 방지 display:swap). CSS 변수로 노출. */
@@ -41,7 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Toaster>
                 <SessionGuard />
                 <AnalyticsRouteTracker />
-                {children}
+                <MotionProvider>{children}</MotionProvider>
               </Toaster>
             </SessionProvider>
           </QueryProvider>

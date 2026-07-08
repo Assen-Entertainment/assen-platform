@@ -1,9 +1,10 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState } from "@/components/ui";
+import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState, Skeleton } from "@/components/ui";
 import { SearchIcon } from "@/lib/icons";
 import { useSearch } from "@/lib/api/queries";
+import { Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { track } from "@/lib/analytics";
 import type { Creator, Product } from "@/lib/api";
@@ -149,6 +150,8 @@ export function SearchView({
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      {/* 검색 컨트롤 — 웜 캔버스 위에 뜬 surface 카드로 회색-온-회색 대비 문제 해소(#6). */}
+      <div className="flex flex-col gap-4 rounded-xl border border-outline bg-surface p-4 shadow-1 sm:p-5">
       {/* combobox — 입력 포커스 시 서제스트/최근 검색어 드롭다운. 포커스가 래퍼 밖으로 나가면 닫힘.
           (래퍼 div는 포커스 경계용 onBlur만 — 상호작용은 내부 input[role=combobox]가 담당). */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
@@ -304,13 +307,28 @@ export function SearchView({
           </ul>
         ) : null}
       </div>
-      <SegmentedControl
-        options={[{ label: "전체", value: "all" }, { label: "크리에이터", value: "c" }, { label: "상품", value: "p" }]}
-        value={tab}
-        onValueChange={setTab}
-      />
+        <SegmentedControl
+          options={[{ label: "전체", value: "all" }, { label: "크리에이터", value: "c" }, { label: "상품", value: "p" }]}
+          value={tab}
+          onValueChange={setTab}
+        />
+      </div>
+
+      {/* 결과 컨텍스트(#6) — 질의 + 카운트로 텍스트 위계를 세운다. 빈 질의(브라우즈)는 안내 카피. */}
+      {active && !showError && !(search.isFetching && !search.data) ? (
+        <p className="px-0.5 text-body-s text-on-surface-variant">
+          <span className="font-semibold text-on-surface">&lsquo;{qTrim}&rsquo;</span> 검색 결과 · 크리에이터{" "}
+          <span className="tabular-nums text-on-surface">{cl.length}</span> · 상품{" "}
+          <span className="tabular-nums text-on-surface">{pl.length}</span>
+        </p>
+      ) : !active ? (
+        <p className="px-0.5 text-body-s text-on-surface-variant">지금 주목받는 크리에이터와 상품을 둘러보세요</p>
+      ) : null}
+
       {showError ? (
         <ErrorState onRetry={() => search.refetch()} />
+      ) : active && search.isFetching && !search.data ? (
+        <SearchResultsSkeleton />
       ) : active && cl.length === 0 && pl.length === 0 ? (
         <EmptyState title="검색 결과가 없어요" description="다른 키워드로 검색하거나 철자를 확인해 보세요." />
       ) : (
@@ -318,21 +336,25 @@ export function SearchView({
           {(tab === "all" || tab === "c") && cl.length > 0 ? (
             <section className="flex flex-col gap-3">
               <h2 className="text-title-l text-on-surface">크리에이터</h2>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-4" amount={0.08}>
                 {cl.map((c) => (
-                  <CreatorThumbCard key={c.id} name={c.name} meta={c.category} accentColor={c.accentColor} href={`/creator/${c.handle}`} />
+                  <StaggerItem key={c.id} lift>
+                    <CreatorThumbCard name={c.name} meta={c.category} accentColor={c.accentColor} href={`/creator/${c.handle}`} />
+                  </StaggerItem>
                 ))}
-              </div>
+              </Stagger>
             </section>
           ) : null}
           {(tab === "all" || tab === "p") && pl.length > 0 ? (
             <section className="flex flex-col gap-3">
               <h2 className="text-title-l text-on-surface">상품</h2>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-4" amount={0.08}>
                 {pl.map((p) => (
-                  <MonetizableItem key={p.id} type={p.type} title={p.title} price={`₩${p.price.toLocaleString("ko-KR")}`} meta={p.meta} onAction={() => router.push(`/store/${p.id}`)} />
+                  <StaggerItem key={p.id} lift>
+                    <MonetizableItem type={p.type} title={p.title} price={`₩${p.price.toLocaleString("ko-KR")}`} meta={p.meta} onAction={() => router.push(`/store/${p.id}`)} />
+                  </StaggerItem>
                 ))}
-              </div>
+              </Stagger>
             </section>
           ) : null}
         </>
@@ -344,4 +366,21 @@ export function SearchView({
 /** 서제스트 옵션 행 클래스 — 하이라이트(키보드/호버) 시 강조 배경. */
 function cnRow(highlighted: boolean): string {
   return `flex items-center gap-1 rounded-sm px-3 py-2 ${highlighted ? "bg-surface-container-high" : ""}`;
+}
+
+/** 검색 로딩 스켈레톤(#6) — 질의 결과를 받아오는 동안 빈 화면 대신 카드 자리표시(reduced-motion 시 정적). */
+function SearchResultsSkeleton() {
+  return (
+    <section className="flex flex-col gap-3" aria-hidden>
+      <Skeleton className="h-6 w-28" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex flex-col gap-2">
+            <Skeleton className="aspect-square w-full rounded-lg" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }

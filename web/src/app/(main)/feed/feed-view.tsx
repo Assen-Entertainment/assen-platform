@@ -94,7 +94,7 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
         <EmptyState title="아직 피드가 비어 있어요" description="관심 있는 크리에이터를 팔로우해 보세요." />
       ) : (
         <>
-        <div className="overflow-hidden rounded-lg border border-outline">
+        <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
           {posts.map((p) => (
             <PostCard
               key={p.id}

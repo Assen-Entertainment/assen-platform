@@ -156,7 +156,10 @@ export function CreatorProfileView({
   const goalMax = Math.max(5000, Math.ceil((c.followers + 1) / 5000) * 5000);
 
   return (
-    <div style={accent ? creatorAccentVars(accent) : undefined} className="mx-auto flex max-w-4xl flex-col gap-2">
+    <div
+      style={accent ? creatorAccentVars(accent) : undefined}
+      className="mx-auto flex max-w-4xl flex-col gap-2 [animation:fade-up_500ms_ease-out]"
+    >
       <CreatorHomeHeader
         name={c.name}
         handle={c.handle}
@@ -220,7 +223,7 @@ export function CreatorProfileView({
         </TabsList>
 
         <TabsContent value="posts" className="pt-2">
-          <div className="overflow-hidden rounded-lg border border-outline">
+          <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
             {postList.map((p) => (
               <PostCard
                 key={p.id}

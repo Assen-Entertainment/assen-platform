@@ -8,8 +8,22 @@
 /* 클래스 기반 다크모드: <html class="dark"> 토글 */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * canvas — 앱 배경 "웜 페이퍼"(R13 발전형 폴리시, 온기 미세조정). Figma DS 시맨틱 색이 아니라
+ * 웹 셸 배경 처리이므로 tokens.css(생성 미러) 대신 여기(수작성 앱 스타일)에 정의 → 토큰 재생성에 불변.
+ * surface(카드)는 순백 유지 → 흰 카드가 종이 위에 떠 보이는 편집형 리듬. 색 아이덴티티 불변(가드레일).
+ */
+:root {
+  --canvas: #f8f6f1;
+}
+.dark {
+  /* 다크 canvas = surface보다 한 단계 깊게 → 카드(surface)가 위로 떠 보임(편집형 깊이). */
+  --canvas: #0f0f12;
+}
+
 /* 시맨틱 색 → 모드 반응(원시 CSS변수 참조). inline = 유틸이 var()를 직접 사용 → 라이트/다크/런타임 액센트 자동 추종. */
 @theme inline {
+  --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-container: var(--surface-container);
   --color-surface-container-high: var(--surface-container-high);
@@ -125,6 +139,11 @@
   60% { transform: scale(1.05); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* 진입 리빌(편집형 로드 모먼트) — 히어로·섹션이 살짝 떠오르며 페이드인. 전역 reduced-motion 가드(#43)로 축소. */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* 오버레이 enter/exit 모션(R5-W3 #1) — Radix data-[state=open|closed] 기반. shadcn 표준을
    tailwindcss-animate 의존 없이 재현. enter 200ms ease-out(스냅·즉각 반응), exit 150ms ease-in.
@@ -166,7 +185,7 @@
     color-scheme: dark;
   }
   body {
-    background-color: var(--surface);
+    background-color: var(--canvas);
     color: var(--on-surface);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
