@@ -25,6 +25,7 @@ import {
 import { useCreators, useProducts } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { Spinner } from "@/components/ui";
 import type { Creator, Page, Product } from "@/lib/api";
 
@@ -120,82 +121,92 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
       </section>
 
       {/* 카테고리 탐색(#7) — 콜드스타트 진입점. */}
-      <CategoryIconRow items={CATEGORY_ICONS} onSelect={goSearch} />
+      <Reveal>
+        <CategoryIconRow items={CATEGORY_ICONS} onSelect={goSearch} />
+      </Reveal>
 
       {/* 인기 크리에이터 선반(#10) — 사회적 증거 메타 노출(#12). */}
-      <Shelf
-        title="이번 주 인기 크리에이터"
-        description="지금 가장 주목받는 크리에이터를 만나보세요"
-        action={
-          <Link href="/creator" className="text-body-s text-primary hover:underline">
-            더보기
-          </Link>
-        }
-      >
-        {popular.map((c) => (
-          <CreatorThumbCard
-            key={c.id}
-            name={c.name}
-            meta={creatorMeta(c)}
-            accentColor={c.accentColor}
-            href={`/creator/${c.handle}`}
-            className="w-40"
-          />
-        ))}
-      </Shelf>
-
-      {/* 추천 상품 선반 — 개인화 카피는 로그인 시에만. 비로그인은 일반 카피(#9·P0 비로그인 동선). */}
-      <Shelf
-        title={user ? "회원님을 위한 추천 상품" : "지금 주목받는 상품"}
-        description={user ? "팔로우한 취향을 바탕으로 골랐어요" : "많은 팬이 함께 보고 있는 상품이에요"}
-        action={
-          <Link href="/store" className="text-body-s text-primary hover:underline">
-            더보기
-          </Link>
-        }
-      >
-        {pList.map((p) => (
-          <MonetizableItem
-            key={p.id}
-            type={p.type}
-            title={p.title}
-            price={`₩${p.price.toLocaleString("ko-KR")}`}
-            meta={p.meta}
-            onAction={() => router.push(`/store/${p.id}`)}
-            className="w-56"
-          />
-        ))}
-      </Shelf>
-
-      {/* 신규 크리에이터 선반. */}
-      <Shelf title="새로 합류한 크리에이터" description="갓 시작한 크리에이터를 응원해 주세요">
-        {fresh.map((c) => (
-          <CreatorThumbCard
-            key={c.id}
-            name={c.name}
-            meta={creatorMeta(c)}
-            accentColor={c.accentColor}
-            href={`/creator/${c.handle}`}
-            className="w-40"
-          />
-        ))}
-      </Shelf>
-
-      {/* 전체 둘러보기 — 카테고리 필터 + 고밀도 그리드. */}
-      <section className="flex flex-col gap-4">
-        <h2 className="text-title-l text-on-surface">전체 둘러보기</h2>
-        <SegmentedControl options={CATS} value={cat} onValueChange={setCat} />
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {shown.map((c) => (
+      <Reveal>
+        <Shelf
+          title="이번 주 인기 크리에이터"
+          description="지금 가장 주목받는 크리에이터를 만나보세요"
+          action={
+            <Link href="/creator" className="text-body-s text-primary hover:underline">
+              더보기
+            </Link>
+          }
+        >
+          {popular.map((c) => (
             <CreatorThumbCard
               key={c.id}
               name={c.name}
               meta={creatorMeta(c)}
               accentColor={c.accentColor}
               href={`/creator/${c.handle}`}
+              className="w-40"
             />
           ))}
-        </div>
+        </Shelf>
+      </Reveal>
+
+      {/* 추천 상품 선반 — 개인화 카피는 로그인 시에만. 비로그인은 일반 카피(#9·P0 비로그인 동선). */}
+      <Reveal>
+        <Shelf
+          title={user ? "회원님을 위한 추천 상품" : "지금 주목받는 상품"}
+          description={user ? "팔로우한 취향을 바탕으로 골랐어요" : "많은 팬이 함께 보고 있는 상품이에요"}
+          action={
+            <Link href="/store" className="text-body-s text-primary hover:underline">
+              더보기
+            </Link>
+          }
+        >
+          {pList.map((p) => (
+            <MonetizableItem
+              key={p.id}
+              type={p.type}
+              title={p.title}
+              price={`₩${p.price.toLocaleString("ko-KR")}`}
+              meta={p.meta}
+              onAction={() => router.push(`/store/${p.id}`)}
+              className="w-56"
+            />
+          ))}
+        </Shelf>
+      </Reveal>
+
+      {/* 신규 크리에이터 선반. */}
+      <Reveal>
+        <Shelf title="새로 합류한 크리에이터" description="갓 시작한 크리에이터를 응원해 주세요">
+          {fresh.map((c) => (
+            <CreatorThumbCard
+              key={c.id}
+              name={c.name}
+              meta={creatorMeta(c)}
+              accentColor={c.accentColor}
+              href={`/creator/${c.handle}`}
+              className="w-40"
+            />
+          ))}
+        </Shelf>
+      </Reveal>
+
+      {/* 전체 둘러보기 — 카테고리 필터 + 고밀도 그리드. */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-title-l text-on-surface">전체 둘러보기</h2>
+        <SegmentedControl options={CATS} value={cat} onValueChange={setCat} />
+        {/* 스태거드 진입 + hover 리프트(#8) — 그리드 카드가 순차로 떠오르고, 커서 오버 시 살짝 뜬다. */}
+        <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" amount={0.08}>
+          {shown.map((c) => (
+            <StaggerItem key={c.id} lift>
+              <CreatorThumbCard
+                name={c.name}
+                meta={creatorMeta(c)}
+                accentColor={c.accentColor}
+                href={`/creator/${c.handle}`}
+              />
+            </StaggerItem>
+          ))}
+        </Stagger>
         {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
         {hasNextPage ? (
           <div className="flex flex-col items-center gap-3">

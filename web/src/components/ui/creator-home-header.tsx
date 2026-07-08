@@ -73,17 +73,24 @@ export function CreatorHomeHeader({
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 to-transparent" />
       </div>
 
-      <div className="-mt-12 flex flex-wrap items-end gap-4 px-2">
-        <Avatar fallback={initial} size="xl" tone={handle} className="rounded-full shadow-2 ring-4 ring-surface" />
-        <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pb-1">
+      {/* 커버 아래 헤더(#5) — 아바타는 커버에 프로미넌트하게 오버랩하되, 이름·액션 버튼은
+          커버에서 충분히 내려와 숨 쉬게 한다(커버와 밀착 방지·오버랩 리듬 정돈). */}
+      <div className="px-2">
+        <Avatar
+          fallback={initial}
+          size="xl"
+          tone={handle}
+          className="-mt-14 rounded-full shadow-2 ring-4 ring-surface sm:-mt-16"
+        />
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <h1 className="truncate text-headline text-on-surface">{name}</h1>
+              <h1 className="truncate text-headline text-on-surface sm:text-display-m">{name}</h1>
               {verified ? <VerifiedMark size="md" /> : null}
             </div>
-            <p className="text-body-s text-on-surface-variant">@{handle}</p>
+            <p className="mt-0.5 text-body-s text-on-surface-variant">@{handle}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             {onGift ? (
               <Button variant="outline" onClick={onGift} className="gap-1.5">
                 <GiftIcon aria-hidden className="size-5" /> 후원

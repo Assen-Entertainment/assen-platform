@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { PostCard, TextField, Button, Avatar, LockedOverlay } from "@/components/ui";
+import { PostCard, TextArea, Button, Avatar, LockedOverlay } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
 import { useSession } from "@/lib/session";
@@ -44,12 +44,22 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
     toast({ title: "링크가 복사됐어요", description: "포스트 링크를 클립보드에 복사했습니다." });
   };
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const doSubmit = () => {
     const body = text.trim();
     if (!body || addComment.isPending) return;
     addComment.mutate(body);
     setText("");
+  };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    doSubmit();
+  };
+  // ⌘/Ctrl+Enter로 빠른 등록(멀티라인 입력 중에도) — 일반 Enter는 줄바꿈.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      doSubmit();
+    }
   };
 
   return (
@@ -129,17 +139,25 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
         </div>
       ) : null}
 
-      <form onSubmit={submit} className="flex items-center gap-2">
-        <TextField
+      {/* 댓글 작성(#3) — 멀티라인 여유(min-height·전체 폭)를 준 TextArea 컴포저. */}
+      <form onSubmit={submit} className="flex flex-col gap-2">
+        <TextArea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="댓글을 입력하세요"
-          className="flex-1"
+          onKeyDown={onKeyDown}
+          placeholder="따뜻한 댓글을 남겨보세요"
           aria-label="댓글 입력"
+          rows={3}
+          maxLength={500}
+          showCount
+          className="min-h-24 resize-y"
         />
-        <Button type="submit" disabled={!text.trim() || addComment.isPending}>
-          등록
-        </Button>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-caption text-on-surface-variant">⌘·Ctrl+Enter로 빠르게 등록</span>
+          <Button type="submit" disabled={!text.trim() || addComment.isPending}>
+            등록
+          </Button>
+        </div>
       </form>
     </div>
   );
