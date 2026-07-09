@@ -15,7 +15,18 @@ import uuid
 from typing import Any, cast
 
 from django.conf import settings
-from django.db.models import Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery
+from django.db.models import (
+    Case,
+    Count,
+    Exists,
+    IntegerField,
+    OuterRef,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce
 from django.http import HttpRequest
 from ninja import Router, Schema
@@ -30,14 +41,24 @@ from apps.membership.models import Subscription, SubscriptionStatus
 from apps.social.models import CreatorBlock, Follow, blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
-from config.pagination import paginate
+from config.pagination import clamp_limit, paginate
 from config.throttle import user_write_throttle
 
 creators_router = Router(tags=["creator"])
 search_router = Router(tags=["search"])
 
-_SEARCH_LIMIT = 10
+_SEARCH_LIMIT = 10  # default search page size
+_SEARCH_LIMIT_MAX = 50  # hard ceiling per search page
 _SEARCH_TERM_MAX = 100
+
+# Server-ranked discovery surfaces (E11) — the web sections wire to these instead
+# of client-side sort/reverse of a single list. Each maps to a stable ORDER BY over
+# the annotated creator queryset (followers_count is derived in `_annotated`).
+_RECOMMENDATION_SORTS: dict[str, tuple[str, ...]] = {
+    "popular": ("-followers_count", "handle"),
+    "new": ("-created_at", "handle"),
+    "recommended": ("-followers_count", "-created_at", "handle"),
+}
 
 
 class ErrorOut(Schema):
@@ -86,10 +107,12 @@ class ProductBrief(Schema):
 
 
 class SearchOut(Schema):
-    """Search results across creators and products."""
+    """Search results across creators and products (ranked, paginated)."""
 
     creators: list[CreatorOut]
     products: list[ProductBrief]
+    # Offset to request the next page, or None when neither result set is full.
+    next_offset: int | None = None
 
 
 def _creator_relation_count(relation: QuerySet[Any]) -> Coalesce:
@@ -165,21 +188,31 @@ def list_creators(
     cursor: str | None = None,
     limit: int | None = None,
     category: str | None = None,
+    sort: str | None = None,
 ) -> CreatorPage:
     """List creators (optionally filtered by category), cursor-paginated.
 
     Discovery is an aggregate surface, so creators the authenticated caller has
     personally blocked are excluded (anonymous callers block nothing).
+
+    ``sort`` selects a server-ranked discovery surface (``popular`` / ``new`` /
+    ``recommended`` — see :data:`_RECOMMENDATION_SORTS`), computed from real
+    follower/recency signals rather than the client sorting a single list. A ranked
+    surface returns one bounded top-N page (``next_cursor`` is None) because keyset
+    cursors assume the stable handle order; the default (no ``sort``) stays
+    cursor-paginated.
     """
     account = resolve_optional_account(request)
-    queryset = (
-        _annotated(account)
-        .exclude(id__in=blocked_creator_ids(account))
-        .order_by("handle")
-    )
+    queryset = _annotated(account).exclude(id__in=blocked_creator_ids(account))
     if category:
         queryset = queryset.filter(category=category)
-    items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
+    ordering = _RECOMMENDATION_SORTS.get(sort or "")
+    if ordering is not None:
+        ranked = list(queryset.order_by(*ordering)[: clamp_limit(limit)])
+        return CreatorPage(
+            items=[_creator_out(c) for c in ranked], next_cursor=None
+        )
+    items, next_cursor = paginate(queryset.order_by("handle"), cursor=cursor, limit=limit)
     return CreatorPage(items=[_creator_out(c) for c in items], next_cursor=next_cursor)
 
 
@@ -195,33 +228,62 @@ def get_creator(
 
 
 @search_router.get("", response=SearchOut)
-def search(request: HttpRequest, q: str = "") -> SearchOut:
-    """Search creators (name/handle) and products (title) by a query string."""
+def search(
+    request: HttpRequest, q: str = "", limit: int | None = None, offset: int = 0
+) -> SearchOut:
+    """Ranked, paginated search over creators and products.
+
+    Creators match on name/handle/bio/category and products on title/meta/
+    description — multi-field substring (``icontains``). Substring (not a
+    whitespace ``tsvector``) is deliberate: Korean has no inter-morpheme spaces, so
+    a ``simple``-config full-text index would miss most intra-word matches. A
+    pg_trgm GIN index (indexed substring + typo tolerance) is the documented
+    scale/fuzzy follow-up (ASS-273). Results are ranked so the best hits lead — an
+    exact name, then a prefix, then any-field contains — and ``limit``/``offset``
+    page them; ``next_offset`` is set when a further page may exist.
+    """
     account = resolve_optional_account(request)
     # Bound the term so an oversized query can't drive an unbounded LIKE scan.
     term = q.strip()[:_SEARCH_TERM_MAX]
     if not term:
         return SearchOut(creators=[], products=[])
+    size = max(1, min(limit or _SEARCH_LIMIT, _SEARCH_LIMIT_MAX))
+    offset = max(0, offset)
     # Search is an aggregate surface: personally blocked creators AND their products
     # are excluded for the authenticated caller (anonymous blocks nothing).
     blocked = blocked_creator_ids(account)
-    creators = list(
+    creator_qs = (
         _annotated(account)
-        .filter(name__icontains=term)
+        .filter(
+            Q(name__icontains=term)
+            | Q(handle__icontains=term)
+            | Q(bio__icontains=term)
+            | Q(category__icontains=term)
+        )
         .exclude(id__in=blocked)
-        .order_by("handle")[:_SEARCH_LIMIT]
-    ) + list(
-        _annotated(account)
-        .filter(handle__icontains=term)
-        .exclude(name__icontains=term)
-        .exclude(id__in=blocked)
-        .order_by("handle")[:_SEARCH_LIMIT]
+        .annotate(
+            match_rank=Case(
+                When(name__iexact=term, then=Value(0)),
+                When(name__istartswith=term, then=Value(1)),
+                When(name__icontains=term, then=Value(2)),
+                When(handle__icontains=term, then=Value(3)),
+                default=Value(4),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("match_rank", "-followers_count", "handle")
     )
+    # Fetch one past the page to detect whether a further page exists.
+    creators = list(creator_qs[offset : offset + size + 1])
     # 19+ / visibility gate on product results (same invariant as list_products):
     # draft/hidden are owner-only, and adult_only follows the ENABLE_ADULT_CONTENT +
     # adult_verified gate (off → hidden from everyone), so search cannot leak them.
     product_qs = (
-        Product.objects.filter(title__icontains=term)
+        Product.objects.filter(
+            Q(title__icontains=term)
+            | Q(meta__icontains=term)
+            | Q(description__icontains=term)
+        )
         .exclude(status__in=(ProductStatus.DRAFT.value, ProductStatus.HIDDEN.value))
         .exclude(creator_id__in=blocked)
     )
@@ -229,13 +291,23 @@ def search(request: HttpRequest, q: str = "") -> SearchOut:
         settings.ENABLE_ADULT_CONTENT and account is not None and account.adult_verified
     ):
         product_qs = product_qs.exclude(adult_only=True)
-    products = product_qs.order_by("-created_at")[:_SEARCH_LIMIT]
+    product_qs = product_qs.annotate(
+        match_rank=Case(
+            When(title__istartswith=term, then=Value(0)),
+            When(title__icontains=term, then=Value(1)),
+            default=Value(2),
+            output_field=IntegerField(),
+        )
+    ).order_by("match_rank", "-created_at")
+    products = list(product_qs[offset : offset + size + 1])
+    more = len(creators) > size or len(products) > size
     return SearchOut(
-        creators=[_creator_out(c) for c in creators[:_SEARCH_LIMIT]],
+        creators=[_creator_out(c) for c in creators[:size]],
         products=[
             ProductBrief(id=p.id, type=p.type, title=p.title, price=p.price, meta=p.meta)
-            for p in products
+            for p in products[:size]
         ],
+        next_offset=(offset + size) if more else None,
     )
 
 

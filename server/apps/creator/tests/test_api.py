@@ -114,7 +114,54 @@ def test_search(client: Client) -> None:
     assert any(x["handle"] == "neonbeats" for x in creators["creators"])
     products = client.get("/api/search?q=아크릴").json()
     assert any(x["title"] == "아크릴 스탠드" for x in products["products"])
-    assert client.get("/api/search?q=").json() == {"creators": [], "products": []}
+    assert client.get("/api/search?q=").json() == {
+        "creators": [],
+        "products": [],
+        "next_offset": None,
+    }
+
+
+def test_search_ranks_and_broadens_fields(client: Client) -> None:
+    """Search also matches bio/category and ranks exact/prefix name hits first."""
+    _creator("aaa", name="루미", bio="일러스트레이터")  # exact name
+    _creator("bbb", name="루미나", category="음악")  # name prefix of the query
+    _creator("ccc", name="별", bio="루미를 좋아함")  # bio-only match
+    res = client.get("/api/search?q=루미").json()
+    handles = [c["handle"] for c in res["creators"]]
+    assert set(handles) == {"aaa", "bbb", "ccc"}  # all match (name/bio)
+    assert handles.index("aaa") < handles.index("ccc")  # exact name ranks above bio
+
+
+def test_search_paginates_with_offset(client: Client) -> None:
+    """limit/offset page the ranked results and next_offset signals a further page."""
+    for i in range(3):
+        _creator(f"star{i}", name=f"스타{i}")
+    first = client.get("/api/search?q=스타&limit=2").json()
+    assert len(first["creators"]) == 2
+    assert first["next_offset"] == 2
+    second = client.get("/api/search?q=스타&limit=2&offset=2").json()
+    assert len(second["creators"]) == 1
+    assert second["next_offset"] is None
+
+
+def test_list_creators_recommendation_sorts(client: Client) -> None:
+    """sort=popular ranks by real follower count; ranked surfaces are one bounded page."""
+    _creator("a", name="A")
+    b = _creator("b", name="B")
+    for _ in range(2):
+        Follow.objects.create(
+            follower=Account.objects.create(role=Role.FAN.value), creator=b
+        )
+    Follow.objects.create(
+        follower=Account.objects.create(role=Role.FAN.value), creator=_creator("c")
+    )
+    popular = client.get(f"{BASE}?sort=popular").json()
+    handles = [c["handle"] for c in popular["items"]]
+    assert handles[0] == "b"  # most-followed first (real count, not a proxy)
+    assert popular["next_cursor"] is None  # ranked surface = single bounded page
+    # an unknown sort falls back to the default handle-ordered cursor page
+    default = client.get(f"{BASE}?sort=bogus").json()
+    assert [c["handle"] for c in default["items"]] == ["a", "b", "c"]
 
 
 def test_following_flag_is_false_for_anonymous(client: Client) -> None:
