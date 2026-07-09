@@ -69,10 +69,16 @@ ENABLE_MOCK_PAYMENT: bool = False
 FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", default=True)
 
 # Rate-limiter backend for the cross-cutting middleware limiter (config.ratelimit).
-# "memory" (default) is the per-process in-memory limiter; "redis" selects the
-# shared cross-worker limiter once it is wired (deployment-bound). An unwired value
-# fails safe to in-memory rather than crash the request path — see get_rate_limiter.
+# "memory" (default) is the per-process in-memory limiter; "redis" selects the shared
+# cross-worker limiter (config.ratelimit.RedisRateLimiter). Default stays "memory" so
+# dev/test need no Redis; prod opts into "redis" via env. If "redis" is selected but
+# Redis is unreachable, get_rate_limiter fails safe to in-memory (never a SPOF).
 RATELIMIT_BACKEND: str = env("RATELIMIT_BACKEND", default="memory")
+
+# Redis connection for the shared rate limiter (used only when RATELIMIT_BACKEND=redis).
+# A dedicated DB (…/2), distinct from Celery's broker (…/0) and result backend (…/1),
+# so limiter keys never collide with task state on the same Redis instance.
+RATELIMIT_REDIS_URL: str = env("RATELIMIT_REDIS_URL", default="redis://localhost:6379/2")
 
 # Number of trusted reverse-proxy hops in front of the app, for client-IP
 # extraction in the rate limiters (config.clientip). Default 0 keeps REMOTE_ADDR
