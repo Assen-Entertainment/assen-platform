@@ -17,6 +17,20 @@ export function hueFromSeed(seed: string): number {
   return ((h % 360) + 360) % 360;
 }
 
+/** hex(#rrggbb) → 0..359 hue. 크리에이터 accent를 메쉬 base hue로 쓸 때(색은 유지, 리치니스 부여). */
+export function hexToHue(hex: string): number {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
+  if (!m) return 0;
+  const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  if (d === 0) return 0;
+  let h: number;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return ((Math.round(h * 60) % 360) + 360) % 360;
+}
+
 /**
  * seed + salt → 0..1 결정적 유닛값. FNV-1a(32bit, Math.imul) — 그라디언트 광원 위치 파생용.
  * hue와 독립된 축이라 같은 색이라도 seed마다 광원 배치가 달라져 "메쉬"가 반복되지 않는다.
@@ -56,8 +70,8 @@ function hslHex(h: number, s: number, l: number): string {
  *  3) deep    — 어두운 radial(대각 반대편)로 대비·부피감.
  * 전부 seed 결정적·순수·오프라인(외부 URL 0). 같은 seed = 항상 같은 아트.
  */
-export function gradientDataUri(seed: string): string {
-  const h1 = hueFromSeed(seed);
+export function gradientDataUri(seed: string, baseHue?: number): string {
+  const h1 = baseHue ?? hueFromSeed(seed);
   const h2 = (h1 + 38) % 360; // 인접색(대각 그라디언트 끝)
   const h3 = (h1 + 340) % 360; // -20°, 반대편 톤 → 메쉬 다색감
   // 광원 위치(%) — hue와 독립된 축이라 색이 겹쳐도 구도가 반복되지 않는다.
@@ -89,9 +103,9 @@ export function gradientDataUri(seed: string): string {
 }
 
 /** style={} 에 펼쳐 미디어 컨테이너 배경으로. 종횡비는 컨테이너(aspect-*)가 예약 → CLS 0. */
-export function gradientStyle(seed: string): CSSProperties {
+export function gradientStyle(seed: string, baseHue?: number): CSSProperties {
   return {
-    backgroundImage: `url("${gradientDataUri(seed)}")`,
+    backgroundImage: `url("${gradientDataUri(seed, baseHue)}")`,
     backgroundSize: "cover",
     backgroundPosition: "center",
   };
