@@ -11,28 +11,48 @@ compounds across issues; add a spec per feature surface as they ship.
 surface — routing, auth (`operator_required`), serialization, and the contract —
 against a real server, with deterministic seeded data.
 
-## Run (WSL)
+## Run (Windows / PowerShell)
 
-```sh
-# 1. Bring up the API on a throwaway sqlite DB WITH the unmigrated-app tables.
-#    (up-local.sh uses `migrate` without --run-syncdb, so it would miss them.)
+Pure Windows since 2026-07-01 (WSL removed) — no `/tmp`, no `uv run` (use the
+checked-out venv directly, `server/AGENTS.md`). Two terminals: **A** runs the
+Django dev server in the foreground, **B** seeds + runs the suite.
+
+**Terminal A** — bring up the API on a throwaway sqlite DB:
+
+```powershell
 cd server
-export DJANGO_SETTINGS_MODULE=config.settings.dev
-export DATABASE_URL='sqlite:////tmp/assen_kpi_e2e.sqlite3'
-rm -f /tmp/assen_kpi_e2e.sqlite3
-uv run python manage.py migrate --run-syncdb --noinput
+$env:DJANGO_SETTINGS_MODULE = "config.settings.dev"
+$dbPath = ("$env:TEMP\assen_kpi_e2e.sqlite3" -replace '\\', '/')
+$env:DATABASE_URL = "sqlite:///$dbPath"
+Remove-Item "$env:TEMP\assen_kpi_e2e.sqlite3" -ErrorAction SilentlyContinue
 
-# 2. Seed a deterministic scenario + tokens.
-export KPI_SEED_OUT="$PWD/../e2e/.seed.json"
-uv run python manage.py shell < ../e2e/seed_kpi.py
+# Migrations are fully converted (2026-07-09, ASS-266) — plain `migrate` creates
+# every app's tables now, `--run-syncdb` is no longer needed.
+.\.venv-win\Scripts\python.exe manage.py migrate --noinput
 
-# 3. Serve, then run the suite.
-uv run python manage.py runserver 127.0.0.1:8000 &   # background
-cd ../e2e
-npm install
-KPI_SEED_OUT="$PWD/.seed.json" npx playwright test
+# Seed a deterministic scenario + tokens. PowerShell has no `<` stdin redirect
+# for external commands, so pipe the script through `shell -c exec(open(...))`
+# instead of `manage.py shell < seed_kpi.py`.
+$env:KPI_SEED_OUT = "$PWD\..\e2e\.seed.json"
+.\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_kpi.py', encoding='utf-8').read())"
 
-# 4. Tear down: stop runserver, rm /tmp/assen_kpi_e2e.sqlite3 and .seed.json.
+# Serve (stays in the foreground — leave this terminal running).
+.\.venv-win\Scripts\python.exe manage.py runserver 127.0.0.1:8000
+```
+
+**Terminal B** — run the suite against the server started in A:
+
+```powershell
+cd e2e
+npm install   # clean install if node_modules came from a pre-2026-07-01 WSL checkout
+$env:KPI_SEED_OUT = "$PWD\.seed.json"
+npx playwright test
+```
+
+**Tear down**: `Ctrl+C` terminal A, then in `server/`:
+
+```powershell
+Remove-Item "$env:TEMP\assen_kpi_e2e.sqlite3", "..\e2e\.seed.json" -ErrorAction SilentlyContinue
 ```
 
 Artifacts: `playwright-report/` (HTML) and `test-results/` (traces) — both
@@ -95,10 +115,13 @@ npm run test:web
   fan-role gate on the impression view. Needs `seed_cast.py` (operator + manager
   + fan tokens → `.cast_seed.json`):
 
-  ```sh
-  export CAST_SEED_OUT="$PWD/../e2e/.cast_seed.json"
-  uv run python manage.py shell < ../e2e/seed_cast.py   # after step 1's migrate
-  # then, alongside the suite: CAST_SEED_OUT="$PWD/.cast_seed.json" npx playwright test
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:CAST_SEED_OUT = "$PWD\..\e2e\.cast_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_cast.py', encoding='utf-8').read())"
+  # Terminal B (e2e/), alongside the suite:
+  $env:CAST_SEED_OUT = "$PWD\.cast_seed.json"
+  npx playwright test
   ```
 - `tests/report-handling.api.spec.ts` — ASS-111 operator report-handling stats
   (`GET /api/safety/handling-stats`): the open queue bucketed by status/severity,
@@ -107,10 +130,13 @@ npm run test:web
   out-of-range window → 422. Needs `seed_handling.py` (operator + fan tokens →
   `.handling_seed.json`):
 
-  ```sh
-  export HANDLING_SEED_OUT="$PWD/../e2e/.handling_seed.json"
-  uv run python manage.py shell < ../e2e/seed_handling.py   # after step 1's migrate
-  # then, alongside the suite: HANDLING_SEED_OUT="$PWD/.handling_seed.json" npx playwright test
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:HANDLING_SEED_OUT = "$PWD\..\e2e\.handling_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_handling.py', encoding='utf-8').read())"
+  # Terminal B (e2e/), alongside the suite:
+  $env:HANDLING_SEED_OUT = "$PWD\.handling_seed.json"
+  npx playwright test
   ```
 - `tests/pos-link.api.spec.ts` — ASS-102 v0 operator POS Lite manual linking
   (`/api/operator/pos/...`): the seeded daily link coverage (POS 연결률 + 미연결
@@ -120,10 +146,13 @@ npm run test:web
   import + daily reconciliation are held (OQ-C). Needs `seed_pos.py` (operator +
   fan tokens → `.pos_seed.json`):
 
-  ```sh
-  export POS_SEED_OUT="$PWD/../e2e/.pos_seed.json"
-  uv run python manage.py shell < ../e2e/seed_pos.py   # after step 1's migrate
-  # then, alongside the suite: POS_SEED_OUT="$PWD/.pos_seed.json" npx playwright test
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:POS_SEED_OUT = "$PWD\..\e2e\.pos_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_pos.py', encoding='utf-8').read())"
+  # Terminal B (e2e/), alongside the suite:
+  $env:POS_SEED_OUT = "$PWD\.pos_seed.json"
+  npx playwright test
   ```
 - `tests/reservation.api.spec.ts` — ASS-109 v0 reservation/waitlist
   (`/api/operator/reservations` + `/api/fan/reservations`): the seeded operator
@@ -135,10 +164,13 @@ npm run test:web
   sync, prepaid, and seat assignment are held (PRD P0 제외 / OQ-E). Needs
   `seed_reservation.py` (operator + fan + blocked-fan tokens → `.reservation_seed.json`):
 
-  ```sh
-  export RESERVATION_SEED_OUT="$PWD/../e2e/.reservation_seed.json"
-  uv run python manage.py shell < ../e2e/seed_reservation.py   # after step 1's migrate
-  # then: RESERVATION_SEED_OUT="$PWD/.reservation_seed.json" npx playwright test reservation.api.spec.ts --workers=1
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:RESERVATION_SEED_OUT = "$PWD\..\e2e\.reservation_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_reservation.py', encoding='utf-8').read())"
+  # Terminal B (e2e/):
+  $env:RESERVATION_SEED_OUT = "$PWD\.reservation_seed.json"
+  npx playwright test reservation.api.spec.ts --workers=1
   # (--workers=1: the lifecycle row locks serialise writes, which sqlite cannot do
   #  concurrently — "database is locked"; production Postgres handles it fine.)
   ```
@@ -154,10 +186,13 @@ npm run test:web
   (operator + fan + blocked-fan tokens, a published + a draft campaign →
   `.event_campaign_seed.json`); run with `--workers=1` (sqlite single-writer):
 
-  ```sh
-  export EVENT_CAMPAIGN_SEED_OUT="$PWD/../e2e/.event_campaign_seed.json"
-  uv run python manage.py shell < ../e2e/seed_event_campaign.py   # after step 1's migrate
-  # then: EVENT_CAMPAIGN_SEED_OUT="$PWD/.event_campaign_seed.json" npx playwright test event-campaign.api.spec.ts --workers=1
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:EVENT_CAMPAIGN_SEED_OUT = "$PWD\..\e2e\.event_campaign_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_event_campaign.py', encoding='utf-8').read())"
+  # Terminal B (e2e/):
+  $env:EVENT_CAMPAIGN_SEED_OUT = "$PWD\.event_campaign_seed.json"
+  npx playwright test event-campaign.api.spec.ts --workers=1
   ```
 - `tests/notification.api.spec.ts` — ASS-113 v0 notification policy guard
   (`/api/operator/notifications/...`): the policy registry (allowed 4 + forbidden
@@ -168,10 +203,13 @@ npm run test:web
   durable model/event and the in-memory mock adapter (real FCM is P5). Needs
   `seed_notification.py` (operator + fan tokens → `.notification_seed.json`):
 
-  ```sh
-  export NOTIFICATION_SEED_OUT="$PWD/../e2e/.notification_seed.json"
-  uv run python manage.py shell < ../e2e/seed_notification.py   # after step 1's migrate
-  # then: NOTIFICATION_SEED_OUT="$PWD/.notification_seed.json" npx playwright test notification.api.spec.ts
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:NOTIFICATION_SEED_OUT = "$PWD\..\e2e\.notification_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_notification.py', encoding='utf-8').read())"
+  # Terminal B (e2e/):
+  $env:NOTIFICATION_SEED_OUT = "$PWD\.notification_seed.json"
+  npx playwright test notification.api.spec.ts
   ```
 - `tests/visit-guide.api.spec.ts` — ASS-101 v0 visit guide / 이용 안내 CMS
   (`/api/operator/visit-guide` + `/api/visit-guide` + `/api/fan/visit-guide`):
@@ -184,10 +222,13 @@ npm run test:web
   slice). Needs `seed_visit_guide.py` (operator + fan tokens, a published + a draft
   section → `.visit_guide_seed.json`):
 
-  ```sh
-  export VISIT_GUIDE_SEED_OUT="$PWD/../e2e/.visit_guide_seed.json"
-  uv run python manage.py shell < ../e2e/seed_visit_guide.py   # after step 1's migrate
-  # then: VISIT_GUIDE_SEED_OUT="$PWD/.visit_guide_seed.json" npx playwright test visit-guide.api.spec.ts
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:VISIT_GUIDE_SEED_OUT = "$PWD\..\e2e\.visit_guide_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_visit_guide.py', encoding='utf-8').read())"
+  # Terminal B (e2e/):
+  $env:VISIT_GUIDE_SEED_OUT = "$PWD\.visit_guide_seed.json"
+  npx playwright test visit-guide.api.spec.ts
   ```
 - `tests/coupon.api.spec.ts` — ASS-108 v0 coupons + points
   (`/api/operator/coupon` + `/api/fan/coupon`): the coupon lifecycle (issue →
@@ -199,10 +240,13 @@ npm run test:web
   approval-gated, deferred slice). Needs `seed_coupon.py` (operator + fan +
   blocked-fan tokens, an active + a blocked coupon → `.coupon_seed.json`):
 
-  ```sh
-  export COUPON_SEED_OUT="$PWD/../e2e/.coupon_seed.json"
-  uv run python manage.py shell < ../e2e/seed_coupon.py   # after step 1's migrate
-  # then: COUPON_SEED_OUT="$PWD/.coupon_seed.json" npx playwright test coupon.api.spec.ts --workers=1
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:COUPON_SEED_OUT = "$PWD\..\e2e\.coupon_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_coupon.py', encoding='utf-8').read())"
+  # Terminal B (e2e/):
+  $env:COUPON_SEED_OUT = "$PWD\.coupon_seed.json"
+  npx playwright test coupon.api.spec.ts --workers=1
   ```
 - `tests/rbac.api.spec.ts` — RBAC v0 admin role assignment
   (`/api/admin/rbac/roles`): an admin promotes a fan; an unassignable role (cast)
@@ -213,8 +257,11 @@ npm run test:web
   transitions + row locks). Needs `seed_rbac.py` (admin + second admin + target
   fan + operator + fan → `.rbac_seed.json`):
 
-  ```sh
-  export RBAC_SEED_OUT="$PWD/../e2e/.rbac_seed.json"
-  uv run python manage.py shell < ../e2e/seed_rbac.py   # after step 1's migrate
-  # then: RBAC_SEED_OUT="$PWD/.rbac_seed.json" npx playwright test rbac.api.spec.ts --workers=1
+  ```powershell
+  # Terminal A (server/), after the migrate step above:
+  $env:RBAC_SEED_OUT = "$PWD\..\e2e\.rbac_seed.json"
+  .\.venv-win\Scripts\python.exe manage.py shell -c "exec(open('../e2e/seed_rbac.py', encoding='utf-8').read())"
+  # Terminal B (e2e/):
+  $env:RBAC_SEED_OUT = "$PWD\.rbac_seed.json"
+  npx playwright test rbac.api.spec.ts --workers=1
   ```

@@ -5,7 +5,7 @@
 메이드카페 '하츠코이'의 오프라인 경험을 온라인으로 잇는 크로스플랫폼 서비스. *(구방향)*
 오프라인 방문(Fan CRM)을 기록·연결하는 것이 P0이며, 이후 Likey/Bubble류 온라인 활동(멤버십·메시지·디지털 체키)으로 확장한다.
 
-- 웹: **React + Next.js + TS + Tailwind v4** (`web/`, ADR-09/10) — 신방향
+- 웹: **React + Next.js + TS + Tailwind v4** (`web/`, `docs/adr/0005-web-react-next.md`) — 신방향
 - 모바일: Flutter (iOS + Android; 구 Flutter-web 전제 폐기)
 - 백엔드: Django 5.2 LTS + Django Ninja (ADR-0001)
 - 태스크 추적: Linear — 팀 ASS, 프로젝트 "Assen 웹 플랫폼 v1" (구 "Assen Platform")
@@ -27,10 +27,13 @@
 
 | 문서 | 내용 |
 |---|---|
+| `docs/README.md` | **docs 전체 인덱스** — 카테고리별 문서 목록 + status(current/superseded) |
+| `docs/onboarding.md` | 신규 개발자 Day-1 셋업(server·web·Flutter·e2e) + 트러블슈팅 |
 | `AGENTS.md` | 에이전트 하네스 (필수 선행 문서, 검증 계약, GitOps, 금지 영역) |
 | `apps/AGENTS.md` · `server/AGENTS.md` | 스택별 중첩 하네스 |
 | `docs/CONSTRAINTS.md` | 개발 제약사항 41개 (기준 문서) |
 | `docs/adr/` | 아키텍처 결정 기록 |
+| `docs/api/README.md` | B-API 규약 인덱스 (정본은 `web/src/lib/api/openapi.json`) |
 | `docs/deployment.md` | 현재 배포 상태, local/dev build, production ECS deploy 절차 |
 | `docs/research/` | 제약의 근거 리서치 (하네스 담론, 스택·IAP·컴플라이언스) |
 
