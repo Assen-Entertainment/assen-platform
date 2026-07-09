@@ -214,10 +214,12 @@ figma:
 
 ---
 
-## 6. 다음 액션 (브랜드 방향 E9 확정 후)
+## 6. 다음 액션 — **2026-07-08 대표 지시로 동결 해제·실행**
 
-1. **토큰 동기 1건**: Figma `sys/warning`·`ref/amber/main` → `#B8740A` 상향(tokens.v2 SSOT 정합).
-2. **Figma 신규 등재 11건**(코드-only, gate-note 제외): P1(accordion·file-upload·date-picker·calendar·breadcrumb) → P2(media-viewer·success-check·shelf) → P3(sidebar·topbar·right-rail).
-3. **의도적 편차 Figma 반영 4건**: CreatorThumbCard/MembershipTierCard gradient.brand 커버·상단바(#1·#3), PriceLabel 취소선/할인% variant(#6), EmptyState primary-container 틴트(#2) — 노드 스크린샷 대조 후.
+> 진행 상세·결과 기록: [`ds-figma-sync-2026-07-08.md`](./ds-figma-sync-2026-07-08.md). 상태: #1 토큰·#3 편차 **반영 완료**, #2 코드-only 등재 **구축 중**, #4 Figma-only **로드맵 판정 완료**, #5 브랜드 후행 조건은 대표 지시로 해제(현 반영=코드 현행값 미러).
+
+1. ✅ **토큰 동기 1건(완료)**: Figma `ref/amber/main` → `#B8740A`(`sys/warning` Light alias 자동정정, tokens.v2 SSOT 정합).
+2. ✅ **Figma 신규 등재 11건(완료)**: 신규 섹션 `06 Code-Sync (R7 · 2026-07-08)`(Section 299:28)에 accordion·file-upload·date-picker·calendar·breadcrumb·media-viewer·success-check·shelf·sidebar·topbar·right-rail 등재. 코드-only 미등재 12→1(gate-note만). 매핑률 83.8%→98.6%. 상세 [`ds-figma-sync-2026-07-08.md`](./ds-figma-sync-2026-07-08.md) §3.
+3. ✅ **의도적 편차 4건 반영(완료·시각검증)**: CreatorThumbCard 커버(31:4)·EmptyState 틴트(39:4)·PriceLabel 취소선+할인%(51:8·51:9)·MembershipTierCard Featured 상단바(297:28). 상세 [`ds-figma-sync-2026-07-08.md`](./ds-figma-sync-2026-07-08.md) §2.
 4. **신규 컴포넌트 검토 6건**(Figma-only 실갭): ProgressRing·Rating·Slider·CountdownTimer·ScrollProgressBar·QuestCard — 로드맵 편입 여부 판단.
-5. **모두 브랜드 확정 후행** — 현 시점 Figma 파괴적 쓰기 금지 유지.
+5. ~~모두 브랜드 확정 후행~~ → **2026-07-08 대표 지시로 해제**. 현 반영은 코드 SSOT 현행값 미러(가역); indigo `#5A4DF0` 최종 사인 등 브랜드 확정 시 재점검.
