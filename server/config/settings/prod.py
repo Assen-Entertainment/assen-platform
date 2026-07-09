@@ -25,6 +25,19 @@ _required = environ.Env()
 SECRET_KEY = _required("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = _required.list("DJANGO_ALLOWED_HOSTS")
 
+# Data & task-broker stores are as security-critical as the secret key. base.py
+# ships dev-convenience defaults (postgres://assen:assen@localhost, redis://
+# localhost) so a mis-provisioned prod would NOT fail at boot — it would quietly
+# point at a non-existent local store and fail only at first query. Re-read them
+# through the schema-less Env so their ABSENCE fails closed at boot, exactly like
+# SECRET_KEY/ALLOWED_HOSTS above (ASS-265). Celery's broker/result backends are
+# genuinely used (the beat/worker services); the in-memory rate-limiter and
+# channels layer fail *safe* to in-process, so no generic REDIS_URL is required
+# here until those Redis backends are actually wired (ASS-268).
+DATABASES = {"default": _required.db("DATABASE_URL")}
+CELERY_BROKER_URL = _required("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = _required("CELERY_RESULT_BACKEND")
+
 # TLS terminates at the ALB; trust its forwarded proto header so Django knows
 # the original request was HTTPS (required for secure-cookie/redirect logic).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

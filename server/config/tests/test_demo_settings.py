@@ -17,6 +17,11 @@ def test_demo_profile_enables_all_mock_gates(monkeypatch: pytest.MonkeyPatch) ->
     # demo → prod fail-closes on these; provide them so the import succeeds.
     monkeypatch.setenv("DJANGO_SECRET_KEY", "demo-smoke-secret-not-real")
     monkeypatch.setenv("DJANGO_ALLOWED_HOSTS", "demo.example")
+    # prod also fail-closes on the data/broker stores (ASS-265) — a demo host runs
+    # on a real Postgres/Redis, so these are required too.
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:p@localhost:5432/demo")
+    monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
     # Evaluate demo (and its prod parent) fresh under the env set above.
     for module in ("config.settings.demo", "config.settings.prod"):
         sys.modules.pop(module, None)
