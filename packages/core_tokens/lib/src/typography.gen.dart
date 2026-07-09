@@ -10,11 +10,12 @@ import 'package:flutter/painting.dart';
 /// size read `*Size`; new code can take the whole composed style.
 abstract final class TypographyTokens {
   /// typography.fontFamily.display — primary face.
-  static const String displayFontFamily = 'Cafe24 Ssurround';
+  static const String displayFontFamily = 'Pretendard Variable';
 
   /// typography.fontFamily.display — fallback stack (after the primary).
   static const List<String> displayFontFamilyFallback = [
     'Pretendard',
+    'Apple SD Gothic Neo',
     'sans-serif',
   ];
 

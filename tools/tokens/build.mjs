@@ -23,12 +23,26 @@
 //   are reported as findings, NOT silently reconciled. See ADR-0004.
 
 import StyleDictionary from 'style-dictionary';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..');
 const TOKENS_SRC = resolve(REPO_ROOT, 'docs/design/tokens.json');
+
+// G012 (partial source split): the Dart typography `display` font family is
+// re-sourced from the CANONICAL docs/design/tokens.v2.json (Pretendard) instead
+// of the dead tokens.json ("Cafe24 Ssurround"). The scope is deliberately
+// narrow — ONLY the display font stack. A full Dart-side switch to tokens.v2.json
+// is unsafe: v2 renames/removes token keys (the typography pixel/captionMicro/
+// displayS scales and the whole rose/cream/strawberry colour ramp) that ui_kit
+// widgets, the hand-written color_scheme.dart and the test suite still consume,
+// so a wholesale swap breaks the mobile build. The landing CSS therefore stays
+// 100% on tokens.json (see verify-css.mjs / CSS_NAME_MAP). See ADR-0004 / G012.
+const V2_DISPLAY_FONT_FAMILY = JSON.parse(
+  readFileSync(resolve(REPO_ROOT, 'docs/design/tokens.v2.json'), 'utf8'),
+).typography.fontFamily.display.$value;
 
 const GEN_HEADER_LINES = [
   'GENERATED — DO NOT EDIT BY HAND (#32).',
@@ -330,7 +344,10 @@ function buildTypographyDart(dictionary) {
   const familyFields = families
     .map((t) => {
       const key = t.path[2];
-      const stack = rawValue(t);
+      // G012: re-source ONLY the `display` stack from tokens.v2.json (Pretendard).
+      // `body` is already Pretendard in tokens.json and `pixel` has no v2 twin,
+      // so both keep their tokens.json values (see V2_DISPLAY_FONT_FAMILY above).
+      const stack = key === 'display' ? V2_DISPLAY_FONT_FAMILY : rawValue(t);
       if (!Array.isArray(stack) || stack.length === 0) {
         throw new Error(`typography: fontFamily.${key} is not a non-empty list`);
       }
