@@ -77,14 +77,14 @@ class AssenDialog extends StatelessWidget {
       onPressed: onConfirm,
       expand: true,
     );
-    // Destructive confirms wear the error rose. Overriding the AssenColors
-    // extension's action anchor (roseMain) in this subtree recolours the
+    // Destructive confirms wear the error red. Overriding the AssenColors
+    // extension's action anchor (indigo500) in this subtree recolours the
     // primary AssenButton without a new style enum (single use; tokens.md §1 —
     // irreversible actions also carry the cancel label, never colour alone).
     final confirm = destructive
         ? Theme(
             data: Theme.of(context).copyWith(
-              extensions: [colors.copyWith(roseMain: colors.redMain)],
+              extensions: [colors.copyWith(indigo500: colors.redMain)],
             ),
             child: confirmButton,
           )
@@ -122,7 +122,7 @@ class AssenDialog extends StatelessWidget {
                 style: TextStyle(
                   fontSize: TypographyTokens.bodyMSize,
                   height: 1.5,
-                  color: colors.ink700,
+                  color: colors.ink600,
                 ),
               ),
             ],

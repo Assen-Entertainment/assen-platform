@@ -50,7 +50,7 @@ class AssenBannerCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             ColoredBox(
-              color: colors.strawberryBg,
+              color: colors.indigo100,
               child: FittedBox(fit: BoxFit.cover, child: background),
             ),
             // Bottom scrim purely for text legibility (not a brand gradient).

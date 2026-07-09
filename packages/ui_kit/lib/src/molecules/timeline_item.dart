@@ -54,7 +54,7 @@ class AssenTimelineItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
-    final dotColor = accent ?? colors.roseMain;
+    final dotColor = accent ?? colors.indigo500;
 
     return IntrinsicHeight(
       child: Row(
@@ -106,7 +106,7 @@ class AssenTimelineItem extends StatelessWidget {
                       subtitle!,
                       style: TextStyle(
                         fontSize: TypographyTokens.bodySSize,
-                        color: colors.ink700,
+                        color: colors.ink600,
                       ),
                     ),
                   ],
@@ -143,7 +143,7 @@ class _Rail extends StatelessWidget {
           Expanded(
             child: Container(
               width: 2,
-              color: isFirst ? Colors.transparent : c.ink200,
+              color: isFirst ? Colors.transparent : c.neutral200,
             ),
           ),
           Container(
@@ -154,7 +154,7 @@ class _Rail extends StatelessWidget {
           Expanded(
             child: Container(
               width: 2,
-              color: isLast ? Colors.transparent : c.ink200,
+              color: isLast ? Colors.transparent : c.neutral200,
             ),
           ),
         ],

@@ -60,7 +60,7 @@ void main() {
           ),
         ),
       );
-      expect(_surfaceOf(tester), RefColors.strawberryBg);
+      expect(_surfaceOf(tester), RefColors.pinkBg);
     });
 
     testWidgets('sky skin fills with the sky surface', (tester) async {

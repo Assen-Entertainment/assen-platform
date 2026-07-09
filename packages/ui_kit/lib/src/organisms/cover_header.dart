@@ -65,7 +65,7 @@ class AssenCoverHeader extends StatelessWidget {
       height: coverHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: accent ?? colors.cream200,
+          color: accent ?? colors.neutral200,
           image: coverImage == null
               ? null
               : DecorationImage(image: coverImage!, fit: BoxFit.cover),
@@ -131,7 +131,7 @@ class AssenCoverHeader extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: TypographyTokens.bodyMSize,
-                    color: colors.ink700,
+                    color: colors.ink600,
                   ),
                 ),
               ],

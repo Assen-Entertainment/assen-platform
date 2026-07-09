@@ -131,7 +131,7 @@ class _SettingsBody extends ConsumerWidget {
             _roleLabel(fan.role),
             style: TextStyle(
               fontSize: TypographyTokens.bodyMSize,
-              color: colors.ink700,
+              color: colors.ink600,
             ),
           ),
         ),
@@ -142,7 +142,7 @@ class _SettingsBody extends ConsumerWidget {
               '@${fan.handle}',
               style: TextStyle(
                 fontSize: TypographyTokens.bodyMSize,
-                color: colors.ink700,
+                color: colors.ink600,
               ),
             ),
           ),

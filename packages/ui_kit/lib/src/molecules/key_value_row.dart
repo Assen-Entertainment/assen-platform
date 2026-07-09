@@ -42,7 +42,7 @@ class AssenKeyValueRow extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: TypographyTokens.bodyMSize,
-              color: colors.ink700,
+              color: colors.ink600,
             ),
           ),
           const SizedBox(width: SpacingTokens.s4),
@@ -55,7 +55,7 @@ class AssenKeyValueRow extends StatelessWidget {
                     ? TypographyTokens.titleMSize
                     : TypographyTokens.bodyMSize,
                 fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
-                color: emphasis ? colors.roseMain : colors.ink900,
+                color: emphasis ? colors.indigo500 : colors.ink900,
               ),
             ),
           ),

@@ -176,14 +176,14 @@ class AssenMembershipCard extends StatelessWidget {
   (Color, Color, Color) _palette(AssenColors c) {
     return switch (skin) {
       AssenMembershipSkin.strawberry => (
-        c.strawberryBg,
-        c.strawberryBorder,
-        c.strawberryInk,
+        c.pinkBg,
+        c.pinkInk,
+        c.pinkInk,
       ),
-      AssenMembershipSkin.sky => (c.skyBg, c.skyBorder, c.skyInk),
+      AssenMembershipSkin.sky => (c.skyBg, c.skyInk, c.skyInk),
       AssenMembershipSkin.lavender => (
         c.lavenderBg,
-        c.lavenderBorder,
+        c.lavenderInk,
         c.lavenderInk,
       ),
     };

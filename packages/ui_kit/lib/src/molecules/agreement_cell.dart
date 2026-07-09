@@ -118,7 +118,7 @@ class _Tag extends StatelessWidget {
       style: TextStyle(
         fontSize: TypographyTokens.bodySSize,
         fontWeight: FontWeight.w700,
-        color: required ? colors.roseMain : colors.ink500,
+        color: required ? colors.indigo500 : colors.ink500,
       ),
     );
   }

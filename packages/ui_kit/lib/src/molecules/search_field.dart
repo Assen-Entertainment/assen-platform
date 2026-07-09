@@ -67,7 +67,7 @@ class AssenSearchField extends StatelessWidget {
             fontSize: TypographyTokens.bodyLSize,
             color: colors.ink900,
           ),
-          cursorColor: colors.roseMain,
+          cursorColor: colors.indigo500,
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(
@@ -86,14 +86,14 @@ class AssenSearchField extends StatelessWidget {
                   )
                 : null,
             filled: true,
-            fillColor: colors.cream100,
+            fillColor: colors.neutral100,
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: SpacingTokens.s4,
               vertical: SpacingTokens.s3,
             ),
-            enabledBorder: border(colors.ink200),
-            focusedBorder: border(colors.roseMain, width: 2),
+            enabledBorder: border(colors.neutral200),
+            focusedBorder: border(colors.indigo500, width: 2),
           ),
         );
       },

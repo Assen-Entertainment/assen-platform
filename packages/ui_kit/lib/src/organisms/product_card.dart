@@ -60,7 +60,7 @@ class AssenProductCard extends StatelessWidget {
         AspectRatio(
           aspectRatio: 5 / 3,
           child: ColoredBox(
-            color: colors.cream200,
+            color: colors.neutral200,
             child: media,
           ),
         ),
@@ -118,7 +118,7 @@ class AssenProductCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.white,
         borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.lg)),
-        border: Border.all(color: colors.ink100),
+        border: Border.all(color: colors.neutral100),
       ),
       child: ClipRRect(
         borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.lg)),

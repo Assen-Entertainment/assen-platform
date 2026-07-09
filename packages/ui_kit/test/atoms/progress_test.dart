@@ -35,7 +35,7 @@ void main() {
       final bar = tester.widget<LinearProgressIndicator>(
         find.byType(LinearProgressIndicator),
       );
-      expect(bar.valueColor!.value, RefColors.roseMain);
+      expect(bar.valueColor!.value, RefColors.indigo500);
     });
   });
 
@@ -71,7 +71,7 @@ void main() {
           .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
           .toList();
       final activeColor = (dots[1].decoration! as BoxDecoration).color;
-      expect(activeColor, RefColors.roseMain);
+      expect(activeColor, RefColors.indigo500);
     });
   });
 

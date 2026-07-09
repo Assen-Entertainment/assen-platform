@@ -80,7 +80,7 @@ class _Tab extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: selected ? colors.roseMain : Colors.transparent,
+                color: selected ? colors.indigo500 : Colors.transparent,
                 width: 2,
               ),
             ),

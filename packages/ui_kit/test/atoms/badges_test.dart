@@ -75,7 +75,7 @@ void main() {
         ),
       );
       expect(find.text('확정'), findsOneWidget);
-      expect(_decorationOf(tester, AssenStatusBadge).color, RefColors.matchaBg);
+      expect(_decorationOf(tester, AssenStatusBadge).color, RefColors.mintBg);
     });
 
     testWidgets('cancelled maps to the red surface', (tester) async {

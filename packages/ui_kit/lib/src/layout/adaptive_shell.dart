@@ -48,7 +48,7 @@ class AssenAdaptiveShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     final selectedRailLabelStyle = TypographyTokens.captionMicro.copyWith(
-      color: colors.roseMain,
+      color: colors.indigo500,
     );
     final unselectedRailLabelStyle = TypographyTokens.captionMicro.copyWith(
       color: colors.ink500,
@@ -59,7 +59,7 @@ class AssenAdaptiveShell extends StatelessWidget {
         final size = AssenWindowSize.fromWidth(constraints.maxWidth);
         if (size == AssenWindowSize.compact) {
           return Scaffold(
-            backgroundColor: colors.cream50,
+            backgroundColor: colors.white,
             body: body,
             bottomNavigationBar: AssenTabBar(
               items: items,
@@ -74,23 +74,23 @@ class AssenAdaptiveShell extends StatelessWidget {
         // drives BOTH the extended rail and the AssenContentColumn wrap below.
         final expanded = size.atLeast(AssenWindowSize.expanded);
         return Scaffold(
-          backgroundColor: colors.cream50,
+          backgroundColor: colors.white,
           body: Row(
             children: [
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: colors.cream100,
-                  border: Border(right: BorderSide(color: colors.ink100)),
+                  color: colors.neutral100,
+                  border: Border(right: BorderSide(color: colors.neutral100)),
                 ),
                 child: NavigationRail(
-                  backgroundColor: colors.cream100,
+                  backgroundColor: colors.neutral100,
                   selectedIndex: currentIndex,
                   onDestinationSelected: onChanged,
                   extended: expanded,
                   labelType: expanded ? null : NavigationRailLabelType.selected,
                   useIndicator: true,
-                  indicatorColor: colors.strawberryBg,
-                  selectedIconTheme: IconThemeData(color: colors.roseMain),
+                  indicatorColor: colors.indigo100,
+                  selectedIconTheme: IconThemeData(color: colors.indigo500),
                   unselectedIconTheme: IconThemeData(color: colors.ink500),
                   selectedLabelTextStyle: selectedRailLabelStyle,
                   unselectedLabelTextStyle: unselectedRailLabelStyle,

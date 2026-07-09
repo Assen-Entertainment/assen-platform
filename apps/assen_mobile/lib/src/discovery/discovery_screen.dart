@@ -107,8 +107,8 @@ class _DiscoveryShortcuts extends StatelessWidget {
           subtitle: '크리에이터 소식 모아보기',
           leading: _ShortcutIcon(
             icon: Icons.dynamic_feed_outlined,
-            background: colors.strawberryBg,
-            foreground: colors.strawberryInk,
+            background: colors.indigo100,
+            foreground: colors.indigoInk,
           ),
           onTap: () => context.go(RoutePaths.feed),
         ),

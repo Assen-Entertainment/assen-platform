@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 enum AssenButtonStyle {
   /// Solid rose fill — the single primary action per screen (Korean B2C
   /// convention #1: one main action, usually the bottom CTA). Uses the only
-  /// solid action colour in the palette (`RefColors.roseMain`).
+  /// solid action colour in the palette (`RefColors.indigo500`).
   primary,
 
   /// Tonal strawberry fill for secondary actions that still need presence but
@@ -101,9 +101,9 @@ class AssenButton extends StatelessWidget {
 
   ButtonStyle _primaryStyle(AssenColors colors) {
     return FilledButton.styleFrom(
-      backgroundColor: colors.roseMain,
+      backgroundColor: colors.indigo500,
       foregroundColor: colors.white,
-      disabledBackgroundColor: colors.ink100,
+      disabledBackgroundColor: colors.neutral100,
       disabledForegroundColor: colors.ink500,
       minimumSize: const Size(_minTouchTarget, _minTouchTarget),
       padding: const EdgeInsets.symmetric(
@@ -119,9 +119,9 @@ class AssenButton extends StatelessWidget {
 
   ButtonStyle _secondaryStyle(AssenColors colors) {
     return FilledButton.styleFrom(
-      backgroundColor: colors.strawberryBg,
-      foregroundColor: colors.strawberryInk,
-      disabledBackgroundColor: colors.ink100,
+      backgroundColor: colors.indigo100,
+      foregroundColor: colors.indigoInk,
+      disabledBackgroundColor: colors.neutral100,
       disabledForegroundColor: colors.ink500,
       minimumSize: const Size(_minTouchTarget, _minTouchTarget),
       padding: const EdgeInsets.symmetric(
@@ -137,7 +137,7 @@ class AssenButton extends StatelessWidget {
 
   ButtonStyle _ghostStyle(AssenColors colors) {
     return TextButton.styleFrom(
-      foregroundColor: colors.strawberryInk,
+      foregroundColor: colors.indigoInk,
       disabledForegroundColor: colors.ink500,
       minimumSize: const Size(_minTouchTarget, _minTouchTarget),
       padding: const EdgeInsets.symmetric(

@@ -4,18 +4,17 @@ import 'package:flutter/material.dart';
 /// Builds the Assen Platform light theme.
 ///
 /// The colour scheme is the hand-mapped [AssenColorScheme] (composed from the
-/// generated token ramp, NOT seeded — a seeded M3 scheme distorts the cream
-/// surface). The raw token ramp is also exposed through the [AssenColors],
-/// [AssenSpacing] and [AssenRadius] [ThemeExtension]s so the ASS-88 atoms read
-/// pastel/ink/brass values that have no M3 `ColorScheme` slot. ASS-88 expands
-/// this into typography and component themes.
+/// generated token ramp, NOT seeded — a seeded M3 scheme distorts the surface
+/// tone). The raw token ramp is also exposed through the [AssenColors],
+/// [AssenSpacing] and [AssenRadius] [ThemeExtension]s so the atoms read the
+/// indigo/ink/container values that have no M3 `ColorScheme` slot.
 class AssenTheme {
   const AssenTheme._();
 
   /// Primary CTA colour — the single solid action colour
-  /// (color.ref.rose.main). Not a seed: the scheme is hand-mapped, not
-  /// [ColorScheme.fromSeed]. Retained for ASS-88 component theming.
-  static const Color primary = RefColors.roseMain;
+  /// (color.ref.indigo.500, Assen Indigo). Not a seed: the scheme is
+  /// hand-mapped, not [ColorScheme.fromSeed].
+  static const Color primary = RefColors.indigo500;
 
   /// Returns the light [ThemeData] used by every Assen app.
   ///
@@ -27,7 +26,7 @@ class AssenTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: AssenColorScheme.light,
-      scaffoldBackgroundColor: RefColors.cream50,
+      scaffoldBackgroundColor: RefColors.white,
       extensions: const [AssenColors(), AssenSpacing(), AssenRadius()],
     );
   }

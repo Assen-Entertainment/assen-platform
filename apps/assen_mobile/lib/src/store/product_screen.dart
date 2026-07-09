@@ -74,7 +74,7 @@ class _ProductDetail extends StatelessWidget {
         AspectRatio(
           aspectRatio: 5 / 3,
           child: ColoredBox(
-            color: colors.cream200,
+            color: colors.neutral200,
             child: product.mediaUrl == null
                 ? null
                 : CachedMedia(
@@ -134,7 +134,7 @@ class _ProductDetail extends StatelessWidget {
                   style: TextStyle(
                     fontSize: TypographyTokens.bodyMSize,
                     height: 1.5,
-                    color: colors.ink700,
+                    color: colors.ink600,
                   ),
                 ),
               ],

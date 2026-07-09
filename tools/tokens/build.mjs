@@ -40,13 +40,63 @@ const TOKENS_SRC = resolve(REPO_ROOT, 'docs/design/tokens.json');
 // widgets, the hand-written color_scheme.dart and the test suite still consume,
 // so a wholesale swap breaks the mobile build. The landing CSS therefore stays
 // 100% on tokens.json (see verify-css.mjs / CSS_NAME_MAP). See ADR-0004 / G012.
-const V2_DISPLAY_FONT_FAMILY = JSON.parse(
+const V2_TOKENS = JSON.parse(
   readFileSync(resolve(REPO_ROOT, 'docs/design/tokens.v2.json'), 'utf8'),
-).typography.fontFamily.display.$value;
+);
+const V2_DISPLAY_FONT_FAMILY = V2_TOKENS.typography.fontFamily.display.$value;
+
+// G012 (full COLOUR split): the Dart colour ramp (colors.gen.dart) and the
+// AssenColors ThemeExtension (theme_extensions.gen.dart) are re-sourced from the
+// CANONICAL docs/design/tokens.v2.json (Assen Indigo — #5A4DF0, Fanding tone)
+// instead of the dead tokens.json (hatsukoi rose/cream). Only the COLOUR side
+// moves: the landing CSS and every OTHER Dart group (typography/spacing/radius/
+// elevation/motion) stay on tokens.json so the landing :root diff-0 contract
+// (verify-css.mjs / CSS_NAME_MAP) is preserved byte-for-byte. See ADR-0004/G012.
+//
+// Flatten color.ref.* leaves from tokens.v2.json into {path, value, description}
+// so the Dart colour generators need no Style Dictionary dictionary.
+function v2ColorRefs() {
+  const ref = V2_TOKENS.color.ref;
+  const out = [];
+  for (const [group, node] of Object.entries(ref)) {
+    if (!node || typeof node !== 'object') continue;
+    if ('$value' in node && (node.$type ?? node.type) === 'color') {
+      out.push({
+        path: ['color', 'ref', group],
+        value: node.$value,
+        description: node.$description,
+      });
+      continue;
+    }
+    for (const [leafKey, leaf] of Object.entries(node)) {
+      if (
+        leaf &&
+        typeof leaf === 'object' &&
+        '$value' in leaf &&
+        (leaf.$type ?? leaf.type) === 'color'
+      ) {
+        out.push({
+          path: ['color', 'ref', group, leafKey],
+          value: leaf.$value,
+          description: leaf.$description,
+        });
+      }
+    }
+  }
+  return out;
+}
 
 const GEN_HEADER_LINES = [
   'GENERATED — DO NOT EDIT BY HAND (#32).',
   'Source: docs/design/tokens.json (W3C DTCG 2025.10).',
+  'Regenerate: dart run melos run codegen   (verify: melos run codegen:verify).',
+];
+
+// Colour files (colors.gen.dart, theme_extensions.gen.dart) are sourced from
+// tokens.v2.json (G012); their header names the correct source.
+const GEN_HEADER_LINES_V2 = [
+  'GENERATED — DO NOT EDIT BY HAND (#32).',
+  'Source: docs/design/tokens.v2.json (Assen Indigo — W3C DTCG 2025.10).',
   'Regenerate: dart run melos run codegen   (verify: melos run codegen:verify).',
 ];
 
@@ -139,6 +189,10 @@ StyleDictionary.registerFormat({
 const dartDocHeader = () =>
   GEN_HEADER_LINES.map((l) => `// ${l}`).join('\n');
 
+// Doc header for the tokens.v2.json-sourced colour files (G012).
+const dartDocHeaderV2 = () =>
+  GEN_HEADER_LINES_V2.map((l) => `// ${l}`).join('\n');
+
 // Pristine DTCG primitive (uppercase hex, numeric dimensions) for the Dart side.
 // `token.$value` is transformed by the platform group; `original.$value` is not.
 function rawValue(token) {
@@ -171,19 +225,18 @@ const dartConstName = (path) =>
     .join('')
     .replace(/[^A-Za-z0-9]/g, '');
 
-function buildColorsDart(dictionary) {
-  const refs = dictionary.allTokens.filter(
-    (t) => t.path[0] === 'color' && t.path[1] === 'ref' && (t.$type ?? t.type) === 'color',
-  );
+function buildColorsDart() {
+  // G012: sourced from tokens.v2.json (Assen Indigo), not the SD dictionary.
+  const refs = v2ColorRefs();
   const fields = refs
     .map((t) => {
       const name = dartConstName(t.path.join('.'));
-      const desc = t.$description ?? t.description;
+      const desc = t.description;
       const doc = desc ? `  /// ${desc}\n` : '';
-      return `${doc}  static const Color ${name} = ${dartColorLiteral(String(rawValue(t)))};`;
+      return `${doc}  static const Color ${name} = ${dartColorLiteral(String(t.value))};`;
     })
     .join('\n\n');
-  return `${dartDocHeader()}
+  return `${dartDocHeaderV2()}
 
 import 'dart:ui';
 
@@ -191,7 +244,7 @@ import 'dart:ui';
 ///
 /// These are primitives only — semantic M3 roles (color.sys.*) and the
 /// ColorScheme are deliberately NOT generated (a seeded M3 scheme distorts the
-/// cream surface; see docs/design/tokens.md and ADR-0004). Consume these via
+/// surface tone; see docs/design/tokens.md and ADR-0004). Consume these via
 /// [AssenColors] (ThemeExtension) or directly for decorative motifs.
 abstract final class RefColors {
 ${fields}
@@ -419,10 +472,9 @@ ${styleFields}
 // ThemeExtensions: thin, generated wrappers exposing the raw const groups to the
 // Flutter theme. These are PRIMITIVES surfaced for `Theme.of(context).extension`,
 // not the semantic ColorScheme (which stays hand-written in ui_kit).
-function buildThemeExtensionsDart(dictionary) {
-  const refs = dictionary.allTokens.filter(
-    (t) => t.path[0] === 'color' && t.path[1] === 'ref' && (t.$type ?? t.type) === 'color',
-  );
+function buildThemeExtensionsDart() {
+  // G012: sourced from tokens.v2.json (Assen Indigo), not the SD dictionary.
+  const refs = v2ColorRefs();
   const colorFields = refs.map((t) => `  final Color ${dartConstName(t.path.join('.'))};`).join('\n');
   const colorCtor = refs
     .map((t) => {
@@ -437,11 +489,17 @@ function buildThemeExtensionsDart(dictionary) {
   const colorCopyAssign = refs
     .map((t) => {
       const n = dartConstName(t.path.join('.'));
-      return `      ${n}: ${n} ?? this.${n},`;
+      // Keep the emit format-stable: `dart format` wraps a `name: name ?? this.
+      // name,` assign onto two lines once it exceeds 80 cols (long v2 refs like
+      // indigoOnDarkContainer). Match that wrap so `melos format` / codegen:verify
+      // see zero drift.
+      const single = `      ${n}: ${n} ?? this.${n},`;
+      if (single.length <= 80) return single;
+      return `      ${n}:\n          ${n} ?? this.${n},`;
     })
     .join('\n');
 
-  return `${dartDocHeader()}
+  return `${dartDocHeaderV2()}
 
 import 'package:flutter/material.dart';
 

@@ -79,7 +79,7 @@ class _CreatorProfile extends StatelessWidget {
     final accent = CreatorAccent.fromHex(
       creator.accentColor,
       surface: colors.white,
-      fallback: colors.roseMain,
+      fallback: colors.indigo500,
     );
     final subtitle =
         '@${creator.handle}'
@@ -132,7 +132,7 @@ class _CreatorProfile extends StatelessWidget {
               style: TextStyle(
                 fontSize: TypographyTokens.bodyMSize,
                 height: 1.5,
-                color: colors.ink700,
+                color: colors.ink600,
               ),
             ),
           ),

@@ -35,7 +35,7 @@ void main() {
       // The colour is applied on the IconButton (resolved into the glyph via
       // IconTheme), so assert it there rather than on the Icon widget.
       final button = tester.widget<IconButton>(find.byType(IconButton));
-      expect(button.color, RefColors.roseMain);
+      expect(button.color, RefColors.indigo500);
     });
 
     testWidgets('toggles to the opposite value on tap', (tester) async {

@@ -46,7 +46,7 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
     return AppBar(
-      backgroundColor: colors.cream100,
+      backgroundColor: colors.neutral100,
       foregroundColor: colors.ink900,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -74,7 +74,7 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
       bottom: showDivider
           ? PreferredSize(
               preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.ink100),
+              child: Container(height: 1, color: colors.neutral100),
             )
           : null,
     );
@@ -144,7 +144,7 @@ class AssenTabBar extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.white,
-        border: Border(top: BorderSide(color: colors.ink100)),
+        border: Border(top: BorderSide(color: colors.neutral100)),
       ),
       child: BottomNavigationBar(
         currentIndex: currentIndex,
@@ -152,7 +152,7 @@ class AssenTabBar extends StatelessWidget {
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        selectedItemColor: colors.roseMain,
+        selectedItemColor: colors.indigo500,
         unselectedItemColor: colors.ink500,
         selectedFontSize: TypographyTokens.captionMicroSize,
         unselectedFontSize: TypographyTokens.captionMicroSize,

@@ -92,14 +92,14 @@ class _NotificationTile extends StatelessWidget {
         width: SpacingTokens.s10,
         height: SpacingTokens.s10,
         decoration: BoxDecoration(
-          color: unread ? colors.strawberryBg : colors.cream200,
+          color: unread ? colors.indigo100 : colors.neutral200,
           shape: BoxShape.circle,
         ),
         alignment: Alignment.center,
         child: Icon(
           Icons.notifications_none,
           size: SpacingTokens.s5,
-          color: unread ? colors.strawberryInk : colors.ink500,
+          color: unread ? colors.indigoInk : colors.ink500,
         ),
       ),
       trailing: unread
@@ -107,7 +107,7 @@ class _NotificationTile extends StatelessWidget {
               width: SpacingTokens.s2,
               height: SpacingTokens.s2,
               decoration: BoxDecoration(
-                color: colors.roseMain,
+                color: colors.indigo500,
                 shape: BoxShape.circle,
               ),
             )

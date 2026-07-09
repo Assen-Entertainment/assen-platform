@@ -40,10 +40,10 @@ class _AtomCatalogState extends State<AtomCatalog> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     return Scaffold(
-      backgroundColor: colors.cream50,
+      backgroundColor: colors.white,
       appBar: AppBar(
         title: const Text('Atoms'),
-        backgroundColor: colors.cream100,
+        backgroundColor: colors.neutral100,
         foregroundColor: colors.ink900,
       ),
       body: ListView(
@@ -309,7 +309,7 @@ class _Section extends StatelessWidget {
           Text(
             title,
             style: TypographyTokens.label.copyWith(
-              color: colors.ink700,
+              color: colors.ink600,
               fontWeight: FontWeight.w700,
             ),
           ),

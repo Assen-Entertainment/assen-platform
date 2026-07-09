@@ -28,7 +28,7 @@ void main() {
       );
       final button = tester.widget<FilledButton>(find.byType(FilledButton));
       final bg = button.style!.backgroundColor!.resolve({});
-      expect(bg, RefColors.roseMain);
+      expect(bg, RefColors.indigo500);
     });
 
     testWidgets('ghost variant uses a TextButton', (tester) async {

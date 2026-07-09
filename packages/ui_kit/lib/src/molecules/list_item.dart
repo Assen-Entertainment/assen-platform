@@ -88,7 +88,7 @@ class AssenListItem extends StatelessWidget {
                     subtitle!,
                     style: TextStyle(
                       fontSize: TypographyTokens.bodySSize,
-                      color: colors.ink700,
+                      color: colors.ink600,
                     ),
                   ),
                 ],

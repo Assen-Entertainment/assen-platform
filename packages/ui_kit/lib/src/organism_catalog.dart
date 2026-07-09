@@ -36,7 +36,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     return Scaffold(
-      backgroundColor: colors.cream50,
+      backgroundColor: colors.white,
       appBar: AssenAppBar(
         title: 'Organisms',
         onBack: () {},
@@ -191,14 +191,14 @@ class _BoxedEmptyState extends StatelessWidget {
           width: SpacingTokens.s16,
           height: SpacingTokens.s16,
           decoration: BoxDecoration(
-            color: colors.strawberryBg,
+            color: colors.indigo100,
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
           child: Icon(
             Icons.photo_library_outlined,
             size: SpacingTokens.s8,
-            color: colors.strawberryInk,
+            color: colors.indigoInk,
           ),
         ),
         actionLabel: '캐스트 보러 가기',
@@ -226,7 +226,7 @@ class _Section extends StatelessWidget {
           Text(
             title,
             style: TypographyTokens.label.copyWith(
-              color: colors.ink700,
+              color: colors.ink600,
               fontWeight: FontWeight.w700,
             ),
           ),

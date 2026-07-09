@@ -99,7 +99,7 @@ class AssenBottomCta extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.white,
-        border: Border(top: BorderSide(color: colors.ink100)),
+        border: Border(top: BorderSide(color: colors.neutral100)),
       ),
       // SafeArea keeps the bar clear of the home indicator; the viewInsets
       // padding (added by Scaffold via MediaQuery) lifts it above the keyboard.

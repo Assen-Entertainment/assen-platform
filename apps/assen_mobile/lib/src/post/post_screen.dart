@@ -177,7 +177,7 @@ class _CommentTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: TypographyTokens.bodyMSize,
                     height: 1.4,
-                    color: colors.ink700,
+                    color: colors.ink600,
                   ),
                 ),
               ],

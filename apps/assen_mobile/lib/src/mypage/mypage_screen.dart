@@ -93,17 +93,17 @@ class _MyPageBody extends ConsumerWidget {
         const SizedBox(height: SpacingTokens.s6),
         AssenListItem(
           title: '주문 내역',
-          leading: Icon(Icons.receipt_long_outlined, color: colors.ink700),
+          leading: Icon(Icons.receipt_long_outlined, color: colors.ink600),
           onTap: () => context.go(RoutePaths.orders),
         ),
         AssenListItem(
           title: '스튜디오',
-          leading: Icon(Icons.dashboard_outlined, color: colors.ink700),
+          leading: Icon(Icons.dashboard_outlined, color: colors.ink600),
           onTap: () => context.go(RoutePaths.studio),
         ),
         AssenListItem(
           title: '설정',
-          leading: Icon(Icons.settings_outlined, color: colors.ink700),
+          leading: Icon(Icons.settings_outlined, color: colors.ink600),
           onTap: () => context.go(RoutePaths.settings),
         ),
         const SizedBox(height: SpacingTokens.s8),

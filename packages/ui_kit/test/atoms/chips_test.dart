@@ -44,7 +44,7 @@ void main() {
           AssenFilterChip(label: '체키', selected: true, onSelected: (_) {}),
         ),
       );
-      expect(_decorationOf(tester).color, RefColors.strawberryBg);
+      expect(_decorationOf(tester).color, RefColors.indigo100);
     });
 
     testWidgets('reports toggled selection on tap', (tester) async {
@@ -136,7 +136,7 @@ void main() {
           ),
         ),
       );
-      expect(_decorationOf(tester).color, RefColors.roseMain);
+      expect(_decorationOf(tester).color, RefColors.indigo500);
     });
   });
 

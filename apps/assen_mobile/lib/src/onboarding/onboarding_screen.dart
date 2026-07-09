@@ -164,14 +164,14 @@ class _OnboardingSlide extends StatelessWidget {
             width: SpacingTokens.s16,
             height: SpacingTokens.s16,
             decoration: BoxDecoration(
-              color: colors.strawberryBg,
+              color: colors.indigo100,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Icon(
               page.icon,
               size: SpacingTokens.s8,
-              color: colors.strawberryInk,
+              color: colors.indigoInk,
             ),
           ),
           const SizedBox(height: SpacingTokens.s6),
@@ -191,7 +191,7 @@ class _OnboardingSlide extends StatelessWidget {
             style: TextStyle(
               fontSize: TypographyTokens.bodyLSize,
               height: 1.5,
-              color: colors.ink700,
+              color: colors.ink600,
             ),
           ),
           if (showConsentNotice) ...[
@@ -257,7 +257,7 @@ class _Dots extends StatelessWidget {
             height: SpacingTokens.s2,
             margin: const EdgeInsets.symmetric(horizontal: SpacingTokens.s1),
             decoration: BoxDecoration(
-              color: i == active ? colors.roseMain : colors.ink200,
+              color: i == active ? colors.indigo500 : colors.neutral200,
               shape: BoxShape.circle,
             ),
           ),

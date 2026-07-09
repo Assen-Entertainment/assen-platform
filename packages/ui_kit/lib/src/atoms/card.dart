@@ -54,7 +54,7 @@ class AssenCard extends StatelessWidget {
     final decoration = BoxDecoration(
       color: colors.white,
       borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.lg)),
-      border: isLevel1 ? null : Border.all(color: colors.ink100),
+      border: isLevel1 ? null : Border.all(color: colors.neutral100),
       boxShadow: isLevel1
           ? const [
               BoxShadow(

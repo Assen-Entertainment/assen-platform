@@ -72,7 +72,7 @@ class AssenStatCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: TypographyTokens.labelSize,
                     fontWeight: FontWeight.w600,
-                    color: colors.ink700,
+                    color: colors.ink600,
                   ),
                 ),
               ),
@@ -112,7 +112,7 @@ class _Delta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, icon) = switch (trend) {
-      AssenStatTrend.up => (colors.matchaInk, Icons.arrow_upward),
+      AssenStatTrend.up => (colors.mintInk, Icons.arrow_upward),
       AssenStatTrend.down => (colors.redMain, Icons.arrow_downward),
       AssenStatTrend.none => (colors.ink500, null),
     };

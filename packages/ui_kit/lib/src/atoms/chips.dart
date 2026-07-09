@@ -40,7 +40,7 @@ class AssenFilterChip extends StatelessWidget {
     final enabled = onSelected != null;
     final fg = !enabled
         ? colors.ink500
-        : (selected ? colors.strawberryInk : colors.ink700);
+        : (selected ? colors.indigoInk : colors.ink600);
 
     // 라벨은 내부 Text가 제공하므로 래퍼엔 selected/button 상태만 더한다
     // (래퍼에 label을 또 주면 "게임\n게임"으로 중복됨).
@@ -65,12 +65,12 @@ class AssenFilterChip extends StatelessWidget {
               vertical: SpacingTokens.s2,
             ),
             decoration: BoxDecoration(
-              color: selected ? colors.strawberryBg : colors.cream50,
+              color: selected ? colors.indigo100 : colors.white,
               borderRadius: const BorderRadius.all(
                 Radius.circular(RadiusTokens.full),
               ),
               border: Border.all(
-                color: selected ? colors.strawberryBorder : colors.ink200,
+                color: selected ? colors.indigo500 : colors.neutral200,
               ),
             ),
             child: Row(
@@ -153,16 +153,16 @@ class AssenTimeSlotChip extends StatelessWidget {
     final Color border;
     final Color text;
     if (isSelected) {
-      background = colors.roseMain;
-      border = colors.roseMain;
+      background = colors.indigo500;
+      border = colors.indigo500;
       text = colors.white;
     } else if (isFull) {
-      background = colors.ink100;
-      border = colors.ink200;
+      background = colors.neutral100;
+      border = colors.neutral200;
       text = colors.ink500;
     } else {
-      background = colors.cream50;
-      border = colors.ink200;
+      background = colors.white;
+      border = colors.neutral200;
       text = colors.ink900;
     }
 

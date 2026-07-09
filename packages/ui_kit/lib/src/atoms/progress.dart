@@ -29,8 +29,8 @@ class AssenProgressBar extends StatelessWidget {
       child: LinearProgressIndicator(
         value: clamped,
         minHeight: height,
-        backgroundColor: colors.strawberryBgSubtle,
-        valueColor: AlwaysStoppedAnimation<Color>(colors.roseMain),
+        backgroundColor: colors.indigo100,
+        valueColor: AlwaysStoppedAnimation<Color>(colors.indigo500),
       ),
     );
   }
@@ -78,8 +78,8 @@ class AssenProgressDonut extends StatelessWidget {
         painter: _DonutPainter(
           value: value.clamp(0.0, 1.0),
           strokeWidth: strokeWidth,
-          track: colors.strawberryBgSubtle,
-          progress: colors.roseMain,
+          track: colors.indigo100,
+          progress: colors.indigo500,
         ),
         child: center == null ? null : Center(child: center),
       ),
@@ -165,7 +165,7 @@ class AssenPageIndicator extends StatelessWidget {
           width: active ? SpacingTokens.s4 : SpacingTokens.s2,
           height: SpacingTokens.s2,
           decoration: BoxDecoration(
-            color: active ? colors.roseMain : colors.ink200,
+            color: active ? colors.indigo500 : colors.neutral200,
             borderRadius: const BorderRadius.all(
               Radius.circular(RadiusTokens.full),
             ),

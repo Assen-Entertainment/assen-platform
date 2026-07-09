@@ -28,7 +28,7 @@ class TokenSwatch extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(RadiusTokens.md),
-            border: Border.all(color: RefColors.ink200),
+            border: Border.all(color: RefColors.neutral200),
           ),
         ),
         const SizedBox(height: SpacingTokens.s2),

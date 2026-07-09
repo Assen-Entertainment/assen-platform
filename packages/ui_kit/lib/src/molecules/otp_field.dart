@@ -172,11 +172,11 @@ class _Cell extends StatelessWidget {
     if (status == AssenOtpStatus.error) {
       border = colors.redMain;
     } else if (status == AssenOtpStatus.complete) {
-      border = colors.matchaBorder;
+      border = colors.mintInk;
     } else if (isCursor) {
-      border = colors.roseMain;
+      border = colors.indigo500;
     } else {
-      border = colors.ink200;
+      border = colors.neutral200;
     }
 
     return Container(

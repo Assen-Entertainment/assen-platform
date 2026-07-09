@@ -33,7 +33,7 @@ void main() {
   });
 
   group('TypographyTokens font families', () {
-    test('display leads with Pretendard (G012), falls back through the stack', () {
+    test('display leads with Pretendard, falls back through the stack', () {
       // G012: display now sources from docs/design/tokens.v2.json (Pretendard),
       // not the dead tokens.json ("Cafe24 Ssurround"). The primary is the v2
       // "Pretendard Variable"; the bundled static Pretendard (ui_kit/fonts) is

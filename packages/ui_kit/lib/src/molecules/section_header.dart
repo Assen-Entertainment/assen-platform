@@ -70,7 +70,7 @@ class AssenSectionHeader extends StatelessWidget {
                       style: TextStyle(
                         fontSize: TypographyTokens.labelSize,
                         fontWeight: FontWeight.w600,
-                        color: colors.ink700,
+                        color: colors.ink600,
                       ),
                     ),
                     Icon(

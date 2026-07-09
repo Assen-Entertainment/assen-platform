@@ -111,7 +111,7 @@ class AssenPostCard extends StatelessWidget {
               ),
               child: AspectRatio(
                 aspectRatio: 5 / 3,
-                child: ColoredBox(color: colors.cream200, child: media),
+                child: ColoredBox(color: colors.neutral200, child: media),
               ),
             ),
           ],
@@ -129,7 +129,7 @@ class AssenPostCard extends StatelessWidget {
     final card = DecoratedBox(
       decoration: BoxDecoration(
         color: colors.white,
-        border: Border(bottom: BorderSide(color: colors.ink100)),
+        border: Border(bottom: BorderSide(color: colors.neutral100)),
       ),
       child: content,
     );
@@ -256,7 +256,7 @@ class _CountFooter extends StatelessWidget {
           child: ExcludeSemantics(
             child: _Count(
               icon: liked ? Icons.favorite : Icons.favorite_border,
-              iconColor: liked ? colors.roseMain : colors.ink500,
+              iconColor: liked ? colors.indigo500 : colors.ink500,
               label: '$likeCount',
               colors: colors,
             ),
@@ -304,7 +304,7 @@ class _Count extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: TypographyTokens.bodySSize,
-            color: colors.ink700,
+            color: colors.ink600,
           ),
         ),
       ],

@@ -63,7 +63,7 @@ class AssenSidebarShell extends StatelessWidget {
 
         // Large / extra-large: persistent desktop sidebar + full-width body.
         return Scaffold(
-          backgroundColor: colors.cream50,
+          backgroundColor: colors.white,
           body: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -102,8 +102,8 @@ class _Sidebar extends StatelessWidget {
       key: const Key('assenDesktopSidebar'),
       width: AssenLayout.sidebarWidth,
       decoration: BoxDecoration(
-        color: colors.cream100,
-        border: Border(right: BorderSide(color: colors.ink100)),
+        color: colors.neutral100,
+        border: Border(right: BorderSide(color: colors.neutral100)),
       ),
       child: SafeArea(
         right: false,
@@ -157,17 +157,17 @@ class _SidebarDestination extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
-    final foreground = selected ? colors.roseMain : colors.ink700;
+    final foreground = selected ? colors.indigo500 : colors.ink600;
     final glyph = Icon(
       selected ? item.activeIcon : item.icon,
-      color: selected ? colors.roseMain : colors.ink500,
+      color: selected ? colors.indigo500 : colors.ink500,
       size: SpacingTokens.s6,
     );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s1),
       child: Material(
-        color: selected ? colors.strawberryBg : Colors.transparent,
+        color: selected ? colors.indigo100 : Colors.transparent,
         borderRadius: BorderRadius.circular(RadiusTokens.md),
         child: InkWell(
           onTap: onTap,

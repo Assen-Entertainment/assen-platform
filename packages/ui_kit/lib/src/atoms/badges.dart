@@ -77,15 +77,15 @@ class AssenBadge extends StatelessWidget {
   (Color, Color, Color) _palette(AssenColors c) {
     return switch (hue) {
       AssenBadgeHue.strawberry => (
-        c.strawberryBg,
-        c.strawberryInk,
-        c.strawberryBorder,
+        c.pinkBg,
+        c.pinkInk,
+        c.pinkInk,
       ),
-      AssenBadgeHue.peach => (c.peachBg, c.peachInk, c.peachBorder),
-      AssenBadgeHue.lemon => (c.lemonBg, c.lemonInk, c.lemonBorder),
-      AssenBadgeHue.matcha => (c.matchaBg, c.matchaInk, c.matchaBorder),
-      AssenBadgeHue.sky => (c.skyBg, c.skyInk, c.skyBorder),
-      AssenBadgeHue.lavender => (c.lavenderBg, c.lavenderInk, c.lavenderBorder),
+      AssenBadgeHue.peach => (c.violetBg, c.violetInk, c.violetInk),
+      AssenBadgeHue.lemon => (c.creamBg, c.creamInk, c.creamInk),
+      AssenBadgeHue.matcha => (c.mintBg, c.mintInk, c.mintInk),
+      AssenBadgeHue.sky => (c.skyBg, c.skyInk, c.skyInk),
+      AssenBadgeHue.lavender => (c.lavenderBg, c.lavenderInk, c.lavenderInk),
     };
   }
 }
@@ -118,7 +118,7 @@ class AssenCountBadge extends StatelessWidget {
         width: SpacingTokens.s2,
         height: SpacingTokens.s2,
         decoration: BoxDecoration(
-          color: colors.roseMain,
+          color: colors.indigo500,
           shape: BoxShape.circle,
         ),
       );
@@ -133,7 +133,7 @@ class AssenCountBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: SpacingTokens.s1),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: colors.roseMain,
+        color: colors.indigo500,
         borderRadius: const BorderRadius.all(
           Radius.circular(RadiusTokens.full),
         ),
@@ -214,9 +214,9 @@ class AssenStatusBadge extends StatelessWidget {
 
   (Color, Color, Color) _palette(AssenColors c) {
     return switch (kind) {
-      AssenStatusKind.confirmed => (c.matchaBg, c.matchaInk, c.matchaBorder),
-      AssenStatusKind.pending => (c.lemonBg, c.lemonInk, c.lemonBorder),
-      AssenStatusKind.done => (c.skyBg, c.skyInk, c.skyBorder),
+      AssenStatusKind.confirmed => (c.mintBg, c.mintInk, c.mintInk),
+      AssenStatusKind.pending => (c.creamBg, c.creamInk, c.creamInk),
+      AssenStatusKind.done => (c.skyBg, c.skyInk, c.skyInk),
       AssenStatusKind.cancelled => (c.redBg, c.redInk, c.redMain),
     };
   }

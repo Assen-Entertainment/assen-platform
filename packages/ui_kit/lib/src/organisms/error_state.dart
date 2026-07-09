@@ -55,14 +55,14 @@ class AssenErrorState extends StatelessWidget {
                 width: SpacingTokens.s16,
                 height: SpacingTokens.s16,
                 decoration: BoxDecoration(
-                  color: colors.peachBg,
+                  color: colors.violetBg,
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
                 child: Icon(
                   Icons.cloud_off_outlined,
                   size: SpacingTokens.s8,
-                  color: colors.peachInk,
+                  color: colors.violetInk,
                 ),
               ),
               const SizedBox(height: SpacingTokens.s6),
@@ -82,7 +82,7 @@ class AssenErrorState extends StatelessWidget {
                 style: TextStyle(
                   fontSize: TypographyTokens.bodyMSize,
                   height: 1.5,
-                  color: colors.ink700,
+                  color: colors.ink600,
                 ),
               ),
               if (onRetry != null) ...[

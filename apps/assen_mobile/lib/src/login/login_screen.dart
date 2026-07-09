@@ -268,7 +268,7 @@ class _PhoneStep extends StatelessWidget {
           '인증번호를 보내드릴게요. 소셜 로그인은 준비 중이에요.',
           style: TextStyle(
             fontSize: TypographyTokens.bodyMSize,
-            color: colors.ink700,
+            color: colors.ink600,
           ),
         ),
         const SizedBox(height: SpacingTokens.s6),
@@ -339,7 +339,7 @@ class _OtpStep extends StatelessWidget {
           '$phone(으)로 보낸 6자리 인증번호를 입력해 주세요.',
           style: TextStyle(
             fontSize: TypographyTokens.bodyMSize,
-            color: colors.ink700,
+            color: colors.ink600,
           ),
         ),
         if (devOtpHint != null) ...[

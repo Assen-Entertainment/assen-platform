@@ -53,7 +53,7 @@ class AssenStepIndicator extends StatelessWidget {
                 padding: const EdgeInsets.only(top: SpacingTokens.s3),
                 child: Container(
                   height: 2,
-                  color: i < currentStep ? colors.roseMain : colors.ink200,
+                  color: i < currentStep ? colors.indigo500 : colors.neutral200,
                 ),
               ),
             ),
@@ -94,7 +94,7 @@ class _Node extends StatelessWidget {
           width: SpacingTokens.s6,
           height: SpacingTokens.s6,
           decoration: BoxDecoration(
-            color: colors.roseMain,
+            color: colors.indigo500,
             shape: BoxShape.circle,
           ),
           child: Icon(Icons.check, size: SpacingTokens.s4, color: colors.white),
@@ -106,7 +106,7 @@ class _Node extends StatelessWidget {
           decoration: BoxDecoration(
             color: colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: colors.roseMain, width: 2),
+            border: Border.all(color: colors.indigo500, width: 2),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -114,7 +114,7 @@ class _Node extends StatelessWidget {
             style: TextStyle(
               fontSize: TypographyTokens.bodySSize,
               fontWeight: FontWeight.w700,
-              color: colors.roseMain,
+              color: colors.indigo500,
             ),
           ),
         );
@@ -123,7 +123,7 @@ class _Node extends StatelessWidget {
           width: SpacingTokens.s6,
           height: SpacingTokens.s6,
           decoration: BoxDecoration(
-            color: colors.ink100,
+            color: colors.neutral100,
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
