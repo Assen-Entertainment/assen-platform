@@ -18,6 +18,20 @@
  * 상회하므로 측정 정의 차이로 인한 위양성도 흡수). 실사용 회귀(무거운 의존성 추가 등 ~400 KB
  * 증가)에서 발화한다. 최대 청크 상한 300 KB = 실측 185 KB 대비 ~62% 여유 — 벤더/라우트 청크가
  * 스플릿 경계를 넘겨 비대해지면 발화. 두 값 모두 "야금야금 성장은 허용하되 큰 회귀는 잡는" 수준.
+ *
+ * ── 상한 상향(2026-07-09, ASS-270 Sentry 배선) ─────────────────────────────
+ * `@sentry/nextjs` env-gated 배선(next.config.mjs withSentryConfig + instrumentation-client.ts)
+ * 추가로 클라이언트 번들에 신규 전용 청크가 하나 생긴다(DSN 미설정 상태에서도 SDK 코드 자체는
+ * `instrumentation-client.ts`가 항상 로드하는 파일이라 번들엔 포함됨 — 런타임 init/네트워크만
+ * 스킵됨, next.config.mjs 상단 주석 참조). `bundleSizeOptimizations`(excludeDebugStatements
+ * + excludeReplay*)를 적용했지만 이 프로젝트는 Session Replay를 쓰지 않아 그 트리셰이킹은
+ * 무측정 효과였고, `excludeTracing`은 요구사항(tracesSampleRate env-tunable 성능 모니터링)과
+ * 상충해 켜지 않았다 — 즉 이 증가분은 이미 실질적으로 트리셰이킹을 거친 하한에 가깝다.
+ * 실측(mock 빌드, SENTRY_DSN 미설정, node 24, next 15): 총량 2,110.8 KB(신규 Sentry 청크
+ * 하나가 그 중 416.4 KB, 나머지는 기존과 동일). 총량 상한 2,000→2,620 KB(실측 대비 ~24%
+ * 여유 — 기존과 동일한 여유율 유지). 최대 청크 상한 300→500 KB(실측 416.4 KB 대비 ~20% 여유 —
+ * Sentry SDK 자체가 단일 청크로 분리되는 게 정상이므로 기존 62% 여유율을 그대로 적용하면
+ * 과도하게 느슨해져(680 KB) 향후 회귀 탐지력이 떨어짐 → 의도적으로 더 타이트하게 잡음).
  */
 import { readdirSync, statSync } from "node:fs";
 import { join, dirname, resolve, relative } from "node:path";
@@ -28,8 +42,8 @@ const webRoot = resolve(__dirname, ".."); // web/
 const CHUNKS_DIR = join(webRoot, ".next", "static", "chunks");
 
 // 상한(KB) — 근거는 파일 상단 주석 참조.
-const TOTAL_BUDGET_KB = 2000;
-const MAX_CHUNK_BUDGET_KB = 300;
+const TOTAL_BUDGET_KB = 2620;
+const MAX_CHUNK_BUDGET_KB = 500;
 
 /** CHUNKS_DIR 하위의 모든 .js를 재귀 수집해 [{path, bytes}]로 반환. */
 function collectChunks(dir) {
