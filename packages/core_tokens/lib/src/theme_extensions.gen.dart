@@ -37,6 +37,7 @@ final class AssenColors extends ThemeExtension<AssenColors> {
     this.indigoInk = RefColors.indigoInk,
     this.indigoDarkContainer = RefColors.indigoDarkContainer,
     this.indigoOnDarkContainer = RefColors.indigoOnDarkContainer,
+    this.indigoText = RefColors.indigoText,
     this.lavenderBg = RefColors.lavenderBg,
     this.lavenderInk = RefColors.lavenderInk,
     this.violetBg = RefColors.violetBg,
@@ -80,6 +81,7 @@ final class AssenColors extends ThemeExtension<AssenColors> {
   final Color indigoInk;
   final Color indigoDarkContainer;
   final Color indigoOnDarkContainer;
+  final Color indigoText;
   final Color lavenderBg;
   final Color lavenderInk;
   final Color violetBg;
@@ -124,6 +126,7 @@ final class AssenColors extends ThemeExtension<AssenColors> {
     Color? indigoInk,
     Color? indigoDarkContainer,
     Color? indigoOnDarkContainer,
+    Color? indigoText,
     Color? lavenderBg,
     Color? lavenderInk,
     Color? violetBg,
@@ -168,6 +171,7 @@ final class AssenColors extends ThemeExtension<AssenColors> {
       indigoDarkContainer: indigoDarkContainer ?? this.indigoDarkContainer,
       indigoOnDarkContainer:
           indigoOnDarkContainer ?? this.indigoOnDarkContainer,
+      indigoText: indigoText ?? this.indigoText,
       lavenderBg: lavenderBg ?? this.lavenderBg,
       lavenderInk: lavenderInk ?? this.lavenderInk,
       violetBg: violetBg ?? this.violetBg,
@@ -218,6 +222,7 @@ final class AssenColors extends ThemeExtension<AssenColors> {
       indigoInk: other.indigoInk,
       indigoDarkContainer: other.indigoDarkContainer,
       indigoOnDarkContainer: other.indigoOnDarkContainer,
+      indigoText: other.indigoText,
       lavenderBg: other.lavenderBg,
       lavenderInk: other.lavenderInk,
       violetBg: other.violetBg,

@@ -106,7 +106,7 @@ class _Node extends StatelessWidget {
           decoration: BoxDecoration(
             color: colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: colors.indigo500, width: 2),
+            border: Border.all(color: colors.indigoText, width: 2),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -114,7 +114,7 @@ class _Node extends StatelessWidget {
             style: TextStyle(
               fontSize: TypographyTokens.bodySSize,
               fontWeight: FontWeight.w700,
-              color: colors.indigo500,
+              color: colors.indigoText,
             ),
           ),
         );

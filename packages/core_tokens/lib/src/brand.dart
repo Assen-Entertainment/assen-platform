@@ -24,6 +24,16 @@ import 'package:flutter/painting.dart';
 abstract final class AssenSurfaces {
   /// The warm-paper scaffold canvas (#F8F6F1). White cards float on it.
   static const Color paper = Color(0xFFF8F6F1);
+
+  /// The dark-mode scaffold canvas (#0F0F12) — mirrors web `--canvas` in
+  /// `web/src/styles/globals.css` `.dark`.
+  ///
+  /// One step deeper than `AssenColorScheme.dark`'s `surface`
+  /// (`RefColors.darkBg`, #141417 — see color_scheme.dart), so cards read as
+  /// lifted off the scaffold: the same "cards float on canvas" depth
+  /// relationship [paper] gives the light theme, extended to dark (editorial
+  /// depth, per the web comment: "다크 canvas = surface보다 한 단계 깊게").
+  static const Color paperDark = Color(0xFF0F0F12);
 }
 
 /// The single sanctioned brand gradient (mirrors web `--gradient-brand`).
@@ -67,6 +77,12 @@ abstract final class AssenGradients {
   /// failure). Use this for every gradient surface that carries text: the
   /// login brand panel, the discovery hero band, and the creator cover
   /// fallback.
+  ///
+  /// This AA margin holds under `AssenTheme.dark()` too: the gradient's own
+  /// pixel colours are fixed (no light/dark variant), and every call site
+  /// pairs it with the fixed [onBrand] white — never a theme-dependent ink
+  /// colour — so brightness switching cannot regress it (confirmed 2026-07-09,
+  /// dark-mode foundation work, ASS-282).
   static const LinearGradient brandScrimmed = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,

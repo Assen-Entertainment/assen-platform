@@ -30,7 +30,8 @@
         "100": { "$type": "color", "$value": "#EFEFFE", "$description": "accentContainer/필 (Fanding 실측)" },
         "ink": { "$type": "color", "$value": "#2E2C8A", "$description": "강한 대비 필요 시 (파생)" },
         "darkContainer": { "$type": "color", "$value": "#2A2A52" },
-        "onDarkContainer": { "$type": "color", "$value": "#C7C9FF" }
+        "onDarkContainer": { "$type": "color", "$value": "#C7C9FF" },
+        "text": { "$type": "color", "$value": "#5A4DF0", "$description": "전경 전용 시맨틱(텍스트/아이콘, 채움 아님) 라이트 값 — indigo.500과 동일(흰 배경 대비 OK). 다크 인스턴스는 이 필드를 AssenColorScheme.indigoTextDark(#A79BFF, ≈8:1)로 덮어씀(color_scheme.dart, 코드젠 범위 밖) — indigo.500 자체는 다크에서도 버튼/아이콘 필용으로 불변." }
       },
       "lavender": { "bg": { "$type": "color", "$value": "#EFEFFE" }, "ink": { "$type": "color", "$value": "#4338CA" } },
       "violet": { "bg": { "$type": "color", "$value": "#F6EEFD", "$description": "Fanding 실측 퍼플 틴트" }, "ink": { "$type": "color", "$value": "#6D28D9" } },

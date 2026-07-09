@@ -68,6 +68,9 @@ abstract final class RefColors {
 
   static const Color indigoOnDarkContainer = Color(0xFFC7C9FF);
 
+  /// 전경 전용 시맨틱(텍스트/아이콘, 채움 아님) 라이트 값 — indigo.500과 동일(흰 배경 대비 OK). 다크 인스턴스는 이 필드를 AssenColorScheme.indigoTextDark(#A79BFF, ≈8:1)로 덮어씀(color_scheme.dart, 코드젠 범위 밖) — indigo.500 자체는 다크에서도 버튼/아이콘 필용으로 불변.
+  static const Color indigoText = Color(0xFF5A4DF0);
+
   static const Color lavenderBg = Color(0xFFEFEFFE);
 
   static const Color lavenderInk = Color(0xFF4338CA);

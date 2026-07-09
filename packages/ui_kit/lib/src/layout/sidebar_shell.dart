@@ -157,10 +157,10 @@ class _SidebarDestination extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
-    final foreground = selected ? colors.indigo500 : colors.ink600;
+    final foreground = selected ? colors.indigoText : colors.ink600;
     final glyph = Icon(
       selected ? item.activeIcon : item.icon,
-      color: selected ? colors.indigo500 : colors.ink500,
+      color: selected ? colors.indigoText : colors.ink500,
       size: SpacingTokens.s6,
     );
 

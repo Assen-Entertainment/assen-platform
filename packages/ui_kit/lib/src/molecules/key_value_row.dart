@@ -55,7 +55,7 @@ class AssenKeyValueRow extends StatelessWidget {
                     ? TypographyTokens.titleMSize
                     : TypographyTokens.bodyMSize,
                 fontWeight: emphasis ? FontWeight.w700 : FontWeight.w500,
-                color: emphasis ? colors.indigo500 : colors.ink900,
+                color: emphasis ? colors.indigoText : colors.ink900,
               ),
             ),
           ),

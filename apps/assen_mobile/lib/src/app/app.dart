@@ -18,12 +18,10 @@ class AssenApp extends ConsumerWidget {
       title: 'Assen',
       debugShowCheckedModeBanner: false,
       theme: AssenTheme.light(),
-      // The design system is light-first; a dark ramp is deferred (tokens.md
-      // §2). Point darkTheme at the light theme and pin ThemeMode.light so the
-      // app never shows an unstyled M3 dark scheme. TODO(assen): swap to
-      // AssenTheme.dark() once core_tokens ships the dark ramp.
-      darkTheme: AssenTheme.light(),
-      themeMode: ThemeMode.light,
+      darkTheme: AssenTheme.dark(),
+      // `themeMode` is left unset — `ThemeMode.system` is MaterialApp's own
+      // default, so the app follows the OS/device theme setting (tokens.md
+      // §2 dark ramp, ASS-282) without an explicit (lint-redundant) value.
       routerConfig: router,
     );
   }
