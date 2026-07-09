@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Divider, StatusChip, EmptyState, Button, Spinner } from "@/components/ui";
+import { Divider, StatusChip, EmptyState, ErrorState, Button, Spinner } from "@/components/ui";
 import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useOrders } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
@@ -13,7 +13,7 @@ import type { Order, Page } from "@/lib/api";
  * mock 모드는 단일 페이지(더보기 없음)로 기존 서버 렌더와 동일 표시(회귀 0).
  */
 export function OrdersView({ initialOrders }: { initialOrders: Page<Order> }) {
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useOrders(initialOrders);
+  const { data, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useOrders(initialOrders);
   const orders = data ?? initialOrders.items;
 
   // 무한 스크롤 — sentinel 뷰포트 근접 시 자동 로드(reduced-motion·미지원은 더보기 버튼 폴백).
@@ -29,7 +29,9 @@ export function OrdersView({ initialOrders }: { initialOrders: Page<Order> }) {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <h1 className="text-headline text-on-surface">주문 내역</h1>
-      {orders.length ? (
+      {isError && !data ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : orders.length ? (
         <>
           <div className="overflow-hidden rounded-lg border border-outline">
             {orders.map((o, i) => {

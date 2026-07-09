@@ -3,7 +3,7 @@ import * as React from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ListItem, EmptyState, Divider, Button, Spinner } from "@/components/ui";
+import { ListItem, EmptyState, ErrorState, Divider, Button, Spinner } from "@/components/ui";
 import { HeartFilledIcon, CommentIcon, PersonIcon, StoreIcon, BellIcon } from "@/lib/icons";
 import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/lib/api/queries";
@@ -25,7 +25,7 @@ const GROUPS: { key: Notification["group"]; label: string }[] = [
 export function NotificationsView({ notifications }: { notifications: Page<Notification> }) {
   const router = useRouter();
   // USE_API면 실 목록/읽음, 아니면 mock(sleep) — 낙관적 read=true 반영.
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useNotifications(notifications);
+  const { data, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useNotifications(notifications);
   const list = data ?? notifications.items;
   const markReadMut = useMarkNotificationRead();
   const markAllMut = useMarkAllNotificationsRead();
@@ -48,6 +48,15 @@ export function NotificationsView({ notifications }: { notifications: Page<Notif
   };
   const markAll = () => markAllMut.mutate();
   const unread = list.filter((n) => !n.read).length;
+
+  if (isError && !data) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <h1 className="text-headline text-on-surface">알림</h1>
+        <ErrorState onRetry={() => refetch()} />
+      </div>
+    );
+  }
 
   if (!list.length) {
     return (
