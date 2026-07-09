@@ -153,19 +153,26 @@ def test_keyset_is_stable_when_rows_are_inserted_between_pages() -> None:
     have re-shown the two head rows (a duplicate + a skip), the keyset seek anchors
     on the last row seen and continues cleanly below it.
     """
-    _seed(4)  # ids 1,2,3,4
+    # Capture the ACTUAL pks — the id sequence need not start at 1. Postgres
+    # sequences are not rolled back with the test transaction, so a prior test in
+    # the same DB may have advanced it; the stability guarantee is about relative
+    # order, not absolute id values (this test previously hard-coded 1..4 and so
+    # only held on a fresh sqlite in-memory DB — a Postgres-parity fix).
+    first = [AnonymousSession.objects.create() for _ in range(4)]
+    ids_desc = sorted((s.pk for s in first), reverse=True)  # newest(highest)-first
     queryset = AnonymousSession.objects.order_by("-id")
     page1, cursor1 = paginate(queryset, cursor=None, limit=2)
-    assert [s.pk for s in page1] == [4, 3]
+    assert [s.pk for s in page1] == ids_desc[:2]  # top two
     assert cursor1 is not None
 
-    _seed(2)  # ids 5,6 arrive at the "top" (higher ids) mid-walk
+    for _ in range(2):  # two new rows arrive at the "top" (higher ids) mid-walk
+        AnonymousSession.objects.create()
 
     page2, cursor2 = paginate(queryset, cursor=cursor1, limit=2)
-    assert [s.pk for s in page2] == [2, 1]  # continues strictly below id=3
+    assert [s.pk for s in page2] == ids_desc[2:]  # continues strictly below page1's last
     assert cursor2 is None  # walk terminates; the head inserts are simply not in this walk
     walked = [s.pk for s in (*page1, *page2)]
-    assert walked == [4, 3, 2, 1]  # no duplicate, no skip across the boundary
+    assert walked == ids_desc  # no duplicate, no skip across the boundary
     assert len(set(walked)) == 4
 
 
