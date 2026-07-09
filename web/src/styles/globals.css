@@ -19,6 +19,17 @@
 .dark {
   /* 다크 canvas = surface보다 한 단계 깊게 → 카드(surface)가 위로 떠 보임(편집형 깊이). */
   --canvas: #0f0f12;
+  /* a11y(WCAG 2 AA): 브랜드 인디고 --primary(#5A4DF0)는 '버튼 배경'색 — 다크 표면에
+     '텍스트/링크 전경'으로 얹으면 3.42:1(AA 미달). 다크 전경 전용으로 같은 인디고 계열
+     밝은 톤(#0f0f12 위 8.0:1, AAA)을 두어 text-primary만 리프트. bg-primary(흰글자
+     버튼)는 --primary 그대로 유지된다. */
+  --primary-bright: #a79bff;
+}
+
+/* 다크에서 text-primary는 '전경'이므로 --primary-bright로 리프트(버튼 배경은 불변).
+   언레이어드 규칙 → Tailwind 유틸(@layer)보다 우선. */
+.dark .text-primary {
+  color: var(--primary-bright);
 }
 
 /* 시맨틱 색 → 모드 반응(원시 CSS변수 참조). inline = 유틸이 var()를 직접 사용 → 라이트/다크/런타임 액센트 자동 추종. */
