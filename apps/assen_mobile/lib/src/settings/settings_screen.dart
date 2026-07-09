@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/app/theme_mode_controller.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/mypage/fan_me.dart';
 import 'package:assen_mobile/src/settings/settings_controller.dart';
@@ -174,6 +175,19 @@ class _SettingsBody extends ConsumerWidget {
 
         const SizedBox(height: SpacingTokens.s4),
         const AssenSectionHeader(title: '앱'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: SpacingTokens.s2),
+          child: Text(
+            '테마',
+            style: TextStyle(
+              fontSize: TypographyTokens.titleMSize,
+              fontWeight: FontWeight.w600,
+              color: colors.ink900,
+            ),
+          ),
+        ),
+        const _ThemeModeSelector(),
+        const SizedBox(height: SpacingTokens.s4),
         AssenListItem(
           title: '앱 소개 다시 보기',
           // Pushed (not go) so onboarding's finish/skip can pop back to 설정.
@@ -274,6 +288,41 @@ class _KycActionState extends ConsumerState<_KycAction> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The 테마 (light/dark/system) selector: a 3-way [AssenSegmentedTabs] bound to
+/// [themeModeControllerProvider].
+///
+/// A design-review follow-up (ASS-282): `ThemeMode.system` was previously
+/// implicit and unreachable from the UI, so an OS-dark device could never see
+/// the light-forward brand identity (warm paper). The fan's pick is applied
+/// immediately app-wide via [ThemeModeController] (in-memory only for now —
+/// see that class's doc for the persistence follow-up).
+class _ThemeModeSelector extends ConsumerWidget {
+  const _ThemeModeSelector();
+
+  /// The selectable modes, in the same order as [_labels].
+  static const List<ThemeMode> _modes = [
+    ThemeMode.light,
+    ThemeMode.dark,
+    ThemeMode.system,
+  ];
+
+  /// Korean labels for [_modes], in display order.
+  static const List<String> _labels = ['밝게', '어둡게', '시스템 설정'];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeControllerProvider);
+    final selectedIndex = _modes.indexOf(mode);
+    return AssenSegmentedTabs(
+      segments: _labels,
+      selectedIndex: selectedIndex == -1 ? 0 : selectedIndex,
+      onChanged: (index) => ref
+          .read(themeModeControllerProvider.notifier)
+          .setThemeMode(_modes[index]),
     );
   }
 }

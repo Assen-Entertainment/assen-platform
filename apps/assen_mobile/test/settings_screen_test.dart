@@ -3,6 +3,7 @@
 // nickname PATCHes the server (mocked) and reflects the new value. 성인/KYC 인증 is
 // display-only here (法務 gate) — no verify call is issued. No network.
 
+import 'package:assen_mobile/src/app/theme_mode_controller.dart';
 import 'package:assen_mobile/src/mypage/fan_me.dart';
 import 'package:assen_mobile/src/settings/settings_repository.dart';
 import 'package:assen_mobile/src/settings/settings_screen.dart';
@@ -178,5 +179,42 @@ void main() {
     expect(find.text('로그인이 필요해요'), findsOneWidget);
     expect(find.text('닉네임을 변경하지 못했어요. 다시 시도해 주세요.'), findsNothing);
     expect(repo.patchedNickname, isNull);
+  });
+
+  testWidgets('the 테마 selector defaults to 시스템 설정 and switching updates it', (
+    tester,
+  ) async {
+    // The 테마 row sits in the 앱 section, below the identity + account +
+    // 인증 rows, so give the ListView a tall surface to build it.
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _host(
+        _FakeSettingsRepository(
+          const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SettingsScreen)),
+    );
+    // ThemeMode.system is the unchanged default (ASS-282) until the fan picks
+    // a mode.
+    expect(container.read(themeModeControllerProvider), ThemeMode.system);
+    expect(find.text('테마'), findsOneWidget);
+    expect(find.text('밝게'), findsOneWidget);
+    expect(find.text('어둡게'), findsOneWidget);
+    expect(find.text('시스템 설정'), findsOneWidget);
+
+    await tester.tap(find.text('어둡게'));
+    await tester.pump();
+
+    expect(container.read(themeModeControllerProvider), ThemeMode.dark);
   });
 }
