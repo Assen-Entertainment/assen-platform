@@ -48,6 +48,9 @@ realtime-redis = ["channels-redis>=4.2,<5.0"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Generated Django migrations are not hand-maintained (and are #25 human-gated),
+# so ruff neither lints nor auto-fixes them — mirroring the [tool.mypy] exclude.
+extend-exclude = ["**/migrations/**"]
 
 [tool.ruff.lint]
 # E/F: pyflakes+pycodestyle, I: isort, UP: pyupgrade, B: bugbear.

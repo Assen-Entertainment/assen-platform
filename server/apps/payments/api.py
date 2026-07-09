@@ -14,22 +14,26 @@ Endpoints (``/api/fan/payment-methods``):
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field
 
-from apps.identity.auth import fan_auth
-from apps.identity.models import Account
+from apps.identity.auth import authed, fan_auth
 from apps.payments.models import SavedPaymentMethod
 from config.api import api
 from config.errors import ApiError, ErrorCode
 from config.payment import PaymentError, payment_tokenizer
 from config.throttle import user_write_throttle
+
+# Payment-method lifecycle observability (security-relevant transitions). Structured
+# and PII-free: only ids and the display brand/last4 metadata are logged — the PAN
+# is never stored or logged in the first place (mock tokenizer, PCI).
+logger = logging.getLogger(__name__)
 
 payment_methods_router = Router(auth=fan_auth, tags=["payment-methods"])
 
@@ -88,7 +92,7 @@ def _method_out(method: SavedPaymentMethod) -> PaymentMethodOut:
 @payment_methods_router.get("", response=list[PaymentMethodOut])
 def list_payment_methods(request: HttpRequest) -> list[PaymentMethodOut]:
     """List the requesting fan's own saved payment methods (newest first)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     methods = SavedPaymentMethod.objects.filter(owner=account).order_by("-created_at")
     return [_method_out(m) for m in methods]
 
@@ -108,7 +112,7 @@ def register_payment_method(
     the DB or logs. The first method (or one flagged ``make_primary``) becomes
     primary; the per-owner partial-unique constraint keeps at most one primary.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     tokenizer = payment_tokenizer()
     if tokenizer is None:
         raise ApiError(
@@ -149,6 +153,15 @@ def register_payment_method(
             pg_token=card.pg_token,
             is_primary=False,
         )
+    logger.info(
+        "payments.method.registered",
+        extra={
+            "method_id": str(method.id),
+            "owner_id": str(account.fan_id),
+            "brand": method.brand,
+            "is_primary": method.is_primary,
+        },
+    )
     return 201, _method_out(method)
 
 
@@ -170,7 +183,7 @@ def set_primary_payment_method(
     ``IntegrityError`` from a lost race is caught and the current state re-read rather
     than surfaced as a 500.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     method = SavedPaymentMethod.objects.filter(id=method_id, owner=account).first()
     if method is None:
         return 404, PaymentMethodError(
@@ -195,6 +208,10 @@ def set_primary_payment_method(
             ).first()
             if refreshed is not None:
                 method = refreshed
+        logger.info(
+            "payments.method.primary_changed",
+            extra={"method_id": str(method.id), "owner_id": str(account.fan_id)},
+        )
     return 200, _method_out(method)
 
 
@@ -207,13 +224,17 @@ def delete_payment_method(
     request: HttpRequest, method_id: uuid.UUID
 ) -> tuple[int, PaymentAck | PaymentMethodError]:
     """Delete one of the fan's own saved methods (404 if not theirs)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     method = SavedPaymentMethod.objects.filter(id=method_id, owner=account).first()
     if method is None:
         return 404, PaymentMethodError(
             detail="결제수단을 찾을 수 없어요.", code=ErrorCode.PAYMENT_METHOD_NOT_FOUND.value
         )
     method.delete()
+    logger.info(
+        "payments.method.deleted",
+        extra={"method_id": str(method_id), "owner_id": str(account.fan_id)},
+    )
     return 200, PaymentAck(status="deleted")
 
 

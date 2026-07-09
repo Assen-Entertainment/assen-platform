@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -27,7 +26,7 @@ from pydantic import Field, field_validator
 
 from apps.content.models import Comment, Like, Post
 from apps.creator.models import Creator
-from apps.identity.auth import fan_auth, resolve_optional_account
+from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.services import notify
 from apps.social.models import blocked_creator_ids
@@ -292,7 +291,7 @@ def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | Erro
     the post is always attributed to *that* creator — the author is never taken
     from client input, so a fan cannot post as someone else.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(owner=account).first()
     if creator is None:
         return 403, ErrorOut(detail="크리에이터만 게시물을 작성할 수 있어요.")
@@ -352,7 +351,7 @@ def studio_list_posts(
     operates no creator. Each row carries the same annotations as :func:`_annotated_post`
     (like/comment counts + the owner's own ``liked`` flag), cursor-paginated.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(owner=account).first()
     if creator is None:
         return 403, ErrorOut(detail="크리에이터만 게시물을 관리할 수 있어요.")
@@ -386,7 +385,7 @@ def update_post(
     ``media_url`` scheme is re-validated (A5). The response reflects fresh
     like/comment counts and the caller's ``liked`` flag.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     post = _owned_post(account, post_id)
     if post is None:
         return 404, ErrorOut(detail="post not found")
@@ -415,7 +414,7 @@ def delete_post(
     history constraint, so deletion is a hard delete — its comments and likes
     CASCADE (``Comment.post`` / ``Like.post`` are ``on_delete=CASCADE``).
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     post = _owned_post(account, post_id)
     if post is None:
         return 404, ErrorOut(detail="post not found")
@@ -433,7 +432,7 @@ def like_post(
     request: HttpRequest, post_id: uuid.UUID
 ) -> tuple[int, LikeOut | ErrorOut | InteractionBlockedError]:
     """Like a post; idempotent (a second like is a no-op, still 200)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     # 19+ gate (same funnel as reads): an adult post the caller may not see 404s here
     # too, so the like endpoint can't be used to touch or probe a gated post.
     post = _post_qs(account).filter(id=post_id).first()
@@ -476,7 +475,7 @@ def unlike_post(
     (``like``/comment/order) stay refused while blocked; only the 19+ read funnel
     still applies here, so a gated adult post 404s.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     # 19+ gate (same funnel as reads): a gated adult post 404s here too.
     post = _post_qs(account).filter(id=post_id).first()
     if post is None:
@@ -524,7 +523,7 @@ def create_comment(
     the comment renders identically to a seeded one (and _comment_out never leaks
     the internal fan_id).
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     # 19+ gate (same funnel as reads): a gated adult post 404s so a non-permitted
     # viewer can neither read nor comment on it.
     post = _post_qs(account).select_related("creator__owner").filter(id=post_id).first()

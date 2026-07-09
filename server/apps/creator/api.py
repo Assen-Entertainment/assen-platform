@@ -12,7 +12,7 @@ broken). Auth is resolved silently with
 from __future__ import annotations
 
 import uuid
-from typing import Any, cast
+from typing import Any
 
 from django.conf import settings
 from django.db.models import (
@@ -35,13 +35,14 @@ from pydantic import Field
 from apps.commerce.models import OrderItem, OrderStatus, Product, ProductStatus
 from apps.content.models import Post
 from apps.creator.models import Creator
-from apps.identity.auth import fan_auth, resolve_optional_account
+from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.membership.models import Subscription, SubscriptionStatus
 from apps.social.models import CreatorBlock, Follow, blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.pagination import clamp_limit, paginate
+from config.patch import apply_optional
 from config.throttle import user_write_throttle
 
 creators_router = Router(tags=["creator"])
@@ -343,22 +344,15 @@ def studio_update_profile(
     request: HttpRequest, payload: StudioProfilePatch
 ) -> tuple[int, CreatorOut | ErrorOut]:
     """Update the caller's own creator profile; 403 if they operate no creator."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(owner=account).first()
     if creator is None:
         return 403, ErrorOut(detail="크리에이터만 프로필을 수정할 수 있어요.")
-    if payload.name is not None:
-        creator.name = payload.name
-    if payload.bio is not None:
-        creator.bio = payload.bio
-    if payload.avatar_url is not None:
-        creator.avatar_url = payload.avatar_url
-    if payload.cover_url is not None:
-        creator.cover_url = payload.cover_url
-    if payload.accent_color is not None:
-        creator.accent_color = payload.accent_color
-    if payload.category is not None:
-        creator.category = payload.category
+    apply_optional(
+        creator,
+        payload,
+        ["name", "bio", "avatar_url", "cover_url", "accent_color", "category"],
+    )
     creator.save()
     # Re-fetch through the annotated queryset so the response carries the derived
     # follower/post counts and the caller's own following flag, like every read.
@@ -429,7 +423,7 @@ def studio_stats(request: HttpRequest) -> tuple[int, StudioStatsOut | StudioErro
     product total + selling counts collapse into one conditional aggregate, the
     rest are single indexed ``COUNT``s.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(owner=account).first()
     if creator is None:
         return 403, StudioError(

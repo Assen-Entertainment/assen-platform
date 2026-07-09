@@ -16,15 +16,15 @@ many requests for the same fixture user/IP) can disable it and stay
 deterministic — otherwise the shared LocMem cache would leak throttle state
 across tests.
 
-TRAP — the gate is evaluated at *decoration time*, not per request. Each helper
-runs ``getattr(settings, "FAN_WRITE_THROTTLE_ENABLED", ...)`` once, when the
-``@router`` decorator that receives its return value is imported. The operation
-captures that result (an empty list, or a throttle list) permanently. So a test
-that flips the flag with ``override_settings(FAN_WRITE_THROTTLE_ENABLED=True)`` at
-*run time* does NOT re-enable throttling — the operation already froze the empty
-list at import. To exercise the 429 path a test must instead inject a throttle
-onto the live (bound) operation object; see
-``apps/identity/tests/test_auth_endpoints.py::test_signup_otp_is_ip_throttled``.
+The gate is evaluated **per request**, not at decoration time. Each helper wraps
+its rate throttle in a :class:`_FlagGatedThrottle`, whose ``allow_request`` reads
+``FAN_WRITE_THROTTLE_ENABLED`` on every call: when the flag is off it short-circuits
+to *allow* without touching the cache (so the suite stays deterministic), and when
+on it delegates to the real rate throttle. This is what lets a test flip the flag
+with ``override_settings(FAN_WRITE_THROTTLE_ENABLED=True)`` and actually exercise the
+429 path — the older decoration-time gate froze an empty list into the operation at
+import, so ``override_settings`` had no effect (see
+``config/tests/test_throttle_gate.py``).
 """
 
 from __future__ import annotations
@@ -34,6 +34,35 @@ from django.http import HttpRequest
 from ninja.throttling import AnonRateThrottle, AuthRateThrottle, BaseThrottle
 
 from config.clientip import client_ip
+
+
+def _throttle_enabled() -> bool:
+    """Read the throttle gate at *request* time (see module note)."""
+    return bool(getattr(settings, "FAN_WRITE_THROTTLE_ENABLED", True))
+
+
+class _FlagGatedThrottle(BaseThrottle):
+    """Defer the ``FAN_WRITE_THROTTLE_ENABLED`` check to ``allow_request``.
+
+    Wrapping the real rate throttle (rather than returning ``[]`` at decoration
+    time) means the flag is consulted per request: off → allow immediately (no
+    cache hit, so tests stay deterministic); on → delegate to ``inner``. ``wait``
+    forwards to ``inner`` so a 429 still reports the correct ``Retry-After``.
+    """
+
+    def __init__(self, inner: BaseThrottle) -> None:
+        """Wrap ``inner`` (the real per-user/per-IP rate throttle)."""
+        self.inner = inner
+
+    def allow_request(self, request: HttpRequest) -> bool:
+        """Allow unconditionally when the gate is off, else defer to ``inner``."""
+        if not _throttle_enabled():
+            return True
+        return self.inner.allow_request(request)
+
+    def wait(self) -> float | None:
+        """Forward the recommended wait from the inner throttle."""
+        return self.inner.wait()
 
 
 class _ClientIPIdentMixin:
@@ -62,23 +91,19 @@ class XFFAuthRateThrottle(_ClientIPIdentMixin, AuthRateThrottle):
 def user_write_throttle(rate: str) -> list[BaseThrottle]:
     """Return a per-user rate throttle for ``rate`` (e.g. ``"60/min"``).
 
-    Returns an empty list when ``FAN_WRITE_THROTTLE_ENABLED`` is false (tests),
-    which Ninja treats as "no throttle" — no cache is touched.
+    The returned throttle is flag-gated per request (:class:`_FlagGatedThrottle`):
+    when ``FAN_WRITE_THROTTLE_ENABLED`` is false (tests) it allows every request
+    without touching the cache; when true it enforces ``rate`` per account.
     """
-    if not getattr(settings, "FAN_WRITE_THROTTLE_ENABLED", True):
-        return []
-    return [XFFAuthRateThrottle(rate)]
+    return [_FlagGatedThrottle(XFFAuthRateThrottle(rate))]
 
 
 def anon_throttle(rate: str) -> list[BaseThrottle]:
     """Return a per-IP rate throttle for ``rate`` (e.g. ``"5/min"``).
 
     For unauthenticated entry points (signup/OTP/login) an attacker has no
-    ``request.auth``, so the throttle keys on the client IP instead. Gated by the
-    same ``FAN_WRITE_THROTTLE_ENABLED`` flag as :func:`user_write_throttle`;
-    returns an empty list (no throttle) when disabled. See the module TRAP note on
-    why the gate cannot be re-enabled with ``override_settings`` at test time.
+    ``request.auth``, so the throttle keys on the client IP instead. Gated per
+    request by the same ``FAN_WRITE_THROTTLE_ENABLED`` flag as
+    :func:`user_write_throttle` (see :class:`_FlagGatedThrottle`).
     """
-    if not getattr(settings, "FAN_WRITE_THROTTLE_ENABLED", True):
-        return []
-    return [XFFAnonRateThrottle(rate)]
+    return [_FlagGatedThrottle(XFFAnonRateThrottle(rate))]

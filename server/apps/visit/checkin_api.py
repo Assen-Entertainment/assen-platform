@@ -11,21 +11,21 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
-from apps.identity.auth import OpaqueTokenAuth
-from apps.identity.models import Account, Role
+from apps.identity.auth import OpaqueTokenAuth, authed
+from apps.identity.models import Role
 from apps.visit.checkin_services import (
     CheckinThrottled,
     issue_checkin_token,
     redeem_checkin_token,
 )
 from config.api import api
+from config.throttle import user_write_throttle
 
 # Any authenticated account may *ask* for a token; the handler restricts issuance
 # to fans (a token is only meaningful as a fan check-in credential).
@@ -77,12 +77,13 @@ class RedeemOut(Schema):
 @fan_router.post(
     "/token",
     response={201: CheckinTokenOut, 403: CheckinError, 429: CheckinError},
+    throttle=user_write_throttle("30/min"),
 )
 def issue_token_endpoint(
     request: HttpRequest,
 ) -> tuple[int, CheckinTokenOut | CheckinError]:
     """Issue a short-lived rotating check-in token for the authenticated fan."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     if account.role != Role.FAN.value:
         return 403, CheckinError(detail="Only fans can request a check-in QR.")
     try:
@@ -102,7 +103,7 @@ def redeem_token_endpoint(
     request: HttpRequest, payload: RedeemIn
 ) -> tuple[int, RedeemOut | CheckinError]:
     """Redeem a scanned token into a fan visit (operator scan)."""
-    operator = cast(Account, request.auth)  # type: ignore[attr-defined]
+    operator = authed(request)
     try:
         record, _token = redeem_checkin_token(
             token=payload.token,

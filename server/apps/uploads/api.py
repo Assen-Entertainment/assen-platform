@@ -38,7 +38,7 @@ which lists the required gates before a real serving path).
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, cast
+from typing import Annotated
 
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -47,8 +47,7 @@ from django.http import HttpRequest
 from ninja import File, Router, Schema
 from ninja.files import UploadedFile
 
-from apps.identity.auth import fan_auth
-from apps.identity.models import Account
+from apps.identity.auth import authed, fan_auth
 from apps.uploads.images import (
     ALLOWED_CONTENT_TYPES,
     ImageKind,
@@ -121,7 +120,7 @@ def create_upload(
             code=ErrorCode.UPLOAD_STORAGE_UNAVAILABLE,
         )
 
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
 
     # 1) Coarse gate: the declared content-type must be an allowed raster family.
     # This is spoofable, so it is only the first filter (SVG/HTML declared honestly

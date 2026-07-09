@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -34,9 +33,10 @@ from apps.coupon.services import (
     point_balance,
     redeem_coupon,
 )
-from apps.identity.auth import FanBearerAuth
+from apps.identity.auth import FanBearerAuth, authed
 from apps.identity.models import Account, Role
 from config.api import api
+from config.throttle import user_write_throttle
 
 operator_router = Router(auth=operator_required, tags=["operator-coupon"])
 fan_router = Router(auth=[FanBearerAuth()], tags=["fan-coupon"])
@@ -127,7 +127,11 @@ class PointMutateIn(Schema):
 # --------------------------------------------------------------------------- #
 # Operator surface — coupons
 # --------------------------------------------------------------------------- #
-@operator_router.post("/coupons", response={201: CouponOut, 400: CouponError, 404: CouponError})
+@operator_router.post(
+    "/coupons",
+    response={201: CouponOut, 400: CouponError, 404: CouponError},
+    throttle=user_write_throttle("60/min"),
+)
 def operator_issue_coupon(
     request: HttpRequest, payload: CouponIssueIn
 ) -> tuple[int, CouponOut | CouponError]:
@@ -162,6 +166,7 @@ def operator_list_coupons(
 @operator_router.post(
     "/coupons/{coupon_id}/redeem",
     response={200: CouponOut, 400: CouponError, 404: CouponError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_redeem_coupon(
     request: HttpRequest, coupon_id: uuid.UUID, payload: CouponRedeemIn
@@ -178,6 +183,7 @@ def operator_redeem_coupon(
 @operator_router.post(
     "/coupons/{coupon_id}/cancel",
     response={200: CouponOut, 400: CouponError, 404: CouponError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_cancel_coupon(
     request: HttpRequest, coupon_id: uuid.UUID
@@ -194,6 +200,7 @@ def operator_cancel_coupon(
 @operator_router.post(
     "/coupons/{coupon_id}/expire",
     response={200: CouponOut, 400: CouponError, 404: CouponError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_expire_coupon(
     request: HttpRequest, coupon_id: uuid.UUID
@@ -211,7 +218,8 @@ def operator_expire_coupon(
 # Operator surface — points
 # --------------------------------------------------------------------------- #
 @operator_router.post(
-    "/points/grant", response={200: PointEntryOut, 400: CouponError, 404: CouponError}
+    "/points/grant", response={200: PointEntryOut, 400: CouponError, 404: CouponError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_grant_points(
     request: HttpRequest, payload: PointMutateIn
@@ -232,7 +240,8 @@ def operator_grant_points(
 
 
 @operator_router.post(
-    "/points/adjust", response={200: PointEntryOut, 400: CouponError, 404: CouponError}
+    "/points/adjust", response={200: PointEntryOut, 400: CouponError, 404: CouponError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_adjust_points(
     request: HttpRequest, payload: PointMutateIn
@@ -290,7 +299,7 @@ def fan_get_points(
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated account supplied by the auth class."""
     # request.auth is untyped without Ninja stubs (same idiom as visit/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _coupon_out(coupon: Coupon) -> CouponOut:

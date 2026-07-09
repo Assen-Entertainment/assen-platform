@@ -17,12 +17,42 @@ non-raising variant used to personalise otherwise-anonymous reads.
 
 from __future__ import annotations
 
+from typing import Protocol, cast
+
 from django.http import HttpRequest
 from ninja.security import APIKeyCookie, HttpBearer
 
 from apps.identity.cookies import ACCESS_COOKIE_NAME
 from apps.identity.models import Account
 from apps.identity.services import TokenError, verify_access_token
+
+
+class AuthedHttpRequest(Protocol):
+    """A request that has passed ``fan_auth`` / ``RoleRequired``.
+
+    Ninja stashes the resolved :class:`Account` on ``request.auth`` (the auth
+    class's return value), and the auth classes here mirror it onto
+    ``request.account`` for the RBAC/consent helpers. Neither attribute exists on
+    the base :class:`~django.http.HttpRequest`, so this Protocol is the typed view
+    of an authenticated request — it lets :func:`authed` (and the ``request.account``
+    writers) read/write those attributes without a per-call
+    ``# type: ignore[attr-defined]``.
+    """
+
+    auth: Account
+    account: Account
+
+
+def authed(request: HttpRequest) -> Account:
+    """Return the :class:`Account` the auth layer resolved onto ``request``.
+
+    The single typed accessor for handlers behind an ``auth=`` gate (``fan_auth``,
+    ``RoleRequired`` and friends): it replaces the repeated
+    ``cast(Account, request.auth)  # type: ignore[attr-defined]`` idiom with one
+    precisely-typed call. Only call it from a route that carries such a gate —
+    Ninja guarantees ``request.auth`` is the :class:`Account` there.
+    """
+    return cast(AuthedHttpRequest, request).auth
 
 
 def _authenticate(request: HttpRequest, token: str) -> Account | None:
@@ -36,7 +66,7 @@ def _authenticate(request: HttpRequest, token: str) -> Account | None:
         account = verify_access_token(token)
     except TokenError:
         return None
-    request.account = account  # type: ignore[attr-defined]
+    cast(AuthedHttpRequest, request).account = account
     return account
 
 

@@ -13,6 +13,7 @@ point adjustments cannot drive a balance negative.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 
@@ -36,6 +37,11 @@ from apps.safety.services import has_active_block
 
 # Scopes that bar a fan from redeeming a coupon (F11: 팬덤 기능 제한).
 _REDEEM_BLOCK_SCOPES = [BlockScope.FANDOM_FEATURE.value]
+
+# Operational log for the money-adjacent coupon/point lifecycle (in addition to the
+# analytics event + audit row). Structured and PII-free: only ids, coupon_type, and
+# deltas are logged — never the operator's free-text ``reason``.
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -63,6 +69,15 @@ def issue_coupon(
     )
     _emit_coupon(coupon, EventName.COUPON_ISSUED.value, actor)
     _audit_coupon(actor, AuditAction.COUPON_ISSUED.value, coupon)
+    logger.info(
+        "coupon.issued",
+        extra={
+            "coupon_id": str(coupon.id),
+            "coupon_type": coupon.coupon_type,
+            "fan_id": str(fan.fan_id),
+            "actor_id": str(actor.fan_id),
+        },
+    )
     return coupon
 
 
@@ -96,6 +111,16 @@ def redeem_coupon(*, coupon: Coupon, actor: Account, visit_id: str = "") -> Coup
         visit_id=visit_id,
     )
     _audit_coupon(actor, AuditAction.COUPON_REDEEMED.value, coupon)
+    logger.info(
+        "coupon.redeemed",
+        extra={
+            "coupon_id": str(coupon.id),
+            "coupon_type": coupon.coupon_type,
+            "coupon_redemption_id": str(coupon.redemption_id),
+            "fan_id": str(coupon.fan.fan_id),
+            "actor_id": str(actor.fan_id),
+        },
+    )
     return coupon
 
 
@@ -235,6 +260,15 @@ def _add_point_entry(
         action=action,
         target=str(entry.id),
         metadata={"fan_id": str(fan.fan_id), "delta": delta},
+    )
+    logger.info(
+        "coupon.points_recorded",
+        extra={
+            "point_entry_id": str(entry.id),
+            "fan_id": str(fan.fan_id),
+            "actor_id": str(actor.fan_id),
+            "delta": delta,
+        },
     )
     return entry
 
