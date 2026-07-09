@@ -16,12 +16,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # Install dependencies first (cached layer) using only the lock + manifest.
+# --extra realtime-redis pulls in channels-redis (pyproject optional-dependencies):
+# prod runs multi-process behind CHANNEL_LAYERS_BACKEND=redis (E10), so the shared
+# cross-worker layer must actually be installed in this image, not just dev-opt-in.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev --extra realtime-redis
 
 # Copy the application source and install the project itself.
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra realtime-redis
 
 EXPOSE 8000
 

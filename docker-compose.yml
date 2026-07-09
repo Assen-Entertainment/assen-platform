@@ -44,6 +44,12 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-assen}:${POSTGRES_PASSWORD:-assen}@postgres:5432/${POSTGRES_DB:-assen}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      # Shared cross-worker Channels layer (ASS-268 follow-up): DB …/3, distinct from
+      # Celery's broker/result backend (…/0, …/1) and the rate limiter (…/2) on the
+      # same redis service. daphne (ASGI) is the process that actually serves the
+      # WebSocket stack, so it needs the real layer for socket groups to span workers.
+      CHANNEL_LAYERS_BACKEND: redis
+      CHANNEL_LAYERS_REDIS_URL: redis://redis:6379/3
     ports:
       - "8000:8000"
     healthcheck:
@@ -70,6 +76,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-assen}:${POSTGRES_PASSWORD:-assen}@postgres:5432/${POSTGRES_DB:-assen}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      # Shared cross-worker Channels layer (ASS-268 follow-up), same DB as the api
+      # service so any group_send from a task lands in the same shared layer.
+      CHANNEL_LAYERS_BACKEND: redis
+      CHANNEL_LAYERS_REDIS_URL: redis://redis:6379/3
     depends_on:
       redis:
         condition: service_healthy
