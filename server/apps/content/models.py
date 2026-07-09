@@ -9,7 +9,8 @@ Comments denormalise ``author_name`` (display string, matching the frontend
 ``Comment.author``) so seed/anonymous comments render without an account, while
 still keeping a nullable ``author`` FK for real authored comments.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations

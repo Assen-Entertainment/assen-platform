@@ -114,8 +114,8 @@ class Account(models.Model):
             # One fan per phone-hash: the re-signup path keys on this hash, so a
             # DB-level partial unique (only on non-empty hashes — staff rows keep
             # the default "" and stay unconstrained) closes the concurrent-signup
-            # race that filter()+create() alone cannot. Migration-less app — this
-            # constraint is materialised by ``migrate --run-syncdb``.
+            # race that filter()+create() alone cannot. This constraint is
+            # materialised by the app's migration (applied by ``migrate``).
             models.UniqueConstraint(
                 fields=["auth_subject_hash"],
                 condition=~models.Q(auth_subject_hash=""),
@@ -127,8 +127,8 @@ class Account(models.Model):
             # MultipleObjectsReturned → 500 if two staff rows shared a username.
             # Fan rows leave username at the default "" and stay unconstrained, so
             # any number of them coexist (the partial ``username != ''`` condition
-            # mirrors the auth_subject_hash pattern above). Migration-less app —
-            # materialised by ``migrate --run-syncdb``.
+            # mirrors the auth_subject_hash pattern above). Materialised by the
+            # app's migration (applied by ``migrate``).
             models.UniqueConstraint(
                 fields=["username"],
                 condition=~models.Q(username=""),

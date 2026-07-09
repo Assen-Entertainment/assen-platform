@@ -18,8 +18,8 @@ rules from Company-OS shape the design:
    rule).
 
 Models land in this app per the narrow-boundary rule (CONSTRAINTS #38); the
-server is migration-less (tables via ``migrate --run-syncdb``), so no migration
-files are created here.
+app is migrated — ``migrate`` applies ``0001_initial``, regenerated with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations

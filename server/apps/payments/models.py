@@ -5,7 +5,8 @@ only card-derived value persisted is the display ``last4``; ``pg_token`` is an o
 placeholder for a real PG billing token (mock in dev). Real PG tokenization is a
 대표·법무·PG gate (see :mod:`config.payment`).
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ class SavedPaymentMethod(models.Model):
         ordering = ["-created_at"]
         constraints = [
             # At most one primary method per owner. Partial unique on is_primary so
-            # non-primary rows are unconstrained. Migration-less app: materialised by
-            # ``migrate --run-syncdb``.
+            # non-primary rows are unconstrained. Materialised by the app's
+            # migration (applied by ``migrate``).
             models.UniqueConstraint(
                 fields=["owner"],
                 condition=models.Q(is_primary=True),

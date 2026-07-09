@@ -118,18 +118,18 @@ LOCAL_APPS = [
     "apps.event_log",
     "apps.dashboard",
     # New-direction (creator platform) bounded contexts (SDLC 09 §3, E11/B1).
-    # Migration-less like the rest — tables are built by `migrate --run-syncdb`.
+    # Migrated like the rest — each app ships `0001_initial`, applied by `migrate`.
     "apps.creator",
     "apps.social",
     "apps.content",
     "apps.commerce",
     "apps.membership",
     # Saved payment methods (R3): brand + last4 + mock PG token only — never a card
-    # PAN/expiry/cvc. Migration-less like the rest (`migrate --run-syncdb`).
+    # PAN/expiry/cvc. Migrated like the rest (`migrate` applies `0001_initial`).
     "apps.payments",
     # Image uploads (R11): validated image → storage (local FS mock now, S3 후행).
     # Tracks only a server-minted media URL + content-type + owner (no filename/PII).
-    # Migration-less like the rest (`migrate --run-syncdb`).
+    # Migrated like the rest (`migrate` applies `0001_initial`).
     "apps.uploads",
 ]
 

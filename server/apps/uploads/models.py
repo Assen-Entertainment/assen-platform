@@ -5,7 +5,8 @@ the owning account, and a timestamp. It deliberately stores NO user-supplied
 filename (path-traversal / PII surface) and no file bytes — the bytes live in the
 storage backend (local FS mock now, S3 후행), keyed by an unguessable UUID name.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations

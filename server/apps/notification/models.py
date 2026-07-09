@@ -6,7 +6,8 @@ follow/order/system). It is distinct from the operator *push* dispatch
 is a policy-guarded FCM transport with no stored model. Domain triggers append to
 this feed via :func:`apps.notification.services.notify`.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations
