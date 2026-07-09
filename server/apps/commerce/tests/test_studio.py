@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from django.test import Client, override_settings
 
-from apps.commerce.models import Order, OrderItem, Product
+from apps.commerce.models import Order, OrderItem, OrderStatus, Product
 from apps.creator.models import Creator
 from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
@@ -159,3 +159,55 @@ def test_studio_delete_product_with_order_history_is_422(client: Client) -> None
     res2 = client.delete(f"{STUDIO}/{fresh.id}", headers=_auth(owner))
     assert res2.status_code == 200
     assert not Product.objects.filter(id=fresh.id).exists()
+
+
+def _order_item(buyer: Account, product: Product, qty: int, status: str = "paid") -> OrderItem:
+    """A one-line order for ``product`` at ``qty``, with the given order ``status``."""
+    order = Order.objects.create(buyer=buyer, status=status)
+    return OrderItem.objects.create(
+        order=order,
+        product=product,
+        title=product.title,
+        item_type=product.type,
+        qty=qty,
+        price=product.price,
+    )
+
+
+def test_studio_list_products_sold_sums_qty_excluding_cancelled(client: Client) -> None:
+    """``sold`` (ASS-264) = total qty across non-cancelled orders; cancelled excluded."""
+    owner, creator = _owner_with_creator()
+    product = Product.objects.create(creator=creator, type="goods", title="굿즈", price=1000)
+    buyer = Account.objects.create(role=Role.FAN.value)
+
+    _order_item(buyer, product, qty=2)
+    _order_item(buyer, product, qty=3)
+    _order_item(buyer, product, qty=10, status=OrderStatus.CANCELLED.value)
+
+    listed = client.get(STUDIO, headers=_auth(owner)).json()
+    row = next(p for p in listed if p["id"] == str(product.id))
+    assert row["sold"] == 5  # 2 + 3; the cancelled order's qty=10 is excluded
+
+
+def test_studio_new_product_sold_is_zero(client: Client) -> None:
+    owner, _creator = _owner_with_creator()
+    created = _post(
+        client, STUDIO, {"type": "goods", "title": "새상품", "price": 500}, headers=_auth(owner)
+    )
+    assert created.json()["sold"] == 0
+
+
+def test_studio_list_products_sold_isolated_from_other_owner(client: Client) -> None:
+    """Another creator's order activity never leaks into this owner's ``sold`` counts."""
+    owner, creator = _owner_with_creator("stellar")
+    _other_owner, other_creator = _owner_with_creator("nova")
+    my_product = Product.objects.create(creator=creator, type="goods", title="내상품", price=1000)
+    other_product = Product.objects.create(
+        creator=other_creator, type="goods", title="타인상품", price=1000
+    )
+    buyer = Account.objects.create(role=Role.FAN.value)
+    _order_item(buyer, other_product, qty=7)
+
+    listed = client.get(STUDIO, headers=_auth(owner)).json()
+    assert {p["id"] for p in listed} == {str(my_product.id)}
+    assert listed[0]["sold"] == 0

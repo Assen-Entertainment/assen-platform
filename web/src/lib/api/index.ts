@@ -219,6 +219,8 @@ interface RawStudioProduct {
   status: string;
   is_adult: boolean;
   created_at: string;
+  // 비취소 주문 기준 누적 판매 수량(ASS-264). 카운트만 — 수익 금액 아님.
+  sold: number;
 }
 /** 오너 뷰 티어(StudioTierOut) — active 관리 플래그 포함. */
 interface RawStudioTier {
@@ -233,6 +235,8 @@ interface RawStudioTier {
   active: boolean;
   sort_order: number;
   created_at: string;
+  // status=active 구독 수(ASS-264). 카운트만 — 수익 금액 아님.
+  subscribers: number;
 }
 /** 저장된 결제수단(SavedPaymentMethod wire) — brand+last4만(PAN 미보관). */
 interface RawPaymentMethod {
@@ -443,8 +447,8 @@ const mapNotification = (n: RawNotification): Notification => {
 
 const PRODUCT_STATUSES: readonly ProductStatus[] = ["selling", "soldout", "draft", "hidden"];
 /**
- * 오너 상품 매핑 — 서버 계약엔 판매수(sold)가 없어 undefined(관리표에서 "—", 집계 게이트 도입 전까지
- * 0을 실수치인 척 노출 금지). updatedAt은 생성 시각 파생.
+ * 오너 상품 매핑 — sold는 서버가 집계한 비취소 주문 기준 누적 판매 수량(ASS-264, 카운트만·수익
+ * 금액 아님). updatedAt은 생성 시각 파생.
  */
 const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
   id: p.id,
@@ -452,17 +456,17 @@ const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
   title: p.title,
   price: p.price,
   status: (PRODUCT_STATUSES as readonly string[]).includes(p.status) ? (p.status as ProductStatus) : "draft",
-  sold: undefined,
+  sold: p.sold,
   stock: p.stock ?? null,
   updatedAt: relativeTime(p.created_at),
 });
-/** 오너 티어 매핑 — 서버 계약엔 구독자수가 없어 undefined(카드에서 "—", 집계 게이트 전까지 0 노출 금지). */
+/** 오너 티어 매핑 — subscribers는 서버가 집계한 활성(status=active) 구독자 수(ASS-264, 카운트만). */
 const mapStudioTier = (t: RawStudioTier): StudioTier => ({
   id: t.id,
   name: t.name,
   price: t.price,
   benefits: t.benefits,
-  subscribers: undefined,
+  subscribers: t.subscribers,
   active: t.active,
 });
 const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({

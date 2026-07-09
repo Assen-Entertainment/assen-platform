@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from typing import Any
 
 import pytest
@@ -11,7 +12,7 @@ from django.test import Client
 from apps.creator.models import Creator
 from apps.identity.models import Account, Role
 from apps.identity.services import issue_token_pair
-from apps.membership.models import MembershipTier
+from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
 
 pytestmark = pytest.mark.django_db
 
@@ -89,3 +90,48 @@ def test_tier_patch_scoped_to_owner_is_404(client: Client) -> None:
         _patch(client, f"{STUDIO}/{tier.id}", {"price": 1}, headers=_auth(other)).status_code
         == 404
     )
+
+
+def test_studio_list_tiers_subscribers_counts_active_only(client: Client) -> None:
+    """``subscribers`` (ASS-264) = active-status subscriptions; cancelled excluded."""
+    owner, creator = _owner_with_creator()
+    tier = MembershipTier.objects.create(creator=creator, name="베이직", price=4900)
+    Subscription.objects.create(
+        fan=Account.objects.create(role=Role.FAN.value), tier=tier, next_billing_date=date.today()
+    )
+    Subscription.objects.create(
+        fan=Account.objects.create(role=Role.FAN.value), tier=tier, next_billing_date=date.today()
+    )
+    Subscription.objects.create(
+        fan=Account.objects.create(role=Role.FAN.value),
+        tier=tier,
+        next_billing_date=date.today(),
+        status=SubscriptionStatus.CANCELLED.value,
+    )
+
+    listed = client.get(STUDIO, headers=_auth(owner)).json()
+    row = next(t for t in listed if t["id"] == str(tier.id))
+    assert row["subscribers"] == 2
+
+
+def test_studio_new_tier_subscribers_is_zero(client: Client) -> None:
+    owner, _creator = _owner_with_creator()
+    created = _post(client, STUDIO, {"name": "새티어", "price": 1000}, headers=_auth(owner))
+    assert created.json()["subscribers"] == 0
+
+
+def test_studio_list_tiers_subscribers_isolated_from_other_owner(client: Client) -> None:
+    """Another creator's subscribers never leak into this owner's tier counts."""
+    owner, creator = _owner_with_creator("stellar")
+    _other_owner, other_creator = _owner_with_creator("nova")
+    my_tier = MembershipTier.objects.create(creator=creator, name="내티어", price=1000)
+    other_tier = MembershipTier.objects.create(creator=other_creator, name="타인티어", price=1000)
+    Subscription.objects.create(
+        fan=Account.objects.create(role=Role.FAN.value),
+        tier=other_tier,
+        next_billing_date=date.today(),
+    )
+
+    listed = client.get(STUDIO, headers=_auth(owner)).json()
+    assert {t["id"] for t in listed} == {str(my_tier.id)}
+    assert listed[0]["subscribers"] == 0

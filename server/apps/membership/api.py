@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from typing import cast
 
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
@@ -118,7 +119,12 @@ studio_tiers_router = Router(auth=fan_auth, tags=["studio-membership"])
 
 
 class StudioTierOut(Schema):
-    """Owner-view membership tier (adds the ``active`` management flag + timestamp)."""
+    """Owner-view membership tier (adds the ``active`` management flag + timestamp).
+
+    ``subscribers`` is the count of **active** (``status=active``) subscriptions to
+    this tier (ASS-264) — a count, never a settlement/revenue figure (PG·재무 게이트
+    후행).
+    """
 
     id: uuid.UUID
     creator_id: uuid.UUID | None = None
@@ -131,6 +137,7 @@ class StudioTierOut(Schema):
     active: bool
     sort_order: int
     created_at: datetime
+    subscribers: int
 
 
 class StudioTierIn(Schema):
@@ -170,6 +177,22 @@ def _owner_creator(account: Account) -> Creator | None:
     return Creator.objects.filter(owner=account).first()
 
 
+def _tier_subscribers(tier: MembershipTier) -> int:
+    """Active subscriber count for ``tier`` (ASS-264).
+
+    ``studio_list_tiers`` annotates ``subscribers_count`` on the whole queryset in
+    one aggregate query (no N+1); this falls back to a single live count for the
+    lone-tier create/update responses, where the value was never annotated. Mirrors
+    ``studio_stats``' ``subscribers`` invariant (``status = active`` only).
+    """
+    annotated = getattr(tier, "subscribers_count", None)
+    if annotated is not None:
+        return int(annotated)
+    return Subscription.objects.filter(
+        tier=tier, status=SubscriptionStatus.ACTIVE.value
+    ).count()
+
+
 def _studio_tier_out(tier: MembershipTier) -> StudioTierOut:
     """Build the owner-view tier response (includes the ``active`` flag)."""
     return StudioTierOut(
@@ -184,6 +207,7 @@ def _studio_tier_out(tier: MembershipTier) -> StudioTierOut:
         active=tier.active,
         sort_order=tier.sort_order,
         created_at=tier.created_at,
+        subscribers=_tier_subscribers(tier),
     )
 
 
@@ -198,7 +222,18 @@ def studio_list_tiers(
         return 403, SubscriptionError(
             detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
         )
-    tiers = MembershipTier.objects.filter(creator=creator).order_by("sort_order", "price")
+    # subscribers_count: active-subscriber count per tier via one aggregate query (no
+    # N+1) — a single relation join, so no cross-relation fan-out to guard against.
+    tiers = (
+        MembershipTier.objects.filter(creator=creator)
+        .annotate(
+            subscribers_count=Count(
+                "subscriptions",
+                filter=Q(subscriptions__status=SubscriptionStatus.ACTIVE.value),
+            )
+        )
+        .order_by("sort_order", "price")
+    )
     return 200, [_studio_tier_out(t) for t in tiers]
 
 

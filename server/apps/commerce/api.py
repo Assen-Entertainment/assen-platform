@@ -14,7 +14,8 @@ from typing import cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F, QuerySet
+from django.db.models import F, Q, QuerySet, Sum
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field, field_validator
@@ -221,7 +222,11 @@ studio_products_router = Router(auth=fan_auth, tags=["studio-commerce"])
 
 
 class StudioProductOut(Schema):
-    """Owner-view product: adds the management fields (status, 19+, timestamps)."""
+    """Owner-view product: adds the management fields (status, 19+, timestamps).
+
+    ``sold`` is the total quantity sold via **non-cancelled** orders (ASS-264) — a
+    count, never a settlement/revenue figure (PG·재무 게이트 후행).
+    """
 
     id: uuid.UUID
     creator_id: uuid.UUID | None = None
@@ -238,6 +243,7 @@ class StudioProductOut(Schema):
     status: str
     is_adult: bool
     created_at: datetime
+    sold: int
 
 
 class StudioProductIn(Schema):
@@ -297,6 +303,26 @@ def _owner_creator(account: Account) -> Creator | None:
     return Creator.objects.filter(owner=account).first()
 
 
+def _product_sold(product: Product) -> int:
+    """Total quantity sold for ``product`` via non-cancelled orders (ASS-264).
+
+    ``studio_list_products`` annotates ``sold_count`` on the whole queryset in one
+    aggregate query (no N+1); this falls back to a single live aggregate for the
+    lone-product create/update responses, where the value was never annotated. A
+    cancelled order never happened commercially, so its lines are excluded — same
+    invariant as ``studio_stats``' order count. Count only, never a revenue figure.
+    """
+    annotated = getattr(product, "sold_count", None)
+    if annotated is not None:
+        return int(annotated)
+    total = (
+        OrderItem.objects.filter(product=product)
+        .exclude(order__status=OrderStatus.CANCELLED.value)
+        .aggregate(total=Coalesce(Sum("qty"), 0))["total"]
+    )
+    return int(total)
+
+
 def _studio_product_out(product: Product) -> StudioProductOut:
     """Build the owner-view product response (includes management fields)."""
     return StudioProductOut(
@@ -315,6 +341,7 @@ def _studio_product_out(product: Product) -> StudioProductOut:
         status=product.status,
         is_adult=product.adult_only,
         created_at=product.created_at,
+        sold=_product_sold(product),
     )
 
 
@@ -329,7 +356,22 @@ def studio_list_products(
         return 403, CommerceError(
             detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
         )
-    products = Product.objects.filter(creator=creator).order_by("-created_at", "id")
+    # sold_count: total qty sold per product via one aggregate query (no N+1) — the
+    # OrderItem->Product join is a single relation, so unlike the creator followers/
+    # posts case there is no cross-relation fan-out to guard against.
+    products = (
+        Product.objects.filter(creator=creator)
+        .annotate(
+            sold_count=Coalesce(
+                Sum(
+                    "order_items__qty",
+                    filter=~Q(order_items__order__status=OrderStatus.CANCELLED.value),
+                ),
+                0,
+            )
+        )
+        .order_by("-created_at", "id")
+    )
     return 200, [_studio_product_out(p) for p in products]
 
 

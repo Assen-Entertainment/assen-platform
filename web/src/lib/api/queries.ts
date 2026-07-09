@@ -1050,7 +1050,8 @@ export function useCreateProduct() {
         title: input.title || "새 상품",
         price: input.price,
         status: input.status ?? "draft",
-        // sold는 미집계(undefined→"—") — 실 API 경로와 동일하게 0을 실수치인 척 표기하지 않는다.
+        // 방금 생성된 상품은 주문 이력이 없으므로 sold=0 (실 API 경로와 동일한 카운트 불변식).
+        sold: 0,
         stock: null,
         updatedAt: "방금",
       };
@@ -1116,7 +1117,8 @@ export function useCreateTier() {
         name: input.name || "새 티어",
         price: input.price,
         benefits: input.benefits,
-        // subscribers는 미집계(undefined→"—") — 실 API 경로와 동일하게 0을 실수치인 척 표기하지 않는다.
+        // 방금 생성된 티어는 구독자가 없으므로 subscribers=0 (실 API 경로와 동일한 카운트 불변식).
+        subscribers: 0,
         active: true,
       };
       return row;
