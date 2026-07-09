@@ -20,6 +20,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # compose 잡만 경로 필터링(DevOps 위생) — server/flutter/gitleaks/hooks 잡은 그대로 매
+  # push/PR에서 돈다(범위 확대 없음). dorny/paths-filter는 push 이벤트에서 자동으로 이전
+  # 커밋(github.event.before) 대비 diff를 본다 — 별도 base 설정 불요.
+  #
+  # ⚠️ compose가 GitHub 브랜치 보호 규칙의 required status check이면, 이 필터로 인해
+  # server/**를 건드리지 않는 PR에서는 "skipped"로 뜨고 GitHub은 이를 미충족으로 간주해
+  # 머지가 막힐 수 있다 — 그 경우 브랜치 보호 필수 체크 목록에서 compose를 빼거나(대신
+  # changes 잡을 필수 체크로 지정), 이 필터를 되돌려야 한다. 인간 판단 필요.
+  changes:
+    name: Detect changed paths (gates the compose job)
+    runs-on: ubuntu-latest
+    outputs:
+      compose: ${{ steps.filter.outputs.compose }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            compose:
+              - 'server/**'
+              - 'docker-compose.yml'
+              - 'docker-compose.dev.yml'
+              - 'scripts/up-local.sh'
+              - 'scripts/smoke-local.sh'
+              - 'scripts/lib/**'
+
   server:
     name: Server (ruff + mypy + pytest + migrations)
     runs-on: ubuntu-latest
@@ -85,6 +112,8 @@ jobs:
 
   compose:
     name: docker compose validate + boot smoke
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
