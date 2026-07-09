@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState, Skeleton, Button } from "@/components/ui";
+import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState, Skeleton, LoadMore } from "@/components/ui";
 import { SearchIcon } from "@/lib/icons";
 import { useSearch } from "@/lib/api/queries";
 import { Stagger, StaggerItem } from "@/components/motion/motion-primitives";
@@ -370,13 +370,16 @@ export function SearchView({
               </Stagger>
             </section>
           ) : null}
-          {/* 더 보기(B2 next_offset 페이지네이션) — 서버가 더 가져올 결과가 있다고 알릴 때만 노출. */}
-          {active && hasNextPage ? (
-            <div className="flex justify-center">
-              <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-                {isFetchingNextPage ? "불러오는 중…" : "더 보기"}
-              </Button>
-            </div>
+          {/* 더 보기(B2 next_offset 페이지네이션) — 서버가 더 가져올 결과가 있다고 알릴 때만 노출.
+              search-view는 자동 스크롤 로드 없이 버튼 폴백만 유지(auto=false, 기존 동작 유지). */}
+          {active ? (
+            <LoadMore
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              onLoadMore={() => fetchNextPage()}
+              itemCount={cl.length + pl.length}
+              auto={false}
+            />
           ) : null}
         </>
       )}

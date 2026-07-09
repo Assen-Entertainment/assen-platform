@@ -58,7 +58,7 @@ export default function PaymentsSettingsPage() {
   const setPrimary = useSetPrimaryPaymentMethod();
 
   const [open, setOpen] = React.useState(false);
-  const [brand, setBrand] = React.useState(CARD_BRANDS[0]);
+  const [brand, setBrand] = React.useState(CARD_BRANDS[0] ?? "");
   const [makePrimary, setMakePrimary] = React.useState(false);
 
   const methods = React.useMemo(() => data ?? [], [data]);
@@ -82,7 +82,7 @@ export default function PaymentsSettingsPage() {
       {
         onSuccess: () => {
           toast({ title: "결제 수단이 등록되었어요", description: "새 결제 수단이 추가되었습니다." });
-          setBrand(CARD_BRANDS[0]);
+          setBrand(CARD_BRANDS[0] ?? "");
           setMakePrimary(false);
           setOpen(false);
         },
@@ -128,10 +128,10 @@ export default function PaymentsSettingsPage() {
               <TextField label="유효기간" placeholder="MM/YY" className="flex-1" disabled />
               <TextField label="CVC" placeholder="000" className="w-24" disabled />
             </div>
-            <label className="flex items-center gap-2 text-body-s text-on-surface-variant">
-              <Checkbox checked={makePrimary} onCheckedChange={(v) => setMakePrimary(v === true)} />
-              기본 결제 수단으로 설정
-            </label>
+            <div className="flex items-center gap-2 text-body-s text-on-surface-variant">
+              <Checkbox id="pay-make-primary" checked={makePrimary} onCheckedChange={(v) => setMakePrimary(v === true)} />
+              <label htmlFor="pay-make-primary">기본 결제 수단으로 설정</label>
+            </div>
             <div className="mt-1 flex gap-2">
               <DialogClose asChild>
                 <Button variant="outline" className="flex-1">

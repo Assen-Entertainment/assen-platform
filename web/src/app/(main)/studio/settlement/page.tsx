@@ -38,6 +38,8 @@ const columns: DataTableColumn<SettlementRow>[] = [
  */
 export default function StudioSettlementPage() {
   const latest = SETTLEMENT_ROWS[0];
+  // SETTLEMENT_ROWS는 항상 비지 않은 정적 mock 배열이라 실질적으로 발생하지 않는 방어 가드.
+  if (!latest) return null;
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <SectionHeader title="정산" description="수익과 정산 내역을 확인하세요" />

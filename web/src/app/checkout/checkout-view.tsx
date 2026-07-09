@@ -306,10 +306,10 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
         />
         <RefundPolicyNotice />
 
-        <label className="flex items-center gap-2 px-1 text-body-s text-on-surface-variant">
-          <Checkbox checked={agree} onCheckedChange={(v) => setAgree(v === true)} />
-          주문 내용을 확인했으며 결제 진행에 동의합니다
-        </label>
+        <div className="flex items-center gap-2 px-1 text-body-s text-on-surface-variant">
+          <Checkbox id="checkout-agree" checked={agree} onCheckedChange={(v) => setAgree(v === true)} />
+          <label htmlFor="checkout-agree">주문 내용을 확인했으며 결제 진행에 동의합니다</label>
+        </div>
 
         <Button size="lg" disabled={!canPay} className="w-full" onClick={submit}>
           {processing ? (

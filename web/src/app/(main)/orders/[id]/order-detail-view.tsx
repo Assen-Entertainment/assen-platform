@@ -47,7 +47,7 @@ export function OrderDetailView({ order }: { order: Order }) {
   const o = data ?? order;
   const cancelMut = useCancelOrder(order.id);
   const refundMut = useRequestRefund(order.id);
-  const [reason, setReason] = React.useState(REFUND_REASONS[0]);
+  const [reason, setReason] = React.useState(REFUND_REASONS[0] ?? "");
 
   const status = o.status;
   const refund = o.refund ?? null;

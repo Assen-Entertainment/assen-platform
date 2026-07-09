@@ -21,7 +21,8 @@ export function hueFromSeed(seed: string): number {
 export function hexToHue(hex: string): number {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
   if (!m) return 0;
-  const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+  // 캡처 그룹은 모두 `{2}` 고정 길이라 매치 시 항상 참여 — 폴백은 방어적.
+  const r = parseInt(m[1] ?? "0", 16) / 255, g = parseInt(m[2] ?? "0", 16) / 255, b = parseInt(m[3] ?? "0", 16) / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
   if (d === 0) return 0;
   let h: number;

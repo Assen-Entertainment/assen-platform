@@ -299,7 +299,7 @@ export function CreatorProfileView({
                     badge={t.badge}
                     featured={t.featured}
                     accent={t.featured}
-                    inheritNote={i > 0 ? `${tiers[i - 1].name} 혜택 포함` : undefined}
+                    inheritNote={i > 0 ? `${tiers[i - 1]?.name ?? ""} 혜택 포함` : undefined}
                     currentPlan={isCurrent}
                     ctaLabel={mySub ? "이 티어로 변경" : "구독하기"}
                     onSubscribe={

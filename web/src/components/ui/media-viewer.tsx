@@ -56,6 +56,10 @@ export function MediaViewer({ open, onClose, seed, caption, alt = "포스트 미
   };
 
   return (
+    // WAI-ARIA APG 모달 표준 패턴(Escape 닫기 + 배경 클릭 닫기). role="dialog"는 jsx-a11y가
+    // non-interactive로 분류하지만 모달 컨테이너의 키보드/배경클릭 핸들링은 의도된 접근성 구현이다
+    // (focus trap도 이 요소가 담당).
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       role="dialog"
       aria-modal="true"

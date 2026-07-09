@@ -31,6 +31,8 @@ export default function StudioAnalyticsPage() {
 
   const last = series[series.length - 1];
   const first = series[0];
+  // ANALYTICS_SERIES는 항상 비지 않은 정적 mock 배열이라 실질적으로 발생하지 않는 방어 가드.
+  if (!last || !first) return null;
   const subDelta = last.subscribers - first.subscribers;
   const revDelta = last.revenue - first.revenue;
 

@@ -9,7 +9,7 @@ import { useStudioPosts } from "@/lib/api/queries";
 // next/link — jsdom 렌더용 경량 목.
 vi.mock("next/link", () => ({
   default: ({ href, children, ...p }: { href: unknown; children: React.ReactNode }) => (
-    <a href={typeof href === "string" ? href : "#"} {...p}>
+    <a href={typeof href === "string" ? href : "/"} {...p}>
       {children}
     </a>
   ),

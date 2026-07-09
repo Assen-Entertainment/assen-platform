@@ -9,7 +9,7 @@ import {
   ErrorState,
   CategoryIconRow,
   Shelf,
-  Button,
+  LoadMore,
   type CategoryItem,
 } from "@/components/ui";
 import {
@@ -23,9 +23,7 @@ import {
   WritingIcon,
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
-import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
-import { Spinner } from "@/components/ui";
 import type { Creator, Page, Product } from "@/lib/api";
 
 const CATS = [
@@ -84,16 +82,6 @@ export function DiscoveryView({
     (popularQ.isError && !popularQ.data) ||
     (freshQ.isError && !freshQ.data);
   const shown = cat === "all" ? cList : cList.filter((c) => c.category === cat);
-
-  // 무한 스크롤(전체 둘러보기 그리드) — sentinel 근접 시 크리에이터 다음 페이지 자동 로드.
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
-  const canLoadMore = hasNextPage && !isFetchingNextPage;
-  useInfiniteScroll(sentinelRef, {
-    enabled: canLoadMore,
-    onLoadMore: () => {
-      if (canLoadMore) fetchNextPage();
-    },
-  });
 
   // 인기/신규 크리에이터 선반 — 서버 랭킹(sort=popular/new, E11) 소비(클라 sort/reverse 제거).
   const popular = popularQ.data ?? popularCreators.items;
@@ -246,15 +234,12 @@ export function DiscoveryView({
           ))}
         </Stagger>
         {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
-        {hasNextPage ? (
-          <div className="flex flex-col items-center gap-3">
-            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-            {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
-            <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "불러오는 중…" : "더 보기"}
-            </Button>
-          </div>
-        ) : null}
+        <LoadMore
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={() => fetchNextPage()}
+          itemCount={cList.length}
+        />
       </section>
     </div>
   );

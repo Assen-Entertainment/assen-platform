@@ -196,6 +196,9 @@ export const Calendar = React.forwardRef<HTMLDivElement, CalendarProps>(
           ref={gridRef}
           role="grid"
           aria-label={ariaLabel ?? monthLabel}
+          // roving tabindex(각 gridcell 버튼이 개별 tabIndex 관리) — 컨테이너 자체는 탭 정지점이
+          // 아니지만 onKeyDown 위임을 위해 focusable(tabIndex=-1)이어야 한다(interactive-supports-focus).
+          tabIndex={-1}
           onKeyDown={onKeyDown}
           className="grid grid-cols-7 gap-0.5"
         >

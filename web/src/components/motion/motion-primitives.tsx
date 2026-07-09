@@ -3,8 +3,11 @@
 // ⚠️ framer-motion은 JS(Web Animations/rAF) 구동이라 globals.css의 CSS prefers-reduced-motion
 //    가드가 적용되지 않는다. 접근성은 앱 루트의 <MotionConfig reducedMotion="user">가 담당한다
 //    (모션 프로바이더). reduced-motion 사용자에게는 이동(transform)이 제거되고 페이드만 남는다.
+// ⚡ 번들 최적화 — 풀피처 `motion` 대신 경량 `m` + LazyMotion(domAnimation)을 쓴다. Reveal/Stagger는
+//    opacity+transform(whileInView/whileHover)만 사용해 domAnimation으로 충분(drag/layout 불필요).
+//    LazyMotion 경계는 앱 루트(MotionProvider)가 제공 — 이 프리미티브는 `m`만 소비한다.
 import * as React from "react";
-import { motion, type Variants } from "framer-motion";
+import { m, type Variants } from "framer-motion";
 
 /** 앱 CSS 토큰(cubic-bezier(0,0,0.2,1))과 동일 계열의 부드러운 감속 이징. */
 export const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -34,7 +37,7 @@ export function Reveal({
   amount?: number;
 }) {
   return (
-    <motion.div
+    <m.div
       className={className}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
@@ -42,7 +45,7 @@ export function Reveal({
       transition={{ duration: 0.5, ease: EASE_OUT, delay }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -57,7 +60,7 @@ export function Stagger({
   amount?: number;
 }) {
   return (
-    <motion.div
+    <m.div
       className={className}
       variants={containerVariants}
       initial="hidden"
@@ -65,7 +68,7 @@ export function Stagger({
       viewport={{ once: true, amount }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -80,13 +83,13 @@ export function StaggerItem({
   lift?: boolean;
 }) {
   return (
-    <motion.div
+    <m.div
       className={className}
       variants={fadeUpVariants}
       whileHover={lift ? { y: -4 } : undefined}
       transition={{ duration: 0.2, ease: EASE_OUT }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

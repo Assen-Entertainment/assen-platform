@@ -83,6 +83,9 @@ export const DatePicker = React.forwardRef<HTMLButtonElement, DatePickerProps>(
         </button>
 
         {open ? (
+          // WAI-ARIA APG 팝오버/다이얼로그 표준 패턴(Escape 닫기). role="dialog"는 jsx-a11y가
+          // non-interactive로 분류하지만 팝오버 컨테이너의 키보드 핸들링은 의도된 접근성 구현이다.
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
           <div
             role="dialog"
             aria-label="날짜 선택 달력"

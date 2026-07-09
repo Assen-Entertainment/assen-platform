@@ -86,8 +86,8 @@ export function apiErrorMessage(
   if (e instanceof ApiError) {
     const code = e.code;
     if (code) {
-      if (fallbackMap && code in fallbackMap) return fallbackMap[code];
-      if (code in ERROR_CODE_MESSAGES) return ERROR_CODE_MESSAGES[code];
+      const mapped = fallbackMap?.[code] ?? ERROR_CODE_MESSAGES[code];
+      if (mapped) return mapped;
     }
     if (e.detail) return e.detail;
   }

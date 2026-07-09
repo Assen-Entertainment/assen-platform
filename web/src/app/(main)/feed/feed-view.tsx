@@ -17,12 +17,11 @@ import {
   DialogClose,
   DialogTitle,
   DialogDescription,
-  Spinner,
+  LoadMore,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
 import { useSession } from "@/lib/session";
-import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { useFeed, useToggleLike, useReport, useBlockCreator } from "@/lib/api/queries";
 import { ApiError, apiErrorMessage, type Page, type Post } from "@/lib/api";
 
@@ -37,16 +36,6 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
   const report = useReport();
   const blockCreator = useBlockCreator();
   const posts = data ?? initialFeed.items;
-
-  // 무한 스크롤 — sentinel이 뷰포트 근접 시 자동 로드(reduced-motion·미지원은 더보기 버튼 폴백).
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
-  const canLoadMore = hasNextPage && !isFetchingNextPage;
-  useInfiniteScroll(sentinelRef, {
-    enabled: canLoadMore,
-    onLoadMore: () => {
-      if (canLoadMore) fetchNextPage();
-    },
-  });
 
   // 더보기 액션 메뉴 대상 / 신고 시트 대상 포스트 id / 차단 확인 대상(크리에이터).
   const [menuPostId, setMenuPostId] = React.useState<string | null>(null);
@@ -157,15 +146,13 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
           ))}
         </div>
         {/* 무한 스크롤 sentinel + 폴백 버튼 — 자동 로드가 기본, 버튼은 reduced-motion·미지원 폴백. */}
-        {hasNextPage ? (
-          <div className="mt-4 flex flex-col items-center gap-3">
-            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-            {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
-            <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
-            </Button>
-          </div>
-        ) : null}
+        <LoadMore
+          className="mt-4"
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={() => fetchNextPage()}
+          itemCount={posts.length}
+        />
         </>
       )}
 
