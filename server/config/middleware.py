@@ -14,6 +14,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
 from config.clientip import client_ip
@@ -59,8 +60,14 @@ class SecurityHeadersMiddleware:
     """Add baseline security response headers (§3.5 #1, after request id).
 
     Complements Django's ``SecurityMiddleware`` with a few defaults Django does
-    not set by itself. Kept conservative so it is safe to enable platform-wide;
-    stricter CSP is deferred to when the front-end surfaces are known.
+    not set by itself. Kept conservative so it is safe to enable platform-wide.
+
+    Also carries the report-only CSP rollout (ASS-278): a
+    ``Content-Security-Policy-Report-Only`` header, never the enforcing
+    ``Content-Security-Policy`` header, so violations are observed without ever
+    breaking a response. Policy source/rationale live at
+    ``settings.CONTENT_SECURITY_POLICY_REPORT_ONLY``; enforcement is a future,
+    separate step once observed violations are clean.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -73,6 +80,9 @@ class SecurityHeadersMiddleware:
         response.setdefault("X-Content-Type-Options", "nosniff")
         response.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.setdefault("X-Frame-Options", "DENY")
+        policy = getattr(settings, "CONTENT_SECURITY_POLICY_REPORT_ONLY", "")
+        if policy:
+            response.setdefault("Content-Security-Policy-Report-Only", policy)
         return response
 
 

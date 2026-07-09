@@ -164,6 +164,26 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Content-Security-Policy, REPORT-ONLY (ASS-278). Observation-only hardening: sent
+# as Content-Security-Policy-Report-Only (config.middleware.SecurityHeadersMiddleware),
+# never the enforcing Content-Security-Policy header, so a bad policy string cannot
+# break the site — the browser only logs/reports violations. The default baseline is
+# admin-safe (Django admin's templates use inline <style>/<script>, hence the
+# 'unsafe-inline' sources) since this server only renders JSON API responses plus the
+# Django admin HTML. No report-uri/report-to is set by default — there is no
+# violation-collection endpoint yet; set CONTENT_SECURITY_POLICY_REPORT_ONLY to a
+# policy string that includes one once a collector exists. Env-tunable so it can be
+# tightened (or disabled entirely via an empty string) without a code change; an
+# empty/unset value means the middleware omits the header altogether (opt-out).
+CONTENT_SECURITY_POLICY_REPORT_ONLY: str = env(
+    "CONTENT_SECURITY_POLICY_REPORT_ONLY",
+    default=(
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; "
+        "object-src 'none'"
+    ),
+)
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
