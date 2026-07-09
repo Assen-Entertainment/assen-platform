@@ -298,8 +298,8 @@ class _KycActionState extends ConsumerState<_KycAction> {
 /// A design-review follow-up (ASS-282): `ThemeMode.system` was previously
 /// implicit and unreachable from the UI, so an OS-dark device could never see
 /// the light-forward brand identity (warm paper). The fan's pick is applied
-/// immediately app-wide via [ThemeModeController] (in-memory only for now —
-/// see that class's doc for the persistence follow-up).
+/// immediately app-wide and persisted across launches via
+/// [ThemeModeController] (see that class's doc for the storage details).
 class _ThemeModeSelector extends ConsumerWidget {
   const _ThemeModeSelector();
 

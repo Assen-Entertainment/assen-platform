@@ -10,6 +10,7 @@ import 'package:assen_mobile/src/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 /// A repository stand-in: returns a fixed profile (or the 401 error) and keeps
@@ -62,6 +63,14 @@ Widget _host(SettingsRepository repository) => ProviderScope(
 );
 
 void main() {
+  setUp(() {
+    // ThemeModeController reads/writes shared_preferences on build/pick; stub
+    // it to an empty in-memory store so the 테마 tests below are deterministic
+    // rather than relying on the (also fail-closed) missing-platform-channel
+    // path.
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('a 401 shows the login-required empty state', (tester) async {
     await tester.pumpWidget(_host(_FakeSettingsRepository.authRequired()));
     await tester.pump();
