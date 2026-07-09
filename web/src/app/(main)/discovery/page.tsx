@@ -8,8 +8,23 @@ export const metadata: Metadata = {
   openGraph: { title: "크리에이터 발견 · Assen", description: "취향에 맞는 크리에이터와 상품을 발견하세요.", type: "website" },
 };
 
-/** Discovery — 서버에서 커서 Page 시드(크리에이터·상품) → 클라 뷰. 실 API 전환 시 lib/api만 교체. */
+/**
+ * Discovery — 서버에서 커서 Page 시드(크리에이터·상품) + 서버 랭킹 Page 시드(인기/신규, E11 sort=)를
+ * 병렬 조회 → 클라 뷰. 실 API 전환 시 lib/api만 교체.
+ */
 export default async function DiscoveryPage() {
-  const [creators, products] = await Promise.all([getCreatorsPage(), getProductsPage()]);
-  return <DiscoveryView creators={creators} products={products} />;
+  const [creators, products, popularCreators, freshCreators] = await Promise.all([
+    getCreatorsPage(),
+    getProductsPage(),
+    getCreatorsPage(undefined, "popular"),
+    getCreatorsPage(undefined, "new"),
+  ]);
+  return (
+    <DiscoveryView
+      creators={creators}
+      products={products}
+      popularCreators={popularCreators}
+      freshCreators={freshCreators}
+    />
+  );
 }

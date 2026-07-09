@@ -23,7 +23,6 @@ import {
   WritingIcon,
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
-import { useSession } from "@/lib/session";
 import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { Spinner } from "@/components/ui";
@@ -57,16 +56,33 @@ function creatorMeta(c: Creator): string {
   return `${c.category ?? ""} · 팔로워 ${followers(c.followers)}`;
 }
 
-export function DiscoveryView({ creators, products }: { creators: Page<Creator>; products: Page<Product> }) {
+export function DiscoveryView({
+  creators,
+  products,
+  popularCreators,
+  freshCreators,
+}: {
+  creators: Page<Creator>;
+  products: Page<Product>;
+  /** 서버 랭킹(sort=popular, E11) — 팔로워 desc 단일 페이지. */
+  popularCreators: Page<Creator>;
+  /** 서버 랭킹(sort=new, E11) — 최신 가입 desc 단일 페이지. */
+  freshCreators: Page<Creator>;
+}) {
   const router = useRouter();
-  const { user } = useSession();
   const [cat, setCat] = React.useState("all");
   const creatorsQ = useCreators(creators);
+  const popularQ = useCreators(popularCreators, "popular");
+  const freshQ = useCreators(freshCreators, "new");
   const productsQ = useProducts(undefined, products);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = creatorsQ;
   const cList = creatorsQ.data ?? creators.items;
   const pList = productsQ.data ?? products.items;
-  const isError = (creatorsQ.isError && !creatorsQ.data) || (productsQ.isError && !productsQ.data);
+  const isError =
+    (creatorsQ.isError && !creatorsQ.data) ||
+    (productsQ.isError && !productsQ.data) ||
+    (popularQ.isError && !popularQ.data) ||
+    (freshQ.isError && !freshQ.data);
   const shown = cat === "all" ? cList : cList.filter((c) => c.category === cat);
 
   // 무한 스크롤(전체 둘러보기 그리드) — sentinel 근접 시 크리에이터 다음 페이지 자동 로드.
@@ -79,9 +95,9 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
     },
   });
 
-  // 선반용 파생 목록 — 인기(팔로워 desc) / 신규(역순) / 추천 상품.
-  const popular = React.useMemo(() => [...cList].sort((a, b) => b.followers - a.followers), [cList]);
-  const fresh = React.useMemo(() => [...cList].reverse(), [cList]);
+  // 인기/신규 크리에이터 선반 — 서버 랭킹(sort=popular/new, E11) 소비(클라 sort/reverse 제거).
+  const popular = popularQ.data ?? popularCreators.items;
+  const fresh = freshQ.data ?? freshCreators.items;
 
   const goSearch = (q: string) => router.push(`/search?q=${encodeURIComponent(q)}`);
 
@@ -92,6 +108,8 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
           onRetry={() => {
             creatorsQ.refetch();
             productsQ.refetch();
+            popularQ.refetch();
+            freshQ.refetch();
           }}
         />
       </div>
@@ -164,11 +182,16 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
         </Shelf>
       </Reveal>
 
-      {/* 추천 상품 선반 — 개인화 카피는 로그인 시에만. 비로그인은 일반 카피(#9·P0 비로그인 동선). */}
+      {/*
+        인기 상품 선반 — 서버 상품 추천 엔드포인트는 아직 없다(E11 sort=recommended는 크리에이터
+        전용, 범위 밖 상품 추천 API 신설 대신 크리에이터 랭킹을 우선 배선했다 — 위 인기/신규 선반).
+        그래서 이 선반은 일반 상품 목록(useProducts)을 그대로 노출한다 — 개인화 랭킹이 아니므로
+        로그인 여부와 무관하게 논-퍼스널라이즈 카피를 쓴다(디자인 리뷰 F1: 과잉약속 카피 정직화).
+      */}
       <Reveal>
         <Shelf
-          title={user ? "회원님을 위한 추천 상품" : "지금 주목받는 상품"}
-          description={user ? "팔로우한 취향을 바탕으로 골랐어요" : "많은 팬이 함께 보고 있는 상품이에요"}
+          title="인기 상품"
+          description="지금 주목받는 상품들"
           action={
             <Link href="/store" className="text-body-s text-primary hover:underline">
               더보기
@@ -228,7 +251,7 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
             <div ref={sentinelRef} aria-hidden className="h-px w-full" />
             {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
             <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
+              {isFetchingNextPage ? "불러오는 중…" : "더 보기"}
             </Button>
           </div>
         ) : null}
