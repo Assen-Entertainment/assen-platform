@@ -313,7 +313,10 @@ class _PhoneStep extends StatelessWidget {
 /// A gradient brand panel carrying the white [AssenLogo] lockup and a short
 /// tagline, shown on the first sign-in step. The gradient is the sanctioned
 /// tokens.md 2026-07-09 exception (login surface); it adds no logic to the
-/// OTP/mock flow. White copy reads AA on [AssenGradients.brand] at every stop.
+/// OTP/mock flow. The panel uses [AssenGradients.brandScrimmed] (not the plain
+/// [AssenGradients.brand]) because it carries the tagline text, not just the
+/// lockup graphic — the scrimmed variant keeps white body text ≥AA at every
+/// point on the gradient (2026-07-10 a11y fix).
 class _BrandFrontDoor extends StatelessWidget {
   const _BrandFrontDoor();
 
@@ -326,7 +329,7 @@ class _BrandFrontDoor extends StatelessWidget {
         horizontal: SpacingTokens.s5,
       ),
       decoration: const BoxDecoration(
-        gradient: AssenGradients.brand,
+        gradient: AssenGradients.brandScrimmed,
         borderRadius: BorderRadius.all(Radius.circular(RadiusTokens.xl)),
         boxShadow: [
           BoxShadow(

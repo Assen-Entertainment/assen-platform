@@ -23,10 +23,11 @@ import 'package:ui_kit/src/molecules/underline_tabs.dart';
 /// A single-screen gallery of every Molecule for visual review.
 ///
 /// The human-facing review surface for the ASS-88 Molecules layer: it renders
-/// all 16 molecules (each in its relevant variants/states) on the cream surface
-/// so reviewers and the `flutter build web` smoke test exercise the whole layer
-/// at once — the same pattern as `AtomCatalog`. It is stateful so interactive
-/// molecules (fields, steppers, tabs, toggles) actually respond in the gallery.
+/// all 16 molecules (each in its relevant variants/states) on the warm-paper
+/// surface so reviewers and the `flutter build web` smoke test exercise the
+/// whole layer at once — the same pattern as `AtomCatalog`. It is stateful so
+/// interactive molecules (fields, steppers, tabs, toggles) actually respond in
+/// the gallery.
 class MoleculeCatalog extends StatefulWidget {
   /// Creates the molecule catalogue screen.
   const MoleculeCatalog({super.key});
@@ -125,7 +126,7 @@ class _MoleculeCatalogState extends State<MoleculeCatalog> {
               children: [
                 AssenListItem(
                   title: '내 회원증',
-                  subtitle: '하츠코이 본점',
+                  subtitle: '프리미엄 멤버십',
                   leading: const AssenAvatar(name: '미오'),
                   onTap: () {},
                 ),

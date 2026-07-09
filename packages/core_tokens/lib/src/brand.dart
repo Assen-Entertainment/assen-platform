@@ -39,13 +39,41 @@ abstract final class AssenGradients {
   /// `linear-gradient(135deg, #5a4df0 0%, #8a5cf7 100%)`. topLeft → bottomRight
   /// reproduces the CSS 135° angle. The violet stop is the gradient's terminal
   /// hue (web `--gradient-brand`), not a new palette primitive.
+  ///
+  /// GRAPHICS ONLY (not body text): measured contrast for [onBrand] white is
+  /// ≈5.59:1 at the indigo.500 stop but only ≈4.24:1 at the violet terminal —
+  /// below the 4.5:1 AA floor for body text (2026-07-10 a11y review). Safe for
+  /// the lockup mark's stroke (a graphic, not text). Any surface that carries
+  /// text over this gradient MUST use [brandScrimmed] instead.
   static const LinearGradient brand = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [Color(0xFF5A4DF0), Color(0xFF8A5CF7)],
   );
 
-  /// White text/marks read on the brand gradient at any stop (contrast ≥ 5.6:1
-  /// against indigo.500 and ≥ 4.6:1 against the violet terminal).
+  /// [brand], darkened by a flat 25% black scrim — mirrors the web bottom
+  /// scrim (`from-black/25`) used behind text on `creator-home-header.tsx` /
+  /// `discovery-view.tsx`. Alpha-compositing black at 25% over a colour is
+  /// equivalent to scaling its channels by 0.75, so these are [brand]'s two
+  /// stops pre-blended with that scrim — pixel-identical to stacking a real
+  /// `Colors.black.withValues(alpha: 0.25)` layer on top, without the
+  /// Stack/ClipRRect it would take to keep that layer inside the rounded
+  /// corners. Applied UNIFORMLY (not a fade) so contrast holds regardless of
+  /// where text falls on the gradient, per the 2026-07-10 a11y fix.
+  ///
+  /// Measured (WCAG relative luminance): ≈8.39:1 at the indigo.500 stop and
+  /// ≈6.69:1 at the violet terminal — both clear the 4.5:1 AA floor with
+  /// margin (the previous unscrimmed violet-stop reading was ≈4.24:1, a
+  /// failure). Use this for every gradient surface that carries text: the
+  /// login brand panel, the discovery hero band, and the creator cover
+  /// fallback.
+  static const LinearGradient brandScrimmed = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF443AB4), Color(0xFF6845B9)],
+  );
+
+  /// White text/marks read on [brand] at ≥4.24:1 (graphics only) and on
+  /// [brandScrimmed] at ≥6.69:1 (safe for body text — see each field's doc).
   static const Color onBrand = Color(0xFFFFFFFF);
 }

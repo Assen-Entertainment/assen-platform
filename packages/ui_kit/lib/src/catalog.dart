@@ -15,10 +15,10 @@ import 'package:ui_kit/src/atoms/skeleton.dart';
 /// A single-screen gallery of every Atom for visual review.
 ///
 /// This is the human-facing review surface for ASS-88: it renders all 18 atoms
-/// (each in its relevant variants) on the cream surface so reviewers and the
-/// `flutter build web` smoke test exercise the whole catalogue at once. It is
-/// stateful so interactive atoms (toggles, chips, selection controls) actually
-/// respond in the gallery.
+/// (each in its relevant variants) on the warm-paper surface so reviewers and
+/// the `flutter build web` smoke test exercise the whole catalogue at once. It
+/// is stateful so interactive atoms (toggles, chips, selection controls)
+/// actually respond in the gallery.
 class AtomCatalog extends StatefulWidget {
   /// Creates the atom catalogue screen.
   const AtomCatalog({super.key});

@@ -114,8 +114,10 @@ class _CreatorList extends StatelessWidget {
 /// The discovery brand hero — a single gradient welcome band.
 ///
 /// The one discovery gradient moment sanctioned by the tokens.md 2026-07-09
-/// exception (hero surface). White copy reads AA on the indigo→violet
-/// [AssenGradients.brand] at every stop.
+/// exception (hero surface). Uses [AssenGradients.brandScrimmed] (not the
+/// plain [AssenGradients.brand]) since the heading + body copy sit directly on
+/// the gradient — the scrimmed variant keeps white text ≥AA at every point
+/// (2026-07-10 a11y fix).
 class _DiscoveryHero extends StatelessWidget {
   const _DiscoveryHero();
 
@@ -130,7 +132,7 @@ class _DiscoveryHero extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(SpacingTokens.s5),
       decoration: const BoxDecoration(
-        gradient: AssenGradients.brand,
+        gradient: AssenGradients.brandScrimmed,
         borderRadius: BorderRadius.all(Radius.circular(RadiusTokens.xl)),
         boxShadow: [
           BoxShadow(

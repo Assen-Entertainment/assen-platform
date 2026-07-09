@@ -16,7 +16,7 @@ import 'package:ui_kit/src/organisms/product_card.dart';
 ///
 /// The human-facing review surface for the ASS-88 Organisms layer: it renders
 /// the domain-agnostic organisms (MembershipCard, EmptyState, ErrorState,
-/// BottomCTA — each in its relevant variants/states) on the cream surface so
+/// BottomCTA — each in its relevant variants/states) on the warm-paper surface so
 /// reviewers and the `flutter build web` smoke test exercise the layer at
 /// once — the same review pattern as `AtomCatalog`/`MoleculeCatalog`. It is
 /// stateful so the interactive TabBar responds live; AppBar and TabBar frame
@@ -78,7 +78,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
                   name: '미오',
                   memberNumber: '0000 1234 5678',
                   points: '1,280',
-                  tierLabel: '하츠코이',
+                  tierLabel: '프리미엄',
                   avatar: const AssenAvatar(
                     name: '미오',
                     hue: AssenBadgeHue.brand,
@@ -90,7 +90,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
                   name: '유키',
                   memberNumber: '0000 8765 4321',
                   points: '420',
-                  tierLabel: '하츠코이',
+                  tierLabel: '스탠다드',
                   skin: AssenMembershipSkin.sky,
                   avatar: AssenAvatar(name: '유키', hue: AssenBadgeHue.sky),
                 ),
