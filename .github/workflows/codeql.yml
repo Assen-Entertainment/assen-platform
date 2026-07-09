@@ -1,0 +1,51 @@
+name: "CodeQL"
+
+# 정적 보안 분석 게이트(ASS-279) — web/(JS·TS)와 server/(Python) 코드베이스를 PR·
+# 통합 브랜치 push·주간 스케줄에서 스캔한다. github/codeql-action 공식 표준 템플릿을
+# 그대로 미러링(언어별 build-mode: none — 둘 다 컴파일 불요 언어라 별도 빌드 스텝 없음).
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  schedule:
+    # 주간, 월요일 03:30 UTC — ci.yml의 android 스케줄(03:00)과 겹치지 않게 30분 오프셋.
+    - cron: "30 3 * * 1"
+
+# 같은 ref의 이전 실행은 취소해 러너 분을 아낀다(ci.yml/e2e.yml 패턴 미러).
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

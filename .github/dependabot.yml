@@ -1,0 +1,36 @@
+version: 2
+
+# 의존성 최신화 게이트(ASS-279) — 실제 존재하는 매니페스트 디렉토리별로 주간 업데이트 PR을 연다.
+# 각 워크플로(ci.yml/web-ci.yml/e2e.yml)가 이미 lint/typecheck/test로 게이트하므로
+# 여기서는 PR 생성만 담당한다(자동 머지 없음 — CODEOWNERS의 인간 게이트 원칙과 동일선상).
+updates:
+  # web/ — package-lock.json (npm)
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+
+  # landing/ — 별도 정적 사이트, 독립 package-lock.json (npm)
+  - package-ecosystem: "npm"
+    directory: "/landing"
+    schedule:
+      interval: "weekly"
+
+  # server/ — pyproject.toml + uv.lock (uv)
+  - package-ecosystem: "uv"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+
+  # .github/workflows/*.yml 의 액션 버전 (github-actions)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # 루트 pub workspace(melos) — pubspec.yaml/pubspec.lock, apps/assen_mobile·packages/*
+  # 멤버는 resolution: workspace로 이 단일 락파일을 공유한다(개별 pubspec.lock 없음).
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
