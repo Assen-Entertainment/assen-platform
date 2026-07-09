@@ -17,6 +17,19 @@ export function hueFromSeed(seed: string): number {
   return ((h % 360) + 360) % 360;
 }
 
+/**
+ * seed + salt → 0..1 결정적 유닛값. FNV-1a(32bit, Math.imul) — 그라디언트 광원 위치 파생용.
+ * hue와 독립된 축이라 같은 색이라도 seed마다 광원 배치가 달라져 "메쉬"가 반복되지 않는다.
+ */
+function seedUnit(seed: string, salt: number): number {
+  let h = (0x811c9dc5 ^ salt) >>> 0;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ((h >>> 0) % 1000) / 1000;
+}
+
 /** HSL(0..1 s/l) → hex. 아바타 톤 대비 보정 입력용. */
 function hslHex(h: number, s: number, l: number): string {
   const c = (1 - Math.abs(2 * l - 1)) * s;
@@ -34,19 +47,44 @@ function hslHex(h: number, s: number, l: number): string {
 }
 
 /**
- * seed → SVG 그라디언트 data-URI. cover/포스트·상품 미디어의 배경으로 사용.
+ * seed → SVG 메쉬 그라디언트 data-URI. cover/포스트·상품 미디어의 배경으로 사용.
  * preserveAspectRatio=none 으로 컨테이너를 꽉 채운다(background-size: cover 와 병행).
+ *
+ * 단색 대각 채움 대신 3층 합성으로 깊이를 준다(플랫 박스 → "디자인된" 아트):
+ *  1) base   — 대각 linear(id='g'). seed hue → 인접 hue(+38°) 2-stop.
+ *  2) glow    — 밝은 radial 하이라이트(광원). seed 파생 위치라 카드마다 다른 구도.
+ *  3) deep    — 어두운 radial(대각 반대편)로 대비·부피감.
+ * 전부 seed 결정적·순수·오프라인(외부 URL 0). 같은 seed = 항상 같은 아트.
  */
 export function gradientDataUri(seed: string): string {
   const h1 = hueFromSeed(seed);
-  const h2 = (h1 + 40) % 360;
+  const h2 = (h1 + 38) % 360; // 인접색(대각 그라디언트 끝)
+  const h3 = (h1 + 340) % 360; // -20°, 반대편 톤 → 메쉬 다색감
+  // 광원 위치(%) — hue와 독립된 축이라 색이 겹쳐도 구도가 반복되지 않는다.
+  const ax = Math.round(12 + seedUnit(seed, 1) * 46); // 12..58 (상단 하이라이트)
+  const ay = Math.round(8 + seedUnit(seed, 2) * 34); //  8..42
+  const bx = Math.round(46 + seedUnit(seed, 3) * 46); // 46..92 (하단 딥)
+  const by = Math.round(58 + seedUnit(seed, 4) * 34); // 58..92
   const svg =
     `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'>` +
-    `<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>` +
-    `<stop offset='0' stop-color='hsl(${h1},62%,60%)'/>` +
-    `<stop offset='1' stop-color='hsl(${h2},64%,46%)'/>` +
-    `</linearGradient></defs>` +
-    `<rect width='100' height='100' fill='url(#g)'/></svg>`;
+    `<defs>` +
+    `<linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>` +
+    `<stop offset='0' stop-color='hsl(${h1},58%,57%)'/>` +
+    `<stop offset='1' stop-color='hsl(${h2},62%,42%)'/>` +
+    `</linearGradient>` +
+    `<radialGradient id='a' cx='${ax}%' cy='${ay}%' r='62%'>` +
+    `<stop offset='0' stop-color='hsl(${h3},78%,70%)' stop-opacity='0.85'/>` +
+    `<stop offset='1' stop-color='hsl(${h3},78%,70%)' stop-opacity='0'/>` +
+    `</radialGradient>` +
+    `<radialGradient id='b' cx='${bx}%' cy='${by}%' r='55%'>` +
+    `<stop offset='0' stop-color='hsl(${h1},74%,32%)' stop-opacity='0.55'/>` +
+    `<stop offset='1' stop-color='hsl(${h1},74%,32%)' stop-opacity='0'/>` +
+    `</radialGradient>` +
+    `</defs>` +
+    `<rect width='100' height='100' fill='url(#g)'/>` +
+    `<rect width='100' height='100' fill='url(#a)'/>` +
+    `<rect width='100' height='100' fill='url(#b)'/>` +
+    `</svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 

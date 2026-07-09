@@ -107,8 +107,23 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
       >
         <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-white/10 blur-2xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-white/10 blur-3xl" />
+        {/* 브랜드 시그니처 워터마크 — Logo(app/icon.svg)와 형태를 공유하는 상승 "A" 봉우리. 우측 저채도. */}
+        <svg
+          aria-hidden
+          viewBox="0 0 32 32"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="pointer-events-none absolute -right-6 top-1/2 hidden h-[150%] -translate-y-1/2 text-white/[0.08] sm:block"
+        >
+          <path d="M10 23 L16 8.5 L22 23 M12.6 17.6 H19.4" />
+        </svg>
+        {/* 대각 시트 하이라이트 — 광택감(깊이). */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent" />
         {/* 좌측 다크 스크림 — 브랜드 그라디언트를 유지하면서 텍스트 대비 AA 보장. */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/20 via-black/5 to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/25 via-black/5 to-transparent" />
         <div className="relative flex max-w-2xl flex-col gap-3 text-white">
           <span className="text-label font-semibold uppercase tracking-[0.16em] text-white/90">크리에이터 커머스</span>
           <h1 className="text-display-m font-bold leading-[1.15] tracking-tight text-white sm:text-display-xl">

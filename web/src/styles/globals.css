@@ -112,10 +112,12 @@
   --text-caption--line-height: 1.33;
   --text-caption--font-weight: 500;
 
-  --shadow-1: 0 2px 8px rgba(25, 25, 25, 0.08);
-  --shadow-2: 0 8px 24px rgba(25, 25, 25, 0.12);
-  --shadow-3: 0 6px 16px rgba(25, 25, 25, 0.12);
-  --shadow-4: 0 12px 32px rgba(25, 25, 25, 0.16);
+  /* Elevation — R13 프리미엄 리파인: 기존 앰비언트 그림자를 보존하고 얇은 컨택트 레이어(0 1~2px)를
+     겹쳐 카드 가장자리를 또렷하게(부유감↑·저비용). 확산/성격은 불변 → DS 무게감 유지. */
+  --shadow-1: 0 1px 2px rgba(25, 25, 25, 0.05), 0 2px 8px rgba(25, 25, 25, 0.08);
+  --shadow-2: 0 1px 3px rgba(25, 25, 25, 0.06), 0 8px 24px rgba(25, 25, 25, 0.12);
+  --shadow-3: 0 1px 2px rgba(25, 25, 25, 0.06), 0 6px 16px rgba(25, 25, 25, 0.12);
+  --shadow-4: 0 2px 4px rgba(25, 25, 25, 0.08), 0 12px 32px rgba(25, 25, 25, 0.16);
 
   /* 모션 일관화(루브릭 #39·#42) — 전 transition-* 유틸의 기본 = 200ms ease-out.
      hover/focus/press 트랜지션을 단일 지속·이징으로 통일(과도한 개별 duration 제거). */

@@ -2,7 +2,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { TextField, Button, Divider, OTPInput, Logo } from "@/components/ui";
+import { TextField, Button, Divider, OTPInput } from "@/components/ui";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError, ERROR_CODES } from "@/lib/api";
@@ -90,13 +91,7 @@ function OtpLogin({ next }: { next: string }) {
   const signupHref = signupParams.toString() ? `/signup?${signupParams}` : "/signup";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="flex justify-center">
-          <Logo size="lg" />
-        </h1>
-        <p className="text-center text-body-s text-on-surface-variant">크리에이터의 세계관을 팬과 잇는 무대</p>
-
+    <AuthShell>
         {step === "phone" ? (
           <>
             <TextField
@@ -158,8 +153,7 @@ function OtpLogin({ next }: { next: string }) {
         <p className="text-center text-caption text-on-surface-variant">
           ※ 소셜·이메일 로그인은 준비 중이에요.
         </p>
-      </div>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -174,12 +168,7 @@ function MockLogin({ next }: { next: string }) {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="flex justify-center">
-          <Logo size="lg" />
-        </h1>
-        <p className="text-center text-body-s text-on-surface-variant">크리에이터의 세계관을 팬과 잇는 무대</p>
+    <AuthShell>
         <TextField label="이메일" type="email" placeholder="you@assen.kr" />
         <TextField label="비밀번호" type="password" placeholder="••••••••" />
         <Button size="lg" className="w-full" onClick={onLogin}>로그인</Button>
@@ -194,7 +183,6 @@ function MockLogin({ next }: { next: string }) {
           <Button variant="outline" className="w-full" onClick={onLogin}>Google로 계속</Button>
         </div>
         <p className="text-center text-caption text-on-surface-variant">※ 데모 — 실제 인증·본인인증 미연동(게이트)</p>
-      </div>
-    </main>
+    </AuthShell>
   );
 }
