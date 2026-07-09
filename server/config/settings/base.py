@@ -293,6 +293,14 @@ SERVE_LOCAL_MEDIA: bool = False
 # read into memory or written to storage.
 UPLOAD_MAX_BYTES: int = env.int("UPLOAD_MAX_BYTES", default=10 * 1024 * 1024)
 
+# Decompression-bomb guards for the Pillow decode-verify step (ASS-271, see
+# apps.uploads.images.verify_image_decodes) — both env-tunable. A file within
+# UPLOAD_MAX_BYTES can still decode to a huge pixel buffer (e.g. a highly
+# compressed PNG), so these bound the *decoded* image independently of file size:
+# total pixel count (width * height) and either dimension individually.
+UPLOAD_MAX_PIXELS: int = env.int("UPLOAD_MAX_PIXELS", default=40_000_000)
+UPLOAD_MAX_DIMENSION: int = env.int("UPLOAD_MAX_DIMENSION", default=12_000)
+
 # Django 5 storage backends. default = local filesystem for dev/demo/test.
 #
 # S3 PLUGIN POINT (후행 — NOT implemented here): a real deployment installs
@@ -308,12 +316,15 @@ UPLOAD_MAX_BYTES: int = env.int("UPLOAD_MAX_BYTES", default=10 * 1024 * 1024)
 # gated media should use signed reads (see config.storage.SignedUrlAdapter).
 #
 # REQUIRED GATES BEFORE FLIPPING SERVE_LOCAL_MEDIA ON IN A REAL (non-demo) SERVING
-# PATH (후행 — NOT implemented; the current header-sniff + nosniff boundary is a
-# skeleton two security lanes flagged as not yet production-grade):
-#   1. Full magic-byte decode, not just a header sniff — Pillow ``verify()`` with a
-#      ``MAX_IMAGE_PIXELS`` decompression-bomb guard and a dimension cap (a valid
-#      polyglot outside the 64-byte sniff window is only defused today because the
-#      served Content-Type is sniff-derived + X-Content-Type-Options: nosniff).
+# PATH (후행 — NOT implemented unless noted; the current boundary has one security
+# lane still flagged as not yet production-grade):
+#   1. DONE (ASS-271): full decode, not just a header sniff — apps.uploads.api
+#      calls apps.uploads.images.verify_image_decodes after the 64-byte magic sniff,
+#      which runs Pillow ``Image.open(...).verify()`` on the full payload plus a
+#      UPLOAD_MAX_PIXELS/UPLOAD_MAX_DIMENSION decompression-bomb + dimension guard
+#      (a valid polyglot outside the 64-byte sniff window is also defused today
+#      because the served Content-Type is sniff-derived + X-Content-Type-Options:
+#      nosniff).
 #   2. Real object-storage hardening: private bucket, forced image Content-Type +
 #      Content-Disposition, signed reads for gated media (above).
 #   3. Real content moderation (see apps.uploads.api._moderation_accepts) — a
