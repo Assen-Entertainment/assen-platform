@@ -17,7 +17,7 @@ class AssenBottomCta extends StatelessWidget {
   /// Creates a single full-width primary CTA.
   ///
   /// [onPrimary] null disables the button (e.g. an incomplete form). [primary]
-  /// chooses the emphasis (defaults to the rose primary).
+  /// chooses the emphasis (defaults to the indigo primary).
   const AssenBottomCta({
     required this.primaryLabel,
     required this.onPrimary,

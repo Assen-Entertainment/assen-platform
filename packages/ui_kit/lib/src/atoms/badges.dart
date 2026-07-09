@@ -8,8 +8,9 @@ import 'package:flutter/material.dart';
 /// surface-only — tokens.md §1). Cast members are assigned one of these hues as
 /// an identity colour (references #11).
 enum AssenBadgeHue {
-  /// 하츠코이 strawberry — the brand key hue.
-  strawberry,
+  /// brand — the indigo brand hue. The default: a neutral, on-brand chip that
+  /// (unlike the old pink `strawberry`) never collides with the error surface.
+  brand,
 
   /// peach.
   peach,
@@ -32,12 +33,13 @@ enum AssenBadgeHue {
 /// Covers the Content/Badge row of `components.md`. Used for tags and category
 /// labels. Fill + text are a single hue's `bg`/`ink` pair, so the contrast is
 /// always AA (each ink is chosen for ≥4.5:1 on its bg — tokens.md §1). Solid
-/// fill, no gradient.
+/// fill only — the sanctioned brand gradient (AssenGradients.brand) is bounded
+/// to hero/cover/lockup/login surfaces (tokens.md exception 2026-07-09).
 class AssenBadge extends StatelessWidget {
   /// Creates a badge labelled [label] tinted with [hue].
   const AssenBadge({
     required this.label,
-    this.hue = AssenBadgeHue.strawberry,
+    this.hue = AssenBadgeHue.brand,
     super.key,
   });
 
@@ -76,11 +78,7 @@ class AssenBadge extends StatelessWidget {
 
   (Color, Color, Color) _palette(AssenColors c) {
     return switch (hue) {
-      AssenBadgeHue.strawberry => (
-        c.pinkBg,
-        c.pinkInk,
-        c.pinkInk,
-      ),
+      AssenBadgeHue.brand => (c.indigo100, c.indigoInk, c.indigoInk),
       AssenBadgeHue.peach => (c.violetBg, c.violetInk, c.violetInk),
       AssenBadgeHue.lemon => (c.creamBg, c.creamInk, c.creamInk),
       AssenBadgeHue.matcha => (c.mintBg, c.mintInk, c.mintInk),
@@ -93,7 +91,7 @@ class AssenBadge extends StatelessWidget {
 /// A numeric notification badge (`숫자 99+` / dot).
 ///
 /// Covers the Content/CountBadge row of `components.md` — tab and notification
-/// counters. Renders a small rose pill with the count; when [count] exceeds
+/// counters. Renders a small indigo pill with the count; when [count] exceeds
 /// [max] it shows "max+" (e.g. "99+"). A zero count renders a bare dot, useful
 /// for "unread, count unknown" indicators.
 class AssenCountBadge extends StatelessWidget {

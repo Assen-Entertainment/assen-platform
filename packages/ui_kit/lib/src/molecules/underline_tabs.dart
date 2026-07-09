@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 ///
 /// Covers the Navigation/UnderlineTabs row of `components.md` — the cast and
 /// event list filters that can overflow the screen width. Tabs scroll
-/// horizontally; the selected tab is inked in `ink.900` with a rose underline
+/// horizontally; the selected tab is inked in `ink.900` with a indigo underline
 /// indicator, the rest sit in secondary ink. The active state reads from both
 /// weight and the underline, not colour alone.
 ///
@@ -51,7 +51,7 @@ class AssenUnderlineTabs extends StatelessWidget {
   }
 }
 
-/// One tab — inked label over a rose underline when selected.
+/// One tab — inked label over a indigo underline when selected.
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.label,

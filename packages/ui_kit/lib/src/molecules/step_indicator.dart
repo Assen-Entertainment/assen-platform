@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 /// Covers the Navigation/StepIndicator row of `components.md` — the signup and
 /// reservation flows, and specifically the Korean identity-verification flow
 /// (약관 → 통신사 → 번호 → OTP → 완료, convention #5). Renders [count] nodes joined
-/// by connectors: completed nodes are filled rose with a check, the current
-/// node is an outlined rose ring, and upcoming nodes are muted ink dots. The
+/// by connectors: completed nodes are filled indigo with a check, the current
+/// node is an outlined indigo ring, and upcoming nodes are muted ink dots. The
 /// progression reads by fill and shape, never by colour alone.
 class AssenStepIndicator extends StatelessWidget {
   /// Creates an indicator with [count] steps and [currentStep] active

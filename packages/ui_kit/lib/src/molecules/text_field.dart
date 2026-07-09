@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 ///
 /// Covers the Inputs/TextField row of `components.md` and replaces the
 /// deprecated `InputField`. Composes Flutter's [TextField] with the design
-/// system's ink ramp and rose action anchor: the border is the ink ramp at
-/// rest, the rose anchor when focused, and `red.main` when [errorText] is set.
+/// system's ink ramp and indigo action anchor: the border is the ink ramp at
+/// rest, the indigo anchor when focused, and `red.main` when [errorText] is
+/// set.
 /// Disabled (`enabled: false`) mutes to the ink ramp — it never goes darker
 /// than the resting state (tokens.md §1 disabled = muted, not darker).
 ///

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// A linear progress bar (스탬프·목표 진행).
 ///
 /// Covers the Feedback/ProgressBar row of `components.md`. The track is a
-/// subtle pastel rail and the fill is the solid rose anchor; progress is a
+/// subtle pastel rail and the fill is the solid indigo anchor; progress is a
 /// 0–1 fraction so callers express "n of m" by dividing. Rounded ends keep it
 /// soft. Solid fill, no gradient.
 class AssenProgressBar extends StatelessWidget {
@@ -41,7 +41,7 @@ class AssenProgressBar extends StatelessWidget {
 /// Covers the Feedback/ProgressDonut row of `components.md`. Drawn with a
 /// [CustomPainter] as a ring (an explicit inner radius, not a filled pie) so it
 /// reads as the Japanese membership "donut" rather than a clock. The remaining
-/// arc is a subtle pastel track; the completed arc is the solid rose anchor.
+/// arc is a subtle pastel track; the completed arc is the solid indigo anchor.
 /// An optional [center] widget (e.g. "3/8") sits in the hole.
 class AssenProgressDonut extends StatelessWidget {
   /// Creates a donut filled to [value] (clamped to 0..1).
@@ -136,7 +136,7 @@ class _DonutPainter extends CustomPainter {
 /// A carousel page indicator (dots).
 ///
 /// Covers the Navigation/PageIndicator row of `components.md` — banner
-/// carousels. The active dot is the solid rose anchor and slightly wider; the
+/// carousels. The active dot is the solid indigo anchor and slightly wider; the
 /// rest are ink-ramp dots, so the current page reads by both size and colour.
 class AssenPageIndicator extends StatelessWidget {
   /// Creates an indicator for [count] pages with [activeIndex] highlighted.

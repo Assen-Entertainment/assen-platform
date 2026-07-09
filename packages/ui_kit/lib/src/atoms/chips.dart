@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 ///
 /// Covers the Inputs/FilterChip row of `components.md` — collection filters and
 /// the 출근표 (schedule) date picker, and is reused for PartySizeChip via the
-/// [label]. Selected uses a strawberry pastel fill with strawberry ink text
-/// (pastels are surface-only; text is the hue's ink — tokens.md §1); unselected
-/// is an outlined cream surface. No gradients — solid fills only.
+/// [label]. Selected uses the indigo container fill with indigo ink text
+/// (containers are surface-only; text is the ink step — tokens.md §1);
+/// unselected is an outlined neutral surface. Solid fills only — the sanctioned
+/// brand gradient is bounded to hero/cover/lockup/login (tokens.md 2026-07-09).
 class AssenFilterChip extends StatelessWidget {
   /// Creates a filter chip labelled [label].
   ///
@@ -121,7 +122,7 @@ enum AssenTimeSlotState {
 /// Covers the Domain/TimeSlotChip row of `components.md`. The three states are
 /// distinct in more than colour: [AssenTimeSlotState.full] adds a strikethrough
 /// so a closed slot is unmistakable, and [AssenTimeSlotState.selected] fills
-/// with the solid rose anchor. Tap is ignored unless the slot is available.
+/// with the solid indigo anchor. Tap is ignored unless the slot is available.
 class AssenTimeSlotChip extends StatelessWidget {
   /// Creates a time-slot chip showing [label] (e.g. "14:30") in [state].
   ///

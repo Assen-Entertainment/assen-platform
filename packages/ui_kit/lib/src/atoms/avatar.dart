@@ -137,9 +137,9 @@ class AssenAvatar extends StatelessWidget {
   };
 
   Color _fallbackBg(AssenColors c) {
-    if (hue == null) return c.pinkBg;
+    if (hue == null) return c.indigo100;
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.pinkBg,
+      AssenBadgeHue.brand => c.indigo100,
       AssenBadgeHue.peach => c.violetBg,
       AssenBadgeHue.lemon => c.creamBg,
       AssenBadgeHue.matcha => c.mintBg,
@@ -149,9 +149,9 @@ class AssenAvatar extends StatelessWidget {
   }
 
   Color _fallbackInk(AssenColors c) {
-    if (hue == null) return c.pinkInk;
+    if (hue == null) return c.indigoInk;
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.pinkInk,
+      AssenBadgeHue.brand => c.indigoInk,
       AssenBadgeHue.peach => c.violetInk,
       AssenBadgeHue.lemon => c.creamInk,
       AssenBadgeHue.matcha => c.mintInk,
@@ -162,7 +162,7 @@ class AssenAvatar extends StatelessWidget {
 
   Color _ringColor(AssenColors c) {
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.pinkInk,
+      AssenBadgeHue.brand => c.indigoInk,
       AssenBadgeHue.peach => c.violetInk,
       AssenBadgeHue.lemon => c.creamInk,
       AssenBadgeHue.matcha => c.mintInk,

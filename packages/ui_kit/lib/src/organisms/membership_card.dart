@@ -9,8 +9,9 @@ import 'package:ui_kit/src/atoms/icon_button.dart';
 /// darkens" (tokens.md §5, references 금지 #6). Each skin is one pastel hue's
 /// surface/border/ink triple from the token ramp.
 enum AssenMembershipSkin {
-  /// strawberry — 하츠코이 key hue (entry skin).
-  strawberry,
+  /// brand — the indigo brand hue (the default entry skin). Repointed off the
+  /// old pink `strawberry`, which read as the error surface.
+  brand,
 
   /// sky.
   sky,
@@ -27,7 +28,8 @@ enum AssenMembershipSkin {
 /// header (logo + tier), the main field (member [name] + [avatar]), up to four
 /// secondary fields (here the [memberNumber] + [points]) and a QR entry button
 /// wired to [onShowQr]. The [skin] tints the whole card via a single pastel hue
-/// (solid colour fields only — no gradient, tokens.md §1).
+/// (solid colour fields only; the sanctioned brand gradient is bounded to
+/// hero/cover/lockup/login surfaces — tokens.md exception 2026-07-09).
 class AssenMembershipCard extends StatelessWidget {
   /// Creates a membership card for [name].
   ///
@@ -42,7 +44,7 @@ class AssenMembershipCard extends StatelessWidget {
     required this.tierLabel,
     required this.avatar,
     this.onShowQr,
-    this.skin = AssenMembershipSkin.strawberry,
+    this.skin = AssenMembershipSkin.brand,
     super.key,
   });
 
@@ -175,11 +177,7 @@ class AssenMembershipCard extends StatelessWidget {
 
   (Color, Color, Color) _palette(AssenColors c) {
     return switch (skin) {
-      AssenMembershipSkin.strawberry => (
-        c.pinkBg,
-        c.pinkInk,
-        c.pinkInk,
-      ),
+      AssenMembershipSkin.brand => (c.indigo100, c.indigoInk, c.indigoInk),
       AssenMembershipSkin.sky => (c.skyBg, c.skyInk, c.skyInk),
       AssenMembershipSkin.lavender => (
         c.lavenderBg,

@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 /// Covers the Containment/KeyValueRow row of `components.md` — reservation
 /// detail and POS summary lines. The [label] sits on the leading edge in
 /// secondary ink and the [value] is trailing-aligned. The [emphasis] variant
-/// (e.g. a total amount) renders the value larger in the rose ink so the key
+/// (e.g. a total amount) renders the value larger in the indigo ink so the key
 /// figure stands out without changing layout.
 class AssenKeyValueRow extends StatelessWidget {
   /// Creates a row pairing [label] with [value].
   ///
-  /// Set [emphasis] true for the highlighted variant (larger, rose value),
+  /// Set [emphasis] true for the highlighted variant (larger, indigo value),
   /// typically the final/total line in a summary.
   const AssenKeyValueRow({
     required this.label,

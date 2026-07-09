@@ -97,8 +97,8 @@
   },
   "typography": {
     "fontFamily": {
-      "display": { "$type": "fontFamily", "$value": ["Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "sans-serif"] },
-      "body": { "$type": "fontFamily", "$value": ["Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "sans-serif"] }
+      "display": { "$type": "fontFamily", "$value": ["Pretendard", "Apple SD Gothic Neo", "sans-serif"], "$description": "2026-07-09: 'Pretendard Variable' 제거 — 번들된 정적 Pretendard(ui_kit/pubspec.yaml)만 존재해 Variable은 조용히 폴백됐음. 번들 페이스로 고정." },
+      "body": { "$type": "fontFamily", "$value": ["Pretendard", "Apple SD Gothic Neo", "sans-serif"] }
     },
     "scale": {
       "displayXL": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.display}", "fontSize": { "value": 32, "unit": "px" }, "lineHeight": 1.25, "fontWeight": 700 }, "$description": "히어로(리뷰 2026-06-28: 모바일 임팩트). 온보딩/스플래시 등 브랜드 표면 한정" },

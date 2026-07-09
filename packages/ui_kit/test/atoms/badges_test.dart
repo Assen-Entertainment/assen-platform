@@ -98,7 +98,7 @@ void main() {
     builder: () => GoldenTestGroup(
       children: [
         GoldenTestScenario(
-          name: 'badge-strawberry',
+          name: 'badge-brand',
           child: const AssenBadge(label: 'NEW'),
         ),
         GoldenTestScenario(

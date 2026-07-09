@@ -99,7 +99,9 @@ void main() {
 
     // Redirected back to discovery (home) — the login wall never renders.
     expect(find.text('휴대폰 번호로 시작하기'), findsNothing);
-    expect(find.text('둘러보기'), findsOneWidget); // discovery app-bar title
+    // The discovery app bar now carries the brand lockup ('Assen' wordmark) in
+    // place of the plain "둘러보기" title (the title survives as the a11y header).
+    expect(find.text('Assen'), findsWidgets);
   });
 
   testWidgets('a /creator/:handle deep link opens the creator profile', (

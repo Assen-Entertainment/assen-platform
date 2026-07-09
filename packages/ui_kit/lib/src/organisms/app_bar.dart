@@ -6,7 +6,7 @@ import 'package:ui_kit/src/atoms/icon_button.dart';
 /// The top app bar (`기본형 — 센터 타이틀`).
 ///
 /// Covers the Navigation/AppBar row of `components.md`. A centre-titled bar that
-/// sits on the cream container surface with an optional back affordance and a
+/// sits on the neutral container surface with an optional back affordance and a
 /// trailing action slot. It wraps Material's [AppBar] so the colours, the 44pt
 /// touch targets and the centred title come from the Assen tokens rather than
 /// each screen re-theming the frame. Implements [PreferredSizeWidget] so it
@@ -20,14 +20,22 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// hairline bottom border for screens that scroll under the bar.
   const AssenAppBar({
     required this.title,
+    this.titleWidget,
     this.onBack,
     this.actions = const [],
     this.showDivider = false,
     super.key,
   });
 
-  /// The centred screen title.
+  /// The centred screen title. Always set — it is the accessibility header even
+  /// when [titleWidget] paints something else in its place.
   final String title;
+
+  /// Optional widget shown in place of the [title] text (e.g. the brand
+  /// AssenLogo on the discovery home bar). [title] is still announced to
+  /// screen readers as the header, so the visual lockup does not steal the
+  /// screen's semantic name.
+  final Widget? titleWidget;
 
   /// Optional back handler; when set, a leading back button is shown.
   final VoidCallback? onBack;
@@ -61,14 +69,17 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
       title: Semantics(
         header: true,
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: TypographyTokens.titleLSize,
-            fontWeight: FontWeight.w700,
-            color: colors.ink900,
-          ),
-        ),
+        label: titleWidget == null ? null : title,
+        child:
+            titleWidget ??
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: TypographyTokens.titleLSize,
+                fontWeight: FontWeight.w700,
+                color: colors.ink900,
+              ),
+            ),
       ),
       actions: actions,
       bottom: showDivider
@@ -112,7 +123,7 @@ class AssenTabItem {
 ///
 /// Covers the Navigation/TabBar row of `components.md`. A domain-neutral bottom
 /// nav: the host app supplies its own destinations. The active tab is shown
-/// with the rose action colour and a filled glyph; inactive tabs use the
+/// with the indigo action colour and a filled glyph; inactive tabs use the
 /// secondary ink. It wraps Material [BottomNavigationBar] so every tab keeps a
 /// 44pt+ target and reads its colours from the tokens. Unread badges ride on
 /// top via [AssenCountBadge].

@@ -36,7 +36,7 @@ void main() {
             memberNumber: '0000 1234 5678',
             points: '1,280',
             tierLabel: '하츠코이',
-            avatar: AssenAvatar(name: '미오', hue: AssenBadgeHue.strawberry),
+            avatar: AssenAvatar(name: '미오', hue: AssenBadgeHue.brand),
           ),
         ),
       );
@@ -46,7 +46,7 @@ void main() {
       expect(find.text('하츠코이'), findsOneWidget);
     });
 
-    testWidgets('strawberry skin fills with the strawberry surface', (
+    testWidgets('the default brand skin fills with the indigo surface', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -60,7 +60,7 @@ void main() {
           ),
         ),
       );
-      expect(_surfaceOf(tester), RefColors.pinkBg);
+      expect(_surfaceOf(tester), RefColors.indigo100);
     });
 
     testWidgets('sky skin fills with the sky surface', (tester) async {
@@ -121,7 +121,7 @@ void main() {
     builder: () => GoldenTestGroup(
       children: [
         GoldenTestScenario(
-          name: 'strawberry',
+          name: 'brand',
           child: SizedBox(
             width: 340,
             child: AssenMembershipCard(
@@ -131,7 +131,7 @@ void main() {
               tierLabel: '하츠코이',
               avatar: const AssenAvatar(
                 name: '미오',
-                hue: AssenBadgeHue.strawberry,
+                hue: AssenBadgeHue.brand,
               ),
               onShowQr: () {},
             ),

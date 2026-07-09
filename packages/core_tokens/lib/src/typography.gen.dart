@@ -10,11 +10,16 @@ import 'package:flutter/painting.dart';
 /// size read `*Size`; new code can take the whole composed style.
 abstract final class TypographyTokens {
   /// typography.fontFamily.display — primary face.
-  static const String displayFontFamily = 'Pretendard Variable';
+  ///
+  /// Pinned to the bundled static 'Pretendard' (ui_kit/pubspec.yaml). The source
+  /// listed 'Pretendard Variable' first, but no Variable face is bundled, so the
+  /// display scale silently fell back; using the bundled family makes the
+  /// display type actually render Pretendard (docs/design/tokens.v2.json updated
+  /// to match — 2026-07-09).
+  static const String displayFontFamily = 'Pretendard';
 
   /// typography.fontFamily.display — fallback stack (after the primary).
   static const List<String> displayFontFamilyFallback = [
-    'Pretendard',
     'Apple SD Gothic Neo',
     'sans-serif',
   ];

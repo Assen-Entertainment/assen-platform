@@ -91,7 +91,12 @@ class _CreatorProfile extends StatelessWidget {
         AssenCoverHeader(
           title: creator.displayName,
           subtitle: subtitle,
-          accent: accent.accentContainer,
+          // Mirrors web `creator-home-header`: a creator with their own accent
+          // gets that wash; a creator without one gets the sanctioned brand
+          // gradient hero (tokens.md 2026-07-09 cover exception). A real cover
+          // image always wins over both.
+          accent: creator.accentColor == null ? null : accent.accentContainer,
+          gradient: creator.accentColor == null ? AssenGradients.brand : null,
           coverImage: creator.coverUrl == null
               ? null
               : CachedNetworkImageProvider(creator.coverUrl!),

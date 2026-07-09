@@ -71,7 +71,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
         padding: const EdgeInsets.all(SpacingTokens.screenMargin),
         children: [
           _Section(
-            title: 'MembershipCard (간판 — strawberry/sky/lavender skin)',
+            title: 'MembershipCard (간판 — brand/sky/lavender skin)',
             child: Column(
               children: [
                 AssenMembershipCard(
@@ -81,7 +81,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
                   tierLabel: '하츠코이',
                   avatar: const AssenAvatar(
                     name: '미오',
-                    hue: AssenBadgeHue.strawberry,
+                    hue: AssenBadgeHue.brand,
                   ),
                   onShowQr: () {},
                 ),
@@ -160,7 +160,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
               verified: true,
               avatar: const AssenAvatar(
                 name: '미오',
-                hue: AssenBadgeHue.strawberry,
+                hue: AssenBadgeHue.brand,
               ),
               body: '오늘 방송 고마웠어요! 다음 주에 또 만나요 🍓',
               likeCount: 128,

@@ -17,7 +17,7 @@ class AssenTimelineItem extends StatelessWidget {
   ///
   /// [isFirst]/[isLast] control rail trimming at the ends of a list. [trailing]
   /// is an optional trailing slot widget; [accent] optionally recolours the
-  /// node dot (defaults to the rose anchor).
+  /// node dot (defaults to the indigo anchor).
   const AssenTimelineItem({
     required this.date,
     required this.title,
@@ -48,7 +48,7 @@ class AssenTimelineItem extends StatelessWidget {
   final bool isLast;
 
   /// Optional node-dot colour override (e.g. a cast identity colour). Defaults
-  /// to the rose action anchor.
+  /// to the indigo action anchor.
   final Color? accent;
 
   @override

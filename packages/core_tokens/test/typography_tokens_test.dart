@@ -34,14 +34,14 @@ void main() {
 
   group('TypographyTokens font families', () {
     test('display leads with Pretendard, falls back through the stack', () {
-      // G012: display now sources from docs/design/tokens.v2.json (Pretendard),
-      // not the dead tokens.json ("Cafe24 Ssurround"). The primary is the v2
-      // "Pretendard Variable"; the bundled static Pretendard (ui_kit/fonts) is
-      // reached via the fallback list.
-      expect(TypographyTokens.displayFontFamily, 'Pretendard Variable');
+      // display sources from docs/design/tokens.v2.json. 2026-07-09: the phantom
+      // "Pretendard Variable" primary was dropped — only the static Pretendard
+      // (ui_kit/fonts) is bundled, so display now leads with that bundled face
+      // and actually renders (previously it silently fell back).
+      expect(TypographyTokens.displayFontFamily, 'Pretendard');
       expect(
         TypographyTokens.displayFontFamilyFallback,
-        const ['Pretendard', 'Apple SD Gothic Neo', 'sans-serif'],
+        const ['Apple SD Gothic Neo', 'sans-serif'],
       );
     });
 

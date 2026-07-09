@@ -27,9 +27,9 @@ const double _aaUi = 3;
 /// hover surface).
 ///
 /// Apply it to creator-scoped chrome only (profile cover, follow CTA, verified
-/// tint); global app chrome keeps the brand rose. An absent or unparseable base
-/// falls back to a caller-supplied brand colour, so a bad `accent_color` never
-/// throws or renders an invisible accent.
+/// tint); global app chrome keeps the brand indigo. An absent or unparseable
+/// base falls back to a caller-supplied brand colour, so a bad `accent_color`
+/// never throws or renders an invisible accent.
 @immutable
 class CreatorAccent {
   /// Creates a resolved accent set (usually via [CreatorAccent.fromHex]).
@@ -44,7 +44,7 @@ class CreatorAccent {
   ///
   /// [hex] accepts `#RGB`, `RGB`, `#RRGGBB` or `RRGGBB` (case-insensitive); any
   /// other value — including null or a malformed string — degrades to
-  /// [fallback] (pass the brand rose) so the result is always accessible.
+  /// [fallback] (pass the brand indigo) so the result is always accessible.
   /// [surface] is the background the accent sits on (white/cream in this app).
   factory CreatorAccent.fromHex(
     String? hex, {

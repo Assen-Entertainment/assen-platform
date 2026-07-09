@@ -255,45 +255,109 @@ class _PhoneStep extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          '휴대폰 번호로 시작하기',
-          style: TextStyle(
-            fontSize: TypographyTokens.headlineSize,
-            fontWeight: FontWeight.w800,
-            color: colors.ink900,
-          ),
-        ),
-        const SizedBox(height: SpacingTokens.s2),
-        Text(
-          '인증번호를 보내드릴게요. 소셜 로그인은 준비 중이에요.',
-          style: TextStyle(
-            fontSize: TypographyTokens.bodyMSize,
-            color: colors.ink600,
-          ),
-        ),
+        const AssenReveal(child: _BrandFrontDoor()),
         const SizedBox(height: SpacingTokens.s6),
-        AssenTextField(
-          label: '휴대폰 번호',
-          controller: controller,
-          hintText: '010-1234-5678',
-          keyboardType: TextInputType.phone,
-          errorText: errorText,
-          prefixIcon: Icons.phone_outlined,
-        ),
-        const SizedBox(height: SpacingTokens.s6),
-        AssenButton(
-          label: '인증번호 받기',
-          expand: true,
-          onPressed: busy ? null : onSubmit,
-        ),
-        const SizedBox(height: SpacingTokens.s2),
-        AssenButton(
-          label: '게스트로 둘러보기',
-          style: AssenButtonStyle.ghost,
-          expand: true,
-          onPressed: busy ? null : onGuest,
+        AssenReveal(
+          index: 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '휴대폰 번호로 시작하기',
+                style: TextStyle(
+                  fontSize: TypographyTokens.headlineSize,
+                  fontWeight: FontWeight.w800,
+                  color: colors.ink900,
+                ),
+              ),
+              const SizedBox(height: SpacingTokens.s2),
+              Text(
+                '인증번호를 보내드릴게요. 소셜 로그인은 준비 중이에요.',
+                style: TextStyle(
+                  fontSize: TypographyTokens.bodyMSize,
+                  color: colors.ink600,
+                ),
+              ),
+              const SizedBox(height: SpacingTokens.s6),
+              AssenTextField(
+                label: '휴대폰 번호',
+                controller: controller,
+                hintText: '010-1234-5678',
+                keyboardType: TextInputType.phone,
+                errorText: errorText,
+                prefixIcon: Icons.phone_outlined,
+              ),
+              const SizedBox(height: SpacingTokens.s6),
+              AssenButton(
+                label: '인증번호 받기',
+                expand: true,
+                onPressed: busy ? null : onSubmit,
+              ),
+              const SizedBox(height: SpacingTokens.s2),
+              AssenButton(
+                label: '게스트로 둘러보기',
+                style: AssenButtonStyle.ghost,
+                expand: true,
+                onPressed: busy ? null : onGuest,
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// The login brand front-door — the mobile analogue of the web `AuthShell`.
+///
+/// A gradient brand panel carrying the white [AssenLogo] lockup and a short
+/// tagline, shown on the first sign-in step. The gradient is the sanctioned
+/// tokens.md 2026-07-09 exception (login surface); it adds no logic to the
+/// OTP/mock flow. White copy reads AA on [AssenGradients.brand] at every stop.
+class _BrandFrontDoor extends StatelessWidget {
+  const _BrandFrontDoor();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        vertical: SpacingTokens.s8,
+        horizontal: SpacingTokens.s5,
+      ),
+      decoration: const BoxDecoration(
+        gradient: AssenGradients.brand,
+        borderRadius: BorderRadius.all(Radius.circular(RadiusTokens.xl)),
+        boxShadow: [
+          BoxShadow(
+            color: ElevationTokens.level1Color,
+            offset: Offset(
+              ElevationTokens.level1OffsetX,
+              ElevationTokens.level1OffsetY,
+            ),
+            blurRadius: ElevationTokens.level1Blur,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const AssenLogo(
+            size: AssenLogoSize.lg,
+            mono: true,
+            color: AssenGradients.onBrand,
+          ),
+          const SizedBox(height: SpacingTokens.s4),
+          Text(
+            '크리에이터를 응원하는 가장 가까운 방법',
+            textAlign: TextAlign.center,
+            style: TypographyTokens.bodyM.copyWith(
+              color: AssenGradients.onBrand,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

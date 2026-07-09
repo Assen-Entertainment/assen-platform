@@ -95,18 +95,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: SpacingTokens.s2,
-                  vertical: SpacingTokens.s1,
-                ),
-                child: AssenButton(
-                  label: '건너뛰기',
-                  style: AssenButtonStyle.ghost,
-                  onPressed: _finish,
-                ),
+            // Brand header: the Assen lockup anchors the intro on the
+            // warm-paper canvas (a light front-door), with the skip trailing.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                SpacingTokens.s4,
+                SpacingTokens.s2,
+                SpacingTokens.s2,
+                SpacingTokens.s1,
+              ),
+              child: Row(
+                children: [
+                  const AssenLogo(size: AssenLogoSize.sm),
+                  const Spacer(),
+                  AssenButton(
+                    label: '건너뛰기',
+                    style: AssenButtonStyle.ghost,
+                    onPressed: _finish,
+                  ),
+                ],
               ),
             ),
             Expanded(

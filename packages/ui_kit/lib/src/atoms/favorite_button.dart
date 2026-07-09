@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// A heart toggle for marking a cast member as 최애 (favourite).
 ///
 /// Covers the Domain/FavoriteButton row of `components.md` (`on / off` toggle).
-/// The two states are visually distinct: filled rose heart when on, outlined
+/// The two states are visually distinct: filled indigo heart when on, outlined
 /// ink heart when off — never a colour-only difference, so the state is legible
 /// without relying on hue.
 ///

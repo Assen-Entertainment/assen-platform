@@ -103,7 +103,7 @@ class AssenAgreementCell extends StatelessWidget {
   }
 }
 
-/// The `[필수]` / `[선택]` prefix tag. Required uses the rose ink (it gates the
+/// The `[필수]` / `[선택]` prefix tag. Required uses the indigo ink (it gates the
 /// form); optional uses the muted ink ramp.
 class _Tag extends StatelessWidget {
   const _Tag({required this.required, required this.colors});

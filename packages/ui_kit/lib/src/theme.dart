@@ -26,7 +26,10 @@ class AssenTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: AssenColorScheme.light,
-      scaffoldBackgroundColor: RefColors.white,
+      // Warm-paper canvas (mirrors web `--canvas`) so the white design-system
+      // cards float with an editorial rhythm instead of blending into a pure
+      // white background. Cards, app bar and bottom nav stay white/neutral.
+      scaffoldBackgroundColor: AssenSurfaces.paper,
       extensions: const [AssenColors(), AssenSpacing(), AssenRadius()],
     );
   }

@@ -13,8 +13,9 @@ import 'package:flutter/material.dart';
 class AssenCoverHeader extends StatelessWidget {
   /// Creates a cover header titled [title].
   ///
-  /// [coverImage] paints the banner; when null the banner is an [accent] wash
-  /// (or the cream surface if [accent] is also null). [avatar] overlaps the
+  /// [coverImage] paints the banner; when null the banner is the sanctioned
+  /// [gradient] (if set), else an [accent] wash, else the neutral surface.
+  /// [avatar] overlaps the
   /// banner bottom; [badge] renders inline after the title; [subtitle] sits
   /// under it. [coverHeight] is the banner height.
   const AssenCoverHeader({
@@ -25,6 +26,7 @@ class AssenCoverHeader extends StatelessWidget {
     this.coverImage,
     this.coverSemanticLabel,
     this.accent,
+    this.gradient,
     this.coverHeight = 140,
     super.key,
   });
@@ -54,6 +56,13 @@ class AssenCoverHeader extends StatelessWidget {
   /// Optional accent colour for the banner fallback wash.
   final Color? accent;
 
+  /// Optional gradient for the banner fallback (used when there is no
+  /// [coverImage]). A cover is one of the surfaces the tokens.md 2026-07-09
+  /// exception sanctions for a gradient (pass [AssenGradients.brand] for a
+  /// branded hero fallback); it takes precedence over [accent]. Everywhere
+  /// without a cover image otherwise stays a solid [accent]/neutral wash.
+  final Gradient? gradient;
+
   /// The banner height in logical pixels.
   final double coverHeight;
 
@@ -61,14 +70,20 @@ class AssenCoverHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
+    // A cover image wins; otherwise the sanctioned [gradient] (if any) paints a
+    // branded hero, falling back to the solid [accent]/neutral wash.
+    final hasImage = coverImage != null;
     Widget cover = SizedBox(
       height: coverHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: accent ?? colors.neutral200,
-          image: coverImage == null
+          color: hasImage || gradient != null
               ? null
-              : DecorationImage(image: coverImage!, fit: BoxFit.cover),
+              : (accent ?? colors.neutral200),
+          gradient: hasImage ? null : gradient,
+          image: hasImage
+              ? DecorationImage(image: coverImage!, fit: BoxFit.cover)
+              : null,
         ),
       ),
     );

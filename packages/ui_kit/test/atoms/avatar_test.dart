@@ -82,7 +82,7 @@ void main() {
       children: [
         GoldenTestScenario(
           name: 'initial-fallback',
-          child: const AssenAvatar(name: '하나', hue: AssenBadgeHue.strawberry),
+          child: const AssenAvatar(name: '하나', hue: AssenBadgeHue.brand),
         ),
         GoldenTestScenario(
           name: 'online-large',

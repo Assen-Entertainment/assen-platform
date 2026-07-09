@@ -9,6 +9,8 @@
 /// instead (see ADR-0004 and docs/design/tokens.md §3/§7).
 library;
 
+// Hand-written brand-expression tokens (paper canvas + sanctioned gradient).
+export 'src/brand.dart';
 // Hand-written semantic mapping (NOT generated — see file header).
 export 'src/color_scheme.dart';
 // Generated raw primitives (DO NOT EDIT — regenerate from tokens.json).

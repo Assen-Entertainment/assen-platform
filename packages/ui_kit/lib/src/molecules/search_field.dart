@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 /// text field it is a single rounded (`radius.full`) field with a search glyph
 /// a clear (✕) affordance once there is text — the standard list/collection
 /// search affordance. The resting border is the ink ramp; focus thickens it to
-/// the rose action anchor. Solid fills only (tokens.md — no gradient).
+/// the indigo action anchor. Solid fills only (tokens.md — no gradient).
 class AssenSearchField extends StatelessWidget {
   /// Creates a search field.
   ///

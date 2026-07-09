@@ -14,7 +14,10 @@ import 'package:ui_kit/ui_kit.dart';
 /// ([discoveryControllerProvider] → [DiscoveryController] → Dio). It renders
 /// the three async states through ui_kit only — skeletons while loading,
 /// [AssenErrorState] on failure (with retry), and [AssenEmptyState] when the
-/// feed is empty — so no colour or layout is hard-coded here.
+/// feed is empty. The brand front is carried by the [AssenLogo] lockup in the
+/// app bar and a single gradient hero band (the sanctioned tokens.md
+/// exception), and the feed reveals in with a staggered [AssenReveal]
+/// (reduced-motion safe).
 class DiscoveryScreen extends ConsumerWidget {
   /// Creates the discovery screen.
   const DiscoveryScreen({super.key});
@@ -23,7 +26,12 @@ class DiscoveryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(discoveryControllerProvider);
     return Scaffold(
-      appBar: const AssenAppBar(title: '둘러보기'),
+      // The brand lockup replaces the bare "둘러보기" title on the home bar
+      // (mirroring the web shell's logo); the title stays as the a11y header.
+      appBar: const AssenAppBar(
+        title: '둘러보기',
+        titleWidget: AssenLogo(size: AssenLogoSize.sm),
+      ),
       body: feed.when(
         loading: () => const _DiscoverySkeleton(),
         error: (error, stackTrace) => AssenErrorState(
@@ -34,12 +42,13 @@ class DiscoveryScreen extends ConsumerWidget {
         ),
         // The 피드·스토어 shortcuts must stay reachable regardless of whether any
         // creators exist, so they are shown in both branches: inline here for
-        // the empty feed, and at index 0 of [_CreatorList] for the populated
-        // feed.
+        // the empty feed, and after the hero in [_CreatorList] for the
+        // populated feed.
         data: (creators) => creators.isEmpty
             ? Column(
                 children: [
-                  const _DiscoveryShortcuts(),
+                  const AssenReveal(child: _DiscoveryHero()),
+                  const AssenReveal(index: 1, child: _DiscoveryShortcuts()),
                   Expanded(
                     child: AssenEmptyState(
                       title: '아직 크리에이터가 없어요',
@@ -58,8 +67,8 @@ class DiscoveryScreen extends ConsumerWidget {
   }
 }
 
-/// The loaded feed: the browse shortcuts (피드 · 스토어) over a tappable list of
-/// creators.
+/// The loaded feed: a gradient brand hero + the browse shortcuts (피드 · 스토어)
+/// over a tappable, staggered-in list of creators.
 class _CreatorList extends StatelessWidget {
   const _CreatorList({required this.creators});
 
@@ -68,27 +77,91 @@ class _CreatorList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s2),
-      // Index 0 is the shortcuts block; the rest are creators (offset by one).
-      itemCount: creators.length + 1,
+      padding: const EdgeInsets.only(bottom: SpacingTokens.s2),
+      // Index 0 is the hero, index 1 the shortcuts block; the rest are creators
+      // (offset by two).
+      itemCount: creators.length + 2,
       itemBuilder: (context, index) {
-        if (index == 0) return const _DiscoveryShortcuts();
-        final creator = creators[index - 1];
-        return AssenListItem(
-          title: creator.displayName,
-          subtitle:
-              '@${creator.handle}'
-              '${creator.category == null ? '' : ' · ${creator.category}'}',
-          leading: AssenAvatar(
-            name: creator.displayName,
-            imageProvider: creator.avatarUrl == null
-                ? null
-                : CachedNetworkImageProvider(creator.avatarUrl!),
-            semanticLabel: '${creator.displayName} 프로필 사진',
+        if (index == 0) {
+          return const AssenReveal(child: _DiscoveryHero());
+        }
+        if (index == 1) {
+          return const AssenReveal(index: 1, child: _DiscoveryShortcuts());
+        }
+        final creator = creators[index - 2];
+        return AssenReveal(
+          index: index,
+          child: AssenListItem(
+            title: creator.displayName,
+            subtitle:
+                '@${creator.handle}'
+                '${creator.category == null ? '' : ' · ${creator.category}'}',
+            leading: AssenAvatar(
+              name: creator.displayName,
+              imageProvider: creator.avatarUrl == null
+                  ? null
+                  : CachedNetworkImageProvider(creator.avatarUrl!),
+              semanticLabel: '${creator.displayName} 프로필 사진',
+            ),
+            onTap: () => context.go(RoutePaths.creator(creator.handle)),
           ),
-          onTap: () => context.go(RoutePaths.creator(creator.handle)),
         );
       },
+    );
+  }
+}
+
+/// The discovery brand hero — a single gradient welcome band.
+///
+/// The one discovery gradient moment sanctioned by the tokens.md 2026-07-09
+/// exception (hero surface). White copy reads AA on the indigo→violet
+/// [AssenGradients.brand] at every stop.
+class _DiscoveryHero extends StatelessWidget {
+  const _DiscoveryHero();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        SpacingTokens.s4,
+        SpacingTokens.s4,
+        SpacingTokens.s4,
+        SpacingTokens.s2,
+      ),
+      padding: const EdgeInsets.all(SpacingTokens.s5),
+      decoration: const BoxDecoration(
+        gradient: AssenGradients.brand,
+        borderRadius: BorderRadius.all(Radius.circular(RadiusTokens.xl)),
+        boxShadow: [
+          BoxShadow(
+            color: ElevationTokens.level1Color,
+            offset: Offset(
+              ElevationTokens.level1OffsetX,
+              ElevationTokens.level1OffsetY,
+            ),
+            blurRadius: ElevationTokens.level1Blur,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '오늘도 최애를 응원해요',
+            style: TypographyTokens.headline.copyWith(
+              color: AssenGradients.onBrand,
+            ),
+          ),
+          const SizedBox(height: SpacingTokens.s2),
+          Text(
+            '팔로우한 크리에이터의 새 소식과 스토어를 한곳에서 만나보세요.',
+            style: TypographyTokens.bodyM.copyWith(
+              color: AssenGradients.onBrand,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
