@@ -13,9 +13,12 @@ import { otpFor } from "./helpers/otp";
 
 const CREATOR_PHONE = "01000000002"; // seed_demo 데모 크리에이터(010-0000-0002) — stellar 오너.
 
-// 1x1 투명 PNG(매직바이트 유효·비스크립터블) — 서버 업로드 검증(415/422)을 통과하는 최소 이미지.
+// 1x1 PNG — Pillow가 생성한 **실제로 디코딩되는** 최소 이미지. 서버의 content-type/매직바이트
+// 게이트(415/422)와 ASS-271 Pillow decode-verify(청크 CRC·구조 검사)를 모두 통과한다.
+// (이전 리터럴은 IDAT 청크 CRC가 깨진 손상 PNG였다 — magic-byte sniff만 통과해 verify 도입
+//  전까지만 우연히 통과했고, ASS-271 이후 서버가 422로 정당하게 거부해 이 저니가 깨졌었다.)
 const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
   "base64",
 );
 

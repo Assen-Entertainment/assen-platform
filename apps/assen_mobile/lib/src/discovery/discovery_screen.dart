@@ -36,8 +36,7 @@ class DiscoveryScreen extends ConsumerWidget {
       body: AssenAsyncView<List<Creator>>(
         value: feed,
         loading: const _DiscoverySkeleton(),
-        onRetry: () =>
-            ref.read(discoveryControllerProvider.notifier).refresh(),
+        onRetry: () => ref.read(discoveryControllerProvider.notifier).refresh(),
         isEmpty: (creators) => creators.isEmpty,
         // The 피드·스토어 shortcuts must stay reachable regardless of whether any
         // creators exist, so they are shown in both branches: inline here for
