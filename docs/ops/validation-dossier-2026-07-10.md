@@ -158,7 +158,7 @@ curl "http://127.0.0.1:8000/api/creators?sort=popular"      # 기대: 팔로워�
 | `cbf83f9` | 공급망 위생·CI캐시·non-root 이미지·digest핀·Windows dev DX(부트스트랩/닥터·justfile·Trivy SCA/SBOM) | YAML·compose·hadolint·just clean |
 | `15a9cde` | LazyMotion(−45KB)·jsx-a11y 게이트(14위반)·LoadMore·noUncheckedIndexedAccess(13지점) | web tsc/lint/build+예산/vitest 229 |
 | `f848dd8` | 타입 접근자(cast+ignore 64 제거)·머니 구조화로깅·Postgres 동시성테스트 3·throttle +31·ruff migrations 제외 | ruff clean·mypy 286·pytest **821**+동시성 3(PG) |
-| _(B5 Mobile)_ | 진행 중 — 에러매퍼·a11y 3→13·refresh 베이스·픽스처 중앙화·golden CI(Linux) | _(커밋 후 추가)_ |
+| `4e6425a` | B5 Mobile — AsyncView/errorMessageFor·RefreshableAsyncNotifier·nowProvider·a11y 3→13·test_fixtures·golden.yml(CI Linux) | analyze clean·app **134**·ui_kit **189**(골든 skip 유지)·core_tokens 22 |
 
 > **Phase F 회귀 방지 특기**: B3 ruff `--fix`가 생성 마이그레이션 21개를 오염 → **되돌림 + ruff에 `**/migrations/**` 제외 추가**(mypy 미러)로 재발 차단. golden(모바일)은 #31·CI(Linux) 제약으로 **로컬 미생성**, `golden.yml` workflow_dispatch(대표 1클릭)가 Linux 베이스라인 생성.
 
@@ -197,7 +197,7 @@ curl "http://127.0.0.1:8000/api/creators?sort=popular"      # 기대: 팔로워�
 
 ## 7. 진행 중 — 엔지니어링 고도화 배치 (미커밋, 아직 검증 대상 아님)
 
-`caa0f28` 이후, autopilot으로 5개 품질 배치가 실행됐다. **B1·B2·B3·B4는 커밋 완료(§3 Phase F)**, **B5(Mobile+golden CI)만 진행 중**이다.
+`caa0f28` 이후, autopilot으로 5개 품질 배치가 실행됐고 **B1~B5 전부 커밋 완료(§3 Phase F)**. 유일한 인간-게이트 잔여: 모바일 골든 베이스라인은 `.github/workflows/golden.yml`의 `workflow_dispatch`를 대표가 **1회 클릭**(=#31 인간 승인)하면 CI(Linux)가 생성·언스킵·커밋한다.
 - **B1 문서** stale 스윕(PR템플릿 유해정정·API README·피벗 ADR·인덱스·온보딩)
 - **B2 DevOps** 위생·DX(Windows 부트스트랩/닥터·npm ci·CI 캐시·SCA/SBOM·digest핀·non-root)
 - **B3 Backend** 타입 접근자(60 cast 제거)·머니경로 로깅·동시성 테스트·throttle
