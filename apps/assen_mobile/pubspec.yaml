@@ -45,7 +45,7 @@ dependencies:
   # a phone number or any other PII (E6 auth, CONSTRAINTS #26).
   flutter_secure_storage: ^9.2.2
   # Routing: go_router 16.x (declarative routes, deep links, auth-guard redirect).
-  go_router: ^16.0.0
+  go_router: ^17.3.0
   shared_preferences: ^2.5.5
   ui_kit:
     path: ../../packages/ui_kit
