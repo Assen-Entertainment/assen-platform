@@ -1,4 +1,6 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
+import 'package:assen_mobile/src/common/now.dart';
 import 'package:assen_mobile/src/common/relative_time.dart';
 import 'package:assen_mobile/src/notifications/app_notification.dart';
 import 'package:assen_mobile/src/notifications/notifications_controller.dart';
@@ -24,31 +26,34 @@ class NotificationsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(notificationsControllerProvider);
+    final now = ref.watch(nowProvider);
     return Scaffold(
       appBar: const AssenAppBar(title: '알림'),
-      body: feed.when(
-        loading: () => const _NotificationsSkeleton(),
-        error: (error, stackTrace) =>
-            error is NotificationsAuthRequiredException
+      body: AssenAsyncView<List<AppNotification>>(
+        value: feed,
+        loading: const _NotificationsSkeleton(),
+        onRetry: () =>
+            ref.read(notificationsControllerProvider.notifier).refresh(),
+        // A 401 → auth-required is not a failure: show the login wall instead
+        // of the generic error state.
+        errorBuilder: (error, _) => error is NotificationsAuthRequiredException
             ? AssenEmptyState(
                 title: '로그인이 필요해요',
                 message: '알림을 보려면 먼저 로그인해 주세요.',
                 actionLabel: '로그인',
                 onAction: () => context.go(RoutePaths.login),
               )
-            : AssenErrorState(
-                title: '불러오지 못했어요',
-                message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-                onRetry: () => ref
-                    .read(notificationsControllerProvider.notifier)
-                    .refresh(),
-              ),
-        data: (items) => items.isEmpty
-            ? const AssenEmptyState(
-                title: '알림이 없어요',
-                message: '새로운 소식이 도착하면 이곳에 표시됩니다.',
-              )
-            : _NotificationList(items: items),
+            : null,
+        isEmpty: (items) => items.isEmpty,
+        empty: () => const AssenEmptyState(
+          title: '알림이 없어요',
+          message: '새로운 소식이 도착하면 이곳에 표시됩니다.',
+        ),
+        data: (items) => RefreshIndicator(
+          onRefresh: () =>
+              ref.read(notificationsControllerProvider.notifier).refresh(),
+          child: _NotificationList(items: items, now: now),
+        ),
       ),
     );
   }
@@ -56,14 +61,15 @@ class NotificationsScreen extends ConsumerWidget {
 
 /// The loaded feed: a list of notifications, newest first.
 class _NotificationList extends StatelessWidget {
-  const _NotificationList({required this.items});
+  const _NotificationList({required this.items, required this.now});
 
   final List<AppNotification> items;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s2),
       itemCount: items.length,
       itemBuilder: (context, index) =>

@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/cached_media.dart';
 import 'package:assen_mobile/src/store/product.dart';
 import 'package:assen_mobile/src/store/store_controller.dart';
@@ -30,28 +31,36 @@ class StoreScreen extends ConsumerWidget {
     final catalog = ref.watch(storeControllerProvider);
     return Scaffold(
       appBar: AssenAppBar(title: '스토어', onBack: () => _back(context)),
-      body: catalog.when(
-        loading: () => const _StoreSkeleton(),
-        error: (error, stackTrace) => AssenErrorState(
-          title: '불러오지 못했어요',
-          message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-          onRetry: () => ref.read(storeControllerProvider.notifier).refresh(),
+      body: AssenAsyncView<List<Product>>(
+        value: catalog,
+        loading: const _StoreSkeleton(),
+        onRetry: () => ref.read(storeControllerProvider.notifier).refresh(),
+        isEmpty: (products) => products.isEmpty,
+        empty: () => AssenEmptyState(
+          title: '아직 상품이 없어요',
+          message: '곧 새로운 상품이 이곳에 소개됩니다.',
+          actionLabel: '새로고침',
+          onAction: () => ref.read(storeControllerProvider.notifier).refresh(),
         ),
-        data: (products) => products.isEmpty
-            ? AssenEmptyState(
-                title: '아직 상품이 없어요',
-                message: '곧 새로운 상품이 이곳에 소개됩니다.',
-                actionLabel: '새로고침',
-                onAction: () =>
-                    ref.read(storeControllerProvider.notifier).refresh(),
-              )
-            : _ProductGrid(products: products),
+        data: (products) => RefreshIndicator(
+          onRefresh: () => ref.read(storeControllerProvider.notifier).refresh(),
+          child: _ProductGrid(products: products),
+        ),
       ),
     );
   }
 }
 
-/// The loaded catalog: a responsive grid of tappable product cards.
+/// The loaded catalog: a responsive, viewport-culled grid of product cards.
+///
+/// A [GridView.builder] (lazy sliver) rather than a `SingleChildScrollView`
+/// over an eager [AssenFeedGrid], so only the cards near the viewport are
+/// built — the catalog scrolls a large product list without laying every card
+/// out up front. Columns derive from the pane width (max ~220dp each, so two
+/// columns on a phone); `mainAxisExtent` fixes the cell height to the card's
+/// media (5:3) + single-line text block. Wrapped by a `RefreshIndicator`, so
+/// `AlwaysScrollableScrollPhysics` keeps pull-to-refresh working for a short
+/// catalog that does not fill the viewport.
 class _ProductGrid extends StatelessWidget {
   const _ProductGrid({required this.products});
 
@@ -59,32 +68,32 @@ class _ProductGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return GridView.builder(
       padding: const EdgeInsets.all(SpacingTokens.s4),
-      child: AssenFeedGrid(
-        minColumnWidth: 160,
-        maxColumns: 2,
-        columnSpacing: SpacingTokens.s3,
-        rowSpacing: SpacingTokens.s4,
-        children: [
-          for (final product in products)
-            RepaintBoundary(
-              child: AssenProductCard(
-                title: product.title,
-                priceLabel: product.priceLabel,
-                tagLabel: product.typeLabel,
-                meta: product.meta,
-                media: product.mediaUrl == null
-                    ? null
-                    : CachedMedia(
-                        url: product.mediaUrl!,
-                        semanticLabel: product.title,
-                      ),
-                onTap: () => context.go(RoutePaths.product(product.id)),
-              ),
-            ),
-        ],
+      physics: const AlwaysScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
+        mainAxisExtent: 268,
+        crossAxisSpacing: SpacingTokens.s3,
+        mainAxisSpacing: SpacingTokens.s4,
       ),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        final product = products[index];
+        return AssenProductCard(
+          title: product.title,
+          priceLabel: product.priceLabel,
+          tagLabel: product.typeLabel,
+          meta: product.meta,
+          media: product.mediaUrl == null
+              ? null
+              : CachedMedia(
+                  url: product.mediaUrl!,
+                  semanticLabel: product.title,
+                ),
+          onTap: () => context.go(RoutePaths.product(product.id)),
+        );
+      },
     );
   }
 }

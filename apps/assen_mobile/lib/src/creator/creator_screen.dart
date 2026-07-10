@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/creator/creator_controller.dart';
 import 'package:assen_mobile/src/creator/creator_repository.dart';
@@ -40,22 +41,21 @@ class CreatorScreen extends ConsumerWidget {
     final profile = ref.watch(creatorControllerProvider(handle));
     return Scaffold(
       appBar: AssenAppBar(title: '@$handle', onBack: () => _back(context)),
-      body: profile.when(
-        loading: () => const _ProfileSkeleton(),
-        error: (error, stackTrace) => error is CreatorNotFoundException
+      body: AssenAsyncView<Creator>(
+        value: profile,
+        loading: const _ProfileSkeleton(),
+        onRetry: () =>
+            ref.read(creatorControllerProvider(handle).notifier).refresh(),
+        // A 404 is a distinct "no such creator" state with a browse CTA, not
+        // the generic retry; anything else falls through (null) to the default.
+        errorBuilder: (error, _) => error is CreatorNotFoundException
             ? AssenErrorState(
                 title: '없는 크리에이터예요',
                 message: '@$handle 님을 찾지 못했어요. 주소를 다시 확인해 주세요.',
                 retryLabel: '둘러보기로',
                 onRetry: () => context.go(RoutePaths.discovery),
               )
-            : AssenErrorState(
-                title: '불러오지 못했어요',
-                message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-                onRetry: () => ref
-                    .read(creatorControllerProvider(handle).notifier)
-                    .refresh(),
-              ),
+            : null,
         data: (creator) => creator.blocked
             ? const AssenEmptyState(
                 title: '차단한 크리에이터예요',

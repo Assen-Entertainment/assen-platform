@@ -5,4 +5,5 @@
 /// reproducible across machines and CI.
 library;
 
+export 'src/domain_fixtures.dart';
 export 'src/fan_fixtures.dart';

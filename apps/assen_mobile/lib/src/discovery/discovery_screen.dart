@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/discovery/discovery_controller.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -32,36 +33,36 @@ class DiscoveryScreen extends ConsumerWidget {
         title: '둘러보기',
         titleWidget: AssenLogo(size: AssenLogoSize.sm),
       ),
-      body: feed.when(
-        loading: () => const _DiscoverySkeleton(),
-        error: (error, stackTrace) => AssenErrorState(
-          title: '불러오지 못했어요',
-          message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-          onRetry: () =>
-              ref.read(discoveryControllerProvider.notifier).refresh(),
-        ),
+      body: AssenAsyncView<List<Creator>>(
+        value: feed,
+        loading: const _DiscoverySkeleton(),
+        onRetry: () =>
+            ref.read(discoveryControllerProvider.notifier).refresh(),
+        isEmpty: (creators) => creators.isEmpty,
         // The 피드·스토어 shortcuts must stay reachable regardless of whether any
         // creators exist, so they are shown in both branches: inline here for
         // the empty feed, and after the hero in [_CreatorList] for the
         // populated feed.
-        data: (creators) => creators.isEmpty
-            ? Column(
-                children: [
-                  const AssenReveal(child: _DiscoveryHero()),
-                  const AssenReveal(index: 1, child: _DiscoveryShortcuts()),
-                  Expanded(
-                    child: AssenEmptyState(
-                      title: '아직 크리에이터가 없어요',
-                      message: '곧 새로운 크리에이터가 이곳에 소개됩니다.',
-                      actionLabel: '새로고침',
-                      onAction: () => ref
-                          .read(discoveryControllerProvider.notifier)
-                          .refresh(),
-                    ),
-                  ),
-                ],
-              )
-            : _CreatorList(creators: creators),
+        empty: () => Column(
+          children: [
+            const AssenReveal(child: _DiscoveryHero()),
+            const AssenReveal(index: 1, child: _DiscoveryShortcuts()),
+            Expanded(
+              child: AssenEmptyState(
+                title: '아직 크리에이터가 없어요',
+                message: '곧 새로운 크리에이터가 이곳에 소개됩니다.',
+                actionLabel: '새로고침',
+                onAction: () =>
+                    ref.read(discoveryControllerProvider.notifier).refresh(),
+              ),
+            ),
+          ],
+        ),
+        data: (creators) => RefreshIndicator(
+          onRefresh: () =>
+              ref.read(discoveryControllerProvider.notifier).refresh(),
+          child: _CreatorList(creators: creators),
+        ),
       ),
     );
   }
@@ -77,6 +78,7 @@ class _CreatorList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: SpacingTokens.s2),
       // Index 0 is the hero, index 1 the shortcuts block; the rest are creators
       // (offset by two).

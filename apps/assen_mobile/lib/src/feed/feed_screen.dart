@@ -1,5 +1,7 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/cached_media.dart';
+import 'package:assen_mobile/src/common/now.dart';
 import 'package:assen_mobile/src/common/relative_time.dart';
 import 'package:assen_mobile/src/feed/feed_controller.dart';
 import 'package:assen_mobile/src/post/post.dart';
@@ -27,24 +29,24 @@ class FeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(feedControllerProvider);
+    final now = ref.watch(nowProvider);
     return Scaffold(
       appBar: AssenAppBar(title: '피드', onBack: () => _back(context)),
-      body: feed.when(
-        loading: () => const _FeedSkeleton(),
-        error: (error, stackTrace) => AssenErrorState(
-          title: '불러오지 못했어요',
-          message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-          onRetry: () => ref.read(feedControllerProvider.notifier).refresh(),
+      body: AssenAsyncView<List<Post>>(
+        value: feed,
+        loading: const _FeedSkeleton(),
+        onRetry: () => ref.read(feedControllerProvider.notifier).refresh(),
+        isEmpty: (posts) => posts.isEmpty,
+        empty: () => AssenEmptyState(
+          title: '아직 게시물이 없어요',
+          message: '크리에이터가 새 소식을 올리면 이곳에 표시됩니다.',
+          actionLabel: '새로고침',
+          onAction: () => ref.read(feedControllerProvider.notifier).refresh(),
         ),
-        data: (posts) => posts.isEmpty
-            ? AssenEmptyState(
-                title: '아직 게시물이 없어요',
-                message: '크리에이터가 새 소식을 올리면 이곳에 표시됩니다.',
-                actionLabel: '새로고침',
-                onAction: () =>
-                    ref.read(feedControllerProvider.notifier).refresh(),
-              )
-            : _FeedList(posts: posts),
+        data: (posts) => RefreshIndicator(
+          onRefresh: () => ref.read(feedControllerProvider.notifier).refresh(),
+          child: _FeedList(posts: posts, now: now),
+        ),
       ),
     );
   }
@@ -52,14 +54,15 @@ class FeedScreen extends ConsumerWidget {
 
 /// The loaded feed: a list of tappable post cards, newest first.
 class _FeedList extends StatelessWidget {
-  const _FeedList({required this.posts});
+  const _FeedList({required this.posts, required this.now});
 
   final List<Post> posts;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: posts.length,
       itemBuilder: (context, index) {
         final post = posts[index];

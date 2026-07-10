@@ -1,5 +1,6 @@
 import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/mypage/fan_me.dart';
 import 'package:assen_mobile/src/mypage/mypage_controller.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -26,14 +27,15 @@ class MyPageScreen extends ConsumerWidget {
     final me = ref.watch(myPageControllerProvider);
     return Scaffold(
       appBar: const AssenAppBar(title: '마이'),
-      body: me.when(
-        loading: () => const _MyPageSkeleton(),
-        error: (error, stackTrace) => AssenErrorState(
-          title: '불러오지 못했어요',
-          message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-          onRetry: () => ref.read(myPageControllerProvider.notifier).refresh(),
+      body: AssenAsyncView<FanMe>(
+        value: me,
+        loading: const _MyPageSkeleton(),
+        onRetry: () => ref.read(myPageControllerProvider.notifier).refresh(),
+        data: (fan) => RefreshIndicator(
+          onRefresh: () =>
+              ref.read(myPageControllerProvider.notifier).refresh(),
+          child: _MyPageBody(fan: fan),
         ),
-        data: (fan) => _MyPageBody(fan: fan),
       ),
     );
   }
@@ -51,6 +53,7 @@ class _MyPageBody extends ConsumerWidget {
     final subtitle = fan.handle == null ? fan.role : '@${fan.handle}';
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(SpacingTokens.s4),
       children: [
         Row(

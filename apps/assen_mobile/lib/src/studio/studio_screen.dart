@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/studio/studio_controller.dart';
 import 'package:assen_mobile/src/studio/studio_repository.dart';
@@ -31,9 +32,14 @@ class StudioScreen extends ConsumerWidget {
     final stats = ref.watch(studioControllerProvider);
     return Scaffold(
       appBar: AssenAppBar(title: '스튜디오', onBack: () => _back(context)),
-      body: stats.when(
-        loading: () => const _StudioSkeleton(),
-        error: (error, stackTrace) => switch (error) {
+      body: AssenAsyncView<StudioStats>(
+        value: stats,
+        loading: const _StudioSkeleton(),
+        onRetry: () => ref.read(studioControllerProvider.notifier).refresh(),
+        // Two unauthorized states are not failures: a 401 shows the login wall,
+        // a 403 (signed-in non-owner) the creator-only notice. Anything else
+        // falls through (null) to the default error state.
+        errorBuilder: (error, _) => switch (error) {
           StudioAuthRequiredException() => AssenEmptyState(
             title: '로그인이 필요해요',
             message: '스튜디오를 보려면 먼저 로그인해 주세요.',
@@ -44,12 +50,7 @@ class StudioScreen extends ConsumerWidget {
             title: '크리에이터 전용이에요',
             message: '스튜디오는 크리에이터 계정에서만 볼 수 있어요.',
           ),
-          _ => AssenErrorState(
-            title: '불러오지 못했어요',
-            message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-            onRetry: () =>
-                ref.read(studioControllerProvider.notifier).refresh(),
-          ),
+          _ => null,
         },
         data: (stats) => _StudioDashboard(stats: stats),
       ),

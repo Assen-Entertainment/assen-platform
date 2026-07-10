@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/api/api_providers.dart';
+import 'package:assen_mobile/src/common/refreshable_async_notifier.dart';
 import 'package:assen_mobile/src/post/comment.dart';
 import 'package:assen_mobile/src/post/post.dart';
 import 'package:assen_mobile/src/post/post_repository.dart';
@@ -14,7 +15,8 @@ import 'package:flutter_riverpod/misc.dart' show AsyncNotifierProviderFamily;
 /// loading/error/data from a single value and can re-run its fetch via
 /// [refresh] (retry). The id argument is delivered to the notifier by the
 /// family (Riverpod 3.x) and read back in [build].
-class PostController extends AsyncNotifier<Post> {
+class PostController extends AsyncNotifier<Post>
+    with RefreshableAsyncNotifier<Post> {
   /// Creates a controller for the post identified by [postId].
   PostController(this.postId);
 
@@ -26,13 +28,8 @@ class PostController extends AsyncNotifier<Post> {
     return ref.watch(postRepositoryProvider).fetchPost(postId);
   }
 
-  /// Re-fetches the post, surfacing a fresh loading then data/error state.
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref.read(postRepositoryProvider).fetchPost(postId),
-    );
-  }
+  @override
+  Future<Post> fetch() => ref.read(postRepositoryProvider).fetchPost(postId);
 }
 
 /// Exposes each post detail's [AsyncValue], keyed by post id.
@@ -49,7 +46,8 @@ postControllerProvider =
 /// independently of the post body — a comments fetch error renders an inline
 /// retry without
 /// hiding the post the caller came to read.
-class PostCommentsController extends AsyncNotifier<List<Comment>> {
+class PostCommentsController extends AsyncNotifier<List<Comment>>
+    with RefreshableAsyncNotifier<List<Comment>> {
   /// Creates a comments controller for the post identified by [postId].
   PostCommentsController(this.postId);
 
@@ -61,13 +59,9 @@ class PostCommentsController extends AsyncNotifier<List<Comment>> {
     return ref.watch(postRepositoryProvider).fetchComments(postId);
   }
 
-  /// Re-fetches the comments, surfacing a fresh loading then data/error state.
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref.read(postRepositoryProvider).fetchComments(postId),
-    );
-  }
+  @override
+  Future<List<Comment>> fetch() =>
+      ref.read(postRepositoryProvider).fetchComments(postId);
 }
 
 /// Exposes each post's comment thread [AsyncValue], keyed by post id.

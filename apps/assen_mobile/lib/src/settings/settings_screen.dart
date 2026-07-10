@@ -1,6 +1,7 @@
 import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/app/theme_mode_controller.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/mypage/fan_me.dart';
 import 'package:assen_mobile/src/settings/settings_controller.dart';
 import 'package:assen_mobile/src/settings/settings_repository.dart';
@@ -34,21 +35,20 @@ class SettingsScreen extends ConsumerWidget {
     final me = ref.watch(settingsControllerProvider);
     return Scaffold(
       appBar: AssenAppBar(title: '설정', onBack: () => _back(context)),
-      body: me.when(
-        loading: () => const _SettingsSkeleton(),
-        error: (error, stackTrace) => error is SettingsAuthRequiredException
+      body: AssenAsyncView<FanMe>(
+        value: me,
+        loading: const _SettingsSkeleton(),
+        onRetry: () => ref.read(settingsControllerProvider.notifier).refresh(),
+        // A 401 → auth-required is not a failure: show the login wall instead
+        // of the generic error state.
+        errorBuilder: (error, _) => error is SettingsAuthRequiredException
             ? AssenEmptyState(
                 title: '로그인이 필요해요',
                 message: '설정을 보려면 먼저 로그인해 주세요.',
                 actionLabel: '로그인',
                 onAction: () => context.go(RoutePaths.login),
               )
-            : AssenErrorState(
-                title: '불러오지 못했어요',
-                message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-                onRetry: () =>
-                    ref.read(settingsControllerProvider.notifier).refresh(),
-              ),
+            : null,
         data: (fan) => _SettingsBody(fan: fan),
       ),
     );

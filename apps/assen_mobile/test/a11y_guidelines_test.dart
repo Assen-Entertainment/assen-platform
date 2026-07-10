@@ -1,10 +1,11 @@
 // Automated accessibility-guideline coverage for the primary screens (R10,
-// ASS-249): every tappable element clears the Material 48dp / iOS 44pt hit-area
-// floor and carries a label, and body text meets the contrast ratio. Fake
-// repositories feed server-shaped rows with empty image URLs; those empty
-// strings map to null in the models (`nonEmpty`), so the screens skip building
-// the cached-media/avatar image widgets entirely — nothing touches the network
-// (no placeholder to degrade to; the widget simply is not created).
+// ASS-249; expanded R11 3→13 screens): every tappable element clears the
+// Material 48dp / iOS 44pt hit-area floor and carries a label, and body text
+// meets the contrast ratio. Each screen renders from a shared in-memory fake
+// (test/support/fakes.dart) seeded with the canonical fixtures
+// (test/support/fixtures.dart → test_fixtures' DomainFixtures); the fixture
+// image URLs are empty, so the models map them to null and the screens skip
+// building any cached-media/avatar image widget — nothing touches the network.
 //
 // The final group exercises CachedMedia's success-only image label (F1)
 // directly through its `imageBuilder` (buildLoadedImage), so the labelled path
@@ -13,89 +14,38 @@
 import 'dart:convert';
 
 import 'package:assen_mobile/src/common/cached_media.dart';
-import 'package:assen_mobile/src/discovery/creator.dart';
+import 'package:assen_mobile/src/creator/creator_repository.dart';
+import 'package:assen_mobile/src/creator/creator_screen.dart';
 import 'package:assen_mobile/src/discovery/discovery_repository.dart';
 import 'package:assen_mobile/src/discovery/discovery_screen.dart';
 import 'package:assen_mobile/src/feed/feed_repository.dart';
 import 'package:assen_mobile/src/feed/feed_screen.dart';
-import 'package:assen_mobile/src/post/post.dart';
-import 'package:assen_mobile/src/store/product.dart';
+import 'package:assen_mobile/src/membership/membership_repository.dart';
+import 'package:assen_mobile/src/membership/membership_section.dart';
+import 'package:assen_mobile/src/mypage/mypage_repository.dart';
+import 'package:assen_mobile/src/mypage/mypage_screen.dart';
+import 'package:assen_mobile/src/notifications/notifications_repository.dart';
+import 'package:assen_mobile/src/notifications/notifications_screen.dart';
+import 'package:assen_mobile/src/orders/orders_repository.dart';
+import 'package:assen_mobile/src/orders/orders_screen.dart';
+import 'package:assen_mobile/src/post/post_repository.dart';
+import 'package:assen_mobile/src/post/post_screen.dart';
+import 'package:assen_mobile/src/search/search_repository.dart';
+import 'package:assen_mobile/src/search/search_screen.dart';
+import 'package:assen_mobile/src/settings/settings_repository.dart';
+import 'package:assen_mobile/src/settings/settings_screen.dart';
+import 'package:assen_mobile/src/store/product_screen.dart';
 import 'package:assen_mobile/src/store/store_repository.dart';
 import 'package:assen_mobile/src/store/store_screen.dart';
+import 'package:assen_mobile/src/studio/studio_repository.dart';
+import 'package:assen_mobile/src/studio/studio_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-class _FakeDiscoveryRepository implements DiscoveryRepository {
-  _FakeDiscoveryRepository(this._creators);
-
-  final List<Creator> _creators;
-
-  @override
-  Future<List<Creator>> fetchCreators() async => _creators;
-}
-
-class _FakeFeedRepository implements FeedRepository {
-  _FakeFeedRepository(this._posts);
-
-  final List<Post> _posts;
-
-  @override
-  Future<List<Post>> fetchFeed() async => _posts;
-}
-
-class _FakeStoreRepository implements StoreRepository {
-  _FakeStoreRepository(this._products);
-
-  final List<Product> _products;
-
-  @override
-  Future<List<Product>> fetchProducts() async => _products;
-
-  @override
-  Future<Product> fetchProduct(String productId) async =>
-      throw UnimplementedError();
-}
-
-Creator _creator() => Creator.fromJson(const {
-  'id': 'c1',
-  'handle': 'mio',
-  'name': '미오',
-  'category': '버추얼',
-  'avatar_url': '',
-  'verified': true,
-  'followers': 12,
-  'posts': 3,
-});
-
-Post _post() => Post.fromJson(const {
-  'id': 'p1',
-  'creator_id': 'c1',
-  'creator_name': '미오',
-  'creator_handle': 'mio',
-  'verified': true,
-  'body': '오늘 방송 고마웠어요!',
-  'media_url': '',
-  'like_count': 128,
-  'comment_count': 16,
-  'liked': false,
-  'is_adult': false,
-  'created_at': '2026-07-01T00:00:00Z',
-});
-
-Product _product() => Product.fromDetail(const {
-  'id': 'g1',
-  'type': 'goods',
-  'title': '한정 아크릴 스탠드',
-  'price': 18000,
-  'meta': '선착순 100개',
-  'media_url': '',
-  'description': '고급 아크릴 굿즈입니다.',
-  'options': <String>[],
-  'sold_out': false,
-  'locked': false,
-});
+import 'support/fakes.dart';
+import 'support/fixtures.dart';
 
 Widget _app(Widget home) => MaterialApp(theme: AssenTheme.light(), home: home);
 
@@ -109,58 +59,172 @@ Future<void> _expectA11y(WidgetTester tester, {bool contrast = true}) async {
 }
 
 void main() {
+  // One parameterized screen a11y case: a name, the provider overrides that
+  // feed it fixture data, and the screen under test. The record type is
+  // inferred (Riverpod's override type is not publicly nameable).
+  final cases = [
+    (
+      name: 'discovery',
+      overrides: [
+        discoveryRepositoryProvider.overrideWithValue(
+          FakeDiscoveryRepository([creatorFixture()]),
+        ),
+      ],
+      screen: const DiscoveryScreen(),
+    ),
+    (
+      name: 'feed',
+      overrides: [
+        feedRepositoryProvider.overrideWithValue(
+          FakeFeedRepository([postFixture()]),
+        ),
+      ],
+      screen: const FeedScreen(),
+    ),
+    (
+      name: 'store',
+      overrides: [
+        storeRepositoryProvider.overrideWithValue(
+          FakeStoreRepository([productFixture()]),
+        ),
+      ],
+      screen: const StoreScreen(),
+    ),
+    (
+      name: 'creator profile',
+      overrides: [
+        creatorRepositoryProvider.overrideWithValue(
+          FakeCreatorRepository(creatorFixture()),
+        ),
+        membershipRepositoryProvider.overrideWithValue(
+          FakeMembershipRepository([tierFixture()]),
+        ),
+      ],
+      screen: const CreatorScreen(handle: 'mio'),
+    ),
+    (
+      name: 'product detail',
+      overrides: [
+        storeRepositoryProvider.overrideWithValue(
+          FakeStoreRepository(const [], product: productFixture()),
+        ),
+      ],
+      screen: const ProductScreen(productId: 'g1'),
+    ),
+    (
+      name: 'post detail',
+      overrides: [
+        postRepositoryProvider.overrideWithValue(
+          FakePostRepository(postFixture(), comments: [commentFixture()]),
+        ),
+      ],
+      screen: const PostScreen(postId: 'p1'),
+    ),
+    (
+      name: 'notifications',
+      overrides: [
+        notificationsRepositoryProvider.overrideWithValue(
+          FakeNotificationsRepository([notificationFixture()]),
+        ),
+      ],
+      screen: const NotificationsScreen(),
+    ),
+    (
+      name: 'orders',
+      overrides: [
+        ordersRepositoryProvider.overrideWithValue(
+          FakeOrdersRepository([orderFixture()]),
+        ),
+      ],
+      screen: const OrdersScreen(),
+    ),
+    (
+      name: 'mypage',
+      overrides: [
+        myPageRepositoryProvider.overrideWithValue(
+          FakeMyPageRepository(fanMeFixture()),
+        ),
+      ],
+      screen: const MyPageScreen(),
+    ),
+    (
+      name: 'settings',
+      overrides: [
+        settingsRepositoryProvider.overrideWithValue(
+          FakeSettingsRepository(fanMeFixture()),
+        ),
+      ],
+      screen: const SettingsScreen(),
+    ),
+    (
+      name: 'studio',
+      overrides: [
+        studioRepositoryProvider.overrideWithValue(
+          FakeStudioRepository(studioStatsFixture()),
+        ),
+      ],
+      screen: const StudioScreen(),
+    ),
+    (
+      name: 'membership section',
+      overrides: [
+        membershipRepositoryProvider.overrideWithValue(
+          // A plain (non-featured) tier: the featured "추천" pastel badge is an
+          // AssenBadge (ui_kit) contrast matter tracked separately, out of
+          // scope for this screen-level a11y sweep.
+          FakeMembershipRepository([tierFixture(featured: false)]),
+        ),
+      ],
+      // Hosted in a Scaffold so the section header renders on the theme's
+      // opaque background (a bare transparent host makes the contrast check
+      // see alpha-0 behind the text).
+      screen: const Scaffold(
+        body: SingleChildScrollView(
+          child: MembershipSection(creatorId: 'c1'),
+        ),
+      ),
+    ),
+  ];
+
   group('screen a11y guidelines', () {
-    testWidgets('discovery clears tap-target + label + contrast', (
+    for (final testCase in cases) {
+      testWidgets('${testCase.name} clears tap-target + label + contrast', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: testCase.overrides,
+            child: _app(testCase.screen),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        await _expectA11y(tester);
+        handle.dispose();
+      });
+    }
+
+    // Search reaches its results state only after a debounced query, so it is
+    // driven separately: type a term, let the 300ms debounce fire, then assert.
+    testWidgets('search results clear tap-target + label + contrast', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            discoveryRepositoryProvider.overrideWithValue(
-              _FakeDiscoveryRepository([_creator()]),
+            searchRepositoryProvider.overrideWithValue(
+              FakeSearchRepository(searchResultFixture()),
             ),
           ],
-          child: _app(const DiscoveryScreen()),
+          child: _app(const SearchScreen()),
         ),
       );
       await tester.pump();
-      await tester.pump();
-      await _expectA11y(tester);
-      handle.dispose();
-    });
-
-    testWidgets('feed clears tap-target + label + contrast', (tester) async {
-      final handle = tester.ensureSemantics();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            feedRepositoryProvider.overrideWithValue(
-              _FakeFeedRepository([_post()]),
-            ),
-          ],
-          child: _app(const FeedScreen()),
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
-      await _expectA11y(tester);
-      handle.dispose();
-    });
-
-    testWidgets('store clears tap-target + label + contrast', (tester) async {
-      final handle = tester.ensureSemantics();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            storeRepositoryProvider.overrideWithValue(
-              _FakeStoreRepository([_product()]),
-            ),
-          ],
-          child: _app(const StoreScreen()),
-        ),
-      );
-      await tester.pump();
+      await tester.enterText(find.byType(TextField), '미오');
+      // Past the debounce window, then let the fake resolve + the list build.
+      await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
       await _expectA11y(tester);
       handle.dispose();

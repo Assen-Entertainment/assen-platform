@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:assen_mobile/src/search/search_controller.dart';
 import 'package:assen_mobile/src/search/search_result.dart';
@@ -93,20 +94,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
     if (_pending) return const _SearchSkeleton();
-    return results.when(
-      loading: () => const _SearchSkeleton(),
-      error: (error, stackTrace) => AssenErrorState(
-        title: '검색하지 못했어요',
-        message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-        onRetry: () =>
-            ref.read(searchControllerProvider.notifier).search(query),
+    return AssenAsyncView<SearchResult>(
+      value: results,
+      loading: const _SearchSkeleton(),
+      errorTitle: '검색하지 못했어요',
+      onRetry: () => ref.read(searchControllerProvider.notifier).search(query),
+      isEmpty: (result) => result.isEmpty,
+      empty: () => AssenEmptyState(
+        title: '결과가 없어요',
+        message: '"$query"와 일치하는 크리에이터나 상품이 없어요.',
       ),
-      data: (result) => result.isEmpty
-          ? AssenEmptyState(
-              title: '결과가 없어요',
-              message: '"$query"와 일치하는 크리에이터나 상품이 없어요.',
-            )
-          : _SearchResults(result: result),
+      data: (result) => _SearchResults(result: result),
     );
   }
 }
