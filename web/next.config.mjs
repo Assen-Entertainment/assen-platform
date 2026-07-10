@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,4 +71,26 @@ const nextConfig = {
     : {}),
 };
 
-export default nextConfig;
+// Sentry 배선(ASS-270) — 이 빌드타임 래핑 자체는 항상 적용(자동 계측 삽입·소스맵 후보 생성)되지만,
+// 런타임 초기화는 instrumentation.ts / instrumentation-client.ts가 SENTRY_DSN·NEXT_PUBLIC_SENTRY_DSN
+// 미설정 시 완전히 스킵한다(서버 observability.py의 init_sentry() no-op-without-DSN 계약과 동일 —
+// dev/test/미설정 배포는 네트워크·성능 영향 0). 소스맵 업로드는 SENTRY_AUTH_TOKEN 있을 때만 수행되고,
+// 없으면 자동으로 건너뛰며 빌드는 실패하지 않는다(org/project/authToken은 SENTRY_ORG/SENTRY_PROJECT/
+// SENTRY_AUTH_TOKEN 환경변수로 자동 폴백 — @sentry/bundler-plugin-core 확인됨).
+export default withSentryConfig(nextConfig, {
+  sourcemaps: {
+    // 토큰 없이 소스맵을 만들어봐야 업로드가 안 되므로(경고만 찍고 스킵) 아예 생성 단계를 건너뛴다.
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+  },
+  // 번들예산 게이트(scripts/check-bundle-budget.mjs, web-ci) 대응 — 클라이언트 번들에 섞여 들어가는
+  // SDK 디버그 로깅·Session Replay 관련 코드(Replay integration 미사용)를 트리셰이킹으로 제거한다.
+  // tracing(tracesSampleRate)은 요구사항(성능 모니터링 tunable)상 유지 — excludeTracing은 켜지 않는다.
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayIframe: true,
+    excludeReplayShadowDom: true,
+    excludeReplayWorker: true,
+  },
+  // 빌드 로그 소음 억제(플러그인 자체 로그만 — 애플리케이션 빌드 오류/경고는 그대로 노출).
+  silent: true,
+});

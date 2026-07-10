@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 ///
 /// Covers the Inputs/TextField row of `components.md` and replaces the
 /// deprecated `InputField`. Composes Flutter's [TextField] with the design
-/// system's ink ramp and rose action anchor: the border is the ink ramp at
-/// rest, the rose anchor when focused, and `red.main` when [errorText] is set.
+/// system's ink ramp and indigo action anchor: the border is the ink ramp at
+/// rest, the indigo anchor when focused, and `red.main` when [errorText] is
+/// set.
 /// Disabled (`enabled: false`) mutes to the ink ramp — it never goes darker
 /// than the resting state (tokens.md §1 disabled = muted, not darker).
 ///
@@ -85,7 +86,7 @@ class AssenTextField extends StatelessWidget {
         fontSize: TypographyTokens.bodyLSize,
         color: enabled ? colors.ink900 : colors.ink500,
       ),
-      cursorColor: colors.roseMain,
+      cursorColor: colors.indigo500,
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
@@ -93,17 +94,17 @@ class AssenTextField extends StatelessWidget {
         errorText: errorText,
         prefixIcon: prefixIcon == null ? null : Icon(prefixIcon),
         filled: true,
-        fillColor: enabled ? colors.white : colors.cream200,
+        fillColor: enabled ? colors.white : colors.neutral200,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: SpacingTokens.s4,
           vertical: SpacingTokens.s3,
         ),
         labelStyle: TextStyle(
           fontSize: TypographyTokens.labelSize,
-          color: hasError ? colors.redInk : colors.ink700,
+          color: hasError ? colors.redInk : colors.ink600,
         ),
         floatingLabelStyle: TextStyle(
-          color: hasError ? colors.redMain : colors.roseMain,
+          color: hasError ? colors.redMain : colors.indigo500,
         ),
         hintStyle: TextStyle(
           fontSize: TypographyTokens.bodyLSize,
@@ -117,14 +118,14 @@ class AssenTextField extends StatelessWidget {
           fontSize: TypographyTokens.bodySSize,
           color: colors.redMain,
         ),
-        enabledBorder: border(hasError ? colors.redMain : colors.ink200),
+        enabledBorder: border(hasError ? colors.redMain : colors.neutral200),
         focusedBorder: border(
-          hasError ? colors.redMain : colors.roseMain,
+          hasError ? colors.redMain : colors.indigo500,
           width: 2,
         ),
         errorBorder: border(colors.redMain),
         focusedErrorBorder: border(colors.redMain, width: 2),
-        disabledBorder: border(colors.ink100),
+        disabledBorder: border(colors.neutral100),
       ),
     );
   }

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import cast
 
 from django.http import HttpRequest
 from django.utils import timezone
@@ -24,8 +23,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
-from apps.identity.auth import fan_auth
-from apps.identity.models import Account
+from apps.identity.auth import authed, fan_auth
 from apps.notification.adapters import MockNotificationAdapter, NotificationAdapter
 from apps.notification.models import Notification
 from apps.notification.policy import (
@@ -36,6 +34,7 @@ from apps.notification.policy import (
 from apps.notification.services import send_notification
 from config.api import api
 from config.pagination import paginate
+from config.throttle import user_write_throttle
 
 notification_router = Router(auth=operator_required, tags=["operator-notification"])
 
@@ -196,7 +195,7 @@ def list_notifications(
     request: HttpRequest, cursor: str | None = None, limit: int | None = None
 ) -> NotificationPage:
     """List the requesting fan's own notifications, newest first, cursor-paginated."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     queryset = Notification.objects.filter(recipient=account).order_by("-created_at", "id")
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
     return NotificationPage(
@@ -205,11 +204,12 @@ def list_notifications(
 
 
 @fan_notifications_router.post(
-    "/read-all", response=ReadAllOut
+    "/read-all", response=ReadAllOut,
+    throttle=user_write_throttle("30/min"),
 )
 def mark_all_read(request: HttpRequest) -> ReadAllOut:
     """Mark all of the requesting fan's unread notifications as read."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     updated = Notification.objects.filter(recipient=account, read_at__isnull=True).update(
         read_at=timezone.now()
     )
@@ -217,13 +217,14 @@ def mark_all_read(request: HttpRequest) -> ReadAllOut:
 
 
 @fan_notifications_router.post(
-    "/{notification_id}/read", response={200: NotificationOut, 404: NotificationError}
+    "/{notification_id}/read", response={200: NotificationOut, 404: NotificationError},
+    throttle=user_write_throttle("60/min"),
 )
 def mark_read(
     request: HttpRequest, notification_id: uuid.UUID
 ) -> tuple[int, NotificationOut | NotificationError]:
     """Mark one of the fan's own notifications read (404 if not theirs)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     notification = Notification.objects.filter(
         id=notification_id, recipient=account
     ).first()

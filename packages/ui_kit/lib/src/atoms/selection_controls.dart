@@ -8,7 +8,7 @@ const double _selectionMinTarget = 44;
 ///
 /// Covers the Inputs/Checkbox row of `components.md`. Used for individual
 /// agreement rows and multi-select lists. The checked fill is the solid action
-/// anchor (`RefColors.roseMain`); the unchecked border uses the ink ramp.
+/// anchor (`RefColors.indigo500`); the unchecked border uses the ink ramp.
 /// Disabled is a null [onChanged]. Tap target is padded to 44pt.
 class AssenCheckbox extends StatelessWidget {
   /// Creates a checkbox reflecting [value].
@@ -37,9 +37,9 @@ class AssenCheckbox extends StatelessWidget {
         onChanged: onChanged == null
             ? null
             : (next) => onChanged!(next ?? false),
-        activeColor: colors.roseMain,
+        activeColor: colors.indigo500,
         checkColor: colors.white,
-        side: BorderSide(color: colors.ink300, width: 2),
+        side: BorderSide(color: colors.neutral300, width: 2),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(RadiusTokens.xs)),
         ),
@@ -95,11 +95,11 @@ class AssenRadio<T> extends StatelessWidget {
         child: Radio<T>(
           value: value,
           enabled: onChanged != null,
-          activeColor: colors.roseMain,
+          activeColor: colors.indigo500,
           fillColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled)) return colors.ink300;
-            if (states.contains(WidgetState.selected)) return colors.roseMain;
-            return colors.ink300;
+            if (states.contains(WidgetState.disabled)) return colors.neutral300;
+            if (states.contains(WidgetState.selected)) return colors.indigo500;
+            return colors.neutral300;
           }),
         ),
       ),
@@ -135,9 +135,9 @@ class AssenSwitch extends StatelessWidget {
       value: value,
       onChanged: onChanged,
       activeThumbColor: colors.white,
-      activeTrackColor: colors.roseMain,
+      activeTrackColor: colors.indigo500,
       inactiveThumbColor: colors.white,
-      inactiveTrackColor: colors.ink300,
+      inactiveTrackColor: colors.neutral300,
       trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     );
   }

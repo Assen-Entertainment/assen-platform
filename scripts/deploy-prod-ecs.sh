@@ -67,12 +67,12 @@ echo "prod deploy: pushing image tags"
 docker_run push "${ASSEN_ECR_REPOSITORY_URI}:${COMMIT_SHA}"
 docker_run push "${ASSEN_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}"
 
-# Schema provisioning (migration-less apps): domain tables only come from
-# `migrate --noinput --run-syncdb`, which a plain service boot never runs.
-# Until the formal-migrations gate flips (SDLC 11 §5), run it as a one-off
-# ECS task per release — the task definition's command carries the migrate.
+# Schema provisioning: every app now ships real migrations (0001_initial,
+# 2026-07-09 — ASS-266), applied by `migrate --noinput`, which a plain service
+# boot never runs. Run it as a one-off ECS task per release — the task
+# definition's command carries the migrate (must be `migrate`, NOT `--run-syncdb`).
 if [ -n "${ASSEN_ECS_MIGRATE_TASKDEF:-}" ]; then
-  echo "prod deploy: running one-off schema task (migrate --run-syncdb)"
+  echo "prod deploy: running one-off schema task (migrate)"
   # Fire-and-forget is not enough: run-task can fail placement, and the task
   # itself can exit nonzero — either way deploying services on top would ship
   # an API whose domain tables are missing. Capture, wait, and assert exit 0.
@@ -111,7 +111,7 @@ if [ -n "${ASSEN_ECS_MIGRATE_TASKDEF:-}" ]; then
   echo "prod deploy: schema task succeeded"
 else
   echo "prod deploy: NOTE — schema provisioning is manual until ASSEN_ECS_MIGRATE_TASKDEF is set"
-  echo "             run once per release: manage.py migrate --noinput --run-syncdb (SDLC 11 §5)"
+  echo "             run once per release: manage.py migrate --noinput"
 fi
 
 echo "prod deploy: forcing ECS deployments"

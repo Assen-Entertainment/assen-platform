@@ -11,6 +11,7 @@ import type {
   BlockedCreator,
   Comment,
   Creator,
+  CreatorSort,
   MembershipTier,
   Notification,
   NotificationKind,
@@ -142,6 +143,7 @@ interface RawProductBrief {
 interface RawSearch {
   creators: RawCreator[];
   products: RawProductBrief[];
+  next_offset?: number | null;
 }
 // --- B4 쓰기/커머스 wire 계약(snake_case) ------------------------------------
 interface RawOrderItem {
@@ -217,6 +219,8 @@ interface RawStudioProduct {
   status: string;
   is_adult: boolean;
   created_at: string;
+  // 비취소 주문 기준 누적 판매 수량(ASS-264). 카운트만 — 수익 금액 아님.
+  sold: number;
 }
 /** 오너 뷰 티어(StudioTierOut) — active 관리 플래그 포함. */
 interface RawStudioTier {
@@ -231,6 +235,8 @@ interface RawStudioTier {
   active: boolean;
   sort_order: number;
   created_at: string;
+  // status=active 구독 수(ASS-264). 카운트만 — 수익 금액 아님.
+  subscribers: number;
 }
 /** 저장된 결제수단(SavedPaymentMethod wire) — brand+last4만(PAN 미보관). */
 interface RawPaymentMethod {
@@ -441,8 +447,8 @@ const mapNotification = (n: RawNotification): Notification => {
 
 const PRODUCT_STATUSES: readonly ProductStatus[] = ["selling", "soldout", "draft", "hidden"];
 /**
- * 오너 상품 매핑 — 서버 계약엔 판매수(sold)가 없어 undefined(관리표에서 "—", 집계 게이트 도입 전까지
- * 0을 실수치인 척 노출 금지). updatedAt은 생성 시각 파생.
+ * 오너 상품 매핑 — sold는 서버가 집계한 비취소 주문 기준 누적 판매 수량(ASS-264, 카운트만·수익
+ * 금액 아님). updatedAt은 생성 시각 파생.
  */
 const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
   id: p.id,
@@ -450,17 +456,17 @@ const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
   title: p.title,
   price: p.price,
   status: (PRODUCT_STATUSES as readonly string[]).includes(p.status) ? (p.status as ProductStatus) : "draft",
-  sold: undefined,
+  sold: p.sold,
   stock: p.stock ?? null,
   updatedAt: relativeTime(p.created_at),
 });
-/** 오너 티어 매핑 — 서버 계약엔 구독자수가 없어 undefined(카드에서 "—", 집계 게이트 전까지 0 노출 금지). */
+/** 오너 티어 매핑 — subscribers는 서버가 집계한 활성(status=active) 구독자 수(ASS-264, 카운트만). */
 const mapStudioTier = (t: RawStudioTier): StudioTier => ({
   id: t.id,
   name: t.name,
   price: t.price,
   benefits: t.benefits,
-  subscribers: undefined,
+  subscribers: t.subscribers,
   active: t.active,
 });
 const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({
@@ -510,10 +516,26 @@ export async function getCreators(): Promise<Creator[]> {
   if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);
   return CREATORS;
 }
-/** 크리에이터 커서 페이지 — 디스커버리 무한 로드(21번째+ 도달). mock은 단일 페이지(nextCursor 없음). */
-export async function getCreatorsPage(cursor?: string): Promise<Page<Creator>> {
-  if (USE_API) return toPage(await apiFetch<Paginated<RawCreator>>(`/creators${pageQuery(cursor)}`), mapCreator);
-  return { items: CREATORS };
+/**
+ * mock 크리에이터 서버 랭킹 근사(E11) — popular=팔로워 desc, new=배열 역순(최근 합류 근사, 기존
+ * 클라 `.reverse()`와 동일 의미론), recommended=팔로워 desc(목업엔 가입시각이 없어 동률 없음 →
+ * 서버 recommended(-followers,-created_at)와 동일 결과). sort 미지정은 원본 순서(handle 커서).
+ */
+function sortCreatorsMock(sort?: CreatorSort): Creator[] {
+  if (sort === "popular" || sort === "recommended") return [...CREATORS].sort((a, b) => b.followers - a.followers);
+  if (sort === "new") return [...CREATORS].reverse();
+  return CREATORS;
+}
+/**
+ * 크리에이터 커서 페이지 — 디스커버리 무한 로드(21번째+ 도달). `sort` 지정 시 서버 랭킹 단일
+ * 페이지(next_cursor 없음 — popular/new/recommended). mock은 단일 페이지(nextCursor 없음).
+ */
+export async function getCreatorsPage(cursor?: string, sort?: CreatorSort): Promise<Page<Creator>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, sort && `sort=${encodeURIComponent(sort)}`);
+    return toPage(await apiFetch<Paginated<RawCreator>>(`/creators${q}`), mapCreator);
+  }
+  return { items: sortCreatorsMock(sort) };
 }
 export async function getCreator(handle: string): Promise<Creator | undefined> {
   if (USE_API) {
@@ -591,25 +613,71 @@ export async function getFeedPage(cursor?: string): Promise<Page<Post>> {
   if (USE_API) return toPage(await apiFetch<Paginated<RawPost>>(`/feed${pageQuery(cursor)}`), mapPost);
   return { items: POSTS };
 }
-/** 검색 — B2 `/search?q=` 소비. mock 폴백은 서버 의미론(name/handle·title 부분일치, 10건)을 미러. */
-export async function getSearch(q: string): Promise<SearchResult> {
+const SEARCH_LIMIT_DEFAULT = 10;
+const SEARCH_LIMIT_MAX = 50;
+
+/** mock 크리에이터 매치 랭크 — 서버 match_rank(이름 완전일치→접두→포함→핸들→기타)를 근사. */
+function creatorMatchRank(c: Creator, t: string): number {
+  const name = c.name.toLowerCase();
+  if (name === t) return 0;
+  if (name.startsWith(t)) return 1;
+  if (name.includes(t)) return 2;
+  if (c.handle.toLowerCase().includes(t)) return 3;
+  return 4; // bio/category만 매치
+}
+/** mock 상품 매치 랭크 — 서버 match_rank(제목 접두→포함→기타)를 근사. */
+function productMatchRank(p: Product, t: string): number {
+  const title = p.title.toLowerCase();
+  if (title.startsWith(t)) return 0;
+  if (title.includes(t)) return 1;
+  return 2;
+}
+/**
+ * 검색 mock 폴백 — 서버 의미론 미러: 크리에이터는 name/handle/bio/category, 상품은
+ * title/meta/description 다필드 substring 매칭 + 랭킹(best match 먼저) + limit/offset 페이지네이션.
+ */
+function mockSearch(term: string, limit: number | undefined, offset: number): SearchResult {
+  const t = term.toLowerCase();
+  const size = Math.max(1, Math.min(limit ?? SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX));
+  const matchedCreators = CREATORS.filter(
+    (c) =>
+      c.name.toLowerCase().includes(t) ||
+      c.handle.toLowerCase().includes(t) ||
+      (c.bio?.toLowerCase().includes(t) ?? false) ||
+      (c.category?.toLowerCase().includes(t) ?? false),
+  ).sort((a, b) => creatorMatchRank(a, t) - creatorMatchRank(b, t) || b.followers - a.followers);
+  const matchedProducts = PRODUCTS.filter(
+    (p) =>
+      p.title.toLowerCase().includes(t) ||
+      (p.meta?.toLowerCase().includes(t) ?? false) ||
+      (p.description?.toLowerCase().includes(t) ?? false),
+  ).sort((a, b) => productMatchRank(a, t) - productMatchRank(b, t));
+  const more = matchedCreators.length > offset + size || matchedProducts.length > offset + size;
+  return {
+    creators: matchedCreators.slice(offset, offset + size),
+    products: matchedProducts.slice(offset, offset + size),
+    nextOffset: more ? offset + size : null,
+  };
+}
+/**
+ * 검색 — B2 `/search?q=&limit=&offset=` 소비(랭킹 + 페이지네이션). mock 폴백은 서버 의미론을 미러.
+ */
+export async function getSearch(q: string, opts: { limit?: number; offset?: number } = {}): Promise<SearchResult> {
   const term = q.trim();
   if (!term) return { creators: [], products: [] };
+  const offset = Math.max(0, opts.offset ?? 0);
   if (USE_API) {
-    const raw = await apiFetch<RawSearch>(`/search?q=${encodeURIComponent(term)}`);
-    return { creators: raw.creators.map(mapCreator), products: raw.products.map(mapProductBrief) };
+    const params = [`q=${encodeURIComponent(term)}`];
+    if (opts.limit != null) params.push(`limit=${opts.limit}`);
+    if (offset) params.push(`offset=${offset}`);
+    const raw = await apiFetch<RawSearch>(`/search?${params.join("&")}`);
+    return {
+      creators: raw.creators.map(mapCreator),
+      products: raw.products.map(mapProductBrief),
+      nextOffset: raw.next_offset ?? null,
+    };
   }
-  const t = term.toLowerCase();
-  return {
-    // name/handle 외 category 부분일치도 포함 → 카테고리 아이콘 행(디스커버리)에서 착지 보강.
-    creators: CREATORS.filter(
-      (c) =>
-        c.name.toLowerCase().includes(t) ||
-        c.handle.toLowerCase().includes(t) ||
-        (c.category?.toLowerCase().includes(t) ?? false),
-    ).slice(0, 10),
-    products: PRODUCTS.filter((p) => p.title.toLowerCase().includes(t)).slice(0, 10),
-  };
+  return mockSearch(term, opts.limit, offset);
 }
 export async function getPost(id: string): Promise<Post | undefined> {
   if (USE_API) {

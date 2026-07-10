@@ -1,8 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Divider, StatusChip, EmptyState, Button, Spinner } from "@/components/ui";
-import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
+import { Divider, StatusChip, EmptyState, ErrorState, Button, LoadMore } from "@/components/ui";
 import { useOrders } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
 import { orderStatusMeta } from "./status";
@@ -13,29 +12,21 @@ import type { Order, Page } from "@/lib/api";
  * mock 모드는 단일 페이지(더보기 없음)로 기존 서버 렌더와 동일 표시(회귀 0).
  */
 export function OrdersView({ initialOrders }: { initialOrders: Page<Order> }) {
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useOrders(initialOrders);
+  const { data, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useOrders(initialOrders);
   const orders = data ?? initialOrders.items;
-
-  // 무한 스크롤 — sentinel 뷰포트 근접 시 자동 로드(reduced-motion·미지원은 더보기 버튼 폴백).
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
-  const canLoadMore = hasNextPage && !isFetchingNextPage;
-  useInfiniteScroll(sentinelRef, {
-    enabled: canLoadMore,
-    onLoadMore: () => {
-      if (canLoadMore) fetchNextPage();
-    },
-  });
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <h1 className="text-headline text-on-surface">주문 내역</h1>
-      {orders.length ? (
+      {isError && !data ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : orders.length ? (
         <>
           <div className="overflow-hidden rounded-lg border border-outline">
             {orders.map((o, i) => {
               const s = orderStatusMeta(o.status);
               const summary =
-                o.items[0].title + (o.items.length > 1 ? ` 외 ${o.items.length - 1}건` : "");
+                (o.items[0]?.title ?? "") + (o.items.length > 1 ? ` 외 ${o.items.length - 1}건` : "");
               return (
                 <div key={o.id}>
                   {i > 0 ? <Divider /> : null}
@@ -58,15 +49,12 @@ export function OrdersView({ initialOrders }: { initialOrders: Page<Order> }) {
             })}
           </div>
           {/* 무한 스크롤 sentinel + 폴백 버튼(자동 로드가 기본). */}
-          {hasNextPage ? (
-            <div className="flex flex-col items-center gap-3">
-              <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-              {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
-              <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-                {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
-              </Button>
-            </div>
-          ) : null}
+          <LoadMore
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={() => fetchNextPage()}
+            itemCount={orders.length}
+          />
         </>
       ) : (
         <EmptyState

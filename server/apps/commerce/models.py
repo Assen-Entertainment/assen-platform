@@ -7,7 +7,8 @@ a paid order and snapshots the line items, but **no real payment is taken and no
 money moves** — real PG, amounts, and settlement are gated (B7, 대표·법무·PG).
 Every stored monetary value is a display snapshot, never a settlement figure.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations
@@ -167,8 +168,8 @@ class Order(models.Model):
         ordering = ["-created_at"]
         constraints = [
             # One order per (buyer, idempotency_key), but only when a key is
-            # supplied — keyless orders (key IS NULL) are never deduped. Migration-
-            # less app: materialised by ``migrate --run-syncdb``.
+            # supplied — keyless orders (key IS NULL) are never deduped.
+            # Materialised by the app's migration (applied by ``migrate``).
             models.UniqueConstraint(
                 fields=["buyer", "idempotency_key"],
                 condition=models.Q(idempotency_key__isnull=False),

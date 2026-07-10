@@ -12,7 +12,6 @@ import uuid
 from datetime import date as date_type
 from datetime import datetime, time, timedelta
 from decimal import Decimal
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -21,6 +20,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
+from apps.identity.auth import authed
 from apps.identity.models import Account
 from apps.pos_lite.models import PosOrder, PosOrderStatus
 from apps.pos_lite.services import link_pos_order, void_pos_order
@@ -204,7 +204,7 @@ def pos_link_coverage(
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated operator account supplied by RoleRequired."""
     # request.auth is untyped without Ninja stubs (same idiom as visit/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _order_out(record: PosOrder) -> PosOrderOut:

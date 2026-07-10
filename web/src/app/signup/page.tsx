@@ -3,6 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TextField, Button, ConsentGroup, TextLink, OTPInput } from "@/components/ui";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { useSession } from "@/lib/session";
@@ -77,9 +78,8 @@ function OtpSignup() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="text-title-l text-on-surface">회원가입</h1>
+    <AuthShell subtitle="몇 초면 끝나요 — Assen에 오신 걸 환영해요">
+        <h2 className="text-title-l text-on-surface">회원가입</h2>
 
         {step === "phone" ? (
           <>
@@ -142,8 +142,7 @@ function OtpSignup() {
             </Button>
           </>
         )}
-      </div>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -163,9 +162,8 @@ function MockSignup() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="text-title-l text-on-surface">회원가입</h1>
+    <AuthShell subtitle="몇 초면 끝나요 — Assen에 오신 걸 환영해요">
+        <h2 className="text-title-l text-on-surface">회원가입</h2>
         <TextField label="이름" placeholder="홍길동" />
         <TextField label="이메일" type="email" placeholder="you@assen.kr" />
         <TextField label="비밀번호" type="password" placeholder="••••••••" />
@@ -191,7 +189,6 @@ function MockSignup() {
         </p>
         <Button size="lg" className="w-full" disabled={!required} onClick={onSignup}>가입하기</Button>
         <p className="text-center text-caption text-on-surface-variant">※ 데모 — 실제 인증·약관 미연동(게이트)</p>
-      </div>
-    </main>
+    </AuthShell>
   );
 }

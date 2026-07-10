@@ -14,9 +14,12 @@ see the safety-report *list*, but high/critical *detail* requires manager or abo
 
 from __future__ import annotations
 
+from typing import cast
+
 from django.http import HttpRequest
 from ninja.security import HttpBearer
 
+from apps.identity.auth import AuthedHttpRequest
 from apps.identity.models import Account, Role
 from apps.identity.services import TokenError, verify_access_token
 
@@ -71,7 +74,7 @@ class RoleRequired(HttpBearer):
             return None
         if not has_min_role(account, minimum=self.minimum):
             return None
-        request.account = account  # type: ignore[attr-defined]
+        cast(AuthedHttpRequest, request).account = account
         return account
 
 

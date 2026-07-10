@@ -61,16 +61,19 @@ export function CreatorHomeHeader({
   return (
     <header className="flex flex-col">
       <div
-        className="relative h-44 w-full overflow-hidden rounded-xl sm:h-56"
+        className="relative h-44 w-full overflow-hidden rounded-xl ring-1 ring-inset ring-white/10 sm:h-56"
         style={
           accent
             ? { backgroundImage: "linear-gradient(135deg, var(--creator-accent), var(--creator-accent-container))" }
             : { backgroundImage: "var(--gradient-brand)" }
         }
       >
-        {/* 커버 광원·깊이 모티프 — 크리에이터 색이 살아 있는 히어로. */}
-        <div aria-hidden className="pointer-events-none absolute -right-12 -top-16 size-56 rounded-full bg-white/10 blur-2xl" />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/20 to-transparent" />
+        {/* 커버 광원·깊이 모티프(다층) — 크리에이터 색이 살아 있는 히어로.
+            상단 화이트 블룸(광원) + 하단 다크 블룸(부피) + 대각 시트 하이라이트 + 하단 스크림. */}
+        <div aria-hidden className="pointer-events-none absolute -right-12 -top-16 size-56 rounded-full bg-white/15 blur-2xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-16 -left-20 size-64 rounded-full bg-black/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/25 to-transparent" />
       </div>
 
       {/* 커버 아래 헤더(#5) — 아바타는 커버에 프로미넌트하게 오버랩하되, 이름·액션 버튼은

@@ -16,7 +16,7 @@ import 'package:ui_kit/src/organisms/product_card.dart';
 ///
 /// The human-facing review surface for the ASS-88 Organisms layer: it renders
 /// the domain-agnostic organisms (MembershipCard, EmptyState, ErrorState,
-/// BottomCTA — each in its relevant variants/states) on the cream surface so
+/// BottomCTA — each in its relevant variants/states) on the warm-paper surface so
 /// reviewers and the `flutter build web` smoke test exercise the layer at
 /// once — the same review pattern as `AtomCatalog`/`MoleculeCatalog`. It is
 /// stateful so the interactive TabBar responds live; AppBar and TabBar frame
@@ -36,7 +36,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     return Scaffold(
-      backgroundColor: colors.cream50,
+      backgroundColor: colors.white,
       appBar: AssenAppBar(
         title: 'Organisms',
         onBack: () {},
@@ -71,17 +71,17 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
         padding: const EdgeInsets.all(SpacingTokens.screenMargin),
         children: [
           _Section(
-            title: 'MembershipCard (간판 — strawberry/sky/lavender skin)',
+            title: 'MembershipCard (간판 — brand/sky/lavender skin)',
             child: Column(
               children: [
                 AssenMembershipCard(
                   name: '미오',
                   memberNumber: '0000 1234 5678',
                   points: '1,280',
-                  tierLabel: '하츠코이',
+                  tierLabel: '프리미엄',
                   avatar: const AssenAvatar(
                     name: '미오',
-                    hue: AssenBadgeHue.strawberry,
+                    hue: AssenBadgeHue.brand,
                   ),
                   onShowQr: () {},
                 ),
@@ -90,7 +90,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
                   name: '유키',
                   memberNumber: '0000 8765 4321',
                   points: '420',
-                  tierLabel: '하츠코이',
+                  tierLabel: '스탠다드',
                   skin: AssenMembershipSkin.sky,
                   avatar: AssenAvatar(name: '유키', hue: AssenBadgeHue.sky),
                 ),
@@ -160,7 +160,7 @@ class _OrganismCatalogState extends State<OrganismCatalog> {
               verified: true,
               avatar: const AssenAvatar(
                 name: '미오',
-                hue: AssenBadgeHue.strawberry,
+                hue: AssenBadgeHue.brand,
               ),
               body: '오늘 방송 고마웠어요! 다음 주에 또 만나요 🍓',
               likeCount: 128,
@@ -191,14 +191,14 @@ class _BoxedEmptyState extends StatelessWidget {
           width: SpacingTokens.s16,
           height: SpacingTokens.s16,
           decoration: BoxDecoration(
-            color: colors.strawberryBg,
+            color: colors.indigo100,
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
           child: Icon(
             Icons.photo_library_outlined,
             size: SpacingTokens.s8,
-            color: colors.strawberryInk,
+            color: colors.indigoInk,
           ),
         ),
         actionLabel: '캐스트 보러 가기',
@@ -226,7 +226,7 @@ class _Section extends StatelessWidget {
           Text(
             title,
             style: TypographyTokens.label.copyWith(
-              color: colors.ink700,
+              color: colors.ink600,
               fontWeight: FontWeight.w700,
             ),
           ),

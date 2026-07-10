@@ -10,6 +10,9 @@ dependencies = [
     "django-environ>=0.11,<1.0",
     "celery[redis]>=5.4,<6.0",
     "redis>=5.0,<6.0",
+    # Image decode-verify for the upload boundary (ASS-271): PIL.Image.verify() +
+    # a MAX_IMAGE_PIXELS decompression-bomb guard, beyond the 64-byte magic sniff.
+    "Pillow>=10.0,<12.0",
     "psycopg[binary]>=3.2,<4.0",
     "gunicorn>=23.0,<24.0",
     "django-linear-migrations>=2.3,<3.0",
@@ -45,6 +48,9 @@ realtime-redis = ["channels-redis>=4.2,<5.0"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Generated Django migrations are not hand-maintained (and are #25 human-gated),
+# so ruff neither lints nor auto-fixes them — mirroring the [tool.mypy] exclude.
+extend-exclude = ["**/migrations/**"]
 
 [tool.ruff.lint]
 # E/F: pyflakes+pycodestyle, I: isort, UP: pyupgrade, B: bugbear.

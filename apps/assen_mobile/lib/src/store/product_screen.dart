@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/cached_media.dart';
 import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/store/product.dart';
@@ -36,22 +37,21 @@ class ProductScreen extends ConsumerWidget {
     final detail = ref.watch(productControllerProvider(productId));
     return Scaffold(
       appBar: AssenAppBar(title: '상품', onBack: () => _back(context)),
-      body: detail.when(
-        loading: () => const _ProductSkeleton(),
-        error: (error, stackTrace) => error is ProductNotFoundException
+      body: AssenAsyncView<Product>(
+        value: detail,
+        loading: const _ProductSkeleton(),
+        onRetry: () =>
+            ref.read(productControllerProvider(productId).notifier).refresh(),
+        // A 404 is a distinct "no such product" state with a store CTA, not the
+        // generic retry; anything else falls through (null) to the default.
+        errorBuilder: (error, _) => error is ProductNotFoundException
             ? AssenErrorState(
                 title: '없는 상품이에요',
                 message: '상품을 찾지 못했어요. 다시 확인해 주세요.',
                 retryLabel: '스토어로',
                 onRetry: () => context.go(RoutePaths.store),
               )
-            : AssenErrorState(
-                title: '불러오지 못했어요',
-                message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-                onRetry: () => ref
-                    .read(productControllerProvider(productId).notifier)
-                    .refresh(),
-              ),
+            : null,
         data: (product) => _ProductDetail(product: product),
       ),
     );
@@ -74,7 +74,7 @@ class _ProductDetail extends StatelessWidget {
         AspectRatio(
           aspectRatio: 5 / 3,
           child: ColoredBox(
-            color: colors.cream200,
+            color: colors.neutral200,
             child: product.mediaUrl == null
                 ? null
                 : CachedMedia(
@@ -134,7 +134,7 @@ class _ProductDetail extends StatelessWidget {
                   style: TextStyle(
                     fontSize: TypographyTokens.bodyMSize,
                     height: 1.5,
-                    color: colors.ink700,
+                    color: colors.ink600,
                   ),
                 ),
               ],

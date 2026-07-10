@@ -50,7 +50,7 @@ class AssenIconButton extends StatelessWidget {
       icon: Icon(icon),
       iconSize: SpacingTokens.s6,
       color: color ?? colors.ink900,
-      disabledColor: colors.ink300,
+      disabledColor: colors.neutral300,
       tooltip: semanticLabel,
       constraints: const BoxConstraints(
         minWidth: _minTouchTarget,

@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/api/api_providers.dart';
+import 'package:assen_mobile/src/common/refreshable_async_notifier.dart';
 import 'package:assen_mobile/src/creator/creator_repository.dart';
 import 'package:assen_mobile/src/discovery/creator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,8 @@ import 'package:flutter_riverpod/misc.dart' show AsyncNotifierProviderFamily;
 /// [refresh] (retry) without the screen owning any request state. The handle
 /// argument is delivered to the notifier by the family (Riverpod 3.x) and read
 /// back in [build].
-class CreatorController extends AsyncNotifier<Creator> {
+class CreatorController extends AsyncNotifier<Creator>
+    with RefreshableAsyncNotifier<Creator> {
   /// Creates a controller for the profile identified by [handle].
   CreatorController(this.handle);
 
@@ -26,13 +28,9 @@ class CreatorController extends AsyncNotifier<Creator> {
     return ref.watch(creatorRepositoryProvider).fetchCreator(handle);
   }
 
-  /// Re-fetches the profile, surfacing a fresh loading then data/error state.
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref.read(creatorRepositoryProvider).fetchCreator(handle),
-    );
-  }
+  @override
+  Future<Creator> fetch() =>
+      ref.read(creatorRepositoryProvider).fetchCreator(handle);
 }
 
 /// Exposes each creator profile's [AsyncValue], keyed by handle.

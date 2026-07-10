@@ -9,7 +9,7 @@ import {
   ErrorState,
   CategoryIconRow,
   Shelf,
-  Button,
+  LoadMore,
   type CategoryItem,
 } from "@/components/ui";
 import {
@@ -23,10 +23,7 @@ import {
   WritingIcon,
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
-import { useSession } from "@/lib/session";
-import { useInfiniteScroll } from "@/lib/use-infinite-scroll";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
-import { Spinner } from "@/components/ui";
 import type { Creator, Page, Product } from "@/lib/api";
 
 const CATS = [
@@ -57,31 +54,38 @@ function creatorMeta(c: Creator): string {
   return `${c.category ?? ""} · 팔로워 ${followers(c.followers)}`;
 }
 
-export function DiscoveryView({ creators, products }: { creators: Page<Creator>; products: Page<Product> }) {
+export function DiscoveryView({
+  creators,
+  products,
+  popularCreators,
+  freshCreators,
+}: {
+  creators: Page<Creator>;
+  products: Page<Product>;
+  /** 서버 랭킹(sort=popular, E11) — 팔로워 desc 단일 페이지. */
+  popularCreators: Page<Creator>;
+  /** 서버 랭킹(sort=new, E11) — 최신 가입 desc 단일 페이지. */
+  freshCreators: Page<Creator>;
+}) {
   const router = useRouter();
-  const { user } = useSession();
   const [cat, setCat] = React.useState("all");
   const creatorsQ = useCreators(creators);
+  const popularQ = useCreators(popularCreators, "popular");
+  const freshQ = useCreators(freshCreators, "new");
   const productsQ = useProducts(undefined, products);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = creatorsQ;
   const cList = creatorsQ.data ?? creators.items;
   const pList = productsQ.data ?? products.items;
-  const isError = (creatorsQ.isError && !creatorsQ.data) || (productsQ.isError && !productsQ.data);
+  const isError =
+    (creatorsQ.isError && !creatorsQ.data) ||
+    (productsQ.isError && !productsQ.data) ||
+    (popularQ.isError && !popularQ.data) ||
+    (freshQ.isError && !freshQ.data);
   const shown = cat === "all" ? cList : cList.filter((c) => c.category === cat);
 
-  // 무한 스크롤(전체 둘러보기 그리드) — sentinel 근접 시 크리에이터 다음 페이지 자동 로드.
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
-  const canLoadMore = hasNextPage && !isFetchingNextPage;
-  useInfiniteScroll(sentinelRef, {
-    enabled: canLoadMore,
-    onLoadMore: () => {
-      if (canLoadMore) fetchNextPage();
-    },
-  });
-
-  // 선반용 파생 목록 — 인기(팔로워 desc) / 신규(역순) / 추천 상품.
-  const popular = React.useMemo(() => [...cList].sort((a, b) => b.followers - a.followers), [cList]);
-  const fresh = React.useMemo(() => [...cList].reverse(), [cList]);
+  // 인기/신규 크리에이터 선반 — 서버 랭킹(sort=popular/new, E11) 소비(클라 sort/reverse 제거).
+  const popular = popularQ.data ?? popularCreators.items;
+  const fresh = freshQ.data ?? freshCreators.items;
 
   const goSearch = (q: string) => router.push(`/search?q=${encodeURIComponent(q)}`);
 
@@ -92,6 +96,8 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
           onRetry={() => {
             creatorsQ.refetch();
             productsQ.refetch();
+            popularQ.refetch();
+            freshQ.refetch();
           }}
         />
       </div>
@@ -107,8 +113,23 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
       >
         <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-white/10 blur-2xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-white/10 blur-3xl" />
+        {/* 브랜드 시그니처 워터마크 — Logo(app/icon.svg)와 형태를 공유하는 상승 "A" 봉우리. 우측 저채도. */}
+        <svg
+          aria-hidden
+          viewBox="0 0 32 32"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="pointer-events-none absolute -right-6 top-1/2 hidden h-[150%] -translate-y-1/2 text-white/[0.08] sm:block"
+        >
+          <path d="M10 23 L16 8.5 L22 23 M12.6 17.6 H19.4" />
+        </svg>
+        {/* 대각 시트 하이라이트 — 광택감(깊이). */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent" />
         {/* 좌측 다크 스크림 — 브랜드 그라디언트를 유지하면서 텍스트 대비 AA 보장. */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/20 via-black/5 to-transparent" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/25 via-black/5 to-transparent" />
         <div className="relative flex max-w-2xl flex-col gap-3 text-white">
           <span className="text-label font-semibold uppercase tracking-[0.16em] text-white/90">크리에이터 커머스</span>
           <h1 className="text-display-m font-bold leading-[1.15] tracking-tight text-white sm:text-display-xl">
@@ -149,11 +170,16 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
         </Shelf>
       </Reveal>
 
-      {/* 추천 상품 선반 — 개인화 카피는 로그인 시에만. 비로그인은 일반 카피(#9·P0 비로그인 동선). */}
+      {/*
+        인기 상품 선반 — 서버 상품 추천 엔드포인트는 아직 없다(E11 sort=recommended는 크리에이터
+        전용, 범위 밖 상품 추천 API 신설 대신 크리에이터 랭킹을 우선 배선했다 — 위 인기/신규 선반).
+        그래서 이 선반은 일반 상품 목록(useProducts)을 그대로 노출한다 — 개인화 랭킹이 아니므로
+        로그인 여부와 무관하게 논-퍼스널라이즈 카피를 쓴다(디자인 리뷰 F1: 과잉약속 카피 정직화).
+      */}
       <Reveal>
         <Shelf
-          title={user ? "회원님을 위한 추천 상품" : "지금 주목받는 상품"}
-          description={user ? "팔로우한 취향을 바탕으로 골랐어요" : "많은 팬이 함께 보고 있는 상품이에요"}
+          title="인기 상품"
+          description="지금 주목받는 상품들"
           action={
             <Link href="/store" className="text-body-s text-primary hover:underline">
               더보기
@@ -208,15 +234,12 @@ export function DiscoveryView({ creators, products }: { creators: Page<Creator>;
           ))}
         </Stagger>
         {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
-        {hasNextPage ? (
-          <div className="flex flex-col items-center gap-3">
-            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-            {isFetchingNextPage ? <Spinner aria-label="더 불러오는 중" /> : null}
-            <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? "불러오는 중…" : "더 불러오기"}
-            </Button>
-          </div>
-        ) : null}
+        <LoadMore
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={() => fetchNextPage()}
+          itemCount={cList.length}
+        />
       </section>
     </div>
   );

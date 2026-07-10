@@ -40,7 +40,7 @@ class AssenStatRow extends StatelessWidget {
           Container(
             width: 1,
             height: SpacingTokens.s8,
-            color: colors.ink100,
+            color: colors.neutral100,
           ),
         );
       }

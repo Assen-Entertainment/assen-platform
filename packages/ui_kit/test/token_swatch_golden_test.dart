@@ -28,7 +28,7 @@ void main() {
           theme: AssenTheme.light(),
           home: const Scaffold(
             body: Center(
-              child: TokenSwatch(color: RefColors.roseMain, label: 'rose'),
+              child: TokenSwatch(color: RefColors.indigo500, label: 'rose'),
             ),
           ),
         ),
@@ -38,7 +38,7 @@ void main() {
       // The swatch is present and themed from the generated ColorScheme.
       expect(find.text('rose'), findsOneWidget);
       final ctx = tester.element(find.byType(TokenSwatch));
-      expect(Theme.of(ctx).colorScheme.primary, RefColors.roseMain);
+      expect(Theme.of(ctx).colorScheme.primary, RefColors.indigo500);
 
       // The generated fill colour reached an actual painted Container.
       final decorated = tester.widget<Container>(
@@ -48,7 +48,7 @@ void main() {
         ),
       );
       final decoration = decorated.decoration! as BoxDecoration;
-      expect(decoration.color, RefColors.roseMain);
+      expect(decoration.color, RefColors.indigo500);
     });
 
     // (2) Real pixel golden — declared but deferred to human approval (#31).
@@ -60,7 +60,7 @@ void main() {
         children: [
           GoldenTestScenario(
             name: 'rose',
-            child: const TokenSwatch(color: RefColors.roseMain, label: 'rose'),
+            child: const TokenSwatch(color: RefColors.indigo500, label: 'rose'),
           ),
           GoldenTestScenario(
             name: 'sky.bg',

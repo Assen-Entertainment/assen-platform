@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { creatorAccentVars } from "@/lib/creator-accent";
+import { gradientStyle, hexToHue } from "@/lib/placeholder";
 
 /**
  * CreatorThumbCard — Figma DS(31:7). 디스커버리 크리에이터 카드.
@@ -37,9 +38,7 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
         style={
           cover
             ? undefined
-            : accentColor
-              ? { backgroundColor: "var(--creator-accent)" }
-              : { backgroundImage: "var(--gradient-brand)" }
+            : gradientStyle(name, accentColor ? hexToHue(accentColor) : undefined)
         }
       >
         {cover ? (

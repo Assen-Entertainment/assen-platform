@@ -10,7 +10,8 @@ lifted-not-deleted). A personal block carries no moderation semantics, is fully
 fan-controlled, affects only what THAT fan sees, and is a plain create/delete
 edge. The two must never be conflated.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations

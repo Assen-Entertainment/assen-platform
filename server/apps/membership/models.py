@@ -6,7 +6,8 @@ records an active membership but **no real payment is taken and no money moves**
 recurring billing / PG / settlement are gated (B7). ``next_billing_date`` is a
 display value, not a settlement schedule.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations
@@ -108,7 +109,7 @@ class Subscription(models.Model):
         constraints = [
             # At most one ACTIVE subscription per (fan, creator). Partial on active
             # status so a cancelled subscription does not block re-subscribing.
-            # Migration-less app: materialised by ``migrate --run-syncdb``.
+            # Materialised by the app's migration (applied by ``migrate``).
             models.UniqueConstraint(
                 fields=["fan", "creator"],
                 condition=models.Q(status="active"),

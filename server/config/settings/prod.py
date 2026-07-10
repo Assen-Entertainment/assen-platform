@@ -25,6 +25,19 @@ _required = environ.Env()
 SECRET_KEY = _required("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = _required.list("DJANGO_ALLOWED_HOSTS")
 
+# Data & task-broker stores are as security-critical as the secret key. base.py
+# ships dev-convenience defaults (postgres://assen:assen@localhost, redis://
+# localhost) so a mis-provisioned prod would NOT fail at boot — it would quietly
+# point at a non-existent local store and fail only at first query. Re-read them
+# through the schema-less Env so their ABSENCE fails closed at boot, exactly like
+# SECRET_KEY/ALLOWED_HOSTS above (ASS-265). Celery's broker/result backends are
+# genuinely used (the beat/worker services); the in-memory rate-limiter and
+# channels layer fail *safe* to in-process, so no generic REDIS_URL is required
+# here until those Redis backends are actually wired (ASS-268).
+DATABASES = {"default": _required.db("DATABASE_URL")}
+CELERY_BROKER_URL = _required("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = _required("CELERY_RESULT_BACKEND")
+
 # TLS terminates at the ALB; trust its forwarded proto header so Django knows
 # the original request was HTTPS (required for secure-cookie/redirect logic).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -34,10 +47,14 @@ SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
 # task "unhealthy" forever. Exempt exactly those paths (SDLC 11 §6).
 SECURE_REDIRECT_EXEMPT = [r"^healthz$", r"^readyz$"]
 
-# HSTS — start modest; raise to a year once the domain set is stable.
-SECURE_HSTS_SECONDS = env.int("DJANGO_HSTS_SECONDS", default=3600)
+# HSTS (ASS-278) — a full year by default now that the domain/TLS setup is stable;
+# still env-tunable so ops can dial it down (e.g. while rotating certs/domains)
+# without a code change. SECURE_HSTS_PRELOAD stays opt-in (default False): submitting
+# to the browser preload list is very hard to reverse (removal takes months and
+# affects every subdomain), so it must be a deliberate ops decision, not a default.
+SECURE_HSTS_SECONDS = env.int("DJANGO_HSTS_SECONDS", default=31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = False
+SECURE_HSTS_PRELOAD = env.bool("DJANGO_HSTS_PRELOAD", default=False)
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

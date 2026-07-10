@@ -1,5 +1,7 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/cached_media.dart';
+import 'package:assen_mobile/src/common/now.dart';
 import 'package:assen_mobile/src/common/relative_time.dart';
 import 'package:assen_mobile/src/post/comment.dart';
 import 'package:assen_mobile/src/post/post.dart';
@@ -34,24 +36,25 @@ class PostScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final post = ref.watch(postControllerProvider(postId));
+    final now = ref.watch(nowProvider);
     return Scaffold(
       appBar: AssenAppBar(title: '게시물', onBack: () => _back(context)),
-      body: post.when(
-        loading: () => const _PostSkeleton(),
-        error: (error, stackTrace) => error is PostNotFoundException
+      body: AssenAsyncView<Post>(
+        value: post,
+        loading: const _PostSkeleton(),
+        onRetry: () =>
+            ref.read(postControllerProvider(postId).notifier).refresh(),
+        // A 404 is a distinct "no such post" state with a feed CTA, not the
+        // generic retry; anything else falls through (null) to the default.
+        errorBuilder: (error, _) => error is PostNotFoundException
             ? AssenErrorState(
                 title: '없는 게시물이에요',
                 message: '게시물을 찾지 못했어요. 이미 삭제되었을 수 있어요.',
                 retryLabel: '피드로',
                 onRetry: () => context.go(RoutePaths.feed),
               )
-            : AssenErrorState(
-                title: '불러오지 못했어요',
-                message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-                onRetry: () =>
-                    ref.read(postControllerProvider(postId).notifier).refresh(),
-              ),
-        data: (data) => _PostDetail(post: data, postId: postId),
+            : null,
+        data: (data) => _PostDetail(post: data, postId: postId, now: now),
       ),
     );
   }
@@ -59,15 +62,19 @@ class PostScreen extends ConsumerWidget {
 
 /// The loaded detail: the post card, a gate notice, and the comment thread.
 class _PostDetail extends ConsumerWidget {
-  const _PostDetail({required this.post, required this.postId});
+  const _PostDetail({
+    required this.post,
+    required this.postId,
+    required this.now,
+  });
 
   final Post post;
   final String postId;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final comments = ref.watch(postCommentsControllerProvider(postId));
-    final now = DateTime.now();
 
     return ListView(
       padding: const EdgeInsets.only(bottom: SpacingTokens.s8),
@@ -177,7 +184,7 @@ class _CommentTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: TypographyTokens.bodyMSize,
                     height: 1.4,
-                    color: colors.ink700,
+                    color: colors.ink600,
                   ),
                 ),
               ],

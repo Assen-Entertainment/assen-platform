@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/app/theme_mode_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -18,12 +19,11 @@ class AssenApp extends ConsumerWidget {
       title: 'Assen',
       debugShowCheckedModeBanner: false,
       theme: AssenTheme.light(),
-      // The design system is light-first; a dark ramp is deferred (tokens.md
-      // §2). Point darkTheme at the light theme and pin ThemeMode.light so the
-      // app never shows an unstyled M3 dark scheme. TODO(assen): swap to
-      // AssenTheme.dark() once core_tokens ships the dark ramp.
-      darkTheme: AssenTheme.light(),
-      themeMode: ThemeMode.light,
+      darkTheme: AssenTheme.dark(),
+      // The fan-chosen mode (밝게/어둡게/시스템 설정), defaulting to
+      // `ThemeMode.system` — see `ThemeModeController` (tokens.md §2 dark
+      // ramp, ASS-282 design-review follow-up).
+      themeMode: ref.watch(themeModeControllerProvider),
       routerConfig: router,
     );
   }

@@ -23,17 +23,23 @@ export function ConsentGroup({ items, value, onChange, className }: ConsentGroup
     onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
   return (
     <div className={cn("flex flex-col gap-3 rounded-lg border border-outline p-4", className)}>
-      <label className="flex items-center gap-2 text-label text-on-surface">
-        <Checkbox checked={allOn} onCheckedChange={toggleAll} /> 전체 동의
-      </label>
+      <div className="flex items-center gap-2 text-label text-on-surface">
+        <Checkbox id="consent-all" checked={allOn} onCheckedChange={toggleAll} />
+        <label htmlFor="consent-all">전체 동의</label>
+      </div>
       <div className="h-px bg-outline-variant" />
-      {items.map((it) => (
-        <label key={it.id} className="flex items-center gap-2 text-body-m text-on-surface">
-          <Checkbox checked={value.includes(it.id)} onCheckedChange={() => toggle(it.id)} />
-          {it.label}
-          {it.required ? <span className="text-caption text-error">(필수)</span> : null}
-        </label>
-      ))}
+      {items.map((it) => {
+        const id = `consent-${it.id}`;
+        return (
+          <div key={it.id} className="flex items-center gap-2 text-body-m text-on-surface">
+            <Checkbox id={id} checked={value.includes(it.id)} onCheckedChange={() => toggle(it.id)} />
+            <label htmlFor={id}>
+              {it.label}
+              {it.required ? <span className="text-caption text-error">(필수)</span> : null}
+            </label>
+          </div>
+        );
+      })}
     </div>
   );
 }

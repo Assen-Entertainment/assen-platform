@@ -84,7 +84,7 @@ class AssenBottomSheet extends StatelessWidget {
               width: SpacingTokens.s10,
               height: SpacingTokens.s1,
               decoration: BoxDecoration(
-                color: colors.ink200,
+                color: colors.neutral200,
                 borderRadius: const BorderRadius.all(
                   Radius.circular(RadiusTokens.full),
                 ),

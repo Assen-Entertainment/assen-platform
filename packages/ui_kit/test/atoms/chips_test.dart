@@ -38,13 +38,13 @@ void main() {
       expect(find.text('12'), findsOneWidget);
     });
 
-    testWidgets('selected fills with strawberry pastel', (tester) async {
+    testWidgets('selected fills with the indigo container', (tester) async {
       await tester.pumpWidget(
         _host(
           AssenFilterChip(label: '체키', selected: true, onSelected: (_) {}),
         ),
       );
-      expect(_decorationOf(tester).color, RefColors.strawberryBg);
+      expect(_decorationOf(tester).color, RefColors.indigo100);
     });
 
     testWidgets('reports toggled selection on tap', (tester) async {
@@ -126,7 +126,7 @@ void main() {
       expect(text.style!.decoration, TextDecoration.lineThrough);
     });
 
-    testWidgets('selected slot fills with the rose anchor', (tester) async {
+    testWidgets('selected slot fills with the indigo anchor', (tester) async {
       await tester.pumpWidget(
         _host(
           AssenTimeSlotChip(
@@ -136,7 +136,7 @@ void main() {
           ),
         ),
       );
-      expect(_decorationOf(tester).color, RefColors.roseMain);
+      expect(_decorationOf(tester).color, RefColors.indigo500);
     });
   });
 

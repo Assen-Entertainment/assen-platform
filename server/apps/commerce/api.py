@@ -8,13 +8,14 @@ orders, cancel, and request a refund. Filter the catalog to a creator via
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F, QuerySet
+from django.db.models import F, Q, QuerySet, Sum
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field, field_validator
@@ -33,7 +34,7 @@ from apps.commerce.models import (
     RefundStatus,
 )
 from apps.creator.models import Creator
-from apps.identity.auth import fan_auth, resolve_optional_account
+from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
@@ -41,7 +42,13 @@ from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.pagination import paginate
+from config.patch import apply_optional
 from config.throttle import user_write_throttle
+
+# Money-path observability (order/refund lifecycle). Structured, PII-free: only
+# ids/codes/status and mock (non-settlement) amounts are logged — never a name,
+# phone, or address (those live on the order but must not reach the log stream).
+logger = logging.getLogger(__name__)
 
 
 def _validated_media_url(value: str) -> str:
@@ -221,7 +228,11 @@ studio_products_router = Router(auth=fan_auth, tags=["studio-commerce"])
 
 
 class StudioProductOut(Schema):
-    """Owner-view product: adds the management fields (status, 19+, timestamps)."""
+    """Owner-view product: adds the management fields (status, 19+, timestamps).
+
+    ``sold`` is the total quantity sold via **non-cancelled** orders (ASS-264) — a
+    count, never a settlement/revenue figure (PG·재무 게이트 후행).
+    """
 
     id: uuid.UUID
     creator_id: uuid.UUID | None = None
@@ -238,6 +249,7 @@ class StudioProductOut(Schema):
     status: str
     is_adult: bool
     created_at: datetime
+    sold: int
 
 
 class StudioProductIn(Schema):
@@ -297,6 +309,26 @@ def _owner_creator(account: Account) -> Creator | None:
     return Creator.objects.filter(owner=account).first()
 
 
+def _product_sold(product: Product) -> int:
+    """Total quantity sold for ``product`` via non-cancelled orders (ASS-264).
+
+    ``studio_list_products`` annotates ``sold_count`` on the whole queryset in one
+    aggregate query (no N+1); this falls back to a single live aggregate for the
+    lone-product create/update responses, where the value was never annotated. A
+    cancelled order never happened commercially, so its lines are excluded — same
+    invariant as ``studio_stats``' order count. Count only, never a revenue figure.
+    """
+    annotated = getattr(product, "sold_count", None)
+    if annotated is not None:
+        return int(annotated)
+    total = (
+        OrderItem.objects.filter(product=product)
+        .exclude(order__status=OrderStatus.CANCELLED.value)
+        .aggregate(total=Coalesce(Sum("qty"), 0))["total"]
+    )
+    return int(total)
+
+
 def _studio_product_out(product: Product) -> StudioProductOut:
     """Build the owner-view product response (includes management fields)."""
     return StudioProductOut(
@@ -315,6 +347,7 @@ def _studio_product_out(product: Product) -> StudioProductOut:
         status=product.status,
         is_adult=product.adult_only,
         created_at=product.created_at,
+        sold=_product_sold(product),
     )
 
 
@@ -323,13 +356,28 @@ def studio_list_products(
     request: HttpRequest,
 ) -> tuple[int, list[StudioProductOut] | CommerceError]:
     """List the caller's own creator's products, including draft/hidden and 19+."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, CommerceError(
             detail="크리에이터만 상품을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
         )
-    products = Product.objects.filter(creator=creator).order_by("-created_at", "id")
+    # sold_count: total qty sold per product via one aggregate query (no N+1) — the
+    # OrderItem->Product join is a single relation, so unlike the creator followers/
+    # posts case there is no cross-relation fan-out to guard against.
+    products = (
+        Product.objects.filter(creator=creator)
+        .annotate(
+            sold_count=Coalesce(
+                Sum(
+                    "order_items__qty",
+                    filter=~Q(order_items__order__status=OrderStatus.CANCELLED.value),
+                ),
+                0,
+            )
+        )
+        .order_by("-created_at", "id")
+    )
     return 200, [_studio_product_out(p) for p in products]
 
 
@@ -342,7 +390,7 @@ def studio_create_product(
     request: HttpRequest, payload: StudioProductIn
 ) -> tuple[int, StudioProductOut | CommerceError]:
     """Create a product owned by the caller's creator profile; 403 if they operate none."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, CommerceError(
@@ -383,7 +431,7 @@ def studio_update_product(
     request: HttpRequest, product_id: uuid.UUID, payload: StudioProductPatch
 ) -> tuple[int, StudioProductOut | CommerceError]:
     """Update fields on the caller's own product; 403 (no creator) / 404 (not theirs)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, CommerceError(
@@ -406,22 +454,13 @@ def studio_update_product(
                 detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
             )
         product.status = payload.status
-    if payload.title is not None:
-        product.title = payload.title
-    if payload.price is not None:
-        product.price = payload.price
-    if payload.meta is not None:
-        product.meta = payload.meta
-    if payload.media_url is not None:
-        product.media_url = payload.media_url
-    if payload.description is not None:
-        product.description = payload.description
-    if payload.options is not None:
-        product.options = payload.options
-    if payload.sold_out is not None:
-        product.sold_out = payload.sold_out
-    if payload.locked is not None:
-        product.locked = payload.locked
+    apply_optional(
+        product,
+        payload,
+        ["title", "price", "meta", "media_url", "description", "options", "sold_out", "locked"],
+    )
+    # ``is_adult`` maps to a differently-named model field (``adult_only``), so it
+    # stays inline rather than going through the same-name apply_optional pass.
     if payload.is_adult is not None:
         product.adult_only = payload.is_adult
     # ``stock`` is nullable (None = untracked), so "omitted" and "set to null" both
@@ -460,7 +499,7 @@ def studio_delete_product(
     product too (a broader change deferred), so the residual window is documented,
     not hidden.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, CommerceError(
@@ -698,7 +737,8 @@ def _restock_order_lines(order: Order) -> None:
 
 
 @orders_router.post(
-    "", response={200: OrderOut, 201: OrderOut, 404: CommerceError, 422: CommerceError}
+    "", response={200: OrderOut, 201: OrderOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("20/min"),
 )
 def create_order(
     request: HttpRequest, payload: CreateOrderIn
@@ -727,7 +767,7 @@ def create_order(
     winner's order). The fan notification is sent only *after* the transaction
     commits, so a rolled-back order never emits a stray "order received" notice.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     if payload.idempotency_key:
         existing = _load_order_by_key(account, payload.idempotency_key)
         if existing is not None:
@@ -860,6 +900,16 @@ def create_order(
         f"'{product.title}' 주문이 접수되었어요.",
         "/orders",
     )
+    logger.info(
+        "commerce.order.created",
+        extra={
+            "order_id": order.id,
+            "buyer_id": str(account.fan_id),
+            "product_id": str(product.id),
+            "qty": payload.qty,
+            "total": total,
+        },
+    )
     loaded = _load_order(order.id, account)
     assert loaded is not None  # just created for this buyer
     return 201, _order_out(loaded)
@@ -870,7 +920,7 @@ def list_orders(
     request: HttpRequest, cursor: str | None = None, limit: int | None = None
 ) -> OrderPage:
     """List the requesting fan's own orders, newest first, cursor-paginated."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     queryset = (
         Order.objects.filter(buyer=account)
         .prefetch_related("items", "items__product", "items__product__creator", "refund_requests")
@@ -885,7 +935,7 @@ def get_order(
     request: HttpRequest, order_id: str
 ) -> tuple[int, OrderOut | CommerceError]:
     """Return one of the requesting fan's own orders (404 if not theirs)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     order = _load_order(order_id, account)
     if order is None:
         return 404, CommerceError(
@@ -922,7 +972,7 @@ def cancel_order(
     A refund *accepted* (operator-approved) re-stock is a separate operator flow and
     is not handled here (후속 — 운영자 플로우).
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     order = _load_order(order_id, account)
     if order is None:
         return 404, CommerceError(
@@ -948,6 +998,10 @@ def cancel_order(
         _restock_order_lines(order)
     # Reflect the committed transition on the in-memory instance for the response.
     order.status = OrderStatus.CANCELLED.value
+    logger.info(
+        "commerce.order.cancelled",
+        extra={"order_id": order.id, "buyer_id": str(account.fan_id)},
+    )
     return 200, _order_out(order)
 
 
@@ -960,7 +1014,7 @@ def request_refund(
     request: HttpRequest, order_id: str, payload: RefundIn
 ) -> tuple[int, OrderOut | CommerceError]:
     """Request a refund against one of the fan's own orders (shipping/completed)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     order = _load_order(order_id, account)
     if order is None:
         return 404, CommerceError(
@@ -979,7 +1033,7 @@ def request_refund(
                     detail="이미 환불 신청이 접수된 주문이에요.",
                     code=ErrorCode.OPEN_REFUND_EXISTS.value,
                 )
-            RefundRequest.objects.create(
+            refund = RefundRequest.objects.create(
                 order=order,
                 reason=payload.reason,
                 detail=payload.detail,
@@ -989,6 +1043,14 @@ def request_refund(
         return 422, CommerceError(
             detail="이미 환불 신청이 접수된 주문이에요.", code=ErrorCode.OPEN_REFUND_EXISTS.value
         )
+    logger.info(
+        "commerce.refund.requested",
+        extra={
+            "order_id": order.id,
+            "refund_id": str(refund.id),
+            "buyer_id": str(account.fan_id),
+        },
+    )
     refreshed = _load_order(order_id, account)
     assert refreshed is not None  # owned above
     return 200, _order_out(refreshed)
@@ -1061,7 +1123,7 @@ def _ops_actor(request: HttpRequest) -> Account:
     """Return the operator account supplied by ``operator_required`` (RBAC guard)."""
     # request.auth is the Account resolved by RoleRequired; untyped without Ninja
     # stubs (same idiom as apps/safety/api.py._actor).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _ops_refund_out(refund: RefundRequest) -> OpsRefundOut:
@@ -1203,6 +1265,15 @@ def ops_accept_refund(
         f"주문 {order.id}의 환불이 승인되었어요.",
         "/orders",
     )
+    logger.info(
+        "commerce.refund.accepted",
+        extra={
+            "refund_id": str(refund.id),
+            "order_id": order.id,
+            "actor_id": str(_ops_actor(request).fan_id),
+            "order_restocked": bool(order_cancelled),
+        },
+    )
     return 200, _ops_refund_out(refund)
 
 
@@ -1246,6 +1317,14 @@ def ops_reject_refund(
         NotificationKind.ORDER.value,
         f"주문 {refund.order.id}의 환불이 거절되었어요.",
         "/orders",
+    )
+    logger.warning(
+        "commerce.refund.rejected",
+        extra={
+            "refund_id": str(refund.id),
+            "order_id": refund.order.id,
+            "actor_id": str(_ops_actor(request).fan_id),
+        },
     )
     return 200, _ops_refund_out(refund)
 

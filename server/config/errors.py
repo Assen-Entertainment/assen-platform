@@ -124,9 +124,10 @@ class ErrorCode(StrEnum):
     # --- uploads (media) ----------------------------------------------------
     # A multipart image upload was rejected (apps.uploads.api): the declared
     # content-type is not an allowed image family (415 → UPLOAD_TYPE_UNSUPPORTED,
-    # also covers SVG/HTML); the bytes are not a real image or are scriptable
-    # markup — magic-byte sniff (422 → UPLOAD_INVALID); or the file exceeds the size
-    # ceiling (413 → UPLOAD_TOO_LARGE).
+    # also covers SVG/HTML); the bytes are not a real image or are scriptable markup
+    # per the magic-byte sniff, or fail the full Pillow decode-verify / exceed the
+    # decompression-bomb pixel or dimension guard (422 → UPLOAD_INVALID, ASS-271);
+    # or the file exceeds the size ceiling (413 → UPLOAD_TOO_LARGE).
     UPLOAD_TYPE_UNSUPPORTED = "UploadTypeUnsupported"
     UPLOAD_INVALID = "UploadInvalid"
     UPLOAD_TOO_LARGE = "UploadTooLarge"

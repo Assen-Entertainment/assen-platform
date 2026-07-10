@@ -29,8 +29,8 @@ see :mod:`config.identity_verify`).
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
-from typing import cast
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
@@ -42,7 +42,7 @@ from pydantic import Field
 
 from apps.consent.models import ConsentKind
 from apps.consent.services import record_consent
-from apps.identity.auth import access_token_from_request, fan_auth
+from apps.identity.auth import access_token_from_request, authed, fan_auth
 from apps.identity.cookies import (
     ACCESS_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
@@ -70,6 +70,11 @@ from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
 from config.otp import MockOtpSender, OtpSender
 from config.throttle import anon_throttle, user_write_throttle
+
+# Auth-failure observability. Structured and strictly PII-free: raw phone numbers
+# and token plaintext are NEVER logged (only the failure event + a stable code), so
+# the log stream can surface OTP/refresh abuse without leaking an identity.
+logger = logging.getLogger(__name__)
 
 # Consent wording version recorded when the fan confirms 성인/본인 인증. Like
 # SIGNUP_CONSENT_VERSION, storing the version lets the gate require re-consent when
@@ -334,6 +339,7 @@ def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> Signup
         raise ApiError(422, str(exc), code=exc.code) from exc
 
     if not sender.verify(phone=phone, code=data.otp_code):
+        logger.warning("identity.login.otp_invalid", extra={"code": ErrorCode.OTP_INVALID.value})
         raise ApiError(
             422, "인증번호가 올바르지 않아요.", code=ErrorCode.OTP_INVALID
         )
@@ -346,6 +352,10 @@ def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> Signup
     if account is None:
         # The number holds no active fan account: guide to signup without exposing
         # more than the caller (who controls the phone) already knows.
+        logger.info(
+            "identity.login.unregistered",
+            extra={"code": ErrorCode.ACCOUNT_NOT_REGISTERED.value},
+        )
         raise ApiError(
             422, "가입이 필요해요.", code=ErrorCode.ACCOUNT_NOT_REGISTERED
         )
@@ -412,6 +422,13 @@ def refresh(
     try:
         pair = rotate_refresh_token(presented)
     except TokenError as exc:
+        logger.warning(
+            "identity.refresh.token_invalid",
+            extra={
+                "code": ErrorCode.REFRESH_TOKEN_INVALID.value,
+                "surface": "cookie" if web else "body",
+            },
+        )
         raise ApiError(
             401, "Refresh token is invalid.", code=ErrorCode.REFRESH_TOKEN_INVALID
         ) from exc
@@ -439,7 +456,7 @@ def _fan_me_out(account: Account) -> FanMeOut:
 @router.get("/me", response=FanMeOut, auth=fan_auth)
 def get_me(request: HttpRequest) -> FanMeOut:
     """Return the authenticated fan's identity summary (either surface)."""
-    return _fan_me_out(cast(Account, request.auth))  # type: ignore[attr-defined]
+    return _fan_me_out(authed(request))
 
 
 @router.patch(
@@ -452,7 +469,7 @@ def update_me(request: HttpRequest, data: FanMeUpdateIn) -> FanMeOut:
     fan can only edit their own profile. nickname is display-only PII (already the
     sole one stored); no new PII is introduced.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     account.nickname = data.nickname
     account.save(update_fields=["nickname"])
     return _fan_me_out(account)
@@ -469,7 +486,7 @@ def verify_start(request: HttpRequest) -> dict[str, str]:
     OTP surface. On success the mock records a ``pending`` transition and returns a
     bare ack (no PII is sent to or received from the mock).
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     verifier = identity_verifier()
     if verifier is None:
         raise ApiError(
@@ -499,7 +516,7 @@ def verify_confirm(request: HttpRequest) -> VerifyConfirmOut:
     consent is recorded (``ConsentKind.AGE``) so the age-gate has a durable grant.
     No domain event is emitted (AGE consent is not the RULE kind — closed registry).
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     verifier = identity_verifier()
     if verifier is None:
         raise ApiError(
@@ -534,7 +551,7 @@ def get_csrf(request: HttpRequest) -> dict[str, str]:
 @router.get("/membership-card", response=MembershipCardOut, auth=fan_auth)
 def get_membership_card(request: HttpRequest) -> MembershipCardOut:
     """Return the authenticated fan's digital membership card (either surface)."""
-    card = membership_card(cast(Account, request.auth))  # type: ignore[attr-defined]
+    card = membership_card(authed(request))
     return MembershipCardOut(
         nickname=card.nickname,
         member_id=card.member_id,

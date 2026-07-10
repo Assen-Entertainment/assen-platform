@@ -16,7 +16,7 @@ void main() {
     testWidgets('renders a 1px ink-ramp rule', (tester) async {
       await tester.pumpWidget(_host(const AssenDivider()));
       final divider = tester.widget<Divider>(find.byType(Divider));
-      expect(divider.color, RefColors.ink100);
+      expect(divider.color, RefColors.neutral100);
       expect(divider.thickness, 1);
     });
 

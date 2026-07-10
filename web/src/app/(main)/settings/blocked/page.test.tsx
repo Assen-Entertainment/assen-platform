@@ -9,7 +9,7 @@ import type { BlockedCreator } from "@/lib/api";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...p }: { href: unknown; children: React.ReactNode }) => (
-    <a href={typeof href === "string" ? href : "#"} {...p}>
+    <a href={typeof href === "string" ? href : "/"} {...p}>
       {children}
     </a>
   ),

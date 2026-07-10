@@ -16,7 +16,6 @@ from __future__ import annotations
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -28,7 +27,7 @@ from apps.admin_rbac.permissions import manager_required, operator_required
 from apps.admin_rbac.redaction import redact_safety_report, redact_safety_report_list
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
-from apps.identity.auth import fan_auth
+from apps.identity.auth import authed, fan_auth
 from apps.identity.models import Account, Role
 from apps.safety.metrics import report_handling_stats
 from apps.safety.models import (
@@ -228,6 +227,7 @@ def _summary_dict(report: SafetyReport) -> dict[str, object]:
     "/reports",
     auth=operator_required,
     response={201: ReportSummaryOut, 400: SafetyError, 404: SafetyError},
+    throttle=user_write_throttle("20/min"),
 )
 def create_report(
     request: HttpRequest,
@@ -448,6 +448,7 @@ def resolve_report_endpoint(
     "/blocks",
     auth=manager_required,
     response={201: BlockOut, 400: SafetyError, 404: SafetyError},
+    throttle=user_write_throttle("20/min"),
 )
 def create_block(
     request: HttpRequest,
@@ -517,14 +518,14 @@ def _block_out(block: UserBlock) -> BlockOut:
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated staff account supplied by RoleRequired."""
     # request.auth is untyped without Ninja stubs (same idiom as identity/auth.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _fan_account(request: HttpRequest) -> Account:
     """Return the authenticated fan account supplied by ``fan_auth``."""
     # request.auth is the Account resolved by FanBearerAuth/FanCookieAuth; untyped
     # without Ninja stubs (same idiom as _actor / identity.api).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 api.add_router("/safety", router)

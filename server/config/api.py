@@ -30,8 +30,8 @@ class HealthResponse(Schema):
     commit: str
 
 
-def _git_commit() -> str:
-    """Return the current git commit hash, or "unknown" if unavailable.
+def _resolve_git_commit() -> str:
+    """Resolve the current git commit hash, or "unknown" if unavailable.
 
     Reads the COMMIT_SHA env var first (set in CI/containers where the .git
     directory is absent); falls back to invoking git for local development.
@@ -51,6 +51,13 @@ def _git_commit() -> str:
     return result.stdout.strip() or "unknown"
 
 
+# Resolve the commit once at import (the value is fixed for the life of the
+# process): the previous per-request ``git rev-parse`` spawned a subprocess on
+# every ``/health`` hit — pure overhead for a value that never changes while the
+# server runs, and a subprocess fork on the liveness path a load balancer polls.
+_GIT_COMMIT = _resolve_git_commit()
+
+
 @api.get("/health", response=HealthResponse)
 def health(request: HttpRequest) -> HealthResponse:
     """Report liveness, API version, and the running commit hash.
@@ -63,7 +70,7 @@ def health(request: HttpRequest) -> HealthResponse:
     return HealthResponse(
         status="ok",
         version=api.version,
-        commit=_git_commit(),
+        commit=_GIT_COMMIT,
     )
 
 

@@ -7,6 +7,7 @@ import {
   Divider,
   StatusChip,
   EmptyState,
+  ErrorState,
   Sheet,
   SheetTrigger,
   SheetContent,
@@ -22,7 +23,7 @@ import { ApiError, apiErrorMessage, type Subscription } from "@/lib/api";
 export function SubscriptionsView({ subscriptions }: { subscriptions: Subscription[] }) {
   const { toast } = useToast();
   // USE_API면 실 목록/해지, 아니면 mock — 해지 시 낙관적 cancelScheduled=true("해지 예정").
-  const { data } = useSubscriptions(subscriptions);
+  const { data, isError, refetch } = useSubscriptions(subscriptions);
   const subs = data ?? subscriptions;
   const cancelMut = useCancelSubscription();
   const isCancelled = (sub: Subscription) => Boolean(sub.cancelScheduled) || sub.status === "cancelled";
@@ -45,7 +46,9 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <h1 className="text-headline text-on-surface">구독 관리</h1>
-      {subs.length ? (
+      {isError && !data ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : subs.length ? (
         <div className="flex flex-col gap-3">
           {subs.map((sub) => {
             const done = isCancelled(sub);

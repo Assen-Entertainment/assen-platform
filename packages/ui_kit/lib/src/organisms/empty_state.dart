@@ -74,7 +74,7 @@ class AssenEmptyState extends StatelessWidget {
                 style: TextStyle(
                   fontSize: TypographyTokens.bodyMSize,
                   height: 1.5,
-                  color: colors.ink700,
+                  color: colors.ink600,
                 ),
               ),
               if (actionLabel != null) ...[

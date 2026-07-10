@@ -5,7 +5,7 @@ Managed with `uv` (POSIX era). On Windows use the checked-out venv `server/.venv
 ## Rules (incident-based, CONSTRAINTS #25/#27/#38)
 
 - Every function takes type hints; every public function/class has a docstring (*why*, not *what* — no restating the code).
-- **Migrations: 만들지 마라.** 전 앱이 migration-less(모델만)이며 테이블은 `migrate --run-syncdb`로 생성된다(테스트 러너 포함). 새 모델에 `makemigrations`를 실행하면 그 앱만 0001이 생겨 unmigrated FK(`identity.Account` 등)에 의존해 깨진다 — 생성됐다면 삭제. `makemigrations --check`는 항상 clean이어야 한다. 정식 마이그레이션 전환·`migrate`(로컬 초과)는 human-gated(#25). django-linear-migrations는 그 전환 시점을 위해 유지.
+- **Migrations: 정식 전환 완료(2026-07-09 · ASS-266 · #25 승인 하).** 모델 보유 전 앱이 실 마이그레이션(`0001_initial`)을 갖고, 테이블은 `migrate`로 생성된다(테스트 러너 포함). 전 앱이 초기 마이그레이션을 함께 갖추어 과거의 "한 앱만 0001 → unmigrated FK(`identity.Account`) 파손" 문제는 해소됐다. 모델 변경 시 `makemigrations`로 마이그레이션을 갱신하고 `makemigrations --check`는 항상 clean이어야 한다(모델↔마이그레이션 동기). **단, migrations 디렉토리 쓰기는 hook이 차단하므로 생성은 `ALLOW_MIGRATIONS=1` 인간승인 하에서만, `migrate`(로컬 초과)도 human-gated(#25).** django-linear-migrations로 선형 강제. 배포 스키마 provisioning은 `migrate`(NOT `--run-syncdb`).
 - Never read or commit `.env` / credentials. Only `.env.example` is tracked.
 - Ninja routers live in each domain app's `api.py` and attach to the single `config.api` instance. Keep view logic separable from schemas (DRF fallback path, ADR-0001).
 - Keep app boundaries narrow; don't reach across domains via direct model imports once models exist.

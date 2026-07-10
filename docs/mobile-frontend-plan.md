@@ -2,15 +2,17 @@
 
 > 상태: 계획 정본 (2026-07-03, 프론트엔드 완결 라운드 산출물)
 > 전제 문서: SDLC 10(디자인시스템·토큰), SDLC 09(도메인·API), Figma DS v2(`Snd7m8KauF51QBZL5LWuGu`)
-> 현황 감사: 신방향 모바일 코드 커버리지 **0%** — 리포 내 Flutter 자산(fan_app 16화면·operator_app 7화면·ui_kit ~62위젯)은 전량 메이드era(superseded, M10 아카이브 대상)
+> 현황 감사(작성 시점, 2026-07-03): 신방향 모바일 코드 커버리지 **0%** — 리포 내 Flutter 자산(fan_app 16화면·operator_app 7화면·ui_kit ~62위젯)은 전량 메이드era(superseded, M10 아카이브 대상)
+>
+> **갱신(2026-07-07, R7~R9):** §1의 툴체인 게이트는 **해소됨** — Windows 네이티브 Flutter(`C:\Users\daisy\flutter`, R7 설치)로 `dart format`/`analyze`/`test`/`flutter build` 전부 로컬 실행 가능. 이후 M5(13화면)까지 실배선·dev 머지 완료(assen_mobile). §1은 당시 게이트 판단의 기록으로 유지하고, 아래 마일스톤(§2~5)은 후속 라운드 진행 상황에 맞춰 갱신 대상이다.
 
-## 1. 왜 지금 구현이 아니라 계획인가 (툴체인 게이트)
+## 1. 왜 착수 당시 구현이 아니라 계획이었나 (툴체인 게이트, 해소됨 — 위 갱신 참조)
 
-- 로컬 Windows에 flutter/dart 툴체인 없음(WSL 삭제, 2026-07-02). `dart format`·`analyze`·`test`·`flutter build` 전부 로컬 실행 불가.
+- 작성 시점(2026-07-03)에는 로컬 Windows에 flutter/dart 툴체인이 없었다(WSL 삭제, 2026-07-01). `dart format`·`analyze`·`test`·`flutter build` 전부 로컬 실행 불가했다.
 - 검증 불가 상태의 Dart 코드 양산은 금지 원칙 위반 — 실증 사례: `creator_accent.dart`가 dart-format 게이트를 로컬 통과 못해 `a6c3ee1`에서 defer됨.
-- 따라서 모바일 레인의 실행 조건은 다음 중 하나:
+- 당시 검토한 실행 조건 3안:
   - (a) **CI-검증 루프**: 작은 PR 단위로 GitHub Actions(Linux runner)의 format/analyze/test를 게이트로 사용 — 피드백 지연 크므로 토큰/유틸 등 소규모 작업에만 적합
-  - (b) **로컬 툴체인 복구**: Windows용 Flutter SDK 직접 설치(WSL 불필요, 디스크 ~2.5GB) — 화면 구현 착수 전 권장
+  - (b) **로컬 툴체인 복구**: Windows용 Flutter SDK 직접 설치(WSL 불필요, 디스크 ~2.5GB) — 화면 구현 착수 전 권장 → **R7에서 채택·완료**
   - (c) WSL 재구축 — 디스크 사유로 제거했으므로 비권장
 
 ## 2. 선행 마일스톤 (착수 순서 고정)

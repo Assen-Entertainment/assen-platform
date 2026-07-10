@@ -42,7 +42,8 @@ function baseUrl(isServer: boolean): string {
 function readBrowserCookie(name: string): string | undefined {
   if (typeof document === "undefined") return undefined;
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
+  // 캡처 그룹은 `*` 수량자라 매치 시 항상 참여(빈 문자열일 수는 있어도 undefined는 아님) — 폴백은 방어적.
+  return match ? decodeURIComponent(match[1] ?? "") : undefined;
 }
 
 /**

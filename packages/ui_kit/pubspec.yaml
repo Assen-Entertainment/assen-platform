@@ -30,3 +30,19 @@ resolution: workspace
 
 flutter:
   uses-material-design: true
+  # Pretendard (SIL OFL 1.1) — the design SSOT face (docs/design/tokens.v2.json
+  # typography.fontFamily). Bundled here so the shared design system, and every
+  # app that depends on ui_kit, ships the real font. Weights map to the type
+  # scale: Regular=400, Medium=500, SemiBold=600, Bold=700. Staged by
+  # tools/fonts/setup_pretendard.sh; LICENSE ships alongside (fonts/LICENSE).
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: fonts/Pretendard-Regular.otf
+          weight: 400
+        - asset: fonts/Pretendard-Medium.otf
+          weight: 500
+        - asset: fonts/Pretendard-SemiBold.otf
+          weight: 600
+        - asset: fonts/Pretendard-Bold.otf
+          weight: 700

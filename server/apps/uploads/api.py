@@ -1,4 +1,4 @@
-"""Image upload endpoint (R11 — mock local storage, magic-byte validated).
+"""Image upload endpoint (R11 — mock local storage, magic-byte + Pillow validated).
 
 ``POST /api/uploads`` (``fan_auth`` — unauthenticated → 401): accepts a single
 multipart image and returns ``{"url": "/media/uploads/<uuid>.<ext>"}``. That URL
@@ -22,20 +22,23 @@ Security boundary (see also :mod:`apps.uploads.images`):
   any bytes are read; an absent or lying size is still bounded because the payload
   is read in fixed chunks that abort the instant the accumulated length crosses
   the ceiling (so oversize bytes never accumulate unbounded in memory);
+- Pillow decode-verify (422, ASS-271) — once the full payload is read, it must
+  actually decode as the sniffed image family (``Image.open(...).verify()``),
+  catching truncated/corrupted/polyglot files that pass the 64-byte magic sniff,
+  plus an ``UPLOAD_MAX_PIXELS``/``UPLOAD_MAX_DIMENSION`` decompression-bomb guard;
 - the stored filename is a server-minted UUID (never the user's) written under a
   non-executable ``uploads/`` prefix — path traversal and PII are impossible;
 - the stored content-type/extension come from the sniff, never the client.
 
-Real object moderation (nudity/abuse scanning), a full magic-byte decode
-(Pillow verify + decompression-bomb guard), and a real S3 backend are 후행 (see the
-moderation hook below and ``config.settings.base`` STORAGES plugin point, which
-lists the required gates before a real serving path).
+Real object moderation (nudity/abuse scanning) and a real S3 backend are 후행 (see
+the moderation hook below and ``config.settings.base`` STORAGES plugin point,
+which lists the required gates before a real serving path).
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, cast
+from typing import Annotated
 
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -44,13 +47,13 @@ from django.http import HttpRequest
 from ninja import File, Router, Schema
 from ninja.files import UploadedFile
 
-from apps.identity.auth import fan_auth
-from apps.identity.models import Account
+from apps.identity.auth import authed, fan_auth
 from apps.uploads.images import (
     ALLOWED_CONTENT_TYPES,
     ImageKind,
     looks_scriptable,
     sniff_image_kind,
+    verify_image_decodes,
 )
 from apps.uploads.models import Upload
 from config.api import api
@@ -101,9 +104,11 @@ def create_upload(
 
     Rejects (coded ``ApiError``): the upload surface being fail-closed off (503,
     no serving backend wired), a non-image declared content-type (415), a file over
-    :data:`~django.conf.settings.UPLOAD_MAX_BYTES` (413), or bytes that are not a
-    real allowed image / are scriptable markup (422). On success writes the bytes
-    under a UUID name via the storage backend and records an :class:`Upload` row.
+    :data:`~django.conf.settings.UPLOAD_MAX_BYTES` (413), bytes that are not a real
+    allowed image / are scriptable markup (422), or bytes that pass the magic-byte
+    sniff but fail Pillow's full decode-verify / exceed the pixel-count or
+    dimension bomb guard (422). On success writes the bytes under a UUID name via
+    the storage backend and records an :class:`Upload` row.
     """
     # 0) Fail closed unless this environment also serves the stored bytes (there is
     # no real object-storage backend yet). Off (prod) → refuse rather than write to a
@@ -115,7 +120,7 @@ def create_upload(
             code=ErrorCode.UPLOAD_STORAGE_UNAVAILABLE,
         )
 
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
 
     # 1) Coarse gate: the declared content-type must be an allowed raster family.
     # This is spoofable, so it is only the first filter (SVG/HTML declared honestly
@@ -171,13 +176,27 @@ def create_upload(
         parts.append(chunk)
     data = b"".join(parts)
 
-    # 5) Mock moderation hook (real provider is 후행 — see _moderation_accepts).
+    # 5) Full Pillow decode-verify (ASS-271) on the complete payload: the sniff above
+    # only inspected the leading 64 bytes, so a truncated/corrupted/polyglot file can
+    # still carry a valid magic number. This also enforces the decompression-bomb /
+    # dimension guards before any pixel data is decoded further downstream.
+    if not verify_image_decodes(
+        data,
+        kind,
+        max_pixels=settings.UPLOAD_MAX_PIXELS,
+        max_dimension=settings.UPLOAD_MAX_DIMENSION,
+    ):
+        raise ApiError(
+            422, "이미지 파일이 아니에요.", code=ErrorCode.UPLOAD_INVALID
+        )
+
+    # 6) Mock moderation hook (real provider is 후행 — see _moderation_accepts).
     if not _moderation_accepts(data):
         raise ApiError(
             422, "업로드가 거부됐어요.", code=ErrorCode.UPLOAD_INVALID
         )
 
-    # 6) Store under a server-minted UUID name (never the user's filename → no path
+    # 7) Store under a server-minted UUID name (never the user's filename → no path
     # traversal / PII) with the sniffed extension, via the storage abstraction.
     object_name = f"uploads/{uuid.uuid4().hex}.{kind.extension}"
     stored_name = default_storage.save(object_name, ContentFile(data))

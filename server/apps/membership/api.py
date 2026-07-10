@@ -10,21 +10,22 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timedelta
-from typing import cast
 
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
 from pydantic import Field
 
 from apps.creator.models import Creator
-from apps.identity.auth import fan_auth, resolve_optional_account
+from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
 from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
+from config.patch import apply_optional
 from config.throttle import user_write_throttle
 
 # Mock billing cycle length; there is no real recurring billing (B7 gated).
@@ -118,7 +119,12 @@ studio_tiers_router = Router(auth=fan_auth, tags=["studio-membership"])
 
 
 class StudioTierOut(Schema):
-    """Owner-view membership tier (adds the ``active`` management flag + timestamp)."""
+    """Owner-view membership tier (adds the ``active`` management flag + timestamp).
+
+    ``subscribers`` is the count of **active** (``status=active``) subscriptions to
+    this tier (ASS-264) — a count, never a settlement/revenue figure (PG·재무 게이트
+    후행).
+    """
 
     id: uuid.UUID
     creator_id: uuid.UUID | None = None
@@ -131,6 +137,7 @@ class StudioTierOut(Schema):
     active: bool
     sort_order: int
     created_at: datetime
+    subscribers: int
 
 
 class StudioTierIn(Schema):
@@ -170,6 +177,22 @@ def _owner_creator(account: Account) -> Creator | None:
     return Creator.objects.filter(owner=account).first()
 
 
+def _tier_subscribers(tier: MembershipTier) -> int:
+    """Active subscriber count for ``tier`` (ASS-264).
+
+    ``studio_list_tiers`` annotates ``subscribers_count`` on the whole queryset in
+    one aggregate query (no N+1); this falls back to a single live count for the
+    lone-tier create/update responses, where the value was never annotated. Mirrors
+    ``studio_stats``' ``subscribers`` invariant (``status = active`` only).
+    """
+    annotated = getattr(tier, "subscribers_count", None)
+    if annotated is not None:
+        return int(annotated)
+    return Subscription.objects.filter(
+        tier=tier, status=SubscriptionStatus.ACTIVE.value
+    ).count()
+
+
 def _studio_tier_out(tier: MembershipTier) -> StudioTierOut:
     """Build the owner-view tier response (includes the ``active`` flag)."""
     return StudioTierOut(
@@ -184,6 +207,7 @@ def _studio_tier_out(tier: MembershipTier) -> StudioTierOut:
         active=tier.active,
         sort_order=tier.sort_order,
         created_at=tier.created_at,
+        subscribers=_tier_subscribers(tier),
     )
 
 
@@ -192,13 +216,24 @@ def studio_list_tiers(
     request: HttpRequest,
 ) -> tuple[int, list[StudioTierOut] | SubscriptionError]:
     """List the caller's own creator's tiers, including inactive ones."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, SubscriptionError(
             detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
         )
-    tiers = MembershipTier.objects.filter(creator=creator).order_by("sort_order", "price")
+    # subscribers_count: active-subscriber count per tier via one aggregate query (no
+    # N+1) — a single relation join, so no cross-relation fan-out to guard against.
+    tiers = (
+        MembershipTier.objects.filter(creator=creator)
+        .annotate(
+            subscribers_count=Count(
+                "subscriptions",
+                filter=Q(subscriptions__status=SubscriptionStatus.ACTIVE.value),
+            )
+        )
+        .order_by("sort_order", "price")
+    )
     return 200, [_studio_tier_out(t) for t in tiers]
 
 
@@ -211,7 +246,7 @@ def studio_create_tier(
     request: HttpRequest, payload: StudioTierIn
 ) -> tuple[int, StudioTierOut | SubscriptionError]:
     """Create a membership tier owned by the caller's creator; 403 if they operate none."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, SubscriptionError(
@@ -240,7 +275,7 @@ def studio_update_tier(
     request: HttpRequest, tier_id: uuid.UUID, payload: StudioTierPatch
 ) -> tuple[int, StudioTierOut | SubscriptionError]:
     """Update fields on the caller's own tier; 403 (no creator) / 404 (not theirs)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, SubscriptionError(
@@ -251,22 +286,11 @@ def studio_update_tier(
         return 404, SubscriptionError(
             detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
         )
-    if payload.name is not None:
-        tier.name = payload.name
-    if payload.price is not None:
-        tier.price = payload.price
-    if payload.period is not None:
-        tier.period = payload.period
-    if payload.benefits is not None:
-        tier.benefits = payload.benefits
-    if payload.badge is not None:
-        tier.badge = payload.badge
-    if payload.featured is not None:
-        tier.featured = payload.featured
-    if payload.active is not None:
-        tier.active = payload.active
-    if payload.sort_order is not None:
-        tier.sort_order = payload.sort_order
+    apply_optional(
+        tier,
+        payload,
+        ["name", "price", "period", "benefits", "badge", "featured", "active", "sort_order"],
+    )
     tier.save()
     return 200, _studio_tier_out(tier)
 
@@ -292,7 +316,7 @@ def studio_delete_tier(
     subscription can't be deleted (422); the owner should set ``active=False`` (soft
     archive) to stop new signups while keeping existing subscriptions intact.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = _owner_creator(account)
     if creator is None:
         return 403, SubscriptionError(
@@ -374,7 +398,8 @@ def _subscription_out(sub: Subscription) -> SubscriptionOut:
 
 
 @subscriptions_router.post(
-    "", response={201: SubscriptionOut, 404: SubscriptionError, 422: SubscriptionError}
+    "", response={201: SubscriptionOut, 404: SubscriptionError, 422: SubscriptionError},
+    throttle=user_write_throttle("20/min"),
 )
 def subscribe(
     request: HttpRequest, payload: SubscribeIn
@@ -384,7 +409,7 @@ def subscribe(
     Refuses (422) if the fan already has an active subscription to the same
     creator (one active membership per creator).
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     # Only an active (publicly listed) tier is subscribable; an inactive/archived or
     # unknown tier 404s (no existence leak), mirroring ``list_tiers``' active filter.
     tier = (
@@ -427,7 +452,7 @@ def subscribe(
 @subscriptions_router.get("", response=list[SubscriptionOut])
 def list_subscriptions(request: HttpRequest) -> list[SubscriptionOut]:
     """List the requesting fan's own subscriptions (newest first)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     subs = (
         Subscription.objects.filter(fan=account)
         .select_related("tier", "tier__creator")
@@ -439,6 +464,7 @@ def list_subscriptions(request: HttpRequest) -> list[SubscriptionOut]:
 @subscriptions_router.post(
     "/{subscription_id}/cancel",
     response={200: SubscriptionOut, 404: SubscriptionError, 422: SubscriptionError},
+    throttle=user_write_throttle("20/min"),
 )
 def cancel_subscription(
     request: HttpRequest, subscription_id: uuid.UUID
@@ -449,7 +475,7 @@ def cancel_subscription(
     membership stays usable until period-end; the response's ``cancel_scheduled``
     flag lets the web show "해지 예정". A real billing job would flip it later.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     sub = (
         Subscription.objects.select_related("tier", "tier__creator")
         .filter(id=subscription_id, fan=account)
@@ -488,7 +514,7 @@ def change_subscription_tier(
     also refused (422): its tier is frozen until the cancellation is withdrawn (F-E).
     Idempotent: switching to the tier already held is a 200 no-op.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     sub = (
         Subscription.objects.select_related("tier", "tier__creator")
         .filter(id=subscription_id, fan=account)

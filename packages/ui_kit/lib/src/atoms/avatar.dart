@@ -96,9 +96,9 @@ class AssenAvatar extends StatelessWidget {
               width: _dotSize,
               height: _dotSize,
               decoration: BoxDecoration(
-                color: colors.matchaInk,
+                color: colors.mintInk,
                 shape: BoxShape.circle,
-                border: Border.all(color: colors.cream50, width: 2),
+                border: Border.all(color: colors.white, width: 2),
               ),
             ),
           ),
@@ -137,24 +137,24 @@ class AssenAvatar extends StatelessWidget {
   };
 
   Color _fallbackBg(AssenColors c) {
-    if (hue == null) return c.strawberryBg;
+    if (hue == null) return c.indigo100;
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.strawberryBg,
-      AssenBadgeHue.peach => c.peachBg,
-      AssenBadgeHue.lemon => c.lemonBg,
-      AssenBadgeHue.matcha => c.matchaBg,
+      AssenBadgeHue.brand => c.indigo100,
+      AssenBadgeHue.peach => c.violetBg,
+      AssenBadgeHue.lemon => c.creamBg,
+      AssenBadgeHue.matcha => c.mintBg,
       AssenBadgeHue.sky => c.skyBg,
       AssenBadgeHue.lavender => c.lavenderBg,
     };
   }
 
   Color _fallbackInk(AssenColors c) {
-    if (hue == null) return c.strawberryInk;
+    if (hue == null) return c.indigoInk;
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.strawberryInk,
-      AssenBadgeHue.peach => c.peachInk,
-      AssenBadgeHue.lemon => c.lemonInk,
-      AssenBadgeHue.matcha => c.matchaInk,
+      AssenBadgeHue.brand => c.indigoInk,
+      AssenBadgeHue.peach => c.violetInk,
+      AssenBadgeHue.lemon => c.creamInk,
+      AssenBadgeHue.matcha => c.mintInk,
       AssenBadgeHue.sky => c.skyInk,
       AssenBadgeHue.lavender => c.lavenderInk,
     };
@@ -162,12 +162,12 @@ class AssenAvatar extends StatelessWidget {
 
   Color _ringColor(AssenColors c) {
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.strawberryBorder,
-      AssenBadgeHue.peach => c.peachBorder,
-      AssenBadgeHue.lemon => c.lemonBorder,
-      AssenBadgeHue.matcha => c.matchaBorder,
-      AssenBadgeHue.sky => c.skyBorder,
-      AssenBadgeHue.lavender => c.lavenderBorder,
+      AssenBadgeHue.brand => c.indigoInk,
+      AssenBadgeHue.peach => c.violetInk,
+      AssenBadgeHue.lemon => c.creamInk,
+      AssenBadgeHue.matcha => c.mintInk,
+      AssenBadgeHue.sky => c.skyInk,
+      AssenBadgeHue.lavender => c.lavenderInk,
     };
   }
 }

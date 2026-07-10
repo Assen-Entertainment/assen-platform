@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { PostCard, TextArea, Button, Avatar, LockedOverlay } from "@/components/ui";
+import { PostCard, TextArea, Button, Avatar, LockedOverlay, LoadMore } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { gradientStyle } from "@/lib/placeholder";
 import { useSession } from "@/lib/session";
@@ -130,14 +130,15 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
         )}
       </ul>
 
-      {/* 더보기 — 댓글 커서 다음 페이지가 있을 때만(무한 쿼리). */}
-      {hasNextPage ? (
-        <div className="flex justify-center">
-          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-            {isFetchingNextPage ? "불러오는 중…" : "댓글 더보기"}
-          </Button>
-        </div>
-      ) : null}
+      {/* 더보기 — 댓글 커서 다음 페이지가 있을 때만(무한 쿼리). 자동 스크롤 로드 없이 버튼 폴백만
+          유지(auto=false, 기존 동작 유지). */}
+      <LoadMore
+        hasNextPage={hasNextPage}
+        isFetchingNextPage={isFetchingNextPage}
+        onLoadMore={() => fetchNextPage()}
+        itemCount={list.length}
+        auto={false}
+      />
 
       {/* 댓글 작성(#3) — 멀티라인 여유(min-height·전체 폭)를 준 TextArea 컴포저. */}
       <form onSubmit={submit} className="flex flex-col gap-2">

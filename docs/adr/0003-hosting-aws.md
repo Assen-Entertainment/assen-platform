@@ -1,7 +1,7 @@
 # ADR-0003: 호스팅/배포 — AWS Seoul (ap-northeast-2) + ECS Fargate
 
 - 날짜: 2026-06-12
-- 상태: Accepted — **범위 주(2026-07-02):** 본 결정은 **백엔드(API·Celery)에 유효 유지**. 웹은 결정 당시 Flutter-web 전제였고, React/Next 전환(ADR-09) 후 **웹 호스팅(Vercel vs ECS)은 E10 게이트로 재검토 중**(SDLC 08 E10 · SDLC 11 §3) — 웹 컨테이너 경로 준비물은 `web/Dockerfile`(standalone)로 확보됨.
+- 상태: Accepted — **범위 주(2026-07-02):** 본 결정은 **백엔드(API·Celery)에 유효 유지**. 웹은 결정 당시 Flutter-web 전제였고, React/Next 전환(`0005-web-react-next.md`) 후 **웹 호스팅(Vercel vs ECS)은 E10 게이트로 재검토 중**(SDLC 08 E10 · SDLC 11 §3) — 웹 컨테이너 경로 준비물은 `web/Dockerfile`(standalone)로 확보됨.
 - 결정자: 대표 (Geon Yong Kim) — 결정 스프린트 OQ-10, ralplan 합의(grand-design-plan 긴장점 9)
 
 ## 맥락

@@ -344,11 +344,11 @@ def _served_operation(view_name: str) -> Any:
 def test_signup_otp_is_ip_throttled(client: Client) -> None:
     """The signup-OTP endpoint returns 429 once the per-IP rate is exceeded (A4).
 
-    Works around the decoration-time throttle gate (see ``config.throttle`` TRAP
-    note): the test suite freezes ``FAN_WRITE_THROTTLE_ENABLED=False`` at import, so
-    ``override_settings`` cannot re-enable it. Instead we inject an
-    :class:`AnonRateThrottle` directly onto the live served operation, exercise the
-    real endpoint until the bucket is full, and restore it afterwards.
+    Injects an :class:`AnonRateThrottle` directly onto the live served operation,
+    exercises the real endpoint until the bucket is full, and restores it afterwards
+    — a self-contained check that does not depend on the ``FAN_WRITE_THROTTLE_ENABLED``
+    flag. (Flipping that flag at run time is exercised separately, now that the gate
+    is request-time, in ``config/tests/test_throttle_gate.py``.)
     """
     operation = _served_operation("request_otp")
     original = list(operation.throttle_objects)

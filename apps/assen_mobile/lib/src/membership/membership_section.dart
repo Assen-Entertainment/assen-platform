@@ -124,7 +124,7 @@ class _TierCard extends StatelessWidget {
                     Icon(
                       Icons.check_circle_outline,
                       size: SpacingTokens.s4,
-                      color: colors.matchaInk,
+                      color: colors.mintInk,
                     ),
                     const SizedBox(width: SpacingTokens.s2),
                     Expanded(
@@ -133,7 +133,7 @@ class _TierCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: TypographyTokens.bodyMSize,
                           height: 1.4,
-                          color: colors.ink700,
+                          color: colors.ink600,
                         ),
                       ),
                     ),

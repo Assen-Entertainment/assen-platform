@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 /// ASS-249).
 ///
 /// Wraps [CachedNetworkImage] with the app's shared media policy so every
-/// banner behaves the same: a cream ([AssenColors.cream200]) placeholder while
-/// the bytes stream in, the same cream fallback on a load failure (a broken URL
-/// degrades to the identical cream banner an absent URL shows — R9a
+/// banner behaves the same: a neutral ([AssenColors.neutral200]) placeholder
+/// while the bytes stream in, the same neutral fallback on a load failure (a
+/// broken URL degrades to the same neutral banner an absent URL shows — R9a
 /// errorBuilder parity), and a short cross-fade in. The bytes are cached to
 /// disk and memory by `cached_network_image`, so a re-scroll or revisit paints
 /// instantly instead of refetching.
@@ -55,8 +55,8 @@ class CachedMedia extends StatelessWidget {
       // The cream placeholder/error carry no image label (unlabelled
       // ColoredBox), so a load in progress or a failed load is never announced
       // as the item and stays visually identical to the "no image" banner.
-      placeholder: (context, _) => ColoredBox(color: colors.cream200),
-      errorWidget: (context, _, _) => ColoredBox(color: colors.cream200),
+      placeholder: (context, _) => ColoredBox(color: colors.neutral200),
+      errorWidget: (context, _, _) => ColoredBox(color: colors.neutral200),
     );
   }
 }

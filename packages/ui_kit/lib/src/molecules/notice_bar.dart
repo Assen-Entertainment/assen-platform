@@ -77,15 +77,15 @@ class AssenNoticeBar extends StatelessWidget {
   (Color, Color, Color, IconData) _palette(AssenColors c) {
     return switch (kind) {
       AssenNoticeKind.info => (
-        c.skyBgSubtle,
+        c.skyBg,
         c.skyInk,
-        c.skyBorder,
+        c.skyInk,
         Icons.info_outline,
       ),
       AssenNoticeKind.warning => (
-        c.lemonBgSubtle,
-        c.lemonInk,
-        c.lemonBorder,
+        c.creamBg,
+        c.creamInk,
+        c.creamInk,
         Icons.warning_amber_outlined,
       ),
     };

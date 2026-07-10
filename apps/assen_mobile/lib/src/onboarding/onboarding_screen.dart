@@ -95,18 +95,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: SpacingTokens.s2,
-                  vertical: SpacingTokens.s1,
-                ),
-                child: AssenButton(
-                  label: '건너뛰기',
-                  style: AssenButtonStyle.ghost,
-                  onPressed: _finish,
-                ),
+            // Brand header: the Assen lockup anchors the intro on the
+            // warm-paper canvas (a light front-door), with the skip trailing.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                SpacingTokens.s4,
+                SpacingTokens.s2,
+                SpacingTokens.s2,
+                SpacingTokens.s1,
+              ),
+              child: Row(
+                children: [
+                  const AssenLogo(size: AssenLogoSize.sm),
+                  const Spacer(),
+                  AssenButton(
+                    label: '건너뛰기',
+                    style: AssenButtonStyle.ghost,
+                    onPressed: _finish,
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -164,14 +171,14 @@ class _OnboardingSlide extends StatelessWidget {
             width: SpacingTokens.s16,
             height: SpacingTokens.s16,
             decoration: BoxDecoration(
-              color: colors.strawberryBg,
+              color: colors.indigo100,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Icon(
               page.icon,
               size: SpacingTokens.s8,
-              color: colors.strawberryInk,
+              color: colors.indigoInk,
             ),
           ),
           const SizedBox(height: SpacingTokens.s6),
@@ -191,7 +198,7 @@ class _OnboardingSlide extends StatelessWidget {
             style: TextStyle(
               fontSize: TypographyTokens.bodyLSize,
               height: 1.5,
-              color: colors.ink700,
+              color: colors.ink600,
             ),
           ),
           if (showConsentNotice) ...[
@@ -257,7 +264,7 @@ class _Dots extends StatelessWidget {
             height: SpacingTokens.s2,
             margin: const EdgeInsets.symmetric(horizontal: SpacingTokens.s1),
             decoration: BoxDecoration(
-              color: i == active ? colors.roseMain : colors.ink200,
+              color: i == active ? colors.indigo500 : colors.neutral200,
               shape: BoxShape.circle,
             ),
           ),

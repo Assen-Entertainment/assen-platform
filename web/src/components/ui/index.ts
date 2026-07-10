@@ -36,6 +36,7 @@ export { RightRail } from "./right-rail";
 export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem } from "./select";
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "./accordion";
 export { FileUpload, type FileUploadProps } from "./file-upload";
+export { LoadMore, type LoadMoreProps } from "./load-more";
 // Overlays (Radix)
 export { Dialog, DialogTrigger, DialogClose, DialogContent, DialogTitle, DialogDescription } from "./dialog";
 export { Sheet, SheetTrigger, SheetClose, SheetContent, SheetTitle, SheetDescription, type SheetContentProps } from "./sheet";

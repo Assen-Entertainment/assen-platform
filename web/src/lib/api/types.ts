@@ -18,6 +18,12 @@ export interface Creator {
   blocked?: boolean;
 }
 
+/**
+ * 크리에이터 목록 서버 랭킹(E11) — `GET /creators?sort=`. popular=팔로워 desc, new=최신 가입 desc,
+ * recommended=팔로워·최신 혼합. 미지정 시 기존 handle 커서 페이지(무한 스크롤) 그대로.
+ */
+export type CreatorSort = "popular" | "new" | "recommended";
+
 /** 내가 차단한 크리에이터 1건(설정 차단 목록 — 서버 BlockedCreatorOut). */
 export interface BlockedCreator {
   creatorId: string;
@@ -104,10 +110,12 @@ export interface Paginated<T> {
   next_cursor?: string | null;
 }
 
-/** /search 결과 (creators + products). */
+/** /search 결과 (creators + products) — 랭킹·페이지네이션(B2 `/search?q=&limit=&offset=`). */
 export interface SearchResult {
   creators: Creator[];
   products: Product[];
+  /** 다음 페이지 오프셋 — 더 가져올 결과가 있으면 값, 없으면 null(마지막 페이지)/undefined(빈 질의). */
+  nextOffset?: number | null;
 }
 
 // --- 커머스 상태/주문 — 서버 wire 계약(B4). OrderStatus/RefundStatus는 서버 상태 매핑. ---

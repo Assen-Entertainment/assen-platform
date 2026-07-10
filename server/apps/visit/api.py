@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_type
 from datetime import datetime, time, timedelta
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -14,6 +13,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
+from apps.identity.auth import authed
 from apps.identity.models import Account, Role
 from apps.visit.models import VisitRecord
 from apps.visit.services import correct_visit, record_visit, void_visit
@@ -159,7 +159,7 @@ def _actor(request: HttpRequest) -> Account:
     # Ninja stashes the authenticated principal on request.auth; it is untyped
     # without Ninja stubs, so we ignore attr-defined here (same idiom as
     # identity/auth.py) and cast to the concrete Account.
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _record_out(record: VisitRecord) -> VisitRecordOut:

@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 ///
 /// Covers the Inputs/FilterChip row of `components.md` — collection filters and
 /// the 출근표 (schedule) date picker, and is reused for PartySizeChip via the
-/// [label]. Selected uses a strawberry pastel fill with strawberry ink text
-/// (pastels are surface-only; text is the hue's ink — tokens.md §1); unselected
-/// is an outlined cream surface. No gradients — solid fills only.
+/// [label]. Selected uses the indigo container fill with indigo ink text
+/// (containers are surface-only; text is the ink step — tokens.md §1);
+/// unselected is an outlined neutral surface. Solid fills only — the sanctioned
+/// brand gradient is bounded to hero/cover/lockup/login (tokens.md 2026-07-09).
 class AssenFilterChip extends StatelessWidget {
   /// Creates a filter chip labelled [label].
   ///
@@ -40,7 +41,7 @@ class AssenFilterChip extends StatelessWidget {
     final enabled = onSelected != null;
     final fg = !enabled
         ? colors.ink500
-        : (selected ? colors.strawberryInk : colors.ink700);
+        : (selected ? colors.indigoInk : colors.ink600);
 
     // 라벨은 내부 Text가 제공하므로 래퍼엔 selected/button 상태만 더한다
     // (래퍼에 label을 또 주면 "게임\n게임"으로 중복됨).
@@ -65,12 +66,12 @@ class AssenFilterChip extends StatelessWidget {
               vertical: SpacingTokens.s2,
             ),
             decoration: BoxDecoration(
-              color: selected ? colors.strawberryBg : colors.cream50,
+              color: selected ? colors.indigo100 : colors.white,
               borderRadius: const BorderRadius.all(
                 Radius.circular(RadiusTokens.full),
               ),
               border: Border.all(
-                color: selected ? colors.strawberryBorder : colors.ink200,
+                color: selected ? colors.indigo500 : colors.neutral200,
               ),
             ),
             child: Row(
@@ -121,7 +122,7 @@ enum AssenTimeSlotState {
 /// Covers the Domain/TimeSlotChip row of `components.md`. The three states are
 /// distinct in more than colour: [AssenTimeSlotState.full] adds a strikethrough
 /// so a closed slot is unmistakable, and [AssenTimeSlotState.selected] fills
-/// with the solid rose anchor. Tap is ignored unless the slot is available.
+/// with the solid indigo anchor. Tap is ignored unless the slot is available.
 class AssenTimeSlotChip extends StatelessWidget {
   /// Creates a time-slot chip showing [label] (e.g. "14:30") in [state].
   ///
@@ -153,16 +154,16 @@ class AssenTimeSlotChip extends StatelessWidget {
     final Color border;
     final Color text;
     if (isSelected) {
-      background = colors.roseMain;
-      border = colors.roseMain;
+      background = colors.indigo500;
+      border = colors.indigo500;
       text = colors.white;
     } else if (isFull) {
-      background = colors.ink100;
-      border = colors.ink200;
+      background = colors.neutral100;
+      border = colors.neutral200;
       text = colors.ink500;
     } else {
-      background = colors.cream50;
-      border = colors.ink200;
+      background = colors.white;
+      border = colors.neutral200;
       text = colors.ink900;
     }
 

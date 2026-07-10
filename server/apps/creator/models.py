@@ -4,8 +4,8 @@ A ``Creator`` is the public identity fans discover and follow. It optionally
 links 1:1 to an :class:`~apps.identity.models.Account` (the user who operates
 it); the link is nullable so demo/seed creators can exist before accounts do.
 
-Migration-less app (``migrate --run-syncdb`` materialises the tables — see
-[[assen-server-unmigrated-apps]]); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial`` (see
+[[assen-server-unmigrated-apps]]); regenerate with ``makemigrations`` when models change.
 
 Follower and post counts are *derived* (annotated at query time from the social
 and content relations), not stored, so they cannot drift.

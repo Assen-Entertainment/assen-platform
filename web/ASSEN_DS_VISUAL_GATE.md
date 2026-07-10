@@ -1,6 +1,6 @@
 # Assen DS 시각 게이트
 
-빌드 → 스크린샷 → Figma 픽셀 비교. **Windows npm으로 수행**한다(구 "WSL 전용" 전제는 폐기 — ADR-10, WSL 제거됨). 코드·토큰·Figma 정합과 브랜드 루브릭은 이미 통과(정적/프로그래매틱). 이 게이트는 **런타임 시각 회귀 확인**용.
+빌드 → 스크린샷 → Figma 픽셀 비교. **Windows npm으로 수행**한다(구 "WSL 전용" 전제는 폐기 — `docs/adr/0006-toolchain-windows-uv.md`, WSL 제거됨). 코드·토큰·Figma 정합과 브랜드 루브릭은 이미 통과(정적/프로그래매틱). 이 게이트는 **런타임 시각 회귀 확인**용.
 
 ## 1. 설치 + 실행
 `ASSEN_WEB_SETUP.md` §1 대로 설치 후:
@@ -51,14 +51,14 @@ Figma MCP `get_screenshot`(파일 `Snd7m8KauF51QBZL5LWuGu`, 페이지 `5:3`)으�
 
 ## 5. 알려진 의도적 편차 (브랜드 루브릭 상향 — 회귀 아님, Figma 상향 동기 권고)
 동기 상태는 2026-07-06 R7 감사(`get_variable_defs` + `ds-spec-addendum §10` 앵커) 근거. 상세 근거는 [`docs/design/ds-parity-audit-2026-07-06.md`](../docs/design/ds-parity-audit-2026-07-06.md) §5.
-- **CreatorThumbCard**: 이름 fs12→`title-m`, 회색 커버→`gradient.brand` 폴백 (C·B) — ⚠️ **미동기(코드 선행)**: gradient.brand Paint Style은 6표면에 바인딩되나 노드 31:7 미포함.
-- **EmptyState**: 회색 서클→`primary-container` 틴트 (D) — ⚠️ **노드 fill 미확인**(변수는 실존, 39:9 바인딩 미대조).
-- **MembershipTierCard**: `featured` 시 `gradient.brand` 상단 바 (B) — ⚠️ **미동기(코드 선행)**: 노드 19:3 gradient.brand 바인딩 미포함.
+- **CreatorThumbCard**: 이름 fs12→`title-m`, 회색 커버→`gradient.brand` 폴백 (C·B) — ✅ **동기 완료(2026-07-08)**: 커버 노드 31:4에 `gradient/brand` Paint Style 바인딩 → [`ds-figma-sync-2026-07-08.md`](../docs/design/ds-figma-sync-2026-07-08.md).
+- **EmptyState**: 회색 서클→`primary-container` 틴트 (D) — ✅ **동기 완료(2026-07-08)**: 서클 노드 39:4를 `sys/primaryContainer` 변수에 바인딩.
+- **MembershipTierCard**: `featured` 시 `gradient.brand` 상단 바 (B) — ✅ **동기 완료(2026-07-08)**: Featured 클론(297:28) 신설 + flush `gradient/brand` 상단 바(297:49). 원본 19:3·인스턴스 무손상.
 - **Switch**: off track `neutral-300`(=Figma #d4d4d8, 다크 `neutral-700` 대응), thumb 항상 white — ✅ **토큰값 일치**(`ref/neutral/300 = #d4d4d8` 확인; 노드 14:6 바인딩 미대조).
-- **Badge success/warning**: 중립 필→`success-container`/`warning-container` filled (a11y AA) — 🟡 **부분 동기**: success-container(mint) 변수 일치. **warning은 미완** — Figma `sys/warning = #ce8509`(구값) ↔ tokens.v2 `#B8740A`(a11y 상향) **드리프트**(§4-1 참조).
-- **PriceLabel**: 원가(취소선)+할인%(error) 지원 추가 — ⚠️ **코드 선행 추정**(노드 51:10 variant 미확인).
+- **Badge success/warning**: 중립 필→`success-container`/`warning-container` filled (a11y AA) — ✅ **동기 완료(2026-07-08)**: success-container(mint) 일치 + warning 드리프트 해소(`ref/amber/main` #ce8509→#b8740a, `sys/warning` Light alias 자동정정).
+- **PriceLabel**: 원가(취소선)+할인%(error) 지원 추가 — ✅ **동기 완료(2026-07-08)**: 51:8 원가 STRIKETHROUGH + 51:9 할인율 `sys/error` 바인딩.
 
-> **토큰 드리프트 1건(조치 필요)**: `sys/warning` — Figma `#CE8509`(구·비텍스트 3:1 미달) vs tokens.v2.json `#B8740A`(WCAG 1.4.11 통과). SSOT=tokens.v2. 브랜드 확정 후 Figma `sys/warning`·`ref/amber/main` 상향 동기. (그 외 sys.primary/onPrimary/primaryContainer/onPrimaryContainer/surface/onSurface/onSurfaceVariant/surfaceContainerHigh/outline/error/success + radius·spacing + 타이포 메트릭은 전부 일치.)
+> **토큰 드리프트 0건(2026-07-08 해소)**: `ref/amber/main` #CE8509→#B8740A 반영, `sys/warning` Light가 alias로 자동정정. SSOT=tokens.v2 정합. (그 외 sys.primary/onPrimary/primaryContainer/onPrimaryContainer/surface/onSurface/onSurfaceVariant/surfaceContainerHigh/outline/error/success + radius·spacing + 타이포 메트릭은 전부 일치.)
 
 ## 6. 체크리스트
 - [ ] 라이트/다크 양모드 렌더 정상 (색 반전)

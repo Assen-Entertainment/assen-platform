@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/api/api_providers.dart';
+import 'package:assen_mobile/src/common/refreshable_async_notifier.dart';
 import 'package:assen_mobile/src/store/product.dart';
 import 'package:assen_mobile/src/store/store_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,19 +13,16 @@ import 'package:flutter_riverpod/misc.dart' show AsyncNotifierProviderFamily;
 /// An [AsyncNotifier] so the screen renders loading/error/data from one value,
 /// and can re-run the fetch via [refresh] (retry) without the screen owning any
 /// request state.
-class StoreController extends AsyncNotifier<List<Product>> {
+class StoreController extends AsyncNotifier<List<Product>>
+    with RefreshableAsyncNotifier<List<Product>> {
   @override
   Future<List<Product>> build() {
     return ref.watch(storeRepositoryProvider).fetchProducts();
   }
 
-  /// Re-fetches the catalog, surfacing a fresh loading then data/error state.
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref.read(storeRepositoryProvider).fetchProducts(),
-    );
-  }
+  @override
+  Future<List<Product>> fetch() =>
+      ref.read(storeRepositoryProvider).fetchProducts();
 }
 
 /// Exposes the store catalog [AsyncValue] and its [StoreController].
@@ -40,7 +38,8 @@ final storeControllerProvider =
 /// loading/error/data from a single value and can re-run its fetch via
 /// [refresh] (retry). The id argument is delivered to the notifier by the
 /// family (Riverpod 3.x) and read back in [build].
-class ProductController extends AsyncNotifier<Product> {
+class ProductController extends AsyncNotifier<Product>
+    with RefreshableAsyncNotifier<Product> {
   /// Creates a controller for the product identified by [productId].
   ProductController(this.productId);
 
@@ -52,13 +51,9 @@ class ProductController extends AsyncNotifier<Product> {
     return ref.watch(storeRepositoryProvider).fetchProduct(productId);
   }
 
-  /// Re-fetches the product, surfacing a fresh loading then data/error state.
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref.read(storeRepositoryProvider).fetchProduct(productId),
-    );
-  }
+  @override
+  Future<Product> fetch() =>
+      ref.read(storeRepositoryProvider).fetchProduct(productId);
 }
 
 /// Exposes each product detail's [AsyncValue], keyed by product id.

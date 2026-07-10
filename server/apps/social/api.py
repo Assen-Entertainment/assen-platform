@@ -17,15 +17,13 @@ access cookie) and rate-limited per user (:func:`config.throttle.user_write_thro
 from __future__ import annotations
 
 import uuid
-from typing import cast
 
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest
 from ninja import Router, Schema
 
 from apps.creator.models import Creator
-from apps.identity.auth import fan_auth
-from apps.identity.models import Account
+from apps.identity.auth import authed, fan_auth
 from apps.notification.services import notify
 from apps.social.models import CreatorBlock, Follow
 from config.api import api
@@ -63,7 +61,7 @@ def follow_creator(
     request: HttpRequest, handle: str
 ) -> tuple[int, FollowOut | ErrorOut]:
     """Follow a creator; idempotent (a second follow is a no-op, still 200)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(handle=handle).first()
     if creator is None:
         return 404, ErrorOut(detail="creator not found")
@@ -96,7 +94,7 @@ def unfollow_creator(
     request: HttpRequest, handle: str
 ) -> tuple[int, FollowOut | ErrorOut]:
     """Unfollow a creator; idempotent (unfollowing a non-follow is a no-op)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(handle=handle).first()
     if creator is None:
         return 404, ErrorOut(detail="creator not found")
@@ -159,7 +157,7 @@ def block_creator(request: HttpRequest, payload: BlockIn) -> tuple[int, BlockOut
     An unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,
     a personal block does not hide the target's existence.
     """
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     creator = Creator.objects.filter(id=payload.creator_id).first()
     if creator is None:
         return 404, BlockError(
@@ -185,7 +183,7 @@ def block_creator(request: HttpRequest, payload: BlockIn) -> tuple[int, BlockOut
 )
 def unblock_creator(request: HttpRequest, creator_id: uuid.UUID) -> tuple[int, BlockOut]:
     """Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     CreatorBlock.objects.filter(blocker=account, creator_id=creator_id).delete()
     return 200, BlockOut(blocked=False, creator_id=creator_id)
 
@@ -193,7 +191,7 @@ def unblock_creator(request: HttpRequest, creator_id: uuid.UUID) -> tuple[int, B
 @blocks_router.get("", response=list[BlockedCreatorOut])
 def list_blocks(request: HttpRequest) -> list[BlockedCreatorOut]:
     """List the creators the requesting fan has blocked (settings screen)."""
-    account = cast(Account, request.auth)  # type: ignore[attr-defined]
+    account = authed(request)
     blocks = (
         CreatorBlock.objects.filter(blocker=account)
         .select_related("creator")

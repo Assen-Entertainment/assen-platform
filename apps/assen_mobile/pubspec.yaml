@@ -46,12 +46,18 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   # Routing: go_router 16.x (declarative routes, deep links, auth-guard redirect).
   go_router: ^16.0.0
+  shared_preferences: ^2.5.5
   ui_kit:
     path: ../../packages/ui_kit
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Shared, deterministic backend-shaped JSON builders (DomainFixtures) so the
+  # screen tests seed data from one canonical source instead of inline literals.
+  # Dev-only: production code must never depend on this package.
+  test_fixtures:
+    path: ../../packages/test_fixtures
 
 flutter:
   uses-material-design: true

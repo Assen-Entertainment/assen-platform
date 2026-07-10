@@ -68,7 +68,7 @@ import {
   type StudioTierUpdate,
   type StudioProfileUpdate,
 } from "./index";
-import type { Creator, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, ShippingAddress, BlockedCreator, StudioStats } from "./types";
+import type { Creator, CreatorSort, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, ShippingAddress, BlockedCreator, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
 import { emitNotificationRead, emitAllNotificationsRead } from "./notification-events";
 import { track } from "@/lib/analytics";
@@ -181,11 +181,16 @@ export const qk = {
  * 크리에이터 목록 — 커서 무한 쿼리(디스커버리). select로 평탄화해 소비처는 배열만 보고
  * (data 접근부 무변경), 더보기는 hasNextPage/fetchNextPage로 배선한다. mock=단일 페이지.
  * SSR Page 시드(nextCursor 포함)로 마운트 즉시 hasNextPage 정확 → 이중 페치 없이 더보기 노출.
+ *
+ * `sort`(E11 서버 랭킹 — popular/new/recommended) 지정 시 별도 쿼리 키(["creators", sort])로
+ * 캐시가 분리되고, 서버가 이미 단일 랭킹 페이지(next_cursor 없음)를 반환하므로 hasNextPage=false로
+ * 자연히 수렴한다(무한 쿼리 셸을 그대로 재사용 — 별도 훅 불필요). qk.creators 접두 무효화(팔로우
+ * 토글 등)는 partial match로 sort 변형에도 그대로 적용된다.
  */
-export function useCreators(initialData?: Page<Creator>) {
+export function useCreators(initialData?: Page<Creator>, sort?: CreatorSort) {
   return useInfiniteQuery({
-    queryKey: qk.creators,
-    queryFn: ({ pageParam }) => getCreatorsPage(pageParam),
+    queryKey: sort ? [...qk.creators, sort] : qk.creators,
+    queryFn: ({ pageParam }) => getCreatorsPage(pageParam, sort),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextPageParam,
     initialData: seedInfinite(initialData),
@@ -257,13 +262,23 @@ export function useFeed(initialData?: Page<Post>) {
     select: flattenPages,
   });
 }
-/** 검색 — B2 `/search?q=` 소비. 빈 질의는 비활성, 타이핑 중 직전 결과 유지. */
+/**
+ * 검색 — B2 `/search?q=&limit=&offset=` offset 무한 쿼리(더 보기). 빈 질의는 비활성, 타이핑 중
+ * 직전 결과 유지. select로 누적 페이지를 creators/products로 평탄화(소비처는 배열만 본다) —
+ * hasNextPage/fetchNextPage는 훅 반환값에서 그대로 노출되어 검색 뷰의 "더 보기" 버튼을 배선한다.
+ */
 export function useSearch(q: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: qk.search(q),
-    queryFn: () => getSearch(q),
+    queryFn: ({ pageParam }) => getSearch(q, { offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
     enabled: q.trim().length > 0,
     placeholderData: keepPreviousData,
+    select: (data) => ({
+      creators: data.pages.flatMap((p) => p.creators),
+      products: data.pages.flatMap((p) => p.products),
+    }),
   });
 }
 export function usePost(id: string, initialData?: Post) {
@@ -1035,7 +1050,8 @@ export function useCreateProduct() {
         title: input.title || "새 상품",
         price: input.price,
         status: input.status ?? "draft",
-        // sold는 미집계(undefined→"—") — 실 API 경로와 동일하게 0을 실수치인 척 표기하지 않는다.
+        // 방금 생성된 상품은 주문 이력이 없으므로 sold=0 (실 API 경로와 동일한 카운트 불변식).
+        sold: 0,
         stock: null,
         updatedAt: "방금",
       };
@@ -1101,7 +1117,8 @@ export function useCreateTier() {
         name: input.name || "새 티어",
         price: input.price,
         benefits: input.benefits,
-        // subscribers는 미집계(undefined→"—") — 실 API 경로와 동일하게 0을 실수치인 척 표기하지 않는다.
+        // 방금 생성된 티어는 구독자가 없으므로 subscribers=0 (실 API 경로와 동일한 카운트 불변식).
+        subscribers: 0,
         active: true,
       };
       return row;

@@ -6,7 +6,14 @@
 #   docker build --build-arg NEXT_PUBLIC_API_URL=https://api.example.com/api -t assen-web web/
 
 # --- deps + build ---------------------------------------------------------
-FROM node:22-alpine AS build
+# node:22-alpine pinned by digest (supply-chain hardening — a repushed `22-alpine`
+# tag cannot silently change what ships). Resolved 2026-07-10 via the registry v2
+# manifest API (multi-arch index digest); re-resolve and bump on the next planned
+# Node upgrade:
+#   curl -sI -H "Authorization: Bearer $TOKEN" \
+#     -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
+#     https://registry-1.docker.io/v2/library/node/manifests/22-alpine | grep -i docker-content-digest
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
@@ -29,7 +36,8 @@ RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "ERROR: deployable image requires th
 RUN npm run build
 
 # --- runtime --------------------------------------------------------------
-FROM node:22-alpine AS runtime
+# Same pinned digest as the build stage above (kept in sync deliberately).
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
@@ -42,4 +50,9 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 # public/ (폰트 등 정적 자산) — standalone은 public을 자동 포함하지 않으므로 명시 복사.
 COPY --from=build --chown=node:node /app/public ./public
 EXPOSE 3000
+# /login은 인증 불요 공개 라우트 — e2e.yml이 이미 이 standalone 서버의 준비 완료 신호로
+# 폴링하는 동일 엔드포인트다(중복 계약 없이 그대로 재사용). alpine은 curl 미포함이라
+# busybox 내장 wget을 쓴다.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:3000/login || exit 1
 CMD ["node", "server.js"]

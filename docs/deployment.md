@@ -7,8 +7,10 @@ for local/dev builds and production deployment preparation.
 > `Company-OS/02_Product/SDLC/11_패키징_배포_DevOps_설계_2026-07-02.md`다.
 > 본 문서는 스크립트 사용법 레퍼런스로 유지한다. 신방향 요점: 웹은 `web/`(Next.js,
 > standalone 이미지 `web/Dockerfile` — 호스팅은 E10 게이트), 백엔드 스키마는
-> migration-less라 **`migrate --run-syncdb`가 유일한 테이블 생성 경로**(up-local에
-> 배선, prod는 one-off task 심), 프로덕션 설정은 `config.settings.prod`(fail-closed).
+> **2026-07-09 마이그레이션 정식 전환 완료**라 각 앱이 `0001_initial`을 보유하며
+> **`migrate`가 테이블 생성 경로**(up-local에 배선, prod는 one-off task 심;
+> 모델 변경 시 `makemigrations`, server/AGENTS.md), 프로덕션 설정은
+> `config.settings.prod`(fail-closed).
 > 아래 "Local Web Shell"의 Flutter-web 셸은 **구방향 잔재**(M10 아카이브 대상)다.
 
 ## Current Status

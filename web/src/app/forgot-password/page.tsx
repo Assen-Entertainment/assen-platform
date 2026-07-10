@@ -2,6 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { TextField, Button } from "@/components/ui";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 /** Forgot Password — W3. 이메일 입력 → 전송(mock) → 완료 상태. ※실 메일 발송 미연동(게이트). */
 export default function ForgotPasswordPage() {
@@ -15,9 +16,8 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-container-high p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl bg-surface p-6 shadow-2">
-        <h1 className="text-title-l text-on-surface">비밀번호 재설정</h1>
+    <AuthShell subtitle="걱정 마세요 — 금방 되돌릴 수 있어요">
+        <h2 className="text-title-l text-on-surface">비밀번호 재설정</h2>
         {sent ? (
           <>
             <p className="text-body-m text-on-surface-variant">
@@ -50,7 +50,6 @@ export default function ForgotPasswordPage() {
           </form>
         )}
         <p className="text-center text-caption text-on-surface-variant">※ 데모 — 실제 메일 발송 미연동(게이트)</p>
-      </div>
-    </main>
+    </AuthShell>
   );
 }

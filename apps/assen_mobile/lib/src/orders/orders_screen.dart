@@ -1,4 +1,6 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
+import 'package:assen_mobile/src/common/now.dart';
 import 'package:assen_mobile/src/common/relative_time.dart';
 import 'package:assen_mobile/src/orders/order.dart';
 import 'package:assen_mobile/src/orders/orders_controller.dart';
@@ -30,29 +32,33 @@ class OrdersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final orders = ref.watch(ordersControllerProvider);
+    final now = ref.watch(nowProvider);
     return Scaffold(
       appBar: AssenAppBar(title: '주문 내역', onBack: () => _back(context)),
-      body: orders.when(
-        loading: () => const _OrdersSkeleton(),
-        error: (error, stackTrace) => error is OrdersAuthRequiredException
+      body: AssenAsyncView<List<Order>>(
+        value: orders,
+        loading: const _OrdersSkeleton(),
+        onRetry: () => ref.read(ordersControllerProvider.notifier).refresh(),
+        // A 401 → auth-required is not a failure: show the login wall instead
+        // of the generic error state.
+        errorBuilder: (error, _) => error is OrdersAuthRequiredException
             ? AssenEmptyState(
                 title: '로그인이 필요해요',
                 message: '주문 내역을 보려면 먼저 로그인해 주세요.',
                 actionLabel: '로그인',
                 onAction: () => context.go(RoutePaths.login),
               )
-            : AssenErrorState(
-                title: '불러오지 못했어요',
-                message: '네트워크 상태를 확인하고 다시 시도해 주세요.',
-                onRetry: () =>
-                    ref.read(ordersControllerProvider.notifier).refresh(),
-              ),
-        data: (orders) => orders.isEmpty
-            ? const AssenEmptyState(
-                title: '주문 내역이 없어요',
-                message: '아직 주문한 상품이 없습니다.',
-              )
-            : _OrderList(orders: orders),
+            : null,
+        isEmpty: (items) => items.isEmpty,
+        empty: () => const AssenEmptyState(
+          title: '주문 내역이 없어요',
+          message: '아직 주문한 상품이 없습니다.',
+        ),
+        data: (items) => RefreshIndicator(
+          onRefresh: () =>
+              ref.read(ordersControllerProvider.notifier).refresh(),
+          child: _OrderList(orders: items, now: now),
+        ),
       ),
     );
   }
@@ -60,14 +66,15 @@ class OrdersScreen extends ConsumerWidget {
 
 /// The loaded history: a list of order cards, newest first.
 class _OrderList extends StatelessWidget {
-  const _OrderList({required this.orders});
+  const _OrderList({required this.orders, required this.now});
 
   final List<Order> orders;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(SpacingTokens.s4),
       itemCount: orders.length,
       separatorBuilder: (context, index) =>

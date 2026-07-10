@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState, Skeleton } from "@/components/ui";
+import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState, Skeleton, LoadMore } from "@/components/ui";
 import { SearchIcon } from "@/lib/icons";
 import { useSearch } from "@/lib/api/queries";
 import { Stagger, StaggerItem } from "@/components/motion/motion-primitives";
@@ -37,10 +37,14 @@ export function SearchView({
   // 서제스트·전체 결과 공용 — 타이핑 중간 요청 억제(250ms 디바운스).
   const debouncedQ = useDebouncedValue(qTrim, 250);
   const search = useSearch(debouncedQ);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = search;
   const active = debouncedQ.length > 0;
   const cl = active ? (search.data?.creators ?? []) : creators;
   const pl = active ? (search.data?.products ?? []) : products;
   const showError = active && search.isError && !search.data;
+  // 활성 탭 기준 표시 아이템 — 탭이 크리에이터/상품 한쪽으로 스코프되면 그 탭의 목록만 "결과 있음" 판단에 쓴다.
+  // (예: 크리에이터=0·상품>0인 질의에서 "크리에이터" 탭을 보면 결과 영역이 비어야 EmptyState를 띄운다.)
+  const tabEmpty = tab === "c" ? cl.length === 0 : tab === "p" ? pl.length === 0 : cl.length === 0 && pl.length === 0;
 
   // --- 서제스트 드롭다운(combobox) 상태 ---
   const [open, setOpen] = React.useState(false);
@@ -329,8 +333,17 @@ export function SearchView({
         <ErrorState onRetry={() => search.refetch()} />
       ) : active && search.isFetching && !search.data ? (
         <SearchResultsSkeleton />
-      ) : active && cl.length === 0 && pl.length === 0 ? (
-        <EmptyState title="검색 결과가 없어요" description="다른 키워드로 검색하거나 철자를 확인해 보세요." />
+      ) : active && tabEmpty ? (
+        <EmptyState
+          title="검색 결과가 없어요"
+          description={
+            tab === "c"
+              ? "이 검색어와 일치하는 크리에이터가 없어요. 다른 탭이나 키워드를 확인해 보세요."
+              : tab === "p"
+                ? "이 검색어와 일치하는 상품이 없어요. 다른 탭이나 키워드를 확인해 보세요."
+                : "다른 키워드로 검색하거나 철자를 확인해 보세요."
+          }
+        />
       ) : (
         <>
           {(tab === "all" || tab === "c") && cl.length > 0 ? (
@@ -356,6 +369,17 @@ export function SearchView({
                 ))}
               </Stagger>
             </section>
+          ) : null}
+          {/* 더 보기(B2 next_offset 페이지네이션) — 서버가 더 가져올 결과가 있다고 알릴 때만 노출.
+              search-view는 자동 스크롤 로드 없이 버튼 폴백만 유지(auto=false, 기존 동작 유지). */}
+          {active ? (
+            <LoadMore
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              onLoadMore={() => fetchNextPage()}
+              itemCount={cl.length + pl.length}
+              auto={false}
+            />
           ) : null}
         </>
       )}

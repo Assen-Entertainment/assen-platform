@@ -61,7 +61,7 @@ class _AssenSkeletonState extends State<AssenSkeleton>
       _controller.stop();
       return DecoratedBox(
         decoration: BoxDecoration(
-          color: colors.cream200,
+          color: colors.neutral200,
           borderRadius: BorderRadius.all(Radius.circular(widget.radius)),
         ),
         child: SizedBox(width: widget.width, height: widget.height),
@@ -77,7 +77,7 @@ class _AssenSkeletonState extends State<AssenSkeleton>
         final t = Curves.easeInOut.transform(_controller.value);
         return DecoratedBox(
           decoration: BoxDecoration(
-            color: Color.lerp(colors.cream200, colors.cream300, t),
+            color: Color.lerp(colors.neutral200, colors.neutral300, t),
             borderRadius: BorderRadius.all(Radius.circular(widget.radius)),
           ),
           child: SizedBox(width: widget.width, height: widget.height),

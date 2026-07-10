@@ -1,6 +1,6 @@
 # Assen 웹 클라이언트 — 셋업 가이드 (React + Next.js + Tailwind v4 + Radix)
 
-> 스택 결정 = [[assen-web-stack]] · SDLC 08. 빌드/설치/실행은 **Windows npm**(node 24 / npm 11, ADR-10 — pnpm·WSL 불요).
+> 스택 결정 = [[assen-web-stack]] · SDLC 08 · `docs/adr/0005-web-react-next.md`. 빌드/설치/실행은 **Windows npm**(node 24 / npm 11, `docs/adr/0006-toolchain-windows-uv.md` — pnpm·WSL 불요).
 > 스캐폴드는 완료 상태다: `web/`은 실행 가능한 앱(전 라우트·DS 42 컴포넌트·React Query·테스트·B5 실 API 연동)이며, 본 문서는 로컬 구동·검증 절차만 다룬다.
 
 ## 1. 설치 & 실행 (Windows)

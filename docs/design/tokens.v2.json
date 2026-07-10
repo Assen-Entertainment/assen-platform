@@ -24,13 +24,14 @@
         "inkSub": { "$type": "color", "$value": "#A1A1AA" }
       },
       "indigo": {
-        "500": { "$type": "color", "$value": "#5A4DF0", "$description": "Assen Indigo — primary 액센트. 2026-06-28 브랜드 시그니처: Stripe #635BFF/범용 SaaS 인디고 탈피 위해 violet 방향 hue 미세시프트+심도. 흰 대비 5.6:1(구 #5E63F8 4.54→개선). 라이트/다크 불변. ※대표 최종 사인 대기(가역)" },
+        "500": { "$type": "color", "$value": "#5A4DF0", "$description": "Assen Indigo — primary 액센트. 2026-06-28 브랜드 시그니처: Stripe #635BFF/범용 SaaS 인디고 탈피 위해 violet 방향 hue 미세시프트+심도. 흰 대비 5.6:1(구 #5E63F8 4.54→개선). 라이트/다크 불변. ※2026-07-09 대표 확정(Fanding 톤 유지 — 정본, 가역 아님)" },
         "hover": { "$type": "color", "$value": "#3727ED", "$description": "primary filled hover — Stripe식 색조 시프트(명도 -8%, opacity 대체). 흰(onPrimary) 대비 7.85:1(AA). 라이트/다크 공통(darken → 두 모드 모두 대비 상승으로 AA 보장; 다크 lighten은 흰 텍스트 4.5 미달)." },
         "600": { "$type": "color", "$value": "#4B50E0", "$description": "pressed (파생)" },
         "100": { "$type": "color", "$value": "#EFEFFE", "$description": "accentContainer/필 (Fanding 실측)" },
         "ink": { "$type": "color", "$value": "#2E2C8A", "$description": "강한 대비 필요 시 (파생)" },
         "darkContainer": { "$type": "color", "$value": "#2A2A52" },
-        "onDarkContainer": { "$type": "color", "$value": "#C7C9FF" }
+        "onDarkContainer": { "$type": "color", "$value": "#C7C9FF" },
+        "text": { "$type": "color", "$value": "#5A4DF0", "$description": "전경 전용 시맨틱(텍스트/아이콘, 채움 아님) 라이트 값 — indigo.500과 동일(흰 배경 대비 OK). 다크 인스턴스는 이 필드를 AssenColorScheme.indigoTextDark(#A79BFF, ≈8:1)로 덮어씀(color_scheme.dart, 코드젠 범위 밖) — indigo.500 자체는 다크에서도 버튼/아이콘 필용으로 불변." }
       },
       "lavender": { "bg": { "$type": "color", "$value": "#EFEFFE" }, "ink": { "$type": "color", "$value": "#4338CA" } },
       "violet": { "bg": { "$type": "color", "$value": "#F6EEFD", "$description": "Fanding 실측 퍼플 틴트" }, "ink": { "$type": "color", "$value": "#6D28D9" } },
@@ -97,8 +98,8 @@
   },
   "typography": {
     "fontFamily": {
-      "display": { "$type": "fontFamily", "$value": ["Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "sans-serif"] },
-      "body": { "$type": "fontFamily", "$value": ["Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "sans-serif"] }
+      "display": { "$type": "fontFamily", "$value": ["Pretendard", "Apple SD Gothic Neo", "sans-serif"], "$description": "2026-07-09: 'Pretendard Variable' 제거 — 번들된 정적 Pretendard(ui_kit/pubspec.yaml)만 존재해 Variable은 조용히 폴백됐음. 번들 페이스로 고정." },
+      "body": { "$type": "fontFamily", "$value": ["Pretendard", "Apple SD Gothic Neo", "sans-serif"] }
     },
     "scale": {
       "displayXL": { "$type": "typography", "$value": { "fontFamily": "{typography.fontFamily.display}", "fontSize": { "value": 32, "unit": "px" }, "lineHeight": 1.25, "fontWeight": 700 }, "$description": "히어로(리뷰 2026-06-28: 모바일 임팩트). 온보딩/스플래시 등 브랜드 표면 한정" },
@@ -168,7 +169,7 @@
     "disabledOpacity": { "$type": "number", "$value": 0.38, "$description": "disabled 콘텐츠(onSurface 38%)" }
   },
   "gradient": {
-    "brand": { "$type": "custom", "$value": { "type": "linear", "angle": 135, "stops": ["#5A4DF0", "#8A5CF7"] }, "$description": "브랜드 시그니처 그라데이션(Assen Indigo→violet) — 히어로/스플래시/딜라이트 표면 한정. 2026-06-28 채택(대표 사인 대기)" }
+    "brand": { "$type": "custom", "$value": { "type": "linear", "angle": 135, "stops": ["#5A4DF0", "#8A5CF7"] }, "$description": "브랜드 시그니처 그라데이션(Assen Indigo→violet) — 히어로/스플래시/딜라이트 표면 한정. 2026-06-28 채택·2026-07-09 대표 확정" }
   },
   "creatorAccent": {
     "$note": "★런타임 크리에이터 액센트 = 정적 토큰 아님(리뷰 2026-06-28 분류정정). base 입력색 → WCAG/APCA 자동 darken·lighten으로 onAccent(흑/백 대비큰쪽)·container(surface 12% 틴트) 파생하는 Dart 런타임 유틸로 구현. Style Dictionary 미생성. 미달색→보정 후 ≥4.5 단위테스트.",

@@ -118,7 +118,10 @@ describe("SearchView 서제스트 상호작용", () => {
     );
 
     // 마지막 옵션("전체 결과 보기")까지 내려가 Enter → 전체 검색 이동.
+    // 상품도 title/meta/description 다필드로 매칭되어(서버 의미론 미러) "아크릴 스탠드"(설명에 "별빛"
+    // 포함)가 크리에이터 다음 서제스트로 함께 뜬다 → 옵션 순서는 [크리에이터, 상품, 전체 결과 보기].
     fireEvent.keyDown(input, { key: "ArrowDown" }); // 크리에이터
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // 상품
     fireEvent.keyDown(input, { key: "ArrowDown" }); // 전체 결과 보기
     fireEvent.keyDown(input, { key: "Enter" });
     expect(pushMock).toHaveBeenCalledWith(`/search?q=${encodeURIComponent("별빛")}`);
