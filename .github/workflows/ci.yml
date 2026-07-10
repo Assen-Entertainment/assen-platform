@@ -31,6 +31,12 @@ jobs:
   changes:
     name: Detect changed paths (gates the compose job)
     runs-on: ubuntu-latest
+    # dorny/paths-filter reads the PR's changed files via the API on pull_request
+    # events; without pull-requests:read the token is refused ("Resource not
+    # accessible by integration"). contents:read keeps the checkout working.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       compose: ${{ steps.filter.outputs.compose }}
     steps:

@@ -13,9 +13,12 @@ import { otpFor } from "./helpers/otp";
 
 const CREATOR_PHONE = "01000000002"; // seed_demo 데모 크리에이터(010-0000-0002) — stellar 오너.
 
-// 1x1 투명 PNG(매직바이트 유효·비스크립터블) — 서버 업로드 검증(415/422)을 통과하는 최소 이미지.
+// 1x1 PNG — Pillow가 생성한 **실제로 디코딩되는** 최소 이미지. 서버의 content-type/매직바이트
+// 게이트(415/422)와 ASS-271 Pillow decode-verify(청크 CRC·구조 검사)를 모두 통과한다.
+// (이전 리터럴은 IDAT 청크 CRC가 깨진 손상 PNG였다 — magic-byte sniff만 통과해 verify 도입
+//  전까지만 우연히 통과했고, ASS-271 이후 서버가 422로 정당하게 거부해 이 저니가 깨졌었다.)
 const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
   "base64",
 );
 
@@ -48,6 +51,10 @@ test("스튜디오 포스트 작성 — 이미지 업로드 → 발행 → 스�
   // 2. 포스트 작성 화면 — 본문 입력 + 이미지 업로드(POST /api/uploads) → 프리뷰 확인 → 발행.
   await test.step("이미지 업로드 + 발행", async () => {
     await page.goto("/studio/posts/new", { waitUntil: "networkidle" });
+    // 제목·본문 모두 입력 — 컴포저는 제목을 필수로 요구한다(validateComposerDraft).
+    // 제목이 비면 발행 버튼이 조용히 막혀(publish()가 조기 return) /studio 이동이
+    // 일어나지 않으므로, 저니가 성립하려면 제목을 반드시 채워야 한다.
+    await page.getByLabel("제목").fill("업로드 저니 제목");
     await page.getByLabel("본문").fill(body);
 
     // 숨김 file input에 작은 PNG 주입 → onChange가 apiUpload를 트리거(업로드 중 로딩 → 프리뷰).

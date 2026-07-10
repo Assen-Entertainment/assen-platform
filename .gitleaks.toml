@@ -1,0 +1,26 @@
+# gitleaks configuration — extends the default ruleset and suppresses a small,
+# audited set of false positives so the CI secret-scan gate (ci.yml → gitleaks)
+# stays meaningful (real leaks still fail) without flagging non-secrets.
+#
+# Every entry below was manually verified to be a non-credential:
+#   1) Figma design-file key (an identifier that appears throughout the design
+#      docs). A file key alone grants no access — the Figma API still requires a
+#      personal token — so it is not a secret.
+#   2) A dummy literal token used by the observability PII-scrub tests to prove
+#      that `token=` values are redacted. It is test data, never a real secret.
+#
+# gitleaks auto-loads this file from the repo root (the CI step runs
+# `gitleaks detect --source .` with no --config, so it is picked up).
+[extend]
+useDefault = true
+
+# Global allowlist (singular form — the schema gitleaks 8.21.x honors). The
+# regexes are matched against each finding's detected secret value and suppress
+# it across all commits in history, not just the current worktree.
+[allowlist]
+description = "Audited non-secrets flagged by the generic-api-key heuristic (Figma file key in design docs; dummy PII-scrub test token)."
+regexTarget = "match"
+regexes = [
+  '''Snd7m8KauF51QBZL5LWuGu''',
+  '''abc123DEF456''',
+]
