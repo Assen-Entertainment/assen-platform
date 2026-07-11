@@ -97,7 +97,7 @@ jobs:
         run: flutter test --update-goldens
       # 언스킵된 테스트 + 생성된 goldens PNG(둘 다 test/** 하위)를 dispatch 한 ref 로 커밋.
       - name: Commit baselines + unskips
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: |
             test(ui_kit): generate golden baselines + unskip (#31, CI Linux)
