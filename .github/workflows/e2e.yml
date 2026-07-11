@@ -40,7 +40,9 @@ jobs:
     env:
       # 서버는 dev 설정으로 — mock OTP/KYC/결제·19+ 노출이 켜져 저니(로그인·본인인증·결제)가 성립한다
       # (config/settings/dev.py). manage.py 기본값과 동일하나 명시해 스트레이 env를 배제.
-      DJANGO_SETTINGS_MODULE: config.settings.dev
+      # Disposable E2E profile = dev + ENABLE_SHIPPING_CHECKOUT on, so the live
+      # journey can run the (otherwise privacy-gated) goods checkout (ASS-287 A-1).
+      DJANGO_SETTINGS_MODULE: config.settings.e2e
       # 한 팬 계정이 팔로우/좋아요/댓글/신고/주문/계정/결제/KYC를 연속 write → per-user 스로틀이면
       # 429가 난다. e2e는 결정성을 위해 off(base.py FAN_WRITE_THROTTLE_ENABLED, env override).
       FAN_WRITE_THROTTLE_ENABLED: "False"

@@ -40,7 +40,7 @@ from apps.notification.models import NotificationKind
 from apps.notification.services import notify
 from apps.social.models import blocked_creator_ids
 from config.api import api
-from config.errors import ErrorCode
+from config.errors import ApiError, ErrorCode
 from config.pagination import paginate
 from config.patch import apply_optional
 from config.payment import require_payment_available
@@ -814,6 +814,16 @@ def create_order(
     # coupon orders need none. Checked last so the existing gating errors above keep
     # their codes. (실운영 전 개인정보 처리방침에 배송지 항목 반영 필요 — 법무 확인;
     # 계약·mock 흐름은 무게이트.)
+    # Delivery checkout is gated off until the postal-shipping privacy policy is
+    # approved (ASS-287 A-1). A physical (goods) order collects a recipient
+    # name/phone/address, so refuse it while off — no shipping PII is collected.
+    # (Non-goods orders carry no address and are unaffected.)
+    if product.type == ProductType.GOODS.value and not settings.ENABLE_SHIPPING_CHECKOUT:
+        raise ApiError(
+            503,
+            "배송 결제가 아직 준비되지 않았어요.",
+            code=ErrorCode.SHIPPING_CHECKOUT_UNAVAILABLE,
+        )
     if product.type == ProductType.GOODS.value and not _shipping_is_complete(
         payload.shipping
     ):

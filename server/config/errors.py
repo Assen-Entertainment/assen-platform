@@ -99,6 +99,7 @@ class ErrorCode(StrEnum):
 
     # --- payments -----------------------------------------------------------
     PAYMENTS_UNAVAILABLE = "PaymentsUnavailable"
+    SHIPPING_CHECKOUT_UNAVAILABLE = "ShippingCheckoutUnavailable"
     PAYMENT_CARD_INVALID = "PaymentCardInvalid"
     PAYMENT_METHOD_NOT_FOUND = "PaymentMethodNotFound"
 

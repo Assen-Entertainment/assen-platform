@@ -60,6 +60,14 @@ ENABLE_MOCK_KYC: bool = False
 ENABLE_ADULT_CONTENT: bool = False
 ENABLE_MOCK_PAYMENT: bool = False
 
+# Delivery (shipping-address) checkout — OFF until the postal-shipping privacy
+# policy is approved (ASS-287 A-1). While off, any physical (goods) order is
+# refused (503 SHIPPING_CHECKOUT_UNAVAILABLE) so NO recipient name/phone/address
+# PII is collected. Hardcoded (never read from env) so a stray env cannot open
+# PII collection in base/prod/demo; dev inherits this False, and test.py + the
+# disposable e2e settings turn it on to exercise the flow.
+ENABLE_SHIPPING_CHECKOUT: bool = False
+
 # Per-user rate limiting on the fan write endpoints (follow/like/comment/post,
 # SDLC 09 §4, E11/B4). On by default so dev/prod throttle real traffic; the test
 # suite turns it off (config/settings/test.py) to stay deterministic across the
