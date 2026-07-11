@@ -8,9 +8,9 @@ Three fail-safe, gate-driven concerns live here (R4-W2, ASS-242/B8):
   report narrative before anything leaves the process — both by *key* (reusing the
   forbidden key list the event pipeline enforces, ``FORBIDDEN_SAFETY_PROPERTY_KEYS``,
   minus Sentry-legitimate text keys such as ``message`` that are the error signal
-  itself) and by *value* (regex over string leaves, so a phone number / token
-  embedded in an exception / ``message`` / ``request.url`` is caught even under a
-  benign key).
+  itself) and by *value* (regex over string leaves, so a phone number / email /
+  token embedded in an exception / ``message`` / ``request.url`` — including its
+  percent-encoded form in a query string — is caught even under a benign key).
 - **Request-id log correlation** — a :class:`contextvars.ContextVar` bound by
   ``RequestIDMiddleware`` and read back by :class:`RequestIDLogFilter`, so every
   log line can be traced to the request that produced it.
@@ -211,35 +211,56 @@ _HIGH_SIGNAL_TOKENS: tuple[str, ...] = (
 # (``exception.values[].value``), a ``request.url`` / ``query_string``, or a
 # breadcrumb narrative. These patterns redact the sensitive span in place while
 # leaving the surrounding text intact, so error signal survives and PII does not.
-#
-# Korean mobile number: ``010-1234-5678`` and separator/format variants, plus the
-# ``+82`` international form (``+82-10-1234-5678``). Deliberately anchored on the
-# ``01x`` / ``+82 1x`` mobile prefix so it does not devour arbitrary digit runs.
-_PHONE_VALUE_RE = re.compile(r"(?:\+82[-.\s]?|0)1[0-9][-.\s]?\d{3,4}[-.\s]?\d{4}")
+# Each pattern tolerates single-level percent-encoding (``%40`` for ``@``, ``%2D`` /
+# ``%20`` for a phone separator) so PII that arrives URL-encoded on a ``request.url``
+# / ``query_string`` is redacted, not just its plain form (ASS-291 #7).
+
+# A phone-number separator: a literal ``-`` / ``.`` / space, OR a percent-encoded one.
+_PHONE_SEP = r"(?:[-.\s]|%[0-9A-Fa-f]{2})?"
+
+# Korean mobile number: ``010-1234-5678`` and separator/format variants (including
+# percent-encoded separators), plus the ``+82`` international form
+# (``+82-10-1234-5678``). Deliberately anchored on the ``01x`` / ``+82 1x`` mobile
+# prefix so it does not devour arbitrary digit runs.
+_PHONE_VALUE_RE = re.compile(
+    rf"(?:\+82{_PHONE_SEP}|0)1[0-9]{_PHONE_SEP}\d{{3,4}}{_PHONE_SEP}\d{{4}}"
+)
+
+# Email address, plain (``a@b.com``) or with a percent-encoded ``@`` (``a%40b.com``)
+# as it appears URL-encoded in a query string / URL. Redacted wholesale — an email
+# is PII, never error signal.
+_EMAIL_VALUE_RE = re.compile(r"[A-Za-z0-9._%+\-]+(?:@|%40)[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
 # ``Bearer <token>`` in a header/message → keep the scheme, redact the credential.
 _BEARER_VALUE_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]+")
 
-# ``key=value`` secrets in a URL query string or a free-text message
-# (``?token=abc123``, ``?phone=010...``, ``otp=123456``) → keep the key, redact the
-# value up to the next separator. Covers the exact leak surfaces called out in the
-# task (``?token=`` / ``?phone=`` on ``request.url`` / ``query_string``).
+# ``key=value`` PII/secrets in a URL query string or a free-text message
+# (``?token=abc123``, ``?phone=010...``, ``?email=a%40b.com``, ``?recipient_name=…``)
+# → keep the key, redact the value up to the next separator. Extends the original
+# secret keys with the free-text / query-string PII surfaces (email / name / address
+# / phone) called out in ASS-291 #7; because ``[^&\s"']+`` spans the ``%XX`` bytes, a
+# percent-encoded value is redacted as one opaque span.
 _KV_SECRET_VALUE_RE = re.compile(
-    r"(?i)\b((?:access_token|refresh_token|api[_-]?key|token|secret|password|passwd|otp|phone|code)"
+    r"(?i)\b((?:access_token|refresh_token|api[_-]?key|token|secret|password|passwd|otp"
+    r"|phone|tel|mobile|code|email|mail|recipient_name|recipient_phone|full_name|name"
+    r"|address1|address2|address|postal_code|postal|zipcode|zip|contact)"
     r"=)[^&\s\"']+"
 )
 
 
 def _scrub_text(value: str) -> str:
-    """Redact phone numbers / bearer tokens / ``key=secret`` spans inside a string.
+    """Redact phone / email / bearer / ``key=secret`` spans inside a string.
 
     Applied to every string leaf the recursive scrubber reaches (values under
     benign keys — key-based redaction handles the sensitive keys). Order matters:
-    the ``Bearer``/``key=`` credential is redacted before the phone pass so a token
-    that happens to contain a digit run is never partially matched as a number.
+    the ``Bearer`` / ``key=`` credential is redacted first so a token that happens
+    to contain a digit run is never partially matched as a number; the email pass
+    runs before the phone pass for the same reason. Each pass also catches the
+    single-level percent-encoded form (URL-encoded query strings, ASS-291 #7).
     """
     value = _BEARER_VALUE_RE.sub("Bearer [Filtered]", value)
     value = _KV_SECRET_VALUE_RE.sub(r"\1[Filtered]", value)
+    value = _EMAIL_VALUE_RE.sub(_REDACTED, value)
     return _PHONE_VALUE_RE.sub(_REDACTED, value)
 
 

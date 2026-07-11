@@ -11,13 +11,23 @@ the header out entirely.
 
 from __future__ import annotations
 
+import re
+
 from django.http import HttpRequest, HttpResponse
 from django.test import RequestFactory, override_settings
 
-from config.middleware import InMemoryRateLimitMiddleware, SecurityHeadersMiddleware
+from config.middleware import (
+    REQUEST_ID_HEADER,
+    InMemoryRateLimitMiddleware,
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+)
 from config.ratelimit import RateLimiter
 
 _RF = RequestFactory()
+
+# A server-minted id is uuid4 hex: 32 lowercase hex chars, nothing else.
+_MINTED_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 def _ok(request: HttpRequest) -> HttpResponse:
@@ -69,3 +79,43 @@ def test_security_headers_omit_csp_when_policy_is_empty() -> None:
     response = middleware(_RF.get("/"))
     assert "Content-Security-Policy-Report-Only" not in response
     assert "Content-Security-Policy" not in response
+
+
+# --- request-id trust boundary (ASS-291 #7) ---------------------------------- #
+
+
+def test_request_id_honours_a_well_formed_client_id() -> None:
+    """A client id matching the opaque grammar is kept for distributed tracing."""
+    middleware = RequestIDMiddleware(_ok)
+    request = _RF.get("/", HTTP_X_REQUEST_ID="trace-abc_123.45")
+    response = middleware(request)
+    assert response[REQUEST_ID_HEADER] == "trace-abc_123.45"
+    assert getattr(request, "request_id") == "trace-abc_123.45"  # noqa: B009 - dynamic attr
+
+
+def test_request_id_mints_a_fresh_id_when_absent() -> None:
+    """With no client header a fresh server id (uuid4 hex) is minted."""
+    response = RequestIDMiddleware(_ok)(_RF.get("/"))
+    assert _MINTED_ID_RE.match(response[REQUEST_ID_HEADER])
+
+
+def test_request_id_rejects_injected_client_id_and_mints_fresh() -> None:
+    """A malformed X-Request-ID (log-forging CRLF + PII) is discarded, not echoed.
+
+    An attacker-supplied id carrying a newline and a phone number must never reach
+    the response header or the log stream; the middleware mints a clean server id
+    instead, so no injected content survives.
+    """
+    injected = "abc\r\nSet-Cookie: x=1 010-1234-5678"
+    response = RequestIDMiddleware(_ok)(_RF.get("/", HTTP_X_REQUEST_ID=injected))
+    echoed = response[REQUEST_ID_HEADER]
+    assert echoed != injected
+    assert "\n" not in echoed and "\r" not in echoed and " " not in echoed
+    assert "010-1234-5678" not in echoed
+    assert _MINTED_ID_RE.match(echoed)  # fell back to a minted id
+
+
+def test_request_id_rejects_overlong_client_id() -> None:
+    """An over-long id (past the 64-char bound) is discarded for a fresh server id."""
+    response = RequestIDMiddleware(_ok)(_RF.get("/", HTTP_X_REQUEST_ID="a" * 65))
+    assert _MINTED_ID_RE.match(response[REQUEST_ID_HEADER])

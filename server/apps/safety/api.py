@@ -27,6 +27,7 @@ from apps.admin_rbac.permissions import manager_required, operator_required
 from apps.admin_rbac.redaction import redact_safety_report, redact_safety_report_list
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
+from apps.cast.models import CastProfile
 from apps.identity.auth import authed, fan_auth
 from apps.identity.models import Account, Role
 from apps.safety.metrics import report_handling_stats
@@ -34,6 +35,7 @@ from apps.safety.models import (
     ActorKind,
     BlockReason,
     BlockScope,
+    DetailAccessReason,
     ReportSeverity,
     ReportStatus,
     ReportType,
@@ -242,6 +244,12 @@ def create_report(
         return 400, SafetyError(detail=f"Unknown reporter_type '{payload.reporter_type}'.")
     if payload.target_type not in ActorKind.values:
         return 400, SafetyError(detail=f"Unknown target_type '{payload.target_type}'.")
+    if payload.cast_id and not _cast_exists(payload.cast_id):
+        # The operator-supplied cast id is written verbatim into the append-only
+        # event ledger (``EventRecord.cast_id``). Require a well-formed id of an
+        # existing cast so arbitrary free text (a name / phone) can never be
+        # persisted into the immutable log (ASS-291 #7). Input is not echoed back.
+        return 400, SafetyError(detail="Unknown or malformed cast_id.")
     reporter = _account_or_none(payload.reporter_id)
     target = _account_or_none(payload.target_id)
     actor = _actor(request)
@@ -391,12 +399,16 @@ def get_report_detail(
 ) -> tuple[int, ReportDetailOut | SafetyError]:
     """Read the restricted narrative (manager+ only).
 
-    A non-empty ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED
-    audit entry: access to the platform's most sensitive data must answer "why"
-    (audit model compliance contract).
+    A ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED audit entry:
+    access to the platform's most sensitive data must answer "why" (audit model
+    compliance contract). ``reason`` must be one of the closed
+    :class:`~apps.safety.models.DetailAccessReason` codes — never free text — so the
+    "why" travelling in the GET query string cannot carry PII into access logs /
+    referrers (ASS-291 #7). Validated before any row is read; the input is never
+    echoed back.
     """
-    if not reason.strip():
-        return 400, SafetyError(detail="A reason is required to view report detail.")
+    if reason not in DetailAccessReason.values:
+        return 400, SafetyError(detail="reason must be a valid access-reason code.")
     report = get_object_or_404(
         SafetyReport.objects.select_related("detail", "reporter", "target"),
         id=report_id,
@@ -406,7 +418,7 @@ def get_report_detail(
         actor=actor,
         action=AuditAction.SAFETY_DETAIL_VIEWED.value,
         target=str(report.id),
-        reason=reason.strip(),
+        reason=reason,
     )
     detail = report.detail
     return 200, ReportDetailOut(
@@ -500,6 +512,22 @@ def _account_or_none(fan_id: uuid.UUID | None) -> Account | None:
     if fan_id is None:
         return None
     return Account.objects.filter(fan_id=fan_id).first()
+
+
+def _cast_exists(cast_id: str) -> bool:
+    """Whether ``cast_id`` is a well-formed UUID of an existing cast profile.
+
+    A cast id is a :class:`~apps.cast.models.CastProfile` UUID everywhere on the
+    platform (``cast_id=str(profile.id)``). Validating it here keeps arbitrary
+    operator free text out of the append-only event ledger (ASS-291 #7): a
+    malformed or unknown id is rejected before the report — and its event — is
+    written.
+    """
+    try:
+        cast_uuid = uuid.UUID(cast_id)
+    except ValueError:
+        return False
+    return CastProfile.objects.filter(id=cast_uuid).exists()
 
 
 def _block_out(block: UserBlock) -> BlockOut:

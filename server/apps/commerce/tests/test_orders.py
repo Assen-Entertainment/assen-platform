@@ -325,6 +325,37 @@ def test_goods_order_echoes_shipping_snapshot(client: Client) -> None:
     assert order.address1 == "서울시 강남구 테헤란로 1"
 
 
+def test_order_list_omits_shipping_address_but_detail_shows_it(client: Client) -> None:
+    """A-3: the orders list never carries the delivery address; the owner detail does.
+
+    A fan listing their orders must not receive the recipient name / phone / postal /
+    street in every row (ASS-291 A-3). The address is exposed only on the owner-scoped
+    single-order detail endpoint.
+    """
+    fan = _fan()
+    product = _product()
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()["id"]
+
+    listed = client.get(BASE, headers=_auth(fan))
+    row = listed.json()["items"][0]
+    # No delivery snapshot field on a list row, and no recipient PII anywhere in it.
+    assert "shipping_address" not in row
+    raw = listed.content.decode()
+    assert "받는이" not in raw
+    assert "010-1234-5678" not in raw
+    assert "06236" not in raw
+
+    # The owner-scoped detail endpoint still exposes the address.
+    detail = client.get(f"{BASE}/{order_id}", headers=_auth(fan)).json()
+    assert detail["shipping_address"]["recipient_name"] == "받는이"
+    assert detail["shipping_address"]["postal_code"] == "06236"
+
+
 # --- shipping address requirement (R5-W1A) ------------------------------------ #
 
 

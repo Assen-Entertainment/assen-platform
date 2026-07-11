@@ -76,6 +76,25 @@ class ActorKind(models.TextChoices):
     UNKNOWN = "unknown", "unknown"
 
 
+class DetailAccessReason(models.TextChoices):
+    """Closed reason codes for reading a report's restricted narrative (ASS-291 #7).
+
+    The manager-only detail read must state *why* for the ``SAFETY_DETAIL_VIEWED``
+    audit trail, but the reason previously travelled as **free text in the GET query
+    string** — where it lands in access logs / referrers and could carry PII (a
+    copied name, phone, or the narrative itself). A closed enum keeps the "why"
+    auditable while ensuring only a short, opaque code ever reaches a URL; free text
+    is refused at the API boundary. Not a model field, so it adds no migration.
+    """
+
+    ABUSE_INVESTIGATION = "abuse_investigation", "abuse_investigation"
+    REPORT_TRIAGE = "report_triage", "report_triage"
+    LEGAL_REQUEST = "legal_request", "legal_request"
+    USER_APPEAL = "user_appeal", "user_appeal"
+    SAFETY_ESCALATION = "safety_escalation", "safety_escalation"
+    QUALITY_AUDIT = "quality_audit", "quality_audit"
+
+
 class SafetyReport(models.Model):
     """Summary + classification row for a safety report (operator-visible).
 
