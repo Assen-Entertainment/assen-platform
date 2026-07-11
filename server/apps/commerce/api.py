@@ -43,6 +43,7 @@ from config.api import api
 from config.errors import ErrorCode
 from config.pagination import paginate
 from config.patch import apply_optional
+from config.payment import require_payment_available
 from config.throttle import user_write_throttle
 
 # Money-path observability (order/refund lifecycle). Structured, PII-free: only
@@ -768,6 +769,9 @@ def create_order(
     commits, so a rolled-back order never emits a stray "order received" notice.
     """
     account = authed(request)
+    # Fail closed before ANY side effect — including the idempotency replay below:
+    # with no real PG and the mock off, an order must never become PAID (ASS-286).
+    require_payment_available()
     if payload.idempotency_key:
         existing = _load_order_by_key(account, payload.idempotency_key)
         if existing is not None:

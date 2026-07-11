@@ -26,6 +26,7 @@ from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.patch import apply_optional
+from config.payment import require_payment_available
 from config.throttle import user_write_throttle
 
 # Mock billing cycle length; there is no real recurring billing (B7 gated).
@@ -410,6 +411,9 @@ def subscribe(
     creator (one active membership per creator).
     """
     account = authed(request)
+    # No new ACTIVE subscription without a settleable payment path (ASS-286);
+    # explicit free tiers are a separate grant (ASS-297), never a bypass here.
+    require_payment_available()
     # Only an active (publicly listed) tier is subscribable; an inactive/archived or
     # unknown tier 404s (no existence leak), mirroring ``list_tiers``' active filter.
     tier = (
@@ -515,6 +519,9 @@ def change_subscription_tier(
     Idempotent: switching to the tier already held is a 200 no-op.
     """
     account = authed(request)
+    # A tier change activates a (paid) tier with no payment today, so it is gated
+    # with creation (ASS-286); free-tier moves are deferred to the free-grant work.
+    require_payment_available()
     sub = (
         Subscription.objects.select_related("tier", "tier__creator")
         .filter(id=subscription_id, fan=account)
