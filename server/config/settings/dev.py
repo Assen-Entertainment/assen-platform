@@ -35,6 +35,9 @@ ENABLE_MOCK_FAN_OTP = True
 ENABLE_MOCK_KYC = True
 ENABLE_ADULT_CONTENT = True
 ENABLE_MOCK_PAYMENT = True
+# Mock push transport locally so the operator dispatch surface returns success
+# instead of the prod fail-closed 503 (no real FCM/APNs wired; see base.py).
+ENABLE_MOCK_PUSH = True
 
 # Local web dev server origins (Next.js) — override via env when ports differ.
 CORS_ALLOWED_ORIGINS = env.list(

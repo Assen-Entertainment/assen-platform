@@ -43,6 +43,9 @@ ENABLE_MOCK_FAN_OTP = True
 ENABLE_MOCK_KYC = True
 ENABLE_ADULT_CONTENT = True
 ENABLE_MOCK_PAYMENT = True
+# Mock push transport on for tests so the operator dispatch surface returns success;
+# the fail-closed 503 (base) is asserted explicitly with override_settings.
+ENABLE_MOCK_PUSH = True
 # Exercise the (privacy-gated) delivery checkout in fixtures; base/prod/demo keep
 # it hardcoded False (ASS-287 A-1).
 ENABLE_SHIPPING_CHECKOUT = True

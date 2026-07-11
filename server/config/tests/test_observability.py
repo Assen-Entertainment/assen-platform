@@ -198,6 +198,53 @@ def test_scrub_event_redacts_free_text_pii_in_values() -> None:
     assert "Bearer [Filtered]" in trace  # scheme kept, credential redacted
 
 
+def test_scrub_event_redacts_email_and_percent_encoded_pii() -> None:
+    """Value-scrub catches email + percent-encoded (URL-encoded) PII (ASS-291 #7).
+
+    The pre-existing scrubber missed free-text emails and percent-encoded PII on a
+    ``request.url`` / ``query_string``; this pins that an email (plain and ``%40``
+    encoded), a percent-encoded phone, and name/address query params are all redacted
+    while benign query params survive.
+    """
+    event: dict[str, Any] = {
+        # Free-text email in the (legitimate) Sentry message → value-scrubbed.
+        "message": "signup failed for alice@example.com please retry",
+        "request": {
+            # Percent-encoded email under a benign-looking key in the URL.
+            "url": "https://api.assen.example/x?email=bob%40example.com&reason=ok",
+            # Name (percent-encoded), phone (percent-encoded separators), benign page.
+            "query_string": (
+                "recipient_name=%ED%99%8D%EA%B8%B8%EB%8F%99"
+                "&phone=010%2D1234%2D5678&page=2"
+            ),
+        },
+        # Free-text email + percent-encoded phone in an exception value.
+        "exception": {
+            "values": [{"value": "bad addr carol@corp.co.kr call 010%2D9999%2D8888 now"}]
+        },
+    }
+
+    _scrub_event(cast(Any, event), cast(Any, {}))
+
+    assert "alice@example.com" not in event["message"]  # free-text email redacted
+    assert event["message"].startswith("signup failed for ")  # text preserved
+
+    url = event["request"]["url"]
+    assert "bob%40example.com" not in url  # percent-encoded email redacted
+    assert "reason=ok" in url  # benign query param preserved
+
+    qs = event["request"]["query_string"]
+    assert "%ED%99%8D%EA%B8%B8%EB%8F%99" not in qs  # percent-encoded name redacted
+    assert "010%2D1234%2D5678" not in qs  # percent-encoded phone redacted
+    assert "page=2" in qs  # benign param preserved
+    assert "[Filtered]" in qs
+
+    exc_value = event["exception"]["values"][0]["value"]
+    assert "carol@corp.co.kr" not in exc_value  # free-text email redacted
+    assert "010%2D9999%2D8888" not in exc_value  # percent-encoded phone redacted
+    assert exc_value.startswith("bad addr ")  # surrounding text preserved
+
+
 def test_scrub_event_preserves_message_but_value_scrubs_its_pii() -> None:
     """A Sentry ``message`` is the error signal, not PII (R-A regression guard).
 

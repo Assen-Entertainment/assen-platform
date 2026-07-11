@@ -46,6 +46,28 @@ PHONE_IDENTIFIER_HMAC_KEY = _required("PHONE_IDENTIFIER_HMAC_KEY")
 if len(PHONE_IDENTIFIER_HMAC_KEY.encode("utf-8")) < 32:
     raise ImproperlyConfigured("PHONE_IDENTIFIER_HMAC_KEY must be at least 32 bytes.")
 
+# Rate limiting must be shared + correctly proxy-aware in production (ASS-295). The
+# per-process in-memory limiter cannot bound a multi-worker fleet (each worker keeps
+# its own quota → N× the intended limit), and a wrong proxy-hop count either trusts
+# a spoofable client IP or buckets every user onto the load-balancer IP. Require the
+# shared Redis backend, its URL, and an explicit proxy-hop count (>=1 behind the ALB
+# that terminates TLS above). Re-read via env so the check is mypy-clean and mirrors
+# how base.py computed the values.
+if env("RATELIMIT_BACKEND", default="memory") != "redis":
+    raise ImproperlyConfigured(
+        "RATELIMIT_BACKEND must be 'redis' in production — the in-memory limiter "
+        "does not bound a multi-worker fleet (ASS-295)."
+    )
+if not env("RATELIMIT_REDIS_URL", default=""):
+    raise ImproperlyConfigured(
+        "RATELIMIT_REDIS_URL must be set in production (ASS-295)."
+    )
+if env.int("TRUSTED_PROXY_HOPS", default=0) < 1:
+    raise ImproperlyConfigured(
+        "TRUSTED_PROXY_HOPS must be >= 1 behind the load balancer, else every user "
+        "buckets onto the proxy IP (ASS-295)."
+    )
+
 # TLS terminates at the ALB; trust its forwarded proto header so Django knows
 # the original request was HTTPS (required for secure-cookie/redirect logic).
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

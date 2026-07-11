@@ -29,9 +29,7 @@ class MembershipRepository {
     );
     final data = response.data;
     if (data is! List) {
-      throw ArgumentError.value(
-        data,
-        'response.data',
+      throw ArgumentError(
         'GET /api/tiers must return a JSON array (bare list[TierOut])',
       );
     }

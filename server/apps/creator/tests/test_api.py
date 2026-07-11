@@ -203,12 +203,15 @@ def test_handle_rejects_non_slug() -> None:
             Creator(handle=bad, name="x").full_clean()
 
 
-def test_seed_demo_creators_are_listable(client: Client) -> None:
+def test_seed_demo_creators_are_listable(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """After seeding, the creator list endpoint serves the five demo creators.
 
     The seed *counts*/idempotency are asserted in ``creator/tests/test_seed_demo.py``
     (the canonical seed smoke, B7); this only guards that seeded creators surface
     through the read API.
     """
+    monkeypatch.setenv("ALLOW_DEMO_SEED", "1")  # seed guard opt-in (ASS-288)
     call_command("seed_demo")
     assert len(client.get(BASE).json()["items"]) == 5

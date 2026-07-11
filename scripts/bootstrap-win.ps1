@@ -139,6 +139,8 @@ Invoke-Checked -FilePath $VenvPython -ArgumentList @($ManagePy, "migrate", "--no
 
 if (-not $SkipSeed) {
     Write-Step "django seed_demo"
+    # seed_demo requires an explicit opt-in against a disposable dev DB (ASS-288).
+    $env:ALLOW_DEMO_SEED = "1"
     Invoke-Checked -FilePath $VenvPython -ArgumentList @($ManagePy, "seed_demo")
 }
 else {

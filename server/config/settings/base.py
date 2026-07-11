@@ -60,6 +60,13 @@ ENABLE_MOCK_KYC: bool = False
 ENABLE_ADULT_CONTENT: bool = False
 ENABLE_MOCK_PAYMENT: bool = False
 
+# Push-notification transport gate (#16 P5). The operator push-dispatch surface
+# uses an in-memory mock adapter (apps.notification.adapters) — no real FCM/APNs is
+# wired. Hardcoded False here (NOT env-driven), so production fails closed (503
+# PushUnavailable) rather than pretend a push was delivered; only dev/test/demo opt
+# in. A real transport replaces the mock behind this same flag in P5.
+ENABLE_MOCK_PUSH: bool = False
+
 # Delivery (shipping-address) checkout — OFF until the postal-shipping privacy
 # policy is approved (ASS-287 A-1). While off, any physical (goods) order is
 # refused (503 SHIPPING_CHECKOUT_UNAVAILABLE) so NO recipient name/phone/address

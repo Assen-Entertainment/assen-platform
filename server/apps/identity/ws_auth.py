@@ -79,7 +79,12 @@ class FanAuthMiddleware:
     Wraps the inner ASGI app (typically a :class:`channels.routing.URLRouter`).
     Resolves the fan account off the presented bearer token / access cookie and
     stashes it (or ``None``) on a fresh copy of the scope before delegating, so a
-    consumer can authorise the connection without re-implementing the gate.
+    consumer can authorise the connection without re-implementing the gate. The
+    raw presented token is stashed alongside as ``scope["access_token"]`` (``None``
+    when absent) so the consumer can re-run the gate before each delivery and drop
+    a socket whose token was later revoked/expired (ASS-292); handshake auth alone
+    would let a stale socket keep receiving. The token stays in memory only — it is
+    never logged (mirrors :func:`_token_from_scope`).
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -92,4 +97,6 @@ class FanAuthMiddleware:
         account = await database_sync_to_async(_resolve_account_sync)(token) if token else None
         scope = dict(scope)
         scope["account"] = account
+        # Stash the raw token for the consumer's per-delivery re-verification (ASS-292).
+        scope["access_token"] = token
         await self.app(scope, receive, send)

@@ -26,6 +26,10 @@ def test_demo_profile_enables_all_mock_gates(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv(
         "PHONE_IDENTIFIER_HMAC_KEY", "demo-smoke-phone-hmac-key-not-real-0123456789"
     )
+    # prod requires a shared rate-limit backend + explicit proxy hops (ASS-295).
+    monkeypatch.setenv("RATELIMIT_BACKEND", "redis")
+    monkeypatch.setenv("RATELIMIT_REDIS_URL", "redis://localhost:6379/2")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
     # Evaluate demo (and its prod parent) fresh under the env set above.
     for module in ("config.settings.demo", "config.settings.prod"):
         sys.modules.pop(module, None)

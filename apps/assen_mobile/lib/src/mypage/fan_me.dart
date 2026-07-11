@@ -33,9 +33,7 @@ class FanMe {
     final nickname = json['nickname'] as String?;
     final role = json['role'] as String?;
     if (rawId == null || nickname == null || role == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
+      throw ArgumentError(
         'fan payload is missing a required "id"/"nickname"/"role" field',
       );
     }

@@ -9,6 +9,14 @@ correct the instant the socket opens. A notification created anywhere in the
 domain reaches this socket because :func:`apps.notification.services.notify`
 fans out to the same group (see :func:`apps.notification.services.account_group_name`).
 
+Handshake auth is not enough on its own: a long-lived socket must still honour a
+token revoked (logout / refresh-reuse) or expired *after* connect (F11, ASS-292).
+So before every outbound delivery the consumer re-runs the single fan gate
+(:func:`apps.identity.services.verify_access_token`) on the raw token stashed at
+``scope["access_token"]``; a token that no longer resolves closes the socket with
+4401 instead of forwarding, leaving no window where a revoked socket keeps
+receiving. The token is never logged.
+
 Chat/DM, presence, and live are intentionally out of scope — this lays the
 realtime rail; those surfaces mount their own consumers later.
 """
@@ -21,6 +29,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from apps.identity.models import Account
+from apps.identity.services import TokenError, verify_access_token
 from apps.notification.models import Notification
 from apps.notification.services import account_group_name
 
@@ -31,6 +40,20 @@ WS_CLOSE_UNAUTHENTICATED = 4401
 def _unread_count(account: Account) -> int:
     """Return the account's current unread-notification count."""
     return Notification.objects.filter(recipient=account, read_at__isnull=True).count()
+
+
+def _token_still_authorized(token: str) -> bool:
+    """True if the presented access token still resolves to an account (ASS-292).
+
+    Re-runs the one fan gate (:func:`verify_access_token`) so a token whose family
+    was revoked (logout / refresh-reuse) or whose expiry has passed is rejected on
+    the live socket, not only at the handshake. Never logs the token.
+    """
+    try:
+        verify_access_token(token)
+    except TokenError:
+        return False
+    return True
 
 
 class NotificationConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
@@ -58,6 +81,13 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]
         """Forward a group-sent notification payload to the client.
 
         Handles the ``notify.message`` group event emitted by
-        :func:`apps.notification.services.notify`.
+        :func:`apps.notification.services.notify`. Before forwarding, the token
+        presented at connect is re-verified: if it was revoked/expired since the
+        handshake the socket is closed with 4401 instead of delivering (ASS-292),
+        so a stale socket cannot keep receiving.
         """
+        token: str | None = self.scope.get("access_token")
+        if token is None or not await database_sync_to_async(_token_still_authorized)(token):
+            await self.close(code=WS_CLOSE_UNAUTHENTICATED)
+            return
         await self.send_json({"type": "notification", "notification": event["notification"]})

@@ -71,4 +71,9 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
 # (DJANGO_SETTINGS_MODULE). Single-process here; horizontal scale-out needs the
 # shared channels-redis layer (CHANNEL_LAYERS_BACKEND=redis, E10) so socket groups
 # span workers.
+# The prod image boots the production profile by default (ASS-285): the ASGI
+# entrypoint refuses a missing DJANGO_SETTINGS_MODULE, and this makes the safe
+# choice explicit. Compose/ECS may override it (compose sets dev), but no path
+# silently falls back to dev.
+ENV DJANGO_SETTINGS_MODULE=config.settings.prod
 CMD ["uv", "run", "--no-sync", "daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]

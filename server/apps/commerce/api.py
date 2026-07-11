@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
+from typing import Any
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -560,15 +561,18 @@ class OrderShippingOut(Schema):
 
 
 class OrderOut(Schema):
-    """A fan's order (maps to the frontend ``Order`` type).
+    """A fan's order row (maps to the frontend ``Order`` type).
 
     ``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots
     computed server-side (``total = subtotal + shipping_fee``; shipping is a mock
     ``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and
     ``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field
     the web consumes; ``shipping_fee`` is the explicit alias matching the model.
-    ``shipping_address`` echoes the delivery snapshot for goods orders (``None`` for
-    orders that need none), safe because a fan only ever sees their own orders.
+
+    Deliberately carries **no delivery address** (ASS-291 A-3): the shipping
+    snapshot (recipient name / phone / postal / street) is PII, and the orders
+    *list* must not echo it in every row. It is exposed only on the owner-scoped
+    single-order responses via :class:`OrderDetailOut`.
     """
 
     id: str
@@ -579,13 +583,25 @@ class OrderOut(Schema):
     shipping: int
     shipping_fee: int
     total: int
-    shipping_address: OrderShippingOut | None = None
     creator_name: str | None = None
     refund: OrderRefundOut | None = None
 
 
+class OrderDetailOut(OrderOut):
+    """A single order returned to its owner, extended with the delivery snapshot.
+
+    Used only by the owner-scoped single-order responses (detail read, place,
+    cancel, refund) — never the list — so ``shipping_address`` (a goods order's
+    recipient name / phone / postal / street PII) reaches a fan only for their own
+    order, one at a time, not enumerated across a paginated list (ASS-291 A-3).
+    ``None`` for an order that needs no address (digital/experience/ticket/coupon).
+    """
+
+    shipping_address: OrderShippingOut | None = None
+
+
 class OrderPage(Schema):
-    """One page of the fan's orders plus the next cursor."""
+    """One page of the fan's orders plus the next cursor (no addresses — A-3)."""
 
     items: list[OrderOut]
     next_cursor: str | None = None
@@ -641,8 +657,8 @@ class RefundIn(Schema):
     detail: str = Field(default="", max_length=2000)
 
 
-def _order_out(order: Order) -> OrderOut:
-    """Build the order response from a prefetched order."""
+def _order_common_fields(order: Order) -> dict[str, Any]:
+    """Shared, address-free fields for both the list row and the detail response."""
     lines = list(order.items.all())
     # Derive the creator display name from the first line's product (mock orders
     # are single-creator); tolerate a since-deleted product or accountless creator.
@@ -658,8 +674,42 @@ def _order_out(order: Order) -> OrderOut:
         if refunds
         else None
     )
-    # Echo the delivery snapshot only when one was captured (goods orders); a
-    # digital/experience/ticket/coupon order has an empty recipient → None.
+    return {
+        "id": order.id,
+        "status": order.status,
+        "created_at": order.created_at,
+        "items": [
+            OrderItemOut(
+                product_id=line.product_id,
+                title=line.title,
+                type=line.item_type,
+                option=line.option,
+                price=line.price,
+                qty=line.qty,
+            )
+            for line in lines
+        ],
+        "subtotal": order.subtotal,
+        "shipping": order.shipping_fee,
+        "shipping_fee": order.shipping_fee,
+        "total": order.total,
+        "creator_name": creator_name,
+        "refund": refund,
+    }
+
+
+def _order_out(order: Order) -> OrderOut:
+    """Build an address-free order row (the list response — A-3, no shipping PII)."""
+    return OrderOut(**_order_common_fields(order))
+
+
+def _order_detail_out(order: Order) -> OrderDetailOut:
+    """Build the owner-scoped single-order response, including the delivery snapshot.
+
+    Echoes the delivery snapshot only when one was captured (goods orders); a
+    digital/experience/ticket/coupon order has an empty recipient → ``None``. This
+    address is exposed here (one own order at a time), never on the list (A-3).
+    """
     shipping_address = (
         OrderShippingOut(
             recipient_name=order.recipient_name,
@@ -671,29 +721,7 @@ def _order_out(order: Order) -> OrderOut:
         if order.recipient_name
         else None
     )
-    return OrderOut(
-        id=order.id,
-        status=order.status,
-        created_at=order.created_at,
-        items=[
-            OrderItemOut(
-                product_id=line.product_id,
-                title=line.title,
-                type=line.item_type,
-                option=line.option,
-                price=line.price,
-                qty=line.qty,
-            )
-            for line in lines
-        ],
-        subtotal=order.subtotal,
-        shipping=order.shipping_fee,
-        shipping_fee=order.shipping_fee,
-        total=order.total,
-        shipping_address=shipping_address,
-        creator_name=creator_name,
-        refund=refund,
-    )
+    return OrderDetailOut(**_order_common_fields(order), shipping_address=shipping_address)
 
 
 def _load_order(order_id: str, buyer: Account) -> Order | None:
@@ -738,12 +766,12 @@ def _restock_order_lines(order: Order) -> None:
 
 
 @orders_router.post(
-    "", response={200: OrderOut, 201: OrderOut, 404: CommerceError, 422: CommerceError},
+    "", response={200: OrderDetailOut, 201: OrderDetailOut, 404: CommerceError, 422: CommerceError},
     throttle=user_write_throttle("20/min"),
 )
 def create_order(
     request: HttpRequest, payload: CreateOrderIn
-) -> tuple[int, OrderOut | CommerceError]:
+) -> tuple[int, OrderDetailOut | CommerceError]:
     """Place a mock order for one product.
 
     MOCK: records a ``paid`` order and snapshots the line item, but **no real
@@ -775,7 +803,7 @@ def create_order(
     if payload.idempotency_key:
         existing = _load_order_by_key(account, payload.idempotency_key)
         if existing is not None:
-            return 200, _order_out(existing)
+            return 200, _order_detail_out(existing)
     # Gate through the consumer queryset (draft/hidden and gated-adult excluded), so a
     # draft/hidden/gated-adult product 404s just like an unknown id — the order flow
     # can't be used to buy (or probe the existence of) a listing the fan can't see.
@@ -874,7 +902,7 @@ def create_order(
                     if payload.idempotency_key:
                         existing = _load_order_by_key(account, payload.idempotency_key)
                         if existing is not None:
-                            return 200, _order_out(existing)
+                            return 200, _order_detail_out(existing)
                     return 422, CommerceError(
                         detail="재고가 부족해요.",
                         code=ErrorCode.INSUFFICIENT_STOCK.value,
@@ -905,7 +933,7 @@ def create_order(
         if payload.idempotency_key:
             existing = _load_order_by_key(account, payload.idempotency_key)
             if existing is not None:
-                return 200, _order_out(existing)
+                return 200, _order_detail_out(existing)
         raise
 
     notify(
@@ -926,7 +954,7 @@ def create_order(
     )
     loaded = _load_order(order.id, account)
     assert loaded is not None  # just created for this buyer
-    return 201, _order_out(loaded)
+    return 201, _order_detail_out(loaded)
 
 
 @orders_router.get("", response=OrderPage)
@@ -944,28 +972,32 @@ def list_orders(
     return OrderPage(items=[_order_out(o) for o in items], next_cursor=next_cursor)
 
 
-@orders_router.get("/{order_id}", response={200: OrderOut, 404: CommerceError})
+@orders_router.get("/{order_id}", response={200: OrderDetailOut, 404: CommerceError})
 def get_order(
     request: HttpRequest, order_id: str
-) -> tuple[int, OrderOut | CommerceError]:
-    """Return one of the requesting fan's own orders (404 if not theirs)."""
+) -> tuple[int, OrderDetailOut | CommerceError]:
+    """Return one of the requesting fan's own orders (404 if not theirs).
+
+    The owner-scoped detail endpoint — the only place a fan's own delivery address
+    (``shipping_address``) is exposed, one order at a time, never on the list (A-3).
+    """
     account = authed(request)
     order = _load_order(order_id, account)
     if order is None:
         return 404, CommerceError(
             detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
         )
-    return 200, _order_out(order)
+    return 200, _order_detail_out(order)
 
 
 @orders_router.post(
     "/{order_id}/cancel",
-    response={200: OrderOut, 404: CommerceError, 422: CommerceError},
+    response={200: OrderDetailOut, 404: CommerceError, 422: CommerceError},
     throttle=user_write_throttle("6/min"),
 )
 def cancel_order(
     request: HttpRequest, order_id: str
-) -> tuple[int, OrderOut | CommerceError]:
+) -> tuple[int, OrderDetailOut | CommerceError]:
     """Cancel one of the fan's own orders (only while paid/shipping).
 
     The cancellable → cancelled transition is sealed by a **conditional UPDATE
@@ -1016,17 +1048,17 @@ def cancel_order(
         "commerce.order.cancelled",
         extra={"order_id": order.id, "buyer_id": str(account.fan_id)},
     )
-    return 200, _order_out(order)
+    return 200, _order_detail_out(order)
 
 
 @orders_router.post(
     "/{order_id}/refund",
-    response={200: OrderOut, 404: CommerceError, 422: CommerceError},
+    response={200: OrderDetailOut, 404: CommerceError, 422: CommerceError},
     throttle=user_write_throttle("6/min"),
 )
 def request_refund(
     request: HttpRequest, order_id: str, payload: RefundIn
-) -> tuple[int, OrderOut | CommerceError]:
+) -> tuple[int, OrderDetailOut | CommerceError]:
     """Request a refund against one of the fan's own orders (shipping/completed)."""
     account = authed(request)
     order = _load_order(order_id, account)
@@ -1067,7 +1099,7 @@ def request_refund(
     )
     refreshed = _load_order(order_id, account)
     assert refreshed is not None  # owned above
-    return 200, _order_out(refreshed)
+    return 200, _order_detail_out(refreshed)
 
 
 api.add_router("/orders", orders_router)

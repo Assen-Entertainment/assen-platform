@@ -203,6 +203,46 @@ def test_refund_request_flow(client: Client) -> None:
     assert dup.status_code == 422
 
 
+def test_non_owner_cannot_cancel_or_refund_others_order(client: Client) -> None:
+    """IDOR regression: fan B cannot cancel or request a refund on fan A's order.
+
+    Both endpoints load the order via ``_load_order(order_id, buyer=account)``, so a
+    stranger gets 404 (no existence leak); this proves fan B is rejected and fan A's
+    order state is unchanged (never cancelled, no refund request created).
+    """
+    fan_a = _fan()
+    fan_b = _fan()
+    product = _product()
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan_a),
+    ).json()["id"]
+
+    # Fan B: cancel is rejected (404) and the order stays paid.
+    cancel = client.post(
+        f"{BASE}/{order_id}/cancel", content_type=JSON, headers=_auth(fan_b)
+    )
+    assert cancel.status_code == 404
+    assert Order.objects.get(id=order_id).status == OrderStatus.PAID.value
+
+    # Move the order to a refundable state, then fan B's refund is rejected (404).
+    order = Order.objects.get(id=order_id)
+    order.status = OrderStatus.SHIPPING.value
+    order.save(update_fields=["status"])
+    refund = client.post(
+        f"{BASE}/{order_id}/refund",
+        data=json.dumps({"reason": "탈취 시도"}),
+        content_type=JSON,
+        headers=_auth(fan_b),
+    )
+    assert refund.status_code == 404
+    order.refresh_from_db()
+    assert order.status == OrderStatus.SHIPPING.value
+    assert not order.refund_requests.exists()
+
+
 def test_refund_on_paid_order_is_422(client: Client) -> None:
     """A paid (not yet shipping/completed) order cannot be refunded."""
     fan = _fan()
@@ -323,6 +363,37 @@ def test_goods_order_echoes_shipping_snapshot(client: Client) -> None:
     order = Order.objects.get(id=body["id"])
     assert order.recipient_name == "받는이"
     assert order.address1 == "서울시 강남구 테헤란로 1"
+
+
+def test_order_list_omits_shipping_address_but_detail_shows_it(client: Client) -> None:
+    """A-3: the orders list never carries the delivery address; the owner detail does.
+
+    A fan listing their orders must not receive the recipient name / phone / postal /
+    street in every row (ASS-291 A-3). The address is exposed only on the owner-scoped
+    single-order detail endpoint.
+    """
+    fan = _fan()
+    product = _product()
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan),
+    ).json()["id"]
+
+    listed = client.get(BASE, headers=_auth(fan))
+    row = listed.json()["items"][0]
+    # No delivery snapshot field on a list row, and no recipient PII anywhere in it.
+    assert "shipping_address" not in row
+    raw = listed.content.decode()
+    assert "받는이" not in raw
+    assert "010-1234-5678" not in raw
+    assert "06236" not in raw
+
+    # The owner-scoped detail endpoint still exposes the address.
+    detail = client.get(f"{BASE}/{order_id}", headers=_auth(fan)).json()
+    assert detail["shipping_address"]["recipient_name"] == "받는이"
+    assert detail["shipping_address"]["postal_code"] == "06236"
 
 
 # --- shipping address requirement (R5-W1A) ------------------------------------ #

@@ -26,6 +26,26 @@
         "description": "Report liveness, API version, and the running commit hash.\n\nNinja injects the request positionally; it is unused here but must be named\nwithout a leading underscore so the schema generator does not treat it as a\nrequest-body field."
       }
     },
+    "/api/capabilities": {
+      "get": {
+        "operationId": "config_api_capabilities",
+        "summary": "Capabilities",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            }
+          }
+        },
+        "description": "Report which gated flows are open (see the settings behind each flag)."
+      }
+    },
     "/api/admin/rbac/roles": {
       "post": {
         "operationId": "apps_admin_rbac_api_assign_role",
@@ -1117,7 +1137,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderOut"
+                  "$ref": "#/components/schemas/OrderDetailOut"
                 }
               }
             }
@@ -1127,7 +1147,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderOut"
+                  "$ref": "#/components/schemas/OrderDetailOut"
                 }
               }
             }
@@ -1260,7 +1280,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderOut"
+                  "$ref": "#/components/schemas/OrderDetailOut"
                 }
               }
             }
@@ -1276,7 +1296,7 @@
             }
           }
         },
-        "description": "Return one of the requesting fan's own orders (404 if not theirs).",
+        "description": "Return one of the requesting fan's own orders (404 if not theirs).\n\nThe owner-scoped detail endpoint — the only place a fan's own delivery address\n(``shipping_address``) is exposed, one order at a time, never on the list (A-3).",
         "tags": [
           "commerce-orders"
         ],
@@ -1311,7 +1331,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderOut"
+                  "$ref": "#/components/schemas/OrderDetailOut"
                 }
               }
             }
@@ -1372,7 +1392,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderOut"
+                  "$ref": "#/components/schemas/OrderDetailOut"
                 }
               }
             }
@@ -2940,6 +2960,22 @@
               "title": "Category"
             },
             "required": false
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -2954,7 +2990,7 @@
             }
           }
         },
-        "description": "List creators (optionally filtered by category), cursor-paginated.\n\nDiscovery is an aggregate surface, so creators the authenticated caller has\npersonally blocked are excluded (anonymous callers block nothing).",
+        "description": "List creators (optionally filtered by category), cursor-paginated.\n\nDiscovery is an aggregate surface, so creators the authenticated caller has\npersonally blocked are excluded (anonymous callers block nothing).\n\n``sort`` selects a server-ranked discovery surface (``popular`` / ``new`` /\n``recommended`` — see :data:`_RECOMMENDATION_SORTS`), computed from real\nfollower/recency signals rather than the client sorting a single list. A ranked\nsurface returns one bounded top-N page (``next_cursor`` is None) because keyset\ncursors assume the stable handle order; the default (no ``sort``) stays\ncursor-paginated.",
         "tags": [
           "creator"
         ]
@@ -3017,6 +3053,32 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            },
+            "required": false
           }
         ],
         "responses": {
@@ -3031,7 +3093,7 @@
             }
           }
         },
-        "description": "Search creators (name/handle) and products (title) by a query string.",
+        "description": "Ranked, paginated search over creators and products.\n\nCreators match on name/handle/bio/category and products on title/meta/\ndescription — multi-field substring (``icontains``). Substring (not a\nwhitespace ``tsvector``) is deliberate: Korean has no inter-morpheme spaces, so\na ``simple``-config full-text index would miss most intra-word matches. A\npg_trgm GIN index (indexed substring + typo tolerance) is the documented\nscale/fuzzy follow-up (ASS-273). Results are ranked so the best hits lead — an\nexact name, then a prefix, then any-field contains — and ``limit``/``offset``\npage them; ``next_offset`` is set when a further page may exist.",
         "tags": [
           "search"
         ]
@@ -6343,7 +6405,7 @@
             }
           }
         },
-        "description": "Read the restricted narrative (manager+ only).\n\nA non-empty ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED\naudit entry: access to the platform's most sensitive data must answer \"why\"\n(audit model compliance contract).",
+        "description": "Read the restricted narrative (manager+ only).\n\nA ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED audit entry:\naccess to the platform's most sensitive data must answer \"why\" (audit model\ncompliance contract). ``reason`` must be one of the closed\n:class:`~apps.safety.models.DetailAccessReason` codes — never free text — so the\n\"why\" travelling in the GET query string cannot carry PII into access logs /\nreferrers (ASS-291 #7). Validated before any row is read; the input is never\nechoed back.",
         "tags": [
           "safety"
         ],
@@ -7321,6 +7383,58 @@
         ]
       }
     },
+    "/api/uploads": {
+      "post": {
+        "operationId": "apps_uploads_api_create_upload",
+        "summary": "Create Upload",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Validate + store a single uploaded image; return its media URL.\n\nRejects (coded ``ApiError``): the upload surface being fail-closed off (503,\nno serving backend wired), a non-image declared content-type (415), a file over\n:data:`~django.conf.settings.UPLOAD_MAX_BYTES` (413), bytes that are not a real\nallowed image / are scriptable markup (422), or bytes that pass the magic-byte\nsniff but fail Pillow's full decode-verify / exceed the pixel-count or\ndimension bomb guard (422). On success writes the bytes under a UUID name via\nthe storage backend and records an :class:`Upload` row.",
+        "tags": [
+          "uploads"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "title": "File",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "title": "FileParams",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/operator/visits/": {
       "post": {
         "operationId": "apps_visit_api_create_visit",
@@ -8126,87 +8240,6 @@
           }
         ]
       }
-    },
-    "/api/uploads": {
-      "post": {
-        "operationId": "apps_uploads_api_create_upload",
-        "summary": "Create Upload",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadOut"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "Unsupported Media Type",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadErrorOut"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Request Entity Too Large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadErrorOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Entity",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadErrorOut"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadErrorOut"
-                }
-              }
-            }
-          }
-        },
-        "description": "Validate + store a single uploaded image; return its media URL (drop-in media_url).\n\nHand-synced from apps.uploads.api (R11 POST /api/uploads) because the openapi export requires running Django; regenerate via `npm run gen:types`. fan_auth (401 if unauthenticated). Rejects: upload surface fail-closed off (503 UploadStorageUnavailable), non-image declared content-type (415 UploadTypeUnsupported), file over the size ceiling (413 UploadTooLarge), or bytes that are not a real allowed image / scriptable markup (422 UploadInvalid). Stored under a server-minted UUID; the returned URL is /media/uploads/<uuid>.<ext>.",
-        "tags": [
-          "uploads"
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/MultiPartBodyCreateUpload"
-              }
-            }
-          },
-          "required": true
-        },
-        "security": [
-          {
-            "FanBearerAuth": []
-          },
-          {
-            "FanCookieAuth": []
-          }
-        ]
-      }
     }
   },
   "components": {
@@ -8233,6 +8266,25 @@
           "commit"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "CapabilitiesResponse": {
+        "description": "Runtime capability flags the web reads to gate UI and flows.\n\nSingle source of truth for whether a boundary flow is currently open, so the\nweb consumes these instead of duplicating the server settings (which would\ndrift). No secrets — only whether a gated flow is available.",
+        "properties": {
+          "shipping_checkout_available": {
+            "title": "Shipping Checkout Available",
+            "type": "boolean"
+          },
+          "payment_available": {
+            "title": "Payment Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shipping_checkout_available",
+          "payment_available"
+        ],
+        "title": "CapabilitiesResponse",
         "type": "object"
       },
       "AccountRoleOut": {
@@ -8913,7 +8965,7 @@
         "type": "object"
       },
       "StudioProductOut": {
-        "description": "Owner-view product: adds the management fields (status, 19+, timestamps).",
+        "description": "Owner-view product: adds the management fields (status, 19+, timestamps).\n\n``sold`` is the total quantity sold via **non-cancelled** orders (ASS-264) — a\ncount, never a settlement/revenue figure (PG·재무 게이트 후행).",
         "properties": {
           "id": {
             "format": "uuid",
@@ -8994,6 +9046,10 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "sold": {
+            "title": "Sold",
+            "type": "integer"
           }
         },
         "required": [
@@ -9009,7 +9065,8 @@
           "locked",
           "status",
           "is_adult",
-          "created_at"
+          "created_at",
+          "sold"
         ],
         "title": "StudioProductOut",
         "type": "object"
@@ -9261,6 +9318,90 @@
         "title": "StudioAck",
         "type": "object"
       },
+      "OrderDetailOut": {
+        "description": "A single order returned to its owner, extended with the delivery snapshot.\n\nUsed only by the owner-scoped single-order responses (detail read, place,\ncancel, refund) — never the list — so ``shipping_address`` (a goods order's\nrecipient name / phone / postal / street PII) reaches a fan only for their own\norder, one at a time, not enumerated across a paginated list (ASS-291 A-3).\n``None`` for an order that needs no address (digital/experience/ticket/coupon).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "integer"
+          },
+          "shipping": {
+            "title": "Shipping",
+            "type": "integer"
+          },
+          "shipping_fee": {
+            "title": "Shipping Fee",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "creator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Name"
+          },
+          "refund": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderRefundOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shipping_address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderShippingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "items",
+          "subtotal",
+          "shipping",
+          "shipping_fee",
+          "total"
+        ],
+        "title": "OrderDetailOut",
+        "type": "object"
+      },
       "OrderItemOut": {
         "description": "One line of an order (snapshot at purchase; maps to frontend ``OrderItem``).",
         "properties": {
@@ -9305,90 +9446,6 @@
           "qty"
         ],
         "title": "OrderItemOut",
-        "type": "object"
-      },
-      "OrderOut": {
-        "description": "A fan's order (maps to the frontend ``Order`` type).\n\n``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots\ncomputed server-side (``total = subtotal + shipping_fee``; shipping is a mock\n``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and\n``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field\nthe web consumes; ``shipping_fee`` is the explicit alias matching the model.\n``shipping_address`` echoes the delivery snapshot for goods orders (``None`` for\norders that need none), safe because a fan only ever sees their own orders.",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/OrderItemOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "subtotal": {
-            "title": "Subtotal",
-            "type": "integer"
-          },
-          "shipping": {
-            "title": "Shipping",
-            "type": "integer"
-          },
-          "shipping_fee": {
-            "title": "Shipping Fee",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          },
-          "shipping_address": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OrderShippingOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "creator_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Creator Name"
-          },
-          "refund": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OrderRefundOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "status",
-          "created_at",
-          "items",
-          "subtotal",
-          "shipping",
-          "shipping_fee",
-          "total"
-        ],
-        "title": "OrderOut",
         "type": "object"
       },
       "OrderRefundOut": {
@@ -9531,8 +9588,82 @@
         "title": "ShippingIn",
         "type": "object"
       },
+      "OrderOut": {
+        "description": "A fan's order row (maps to the frontend ``Order`` type).\n\n``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots\ncomputed server-side (``total = subtotal + shipping_fee``; shipping is a mock\n``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and\n``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field\nthe web consumes; ``shipping_fee`` is the explicit alias matching the model.\n\nDeliberately carries **no delivery address** (ASS-291 A-3): the shipping\nsnapshot (recipient name / phone / postal / street) is PII, and the orders\n*list* must not echo it in every row. It is exposed only on the owner-scoped\nsingle-order responses via :class:`OrderDetailOut`.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "integer"
+          },
+          "shipping": {
+            "title": "Shipping",
+            "type": "integer"
+          },
+          "shipping_fee": {
+            "title": "Shipping Fee",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "creator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Name"
+          },
+          "refund": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderRefundOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "items",
+          "subtotal",
+          "shipping",
+          "shipping_fee",
+          "total"
+        ],
+        "title": "OrderOut",
+        "type": "object"
+      },
       "OrderPage": {
-        "description": "One page of the fan's orders plus the next cursor.",
+        "description": "One page of the fan's orders plus the next cursor (no addresses — A-3).",
         "properties": {
           "items": {
             "items": {
@@ -9794,54 +9925,6 @@
           "detail"
         ],
         "title": "ErrorOut",
-        "type": "object"
-      },
-      "UploadOut": {
-        "description": "The stored object's site-relative media URL (drop-in for a media_url).",
-        "properties": {
-          "url": {
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
-        ],
-        "title": "UploadOut",
-        "type": "object"
-      },
-      "UploadErrorOut": {
-        "description": "Coded error shape for POST /api/uploads failures (ApiError: detail + stable code). Hand-synced from apps.uploads.api / config.errors.ErrorCode; the UI branches on `code` (UploadTypeUnsupported/UploadTooLarge/UploadInvalid/UploadStorageUnavailable — see error-messages.ts). Regenerate schema.d.ts via `npm run gen:types`.",
-        "properties": {
-          "detail": {
-            "title": "Detail",
-            "type": "string"
-          },
-          "code": {
-            "title": "Code",
-            "type": "string"
-          }
-        },
-        "required": [
-          "detail",
-          "code"
-        ],
-        "title": "UploadErrorOut",
-        "type": "object"
-      },
-      "MultiPartBodyCreateUpload": {
-        "description": "Multipart form body for POST /api/uploads (a single image file).",
-        "properties": {
-          "file": {
-            "format": "binary",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "MultiPartBodyCreateUpload",
         "type": "object"
       },
       "PostIn": {
@@ -10466,7 +10549,7 @@
         "type": "object"
       },
       "SearchOut": {
-        "description": "Search results across creators and products.",
+        "description": "Search results across creators and products (ranked, paginated).",
         "properties": {
           "creators": {
             "items": {
@@ -10481,6 +10564,17 @@
             },
             "title": "Products",
             "type": "array"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
           }
         },
         "required": [
@@ -11445,7 +11539,7 @@
         "type": "object"
       },
       "StudioTierOut": {
-        "description": "Owner-view membership tier (adds the ``active`` management flag + timestamp).",
+        "description": "Owner-view membership tier (adds the ``active`` management flag + timestamp).\n\n``subscribers`` is the count of **active** (``status=active``) subscriptions to\nthis tier (ASS-264) — a count, never a settlement/revenue figure (PG·재무 게이트\n후행).",
         "properties": {
           "id": {
             "format": "uuid",
@@ -11503,6 +11597,10 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "subscribers": {
+            "title": "Subscribers",
+            "type": "integer"
           }
         },
         "required": [
@@ -11515,7 +11613,8 @@
           "featured",
           "active",
           "sort_order",
-          "created_at"
+          "created_at",
+          "subscribers"
         ],
         "title": "StudioTierOut",
         "type": "object"
@@ -13538,6 +13637,20 @@
           "handle"
         ],
         "title": "BlockedCreatorOut",
+        "type": "object"
+      },
+      "UploadOut": {
+        "description": "The stored object's site-relative media URL (drop-in for a ``media_url``).",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "UploadOut",
         "type": "object"
       },
       "VisitRecordOut": {

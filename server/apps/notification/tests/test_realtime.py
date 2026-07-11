@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from datetime import timedelta
 from typing import Any
 from unittest import mock
 
@@ -32,9 +33,10 @@ from channels.routing import URLRouter
 from channels.security.websocket import AllowedHostsOriginValidator
 from channels.testing import WebsocketCommunicator
 from django.db import transaction
+from django.utils import timezone
 
-from apps.identity.models import Account, Role
-from apps.identity.services import issue_token_pair
+from apps.identity.models import AccessToken, Account, Role
+from apps.identity.services import issue_token_pair, revoke_family
 from apps.identity.ws_auth import FanAuthMiddleware
 from apps.notification.models import Notification, NotificationKind
 from apps.notification.routing import websocket_urlpatterns
@@ -70,6 +72,29 @@ def _seed_unread(account: Account, count: int) -> None:
         Notification.objects.create(
             recipient=account, kind=NotificationKind.SYSTEM.value, title=f"n{i}"
         )
+
+
+def _revoke_token_families(account: Account) -> None:
+    """Revoke every token family for the account (logout / reuse-detection, F11)."""
+    for family in account.token_families.all():
+        revoke_family(family, reason="logout")
+
+
+def _expire_access_tokens(account: Account) -> None:
+    """Push the account's access token(s) past expiry without touching the family."""
+    AccessToken.objects.filter(family__account=account).update(
+        expires_at=timezone.now() - timedelta(seconds=1)
+    )
+
+
+# A representative fan-out payload reused by the post-connect re-verification tests.
+_SAMPLE_NOTIFICATION = {
+    "id": "3f8b",
+    "kind": NotificationKind.FOLLOW.value,
+    "title": "새 팔로워가 생겼어요.",
+    "href": "/creator/stellar",
+    "created_at": "2026-07-04T00:00:00+00:00",
+}
 
 
 @pytest.mark.asyncio
@@ -192,6 +217,93 @@ async def test_group_message_is_forwarded_to_the_socket() -> None:
     )
     message = await communicator.receive_json_from()
     assert message == {"type": "notification", "notification": notification}
+    await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_revoked_family_drops_socket_on_next_delivery() -> None:
+    """A socket is closed on the first delivery after its token family is revoked (ASS-292).
+
+    Handshake auth accepted the socket; revoking the family mid-session (logout /
+    refresh-reuse) must be honoured on the *next* delivery. The consumer re-verifies
+    the presented token, finds the family revoked, and closes 4401 instead of
+    forwarding — no stale notification reaches the client.
+    """
+    account, token = await database_sync_to_async(_make_fan_with_token)()
+    communicator = WebsocketCommunicator(
+        _ws_application(), WS_PATH, headers=_bearer_headers(token)
+    )
+    connected, _ = await communicator.connect()
+    assert connected is True
+    await communicator.receive_json_from()  # drain the connect-time unread count
+
+    await database_sync_to_async(_revoke_token_families)(account)
+
+    layer = get_channel_layer()
+    await layer.group_send(
+        f"notifications_{account.pk}",
+        {"type": "notify.message", "notification": _SAMPLE_NOTIFICATION},
+    )
+    response = await communicator.receive_output()
+    assert response == {"type": "websocket.close", "code": 4401}
+    await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_expired_token_drops_socket_on_next_delivery() -> None:
+    """A socket whose access token expires after connect is dropped on next delivery (ASS-292).
+
+    The token was valid at the handshake; letting its ``expires_at`` lapse must cut
+    off delivery — the per-message re-verification sees the token as no longer valid
+    and closes 4401 rather than forwarding.
+    """
+    account, token = await database_sync_to_async(_make_fan_with_token)()
+    communicator = WebsocketCommunicator(
+        _ws_application(), WS_PATH, headers=_bearer_headers(token)
+    )
+    connected, _ = await communicator.connect()
+    assert connected is True
+    await communicator.receive_json_from()  # drain the connect-time unread count
+
+    await database_sync_to_async(_expire_access_tokens)(account)
+
+    layer = get_channel_layer()
+    await layer.group_send(
+        f"notifications_{account.pk}",
+        {"type": "notify.message", "notification": _SAMPLE_NOTIFICATION},
+    )
+    response = await communicator.receive_output()
+    assert response == {"type": "websocket.close", "code": 4401}
+    await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_valid_token_socket_keeps_receiving_after_reverify() -> None:
+    """A still-valid token clears re-verification, so deliveries keep flowing (ASS-292).
+
+    The per-delivery gate must not regress the happy path: two successive group
+    messages are both forwarded, proving re-verification of a live token is
+    invisible to the client.
+    """
+    account, token = await database_sync_to_async(_make_fan_with_token)()
+    communicator = WebsocketCommunicator(
+        _ws_application(), WS_PATH, headers=_bearer_headers(token)
+    )
+    connected, _ = await communicator.connect()
+    assert connected is True
+    await communicator.receive_json_from()  # drain the connect-time unread count
+
+    layer = get_channel_layer()
+    for _ in range(2):
+        await layer.group_send(
+            f"notifications_{account.pk}",
+            {"type": "notify.message", "notification": _SAMPLE_NOTIFICATION},
+        )
+        message = await communicator.receive_json_from()
+        assert message == {"type": "notification", "notification": _SAMPLE_NOTIFICATION}
     await communicator.disconnect()
 
 

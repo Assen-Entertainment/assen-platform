@@ -60,6 +60,17 @@ const nextConfig = {
           },
         ),
       );
+      // 스튜디오 재무 mock(정산/애널리틱스 placeholder 금액, ASS-289 #5) — 동일 규율로 물리 치환한다.
+      // 유일 런타임 소비처 lib/api/index.ts는 alias `@/lib/studio-mock-finance`를 쓴다(차트는 type-only
+      // import → SWC 소거). `$` 앵커로 `.stub` 는 매칭하지 않는다.
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /^@\/lib\/studio-mock-finance$/,
+          (resource) => {
+            resource.request = path.resolve(__dirname, "src/lib/studio-mock-finance.stub.ts");
+          },
+        ),
+      );
     }
     return config;
   },
@@ -67,7 +78,7 @@ const nextConfig = {
   // .next/standalone/src로 그대로 복사하는 부작용이 실측 확인됐다(컴파일 산출물엔 미포함·실행 안 됨이나
   // 배포 이미지 파일시스템엔 잔존). 라이브 빌드에서는 트레이싱 대상에서 제외해 이미지에서도 제거한다.
   ...(process.env.NEXT_PUBLIC_API_URL
-    ? { outputFileTracingExcludes: { "/**": ["./src/lib/api/mock/data.ts"] } }
+    ? { outputFileTracingExcludes: { "/**": ["./src/lib/api/mock/data.ts", "./src/lib/studio-mock-finance.ts"] } }
     : {}),
 };
 

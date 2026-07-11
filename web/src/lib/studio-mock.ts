@@ -84,48 +84,8 @@ export const STUDIO_TIERS: StudioTier[] = [
   },
 ];
 
-export interface SettlementRow {
-  id: string;
-  period: string;
-  /** 총 판매액(placeholder). */
-  gross: number;
-  /** 플랫폼 수수료(placeholder 율 — 확정 아님). */
-  fee: number;
-  /** 원천징수(placeholder — 세무 확정 아님). */
-  withholding: number;
-  /** 실지급액(placeholder). */
-  net: number;
-  status: "paid" | "scheduled" | "processing";
-}
-
-export const SETTLEMENT_STATUS_META: Record<SettlementRow["status"], { label: string; variant: "success" | "neutral" | "warning" }> = {
-  paid: { label: "지급완료", variant: "success" },
-  scheduled: { label: "지급예정", variant: "neutral" },
-  processing: { label: "처리중", variant: "warning" },
-};
-
-export const SETTLEMENT_ROWS: SettlementRow[] = [
-  { id: "s1", period: "2026-06", gross: 1840000, fee: 184000, withholding: 60720, net: 1595280, status: "scheduled" },
-  { id: "s2", period: "2026-05", gross: 1620000, fee: 162000, withholding: 53460, net: 1404540, status: "paid" },
-  { id: "s3", period: "2026-04", gross: 1490000, fee: 149000, withholding: 49170, net: 1291830, status: "paid" },
-  { id: "s4", period: "2026-03", gross: 1305000, fee: 130500, withholding: 43065, net: 1131435, status: "paid" },
-];
-
-export interface AnalyticsPoint {
-  label: string;
-  subscribers: number;
-  revenue: number;
-}
-
-/** 6개월 시계열(placeholder). 차트 데모용. */
-export const ANALYTICS_SERIES: AnalyticsPoint[] = [
-  { label: "1월", subscribers: 620, revenue: 1180000 },
-  { label: "2월", subscribers: 690, revenue: 1305000 },
-  { label: "3월", subscribers: 742, revenue: 1490000 },
-  { label: "4월", subscribers: 805, revenue: 1620000 },
-  { label: "5월", subscribers: 861, revenue: 1720000 },
-  { label: "6월", subscribers: 872, revenue: 1840000 },
-];
+// ※정산/수익 재무 mock(SETTLEMENT_ROWS·ANALYTICS_SERIES 등)은 studio-mock-finance로 분리했다
+//   (ASS-289 #5) — 라이브 빌드에서 날조 금액이 번들에 실리지 않도록 mock 데모 경로 전용 모듈로 격리.
 
 export interface StudioRecentItem {
   title: string;

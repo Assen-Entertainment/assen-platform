@@ -98,6 +98,32 @@ def test_list_and_delete_scoped_to_owner(client: Client) -> None:
     assert not SavedPaymentMethod.objects.filter(id=created["id"]).exists()
 
 
+def test_non_owner_cannot_set_primary_or_delete_others_method(client: Client) -> None:
+    """IDOR regression: fan B cannot set-primary or delete fan A's payment method.
+
+    Both endpoints scope by ``owner=account`` (404 for a stranger, no existence leak);
+    this proves a different account is rejected and fan A's method is left untouched.
+    """
+    fan_a = _fan()
+    fan_b = _fan()
+    created = _post(
+        client, BASE, {"brand": "VISA", "card_number": "4111111111111111"}, headers=_auth(fan_a)
+    ).json()
+    method_id = created["id"]
+    assert created["is_primary"] is True
+
+    # Fan B: set-primary is rejected (404) and changes nothing.
+    assert (
+        client.post(f"{BASE}/{method_id}/primary", headers=_auth(fan_b)).status_code == 404
+    )
+    # Fan B: delete is rejected (404) and the row survives.
+    assert client.delete(f"{BASE}/{method_id}", headers=_auth(fan_b)).status_code == 404
+
+    method = SavedPaymentMethod.objects.get(id=method_id)
+    assert method.owner_id == fan_a.id
+    assert method.is_primary is True
+
+
 @override_settings(ENABLE_MOCK_PAYMENT=False)
 def test_register_fails_closed_when_no_tokenizer(client: Client) -> None:
     """With no tokenizer wired (real PG gate), registration returns 503."""

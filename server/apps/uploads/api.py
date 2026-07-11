@@ -53,6 +53,7 @@ from apps.uploads.images import (
     ImageKind,
     looks_scriptable,
     sniff_image_kind,
+    strip_metadata,
     verify_image_decodes,
 )
 from apps.uploads.models import Upload
@@ -196,8 +197,25 @@ def create_upload(
             422, "업로드가 거부됐어요.", code=ErrorCode.UPLOAD_INVALID
         )
 
-    # 7) Store under a server-minted UUID name (never the user's filename → no path
+    # 7) Strip ALL metadata (EXIF/XMP/GPS/ICC — e.g. an embedded phone number or GPS
+    # location) by canonically re-encoding through Pillow in the sniffed format
+    # (ASS-293). verify_image_decodes only decode-verifies; without this the original
+    # bytes — metadata and all — would be stored and served. The image is already
+    # dimension/pixel-capped (step 5), so this full re-decode is not a bomb. A
+    # re-encode failure on a payload that passed decode-verify is treated as an
+    # unusable image (422), keeping the endpoint fail-closed rather than raising 500.
+    try:
+        data = strip_metadata(data, kind)
+    except Exception as exc:
+        raise ApiError(
+            422, "이미지 파일이 아니에요.", code=ErrorCode.UPLOAD_INVALID
+        ) from exc
+
+    # 8) Store under a server-minted UUID name (never the user's filename → no path
     # traversal / PII) with the sniffed extension, via the storage abstraction.
+    # NOTE: the multipart parser reads the whole request body before the size ceiling
+    # (steps 2/4) can reject it — a true early *ingress* byte cap is a reverse-proxy /
+    # deployment concern (nginx client_max_body_size / ALB), not fixable in-app here.
     object_name = f"uploads/{uuid.uuid4().hex}.{kind.extension}"
     stored_name = default_storage.save(object_name, ContentFile(data))
     url = default_storage.url(stored_name)

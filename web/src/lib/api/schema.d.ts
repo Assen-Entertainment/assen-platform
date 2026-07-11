@@ -28,6 +28,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capabilities
+         * @description Report which gated flows are open (see the settings behind each flag).
+         */
+        get: operations["config_api_capabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/rbac/roles": {
         parameters: {
             query?: never;
@@ -387,6 +407,9 @@ export interface paths {
         /**
          * Get Order
          * @description Return one of the requesting fan's own orders (404 if not theirs).
+         *
+         *     The owner-scoped detail endpoint — the only place a fan's own delivery address
+         *     (``shipping_address``) is exposed, one order at a time, never on the list (A-3).
          */
         get: operations["apps_commerce_api_get_order"];
         put?: never;
@@ -930,6 +953,13 @@ export interface paths {
          *
          *     Discovery is an aggregate surface, so creators the authenticated caller has
          *     personally blocked are excluded (anonymous callers block nothing).
+         *
+         *     ``sort`` selects a server-ranked discovery surface (``popular`` / ``new`` /
+         *     ``recommended`` — see :data:`_RECOMMENDATION_SORTS`), computed from real
+         *     follower/recency signals rather than the client sorting a single list. A ranked
+         *     surface returns one bounded top-N page (``next_cursor`` is None) because keyset
+         *     cursors assume the stable handle order; the default (no ``sort``) stays
+         *     cursor-paginated.
          */
         get: operations["apps_creator_api_list_creators"];
         put?: never;
@@ -969,7 +999,16 @@ export interface paths {
         };
         /**
          * Search
-         * @description Search creators (name/handle) and products (title) by a query string.
+         * @description Ranked, paginated search over creators and products.
+         *
+         *     Creators match on name/handle/bio/category and products on title/meta/
+         *     description — multi-field substring (``icontains``). Substring (not a
+         *     whitespace ``tsvector``) is deliberate: Korean has no inter-morpheme spaces, so
+         *     a ``simple``-config full-text index would miss most intra-word matches. A
+         *     pg_trgm GIN index (indexed substring + typo tolerance) is the documented
+         *     scale/fuzzy follow-up (ASS-273). Results are ranked so the best hits lead — an
+         *     exact name, then a prefix, then any-field contains — and ``limit``/``offset``
+         *     page them; ``next_offset`` is set when a further page may exist.
          */
         get: operations["apps_creator_api_search"];
         put?: never;
@@ -2252,9 +2291,13 @@ export interface paths {
          * Get Report Detail
          * @description Read the restricted narrative (manager+ only).
          *
-         *     A non-empty ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED
-         *     audit entry: access to the platform's most sensitive data must answer "why"
-         *     (audit model compliance contract).
+         *     A ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED audit entry:
+         *     access to the platform's most sensitive data must answer "why" (audit model
+         *     compliance contract). ``reason`` must be one of the closed
+         *     :class:`~apps.safety.models.DetailAccessReason` codes — never free text — so the
+         *     "why" travelling in the GET query string cannot carry PII into access logs /
+         *     referrers (ASS-291 #7). Validated before any row is read; the input is never
+         *     echoed back.
          */
         get: operations["apps_safety_api_get_report_detail"];
         put?: never;
@@ -2562,6 +2605,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Validate + store a single uploaded image; return its media URL.
+         *
+         *     Rejects (coded ``ApiError``): the upload surface being fail-closed off (503,
+         *     no serving backend wired), a non-image declared content-type (415), a file over
+         *     :data:`~django.conf.settings.UPLOAD_MAX_BYTES` (413), bytes that are not a real
+         *     allowed image / are scriptable markup (422), or bytes that pass the magic-byte
+         *     sniff but fail Pillow's full decode-verify / exceed the pixel-count or
+         *     dimension bomb guard (422). On success writes the bytes under a UUID name via
+         *     the storage backend and records an :class:`Upload` row.
+         */
+        post: operations["apps_uploads_api_create_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/visits/": {
         parameters: {
             query?: never;
@@ -2834,28 +2905,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Upload
-         * @description Validate + store a single uploaded image; return its media URL (drop-in media_url).
-         *
-         *     Hand-synced from apps.uploads.api (R11 POST /api/uploads) because the openapi export requires running Django; regenerate via `npm run gen:types`. fan_auth (401 if unauthenticated). Rejects: upload surface fail-closed off (503 UploadStorageUnavailable), non-image declared content-type (415 UploadTypeUnsupported), file over the size ceiling (413 UploadTooLarge), or bytes that are not a real allowed image / scriptable markup (422 UploadInvalid). Stored under a server-minted UUID; the returned URL is /media/uploads/<uuid>.<ext>.
-         */
-        post: operations["apps_uploads_api_create_upload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2871,6 +2920,20 @@ export interface components {
             version: string;
             /** Commit */
             commit: string;
+        };
+        /**
+         * CapabilitiesResponse
+         * @description Runtime capability flags the web reads to gate UI and flows.
+         *
+         *     Single source of truth for whether a boundary flow is currently open, so the
+         *     web consumes these instead of duplicating the server settings (which would
+         *     drift). No secrets — only whether a gated flow is available.
+         */
+        CapabilitiesResponse: {
+            /** Shipping Checkout Available */
+            shipping_checkout_available: boolean;
+            /** Payment Available */
+            payment_available: boolean;
         };
         /**
          * AccountRoleOut
@@ -3210,6 +3273,9 @@ export interface components {
         /**
          * StudioProductOut
          * @description Owner-view product: adds the management fields (status, 19+, timestamps).
+         *
+         *     ``sold`` is the total quantity sold via **non-cancelled** orders (ASS-264) — a
+         *     count, never a settlement/revenue figure (PG·재무 게이트 후행).
          */
         StudioProductOut: {
             /**
@@ -3248,6 +3314,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Sold */
+            sold: number;
         };
         /**
          * StudioProductIn
@@ -3342,36 +3410,16 @@ export interface components {
             status: string;
         };
         /**
-         * OrderItemOut
-         * @description One line of an order (snapshot at purchase; maps to frontend ``OrderItem``).
-         */
-        OrderItemOut: {
-            /** Product Id */
-            product_id?: string | null;
-            /** Title */
-            title: string;
-            /** Type */
-            type: string;
-            /** Option */
-            option: string;
-            /** Price */
-            price: number;
-            /** Qty */
-            qty: number;
-        };
-        /**
-         * OrderOut
-         * @description A fan's order (maps to the frontend ``Order`` type).
+         * OrderDetailOut
+         * @description A single order returned to its owner, extended with the delivery snapshot.
          *
-         *     ``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots
-         *     computed server-side (``total = subtotal + shipping_fee``; shipping is a mock
-         *     ``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and
-         *     ``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field
-         *     the web consumes; ``shipping_fee`` is the explicit alias matching the model.
-         *     ``shipping_address`` echoes the delivery snapshot for goods orders (``None`` for
-         *     orders that need none), safe because a fan only ever sees their own orders.
+         *     Used only by the owner-scoped single-order responses (detail read, place,
+         *     cancel, refund) — never the list — so ``shipping_address`` (a goods order's
+         *     recipient name / phone / postal / street PII) reaches a fan only for their own
+         *     order, one at a time, not enumerated across a paginated list (ASS-291 A-3).
+         *     ``None`` for an order that needs no address (digital/experience/ticket/coupon).
          */
-        OrderOut: {
+        OrderDetailOut: {
             /** Id */
             id: string;
             /** Status */
@@ -3391,10 +3439,28 @@ export interface components {
             shipping_fee: number;
             /** Total */
             total: number;
-            shipping_address?: components["schemas"]["OrderShippingOut"] | null;
             /** Creator Name */
             creator_name?: string | null;
             refund?: components["schemas"]["OrderRefundOut"] | null;
+            shipping_address?: components["schemas"]["OrderShippingOut"] | null;
+        };
+        /**
+         * OrderItemOut
+         * @description One line of an order (snapshot at purchase; maps to frontend ``OrderItem``).
+         */
+        OrderItemOut: {
+            /** Product Id */
+            product_id?: string | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+            /** Option */
+            option: string;
+            /** Price */
+            price: number;
+            /** Qty */
+            qty: number;
         };
         /**
          * OrderRefundOut
@@ -3478,8 +3544,47 @@ export interface components {
             address2: string;
         };
         /**
+         * OrderOut
+         * @description A fan's order row (maps to the frontend ``Order`` type).
+         *
+         *     ``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots
+         *     computed server-side (``total = subtotal + shipping_fee``; shipping is a mock
+         *     ``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and
+         *     ``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field
+         *     the web consumes; ``shipping_fee`` is the explicit alias matching the model.
+         *
+         *     Deliberately carries **no delivery address** (ASS-291 A-3): the shipping
+         *     snapshot (recipient name / phone / postal / street) is PII, and the orders
+         *     *list* must not echo it in every row. It is exposed only on the owner-scoped
+         *     single-order responses via :class:`OrderDetailOut`.
+         */
+        OrderOut: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Items */
+            items: components["schemas"]["OrderItemOut"][];
+            /** Subtotal */
+            subtotal: number;
+            /** Shipping */
+            shipping: number;
+            /** Shipping Fee */
+            shipping_fee: number;
+            /** Total */
+            total: number;
+            /** Creator Name */
+            creator_name?: string | null;
+            refund?: components["schemas"]["OrderRefundOut"] | null;
+        };
+        /**
          * OrderPage
-         * @description One page of the fan's orders plus the next cursor.
+         * @description One page of the fan's orders plus the next cursor (no addresses — A-3).
          */
         OrderPage: {
             /** Items */
@@ -3617,35 +3722,6 @@ export interface components {
         ErrorOut: {
             /** Detail */
             detail: string;
-        };
-        /**
-         * UploadOut
-         * @description The stored object's site-relative media URL (drop-in for a media_url).
-         */
-        UploadOut: {
-            /** Url */
-            url: string;
-        };
-        /**
-         * UploadErrorOut
-         * @description Coded error shape for POST /api/uploads failures (ApiError: detail + stable code). Hand-synced from apps.uploads.api / config.errors.ErrorCode; the UI branches on `code` (UploadTypeUnsupported/UploadTooLarge/UploadInvalid/UploadStorageUnavailable — see error-messages.ts). Regenerate schema.d.ts via `npm run gen:types`.
-         */
-        UploadErrorOut: {
-            /** Detail */
-            detail: string;
-            /** Code */
-            code: string;
-        };
-        /**
-         * MultiPartBodyCreateUpload
-         * @description Multipart form body for POST /api/uploads (a single image file).
-         */
-        MultiPartBodyCreateUpload: {
-            /**
-             * File
-             * Format: binary
-             */
-            file: string;
         };
         /**
          * PostIn
@@ -3983,13 +4059,15 @@ export interface components {
         };
         /**
          * SearchOut
-         * @description Search results across creators and products.
+         * @description Search results across creators and products (ranked, paginated).
          */
         SearchOut: {
             /** Creators */
             creators: components["schemas"]["CreatorOut"][];
             /** Products */
             products: components["schemas"]["ProductBrief"][];
+            /** Next Offset */
+            next_offset?: number | null;
         };
         /**
          * StudioProfilePatch
@@ -4482,6 +4560,10 @@ export interface components {
         /**
          * StudioTierOut
          * @description Owner-view membership tier (adds the ``active`` management flag + timestamp).
+         *
+         *     ``subscribers`` is the count of **active** (``status=active``) subscriptions to
+         *     this tier (ASS-264) — a count, never a settlement/revenue figure (PG·재무 게이트
+         *     후행).
          */
         StudioTierOut: {
             /**
@@ -4512,6 +4594,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Subscribers */
+            subscribers: number;
         };
         /**
          * SubscriptionError
@@ -5607,6 +5691,14 @@ export interface components {
             handle: string;
         };
         /**
+         * UploadOut
+         * @description The stored object's site-relative media URL (drop-in for a ``media_url``).
+         */
+        UploadOut: {
+            /** Url */
+            url: string;
+        };
+        /**
          * VisitRecordOut
          * @description Visit record fields exposed to operator tools without personal data.
          */
@@ -5898,6 +5990,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    config_api_capabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitiesResponse"];
                 };
             };
         };
@@ -6611,7 +6723,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrderOut"];
+                    "application/json": components["schemas"]["OrderDetailOut"];
                 };
             };
             /** @description Created */
@@ -6620,7 +6732,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrderOut"];
+                    "application/json": components["schemas"]["OrderDetailOut"];
                 };
             };
             /** @description Not Found */
@@ -6660,7 +6772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrderOut"];
+                    "application/json": components["schemas"]["OrderDetailOut"];
                 };
             };
             /** @description Not Found */
@@ -6691,7 +6803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrderOut"];
+                    "application/json": components["schemas"]["OrderDetailOut"];
                 };
             };
             /** @description Not Found */
@@ -6735,7 +6847,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrderOut"];
+                    "application/json": components["schemas"]["OrderDetailOut"];
                 };
             };
             /** @description Not Found */
@@ -7631,6 +7743,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number | null;
                 category?: string | null;
+                sort?: string | null;
             };
             header?: never;
             path?: never;
@@ -7684,6 +7797,8 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
+                limit?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -10402,6 +10517,36 @@ export interface operations {
             };
         };
     };
+    apps_uploads_api_create_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * File
+                     * Format: binary
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadOut"];
+                };
+            };
+        };
+    };
     apps_visit_api_list_visits: {
         parameters: {
             query?: {
@@ -10916,66 +11061,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GuideError"];
-                };
-            };
-        };
-    };
-    apps_uploads_api_create_upload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["MultiPartBodyCreateUpload"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadOut"];
-                };
-            };
-            /** @description Request Entity Too Large */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadErrorOut"];
-                };
-            };
-            /** @description Unsupported Media Type */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadErrorOut"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadErrorOut"];
-                };
-            };
-            /** @description Service Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadErrorOut"];
                 };
             };
         };

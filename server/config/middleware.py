@@ -11,6 +11,7 @@ because the production limiter is deployment-bound (Redis).
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Callable
 
@@ -25,12 +26,23 @@ from config.ratelimit import RateLimiter, get_rate_limiter
 # available to logs/audit so a request can be traced end to end.
 REQUEST_ID_HEADER = "X-Request-ID"
 
+# Grammar a *client-supplied* request id must satisfy to be trusted: a short,
+# opaque token of URL/log-safe characters only. Anything outside this alphabet
+# (whitespace, CR/LF, control chars, ``<``/quotes, percent-encoded PII, an
+# over-long blob) is rejected and a fresh server id is minted instead — so an
+# attacker cannot fold log-forging content or PII into the central log stream or
+# the echoed response header via ``X-Request-ID`` (ASS-291 #7).
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
 
 class RequestIDMiddleware:
     """Attach a unique id to every request and echo it on the response.
 
-    Placed first (§3.5 #1) so the id exists before any later concern logs. If the
-    client supplied one we keep it (distributed tracing); otherwise we mint one.
+    Placed first (§3.5 #1) so the id exists before any later concern logs. A
+    client-supplied id is honoured for distributed tracing **only when it matches
+    a bounded, opaque grammar** (:data:`_REQUEST_ID_RE`); an absent, malformed, or
+    over-long value is discarded and a fresh server id is minted, so untrusted
+    header content can never ride into the log stream / response header.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -45,7 +57,12 @@ class RequestIDMiddleware:
         binding is always unwound, even if a downstream handler raises.
         """
         incoming = request.headers.get(REQUEST_ID_HEADER)
-        request_id = incoming or uuid.uuid4().hex
+        # Trust the client id only if it fits the opaque grammar; otherwise mint a
+        # fresh one so no attacker-controlled content reaches the log/response.
+        if incoming and _REQUEST_ID_RE.match(incoming):
+            request_id = incoming
+        else:
+            request_id = uuid.uuid4().hex
         request.request_id = request_id  # type: ignore[attr-defined]
         token = bind_request_id(request_id)
         try:
