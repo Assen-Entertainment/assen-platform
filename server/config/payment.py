@@ -21,8 +21,41 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.db import models
 
 from config.errors import ApiError, ErrorCode
+
+
+class PaymentProvenance(models.TextChoices):
+    """Where a PAID/ACTIVE record's settlement actually came from (ASS-298).
+
+    Recorded on ``Order``/``Subscription`` so a paid/active record can always
+    answer "how was this settled" before a real PG exists. Pre-ASS-298 rows are
+    never guessed — they backfill to :attr:`LEGACY_UNKNOWN`. Today only
+    :attr:`MOCK` (deterministic mock, ``ENABLE_MOCK_PAYMENT``) and :attr:`FREE`
+    (an explicit free grant, ASS-297) are ever written; :attr:`EXTERNAL` is
+    reserved for when a real PG replaces the mock behind the same flag.
+    """
+
+    FREE = "free", "free"
+    MOCK = "mock", "mock"
+    EXTERNAL = "external", "external"
+    LEGACY_UNKNOWN = "legacy_unknown", "legacy unknown"
+
+
+class PricingKind(models.TextChoices):
+    """Explicit price intent for an offering (ASS-297).
+
+    Distinguishes a genuinely free product/tier (:attr:`FREE`) from a default-0
+    placeholder ``price`` on a paid offering (:attr:`PAID`). Defaults to
+    :attr:`PAID` everywhere, so a price-0 row is never treated as free — a free
+    offering is only ever created by an explicit studio action, and acquiring it
+    goes through the dedicated free-grant path, never the ``amount==0`` bypass the
+    payment gate forbids.
+    """
+
+    PAID = "paid", "paid"
+    FREE = "free", "free"
 
 
 class PaymentError(Exception):

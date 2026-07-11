@@ -23,6 +23,10 @@ export const ERROR_CODES = {
   TierInUse: "TierInUse",
   PaymentCardInvalid: "PaymentCardInvalid",
   PaymentMethodNotFound: "PaymentMethodNotFound",
+  // 무료 획득 게이트(ASS-297) — 유료/무료 경로 교차 사용·무료 가격 불변식 위반 시 서버가 422로 거부.
+  PricingNotFree: "PricingNotFree",
+  PricingIsFree: "PricingIsFree",
+  PricingFreeRequiresZeroPrice: "PricingFreeRequiresZeroPrice",
   // 배송(굿즈) 결제 게이트(ASS-287 A-1) — ENABLE_SHIPPING_CHECKOUT off 시 굿즈 주문을 503으로 거부.
   ShippingCheckoutUnavailable: "ShippingCheckoutUnavailable",
   InteractionBlocked: "InteractionBlocked",
@@ -64,6 +68,10 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   // 결제수단
   PaymentCardInvalid: "카드 정보가 올바르지 않아요. 다시 확인해 주세요.",
   PaymentMethodNotFound: "결제수단을 찾을 수 없어요.",
+  // 무료 획득 게이트(ASS-297)
+  PricingNotFree: "무료로 받을 수 없는 상품이에요. 결제가 필요해요.",
+  PricingIsFree: "무료로 제공되는 상품이에요. 무료 받기로 진행해 주세요.",
+  PricingFreeRequiresZeroPrice: "무료로 설정하려면 가격을 0원으로 맞춰 주세요.",
   // 배송 결제 준비 중(ASS-287): 배송 상품 결제 흐름이 아직 열리지 않았어요(정책 게이트).
   ShippingCheckoutUnavailable: "배송 상품 결제가 아직 준비 중이에요. 잠시 후 다시 시도해 주세요.",
   // 개인 차단(R4): 차단한 크리에이터 콘텐츠에 like/댓글/주문 시 서버가 422로 거부.

@@ -16,17 +16,22 @@ from django.db.models import Count, Q
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from apps.creator.models import Creator
 from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
+from apps.payments.services import record_free_grant, record_mock_settlement
 from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.patch import apply_optional
-from config.payment import require_payment_available
+from config.payment import (
+    PaymentProvenance,
+    PricingKind,
+    require_payment_available,
+)
 from config.throttle import user_write_throttle
 
 # Mock billing cycle length; there is no real recurring billing (B7 gated).
@@ -52,6 +57,9 @@ class TierOut(Schema):
     badge: str
     featured: bool
     sort_order: int
+    # Explicit price intent (ASS-297): a "free" tier is joined via /subscriptions/
+    # free (no payment UI), not the paid subscribe. Default "paid".
+    pricing_kind: str = PricingKind.PAID.value
 
 
 def _tier_out(tier: MembershipTier) -> TierOut:
@@ -68,6 +76,7 @@ def _tier_out(tier: MembershipTier) -> TierOut:
         badge=tier.badge,
         featured=tier.featured,
         sort_order=tier.sort_order,
+        pricing_kind=tier.pricing_kind,
     )
 
 
@@ -139,6 +148,9 @@ class StudioTierOut(Schema):
     sort_order: int
     created_at: datetime
     subscribers: int
+    # Explicit price intent (ASS-297): mirrors the fan-facing TierOut so the owner
+    # studio can read/set whether a tier is genuinely free vs a price-0 paid row.
+    pricing_kind: str = PricingKind.PAID.value
 
 
 class StudioTierIn(Schema):
@@ -152,6 +164,15 @@ class StudioTierIn(Schema):
     featured: bool = False
     active: bool = True
     sort_order: int = Field(default=0, ge=0)
+    pricing_kind: str = PricingKind.PAID.value
+
+    @field_validator("pricing_kind")
+    @classmethod
+    def _check_pricing_kind(cls, value: str) -> str:
+        """Reject a pricing_kind outside the known choices (ASS-297 → 422)."""
+        if value not in PricingKind.values:
+            raise ValueError("pricing_kind must be 'paid' or 'free'.")
+        return value
 
 
 class StudioTierPatch(Schema):
@@ -165,6 +186,15 @@ class StudioTierPatch(Schema):
     featured: bool | None = None
     active: bool | None = None
     sort_order: int | None = Field(default=None, ge=0)
+    pricing_kind: str | None = None
+
+    @field_validator("pricing_kind")
+    @classmethod
+    def _check_pricing_kind(cls, value: str | None) -> str | None:
+        """Validate pricing_kind only when provided (ASS-297 → 422)."""
+        if value is not None and value not in PricingKind.values:
+            raise ValueError("pricing_kind must be 'paid' or 'free'.")
+        return value
 
 
 class StudioTierAck(Schema):
@@ -209,6 +239,7 @@ def _studio_tier_out(tier: MembershipTier) -> StudioTierOut:
         sort_order=tier.sort_order,
         created_at=tier.created_at,
         subscribers=_tier_subscribers(tier),
+        pricing_kind=tier.pricing_kind,
     )
 
 
@@ -240,7 +271,7 @@ def studio_list_tiers(
 
 @studio_tiers_router.post(
     "",
-    response={201: StudioTierOut, 403: SubscriptionError},
+    response={201: StudioTierOut, 403: SubscriptionError, 422: SubscriptionError},
     throttle=user_write_throttle("30/min"),
 )
 def studio_create_tier(
@@ -253,6 +284,14 @@ def studio_create_tier(
         return 403, SubscriptionError(
             detail="크리에이터만 멤버십을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
         )
+    # Coherence guard (ASS-297): a genuinely free tier must carry a zero price —
+    # "free" and a nonzero price are mutually exclusive, else the free-grant path
+    # would silently ignore a stated price.
+    if payload.pricing_kind == PricingKind.FREE.value and payload.price != 0:
+        return 422, SubscriptionError(
+            detail="무료 멤버십의 가격은 0이어야 해요.",
+            code=ErrorCode.PRICING_FREE_REQUIRES_ZERO_PRICE.value,
+        )
     tier = MembershipTier.objects.create(
         creator=creator,
         name=payload.name,
@@ -263,13 +302,19 @@ def studio_create_tier(
         featured=payload.featured,
         active=payload.active,
         sort_order=payload.sort_order,
+        pricing_kind=payload.pricing_kind,
     )
     return 201, _studio_tier_out(tier)
 
 
 @studio_tiers_router.patch(
     "/{tier_id}",
-    response={200: StudioTierOut, 403: SubscriptionError, 404: SubscriptionError},
+    response={
+        200: StudioTierOut,
+        403: SubscriptionError,
+        404: SubscriptionError,
+        422: SubscriptionError,
+    },
     throttle=user_write_throttle("30/min"),
 )
 def studio_update_tier(
@@ -287,10 +332,25 @@ def studio_update_tier(
         return 404, SubscriptionError(
             detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
         )
+    # Coherence guard on the EFFECTIVE post-patch values (ASS-297): a patch may set
+    # either field, so compute what the row would become and reject a free tier left
+    # with a nonzero price (whether the price or the kind was the one changed).
+    effective_kind = (
+        payload.pricing_kind if payload.pricing_kind is not None else tier.pricing_kind
+    )
+    effective_price = payload.price if payload.price is not None else tier.price
+    if effective_kind == PricingKind.FREE.value and effective_price != 0:
+        return 422, SubscriptionError(
+            detail="무료 멤버십의 가격은 0이어야 해요.",
+            code=ErrorCode.PRICING_FREE_REQUIRES_ZERO_PRICE.value,
+        )
     apply_optional(
         tier,
         payload,
-        ["name", "price", "period", "benefits", "badge", "featured", "active", "sort_order"],
+        [
+            "name", "price", "period", "benefits", "badge", "featured",
+            "active", "sort_order", "pricing_kind",
+        ],
     )
     tier.save()
     return 200, _studio_tier_out(tier)
@@ -361,8 +421,13 @@ class SubscriptionOut(Schema):
     price: int
     period: str
     status: str
-    next_billing_date: date
+    # NULL for a free membership (ASS-297) — no next charge, so the web shows no
+    # "다음 결제일". A paid mock subscription keeps its display anchor.
+    next_billing_date: date | None = None
     cancel_scheduled: bool
+    # Derived from payment_provenance=free (ASS-297): the web hides payment-method /
+    # auto-renew / billing-amount UI for a free membership.
+    is_free: bool = False
 
 
 class SubscribeIn(Schema):
@@ -395,6 +460,7 @@ def _subscription_out(sub: Subscription) -> SubscriptionOut:
         cancel_scheduled=(
             sub.status == SubscriptionStatus.ACTIVE.value and sub.cancelled_at is not None
         ),
+        is_free=sub.payment_provenance == PaymentProvenance.FREE,
     )
 
 
@@ -425,6 +491,13 @@ def subscribe(
         return 404, SubscriptionError(
             detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
         )
+    # A free tier is joined only via /subscriptions/free — keep it off the paid
+    # path so it never mints a mock/external settlement (ASS-297).
+    if tier.pricing_kind == PricingKind.FREE:
+        return 422, SubscriptionError(
+            detail="무료 멤버십은 '무료로 시작하기'로 신청해 주세요.",
+            code=ErrorCode.PRICING_IS_FREE.value,
+        )
     active = Subscription.objects.filter(fan=account, status=SubscriptionStatus.ACTIVE)
     # Dedup by creator when the tier belongs to one; otherwise by the exact tier.
     if tier.creator is not None:
@@ -445,7 +518,74 @@ def subscribe(
                 tier=tier,
                 status=SubscriptionStatus.ACTIVE,
                 next_billing_date=timezone.localdate() + _BILLING_CYCLE,
+                # Settled by the deterministic mock (the only path past the
+                # payment gate today); never guessed (ASS-298).
+                payment_provenance=PaymentProvenance.MOCK,
             )
+            # Ledger the settlement in the same transaction (ASS-298).
+            record_mock_settlement(subscription=sub, amount=tier.price)
+    except IntegrityError:
+        return 422, SubscriptionError(
+            detail="이미 구독 중인 크리에이터예요.", code=ErrorCode.DUPLICATE_SUBSCRIPTION.value
+        )
+    return 201, _subscription_out(sub)
+
+
+@subscriptions_router.post(
+    "/free",
+    response={201: SubscriptionOut, 404: SubscriptionError, 422: SubscriptionError},
+    throttle=user_write_throttle("20/min"),
+)
+def subscribe_free(
+    request: HttpRequest, payload: SubscribeIn
+) -> tuple[int, SubscriptionOut | SubscriptionError]:
+    """Join an explicitly free tier — no payment, provenance=free (ASS-297).
+
+    The ONLY way to join a ``pricing_kind=free`` tier: the paid subscribe refuses
+    it (``PricingIsFree``) and this path refuses a paid tier (``PricingNotFree``),
+    so a price-0 placeholder tier can never be joined free. A free membership has
+    no billing anchor (``next_billing_date=None``) and never auto-converts to paid;
+    the one-active-membership-per-creator rule still applies.
+    """
+    account = authed(request)
+    # No require_payment_available() — a free grant settles nothing.
+    tier = (
+        MembershipTier.objects.select_related("creator")
+        .filter(id=payload.tier_id, active=True)
+        .first()
+    )
+    if tier is None:
+        return 404, SubscriptionError(
+            detail="멤버십 등급을 찾을 수 없어요.", code=ErrorCode.TIER_NOT_FOUND.value
+        )
+    # Only an explicitly free tier may be joined here — a paid tier (incl. a price-0
+    # placeholder) must go through the normal, payment-gated subscribe.
+    if tier.pricing_kind != PricingKind.FREE:
+        return 422, SubscriptionError(
+            detail="무료로 시작할 수 있는 멤버십이 아니에요.",
+            code=ErrorCode.PRICING_NOT_FREE.value,
+        )
+    active = Subscription.objects.filter(fan=account, status=SubscriptionStatus.ACTIVE)
+    if tier.creator is not None:
+        active = active.filter(tier__creator=tier.creator)
+    else:
+        active = active.filter(tier=tier)
+    if active.exists():
+        return 422, SubscriptionError(
+            detail="이미 구독 중인 크리에이터예요.", code=ErrorCode.DUPLICATE_SUBSCRIPTION.value
+        )
+    try:
+        with transaction.atomic():
+            sub = Subscription.objects.create(
+                fan=account,
+                tier=tier,
+                status=SubscriptionStatus.ACTIVE,
+                # No next charge for a free membership (ASS-297) — never a fabricated
+                # date — and it never auto-converts to paid.
+                next_billing_date=None,
+                payment_provenance=PaymentProvenance.FREE,
+            )
+            record_free_grant(subscription=sub)
     except IntegrityError:
         return 422, SubscriptionError(
             detail="이미 구독 중인 크리에이터예요.", code=ErrorCode.DUPLICATE_SUBSCRIPTION.value
@@ -561,8 +701,20 @@ def change_subscription_tier(
         return 422, SubscriptionError(
             detail="변경할 수 있는 멤버십 등급이 아니에요.", code=ErrorCode.TIER_NOT_FOUND.value
         )
+    # The target of a paid tier change must itself be paid (ASS-297): a paid→free
+    # "downgrade" is out of scope for v1, and this keeps provenance honestly MOCK.
+    if new_tier.pricing_kind == PricingKind.FREE:
+        return 422, SubscriptionError(
+            detail="무료 등급으로는 변경할 수 없어요.",
+            code=ErrorCode.PRICING_IS_FREE.value,
+        )
     sub.tier = new_tier
-    sub.save(update_fields=["tier"])
+    # A tier change is a fresh mock settlement — refresh provenance and ledger it
+    # in one transaction so the record and its attempt never diverge (ASS-298).
+    sub.payment_provenance = PaymentProvenance.MOCK
+    with transaction.atomic():
+        sub.save(update_fields=["tier", "payment_provenance"])
+        record_mock_settlement(subscription=sub, amount=new_tier.price)
     return 200, _subscription_out(sub)
 
 

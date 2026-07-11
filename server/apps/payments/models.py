@@ -51,3 +51,102 @@ class SavedPaymentMethod(models.Model):
     def __str__(self) -> str:
         """Identify the method by brand + last4 (never a full PAN)."""
         return f"card:{self.brand}****{self.last4}"
+
+
+class PaymentProvider(models.TextChoices):
+    """Which settlement rail an attempt went through (ASS-298).
+
+    ``mock`` = the deterministic dev mock; ``free`` = an explicit free grant
+    (ASS-297, no rail); ``external`` = a real PG (future — never written today).
+    """
+
+    MOCK = "mock", "mock"
+    FREE = "free", "free"
+    EXTERNAL = "external", "external"
+
+
+class PaymentAttemptStatus(models.TextChoices):
+    """Lifecycle of a single payment attempt (ASS-298)."""
+
+    PENDING = "pending", "pending"
+    SUCCEEDED = "succeeded", "succeeded"
+    FAILED = "failed", "failed"
+    REFUNDED = "refunded", "refunded"
+
+
+class PaymentAttempt(models.Model):
+    """Append-only payment-attempt ledger, designed before a real PG (ASS-298).
+
+    Records how an ``Order``/``Subscription`` was settled so a paid/active record
+    can always answer "which attempt settled this" ahead of a real PG. Today only
+    ``mock``/``free`` attempts are written. By construction it holds NO card data —
+    only an opaque provider transaction id, amount, currency, and status. Linked
+    1:N to exactly one of ``Order`` or ``Subscription`` (the XOR constraint below);
+    a refund attempt points at the capture it reverses via ``original_attempt``.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(
+        "commerce.Order",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="payment_attempts",
+    )
+    subscription = models.ForeignKey(
+        "membership.Subscription",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="payment_attempts",
+    )
+    provider = models.CharField(max_length=16, choices=PaymentProvider.choices)
+    # Opaque PG/mock transaction id — NEVER a PAN. Blank until a provider assigns one.
+    provider_txn_id = models.CharField(max_length=128, blank=True, default="")
+    # Authorized amount snapshot in whole KRW. NOT a settlement figure (mock/free today).
+    authorized_amount = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=3, default="KRW")
+    status = models.CharField(
+        max_length=16,
+        choices=PaymentAttemptStatus.choices,
+        default=PaymentAttemptStatus.PENDING,
+    )
+    # Idempotency echo of the parent order's key (the parent owns dedup); indexed for
+    # ledger lookup, not uniquely constrained here.
+    idempotency_key = models.CharField(
+        max_length=64, null=True, blank=True, default=None
+    )
+    # A refund attempt references the capture it reverses (real-PG semantics: a
+    # refund is a new txn pointing at the original). SET_NULL keeps the refund row
+    # if the capture is ever purged.
+    original_attempt = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="refunds",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["order", "-created_at"]),
+            models.Index(fields=["subscription", "-created_at"]),
+            models.Index(fields=["provider", "status"]),
+        ]
+        constraints = [
+            # An attempt settles exactly one target — an order XOR a subscription,
+            # never both and never neither. Materialised by the app's migration.
+            models.CheckConstraint(
+                check=(
+                    models.Q(order__isnull=False, subscription__isnull=True)
+                    | models.Q(order__isnull=True, subscription__isnull=False)
+                ),
+                name="payment_attempt_exactly_one_target",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """Identify the attempt by provider + status."""
+        return f"attempt:{self.provider}:{self.status}"

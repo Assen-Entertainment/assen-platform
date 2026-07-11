@@ -90,6 +90,11 @@ export interface Product {
   isAdult?: boolean;
   /** 판매 상태 — 오너 스코프(StudioProductOut.status). 공개 카탈로그 응답엔 없어 있을 때만 채워짐. */
   status?: string;
+  /**
+   * 가격 종류(서버 ProductOut.pricing_kind, 기본 "paid") — "free"면 무료 획득 대상(결제 없이
+   * `POST /api/orders/free`로 획득). 미지정은 유료로 간주. 검색 브리프엔 없어 옵셔널.
+   */
+  pricingKind?: "paid" | "free";
 }
 
 export interface MembershipTier {
@@ -102,6 +107,11 @@ export interface MembershipTier {
   benefits: string[];
   badge?: string;
   featured?: boolean;
+  /**
+   * 가격 종류(서버 TierOut.pricing_kind, 기본 "paid") — "free"면 무료 멤버십(결제 없이
+   * `POST /api/subscriptions/free`로 가입). 미지정은 유료로 간주.
+   */
+  pricingKind?: "paid" | "free";
 }
 
 /** 커서 페이지 응답 — B2 wire 계약(snake_case). 마지막 페이지에서 next_cursor=null. */
@@ -233,9 +243,11 @@ export interface Subscription {
   tierName: string;
   price: number;
   period: string;
-  /** 다음 결제일(YYYY-MM-DD). */
-  nextBillingDate: string;
+  /** 다음 결제일(YYYY-MM-DD). 무료 멤버십은 결제 앵커가 없어 null(서버 next_billing_date=None). */
+  nextBillingDate: string | null;
   status: "active" | "cancelled";
   /** 해지 예정 — 서버 계약: status=active 유지 + cancel_scheduled=true(말일 해지). */
   cancelScheduled?: boolean;
+  /** 무료 멤버십 여부(서버 SubscriptionOut.is_free, 기본 false) — 결제일·금액 UI를 숨기고 무료 표기. */
+  isFree?: boolean;
 }

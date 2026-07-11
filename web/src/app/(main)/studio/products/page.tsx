@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Spinner,
+  Switch,
   SegmentedControl,
   Dialog,
   DialogTrigger,
@@ -63,6 +64,8 @@ export default function StudioProductsPage() {
   const [newType, setNewType] = React.useState<MonetizableItemType>("goods");
   const [newPrice, setNewPrice] = React.useState("");
   const [newDescription, setNewDescription] = React.useState("");
+  // 무료 상품(ASS-297) — 켜면 가격 입력을 비활성·0원으로(서버 free-requires-zero-price 불변식 미러).
+  const [newFree, setNewFree] = React.useState(false);
 
   const products = React.useMemo(() => data ?? [], [data]);
   const rows = React.useMemo(
@@ -75,6 +78,7 @@ export default function StudioProductsPage() {
     setNewType("goods");
     setNewPrice("");
     setNewDescription("");
+    setNewFree(false);
   };
 
   const onCreate = () => {
@@ -82,9 +86,10 @@ export default function StudioProductsPage() {
       {
         type: newType,
         title: newTitle.trim() || "새 상품",
-        price: Number(newPrice) || 0,
+        price: newFree ? 0 : Number(newPrice) || 0,
         description: newDescription.trim() || undefined,
         status: "draft",
+        pricingKind: newFree ? "free" : "paid",
       },
       {
         onSuccess: () => {
@@ -101,7 +106,7 @@ export default function StudioProductsPage() {
     () => [
       { key: "title", header: "상품명", render: (r) => <span className="line-clamp-1 text-on-surface">{r.title}</span> },
       { key: "type", header: "유형", render: (r) => PRODUCT_TYPE_LABEL[r.type] },
-      { key: "price", header: "가격", align: "right", render: (r) => <span className="tabular-nums">{won(r.price)}</span> },
+      { key: "price", header: "가격", align: "right", render: (r) => <span className="tabular-nums">{r.pricingKind === "free" ? "무료" : won(r.price)}</span> },
       {
         key: "sold",
         header: "판매",
@@ -173,7 +178,20 @@ export default function StudioProductsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <TextField label="가격 (원)" type="number" inputMode="numeric" placeholder="0" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
+            <div className="flex items-center justify-between gap-3 text-body-s text-on-surface">
+              <span>무료 상품 (결제 없이 받기)</span>
+              <Switch aria-label="무료 상품" checked={newFree} onCheckedChange={setNewFree} />
+            </div>
+            <TextField
+              label="가격 (원)"
+              type="number"
+              inputMode="numeric"
+              placeholder="0"
+              value={newFree ? "0" : newPrice}
+              onChange={(e) => setNewPrice(e.target.value)}
+              disabled={newFree}
+              helperText={newFree ? "무료 상품은 0원으로 고정돼요." : undefined}
+            />
             <TextArea label="설명" placeholder="상품 설명을 입력하세요." className="min-h-24" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} />
             <div className="mt-1 flex gap-2">
               <DialogClose asChild>
@@ -251,7 +269,7 @@ function ProductEditDialog({
   product: StudioProduct;
   saving: boolean;
   deleting: boolean;
-  onSave: (patch: { type: MonetizableItemType; title: string; price: number; status: ProductStatus; stock: number | null }) => void;
+  onSave: (patch: { type: MonetizableItemType; title: string; price: number; status: ProductStatus; stock: number | null; pricingKind: "paid" | "free" }) => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
@@ -260,15 +278,18 @@ function ProductEditDialog({
   const [price, setPrice] = React.useState(String(product.price));
   const [status, setStatus] = React.useState<ProductStatus>(product.status);
   const [stock, setStock] = React.useState(product.stock === null ? "" : String(product.stock));
+  // 무료 상품(ASS-297) — 켜면 가격 입력을 비활성·0원으로(서버 free-requires-zero-price 불변식 미러).
+  const [free, setFree] = React.useState(product.pricingKind === "free");
 
   const submit = () =>
     onSave({
       type,
       title: title.trim() || product.title,
-      price: Number(price) || 0,
+      price: free ? 0 : Number(price) || 0,
       status,
       // 빈 값 = 무제한(null). 그 외 숫자.
       stock: stock.trim() === "" ? null : Number(stock) || 0,
+      pricingKind: free ? "free" : "paid",
     });
 
   return (
@@ -294,14 +315,20 @@ function ProductEditDialog({
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center justify-between gap-3 text-body-s text-on-surface">
+          <span>무료 상품 (결제 없이 받기)</span>
+          <Switch aria-label="무료 상품" checked={free} onCheckedChange={setFree} />
+        </div>
         <div className="flex gap-3">
           <TextField
             label="가격 (원)"
             type="number"
             inputMode="numeric"
-            value={price}
+            value={free ? "0" : price}
             onChange={(e) => setPrice(e.target.value)}
             className="flex-1"
+            disabled={free}
+            helperText={free ? "무료 상품은 0원으로 고정돼요." : undefined}
           />
           <TextField
             label="재고"

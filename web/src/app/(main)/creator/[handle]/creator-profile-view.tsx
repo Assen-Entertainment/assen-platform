@@ -289,6 +289,8 @@ export function CreatorProfileView({
               {tiers.map((t, i) => {
                 // 내 활성 구독이 이 크리에이터에 있으면: 현재 티어는 "구독 중"(비활성), 그 외는 "이 티어로 변경".
                 const isCurrent = mySub?.tierId === t.id;
+                // 무료 멤버십(ASS-297) — 신규 가입 CTA를 "무료로 시작하기"로. 체크아웃이 무료 획득을 처리한다.
+                const free = t.pricingKind === "free";
                 return (
                   <MembershipTierCard
                     key={t.id}
@@ -301,7 +303,7 @@ export function CreatorProfileView({
                     accent={t.featured}
                     inheritNote={i > 0 ? `${tiers[i - 1]?.name ?? ""} 혜택 포함` : undefined}
                     currentPlan={isCurrent}
-                    ctaLabel={mySub ? "이 티어로 변경" : "구독하기"}
+                    ctaLabel={mySub ? "이 티어로 변경" : free ? "무료로 시작하기" : "구독하기"}
                     onSubscribe={
                       mySub
                         ? () => setPendingTier(t)

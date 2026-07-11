@@ -33,9 +33,11 @@ import {
   apiToggleLike,
   apiAddComment,
   apiCreateOrder,
+  apiCreateOrderFree,
   apiCancelOrder,
   apiRequestRefund,
   apiSubscribe,
+  apiSubscribeFree,
   apiCancelSubscription,
   apiChangeSubscriptionTier,
   apiMarkNotificationRead,
@@ -519,6 +521,25 @@ export function useCreateOrder() {
   });
 }
 
+/**
+ * 무료 상품 획득(ASS-297) — 결제 없이 apiCreateOrderFree(/orders/free)로 획득. 배송(굿즈)은
+ * 유료 경로와 동일하게 동봉한다(무료는 결제만 뺀다). useCreateOrder와 동일한 무효화(qk.orders).
+ */
+export function useCreateOrderFree() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { productId: string; qty: number; option?: string; shipping?: ShippingAddress }) => {
+      if (USE_API) return apiCreateOrderFree(input);
+      await sleep(400);
+      return null;
+    },
+    onSuccess: (_data, variables) => {
+      track("order_created", { productId: variables.productId, qty: variables.qty });
+      if (USE_API) qc.invalidateQueries({ queryKey: qk.orders });
+    },
+  });
+}
+
 /** 주문 취소(paid/shipping) — 낙관적으로 status=cancelled. */
 export function useCancelOrder(id: string) {
   const qc = useQueryClient();
@@ -594,6 +615,25 @@ export function useSubscribe() {
   return useMutation({
     mutationFn: async (input: { tierId: string }) => {
       if (USE_API) return apiSubscribe(input.tierId);
+      await sleep(400);
+      return null;
+    },
+    onSuccess: (_data, variables) => {
+      track("subscription_started", { tierId: variables.tierId });
+      if (USE_API) qc.invalidateQueries({ queryKey: qk.subscriptions });
+    },
+  });
+}
+
+/**
+ * 무료 멤버십 가입(ASS-297) — 결제 없이 apiSubscribeFree(/subscriptions/free)로 가입.
+ * useSubscribe와 동일한 무효화(qk.subscriptions). 무료 멤버십은 결제 앵커/자동전환이 없다.
+ */
+export function useSubscribeFree() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { tierId: string }) => {
+      if (USE_API) return apiSubscribeFree(input.tierId);
       await sleep(400);
       return null;
     },
@@ -1074,6 +1114,7 @@ export function useCreateProduct() {
         sold: 0,
         stock: null,
         updatedAt: "방금",
+        pricingKind: input.pricingKind ?? "paid",
       };
       return row;
     },
@@ -1140,6 +1181,7 @@ export function useCreateTier() {
         // 방금 생성된 티어는 구독자가 없으므로 subscribers=0 (실 API 경로와 동일한 카운트 불변식).
         subscribers: 0,
         active: true,
+        pricingKind: input.pricingKind ?? "paid",
       };
       return row;
     },

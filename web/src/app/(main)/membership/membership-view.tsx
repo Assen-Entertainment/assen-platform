@@ -30,6 +30,7 @@ export function MembershipView({ subscriptions }: { subscriptions: Subscription[
         <section className="flex flex-col gap-3" aria-label="내 멤버십 목록">
           {subs.map((sub) => {
             const scheduled = Boolean(sub.cancelScheduled);
+            const free = Boolean(sub.isFree);
             return (
               <Card key={sub.id}>
                 <CardBody className="flex flex-col gap-3">
@@ -44,21 +45,30 @@ export function MembershipView({ subscriptions }: { subscriptions: Subscription[
                       </Link>
                       <span className="text-caption text-on-surface-variant">{sub.tierName} 멤버십</span>
                     </div>
-                    <StatusChip variant={scheduled ? "neutral" : "success"}>
-                      {scheduled ? "해지 예정" : "구독 중"}
-                    </StatusChip>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {/* 무료 멤버십 표기(ASS-297) — 결제일·금액 행을 숨기고 무료임을 명시. */}
+                      {free ? <StatusChip variant="info">무료 멤버십</StatusChip> : null}
+                      <StatusChip variant={scheduled ? "neutral" : "success"}>
+                        {scheduled ? "해지 예정" : "구독 중"}
+                      </StatusChip>
+                    </div>
                   </div>
                   <Divider />
-                  <div className="flex items-center justify-between text-body-s">
-                    <span className="text-on-surface-variant">{scheduled ? "종료 예정일" : "다음 결제일"}</span>
-                    <span className="tabular-nums text-on-surface">{sub.nextBillingDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-body-s">
-                    <span className="text-on-surface-variant">결제 금액</span>
-                    <span className="tabular-nums text-on-surface">
-                      {won(sub.price)} / {sub.period}
-                    </span>
-                  </div>
+                  {/* 무료 멤버십은 결제 앵커/금액이 없어 결제일·결제 금액 행을 노출하지 않는다. */}
+                  {free ? null : (
+                    <>
+                      <div className="flex items-center justify-between text-body-s">
+                        <span className="text-on-surface-variant">{scheduled ? "종료 예정일" : "다음 결제일"}</span>
+                        <span className="tabular-nums text-on-surface">{sub.nextBillingDate}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-body-s">
+                        <span className="text-on-surface-variant">결제 금액</span>
+                        <span className="tabular-nums text-on-surface">
+                          {won(sub.price)} / {sub.period}
+                        </span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" asChild>
                       <Link href="/mypage/subscriptions">구독 관리</Link>

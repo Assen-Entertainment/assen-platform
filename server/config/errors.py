@@ -102,6 +102,16 @@ class ErrorCode(StrEnum):
     SHIPPING_CHECKOUT_UNAVAILABLE = "ShippingCheckoutUnavailable"
     PAYMENT_CARD_INVALID = "PaymentCardInvalid"
     PAYMENT_METHOD_NOT_FOUND = "PaymentMethodNotFound"
+    # --- pricing / free grant (ASS-297) -------------------------------------
+    # The free-acquire path was used on a PAID offering (a price-0 placeholder is
+    # still paid) — acquire it through the normal, payment-gated path instead.
+    PRICING_NOT_FREE = "PricingNotFree"
+    # The paid path (order / subscribe / tier change) was used on a FREE offering —
+    # use the dedicated free-grant path instead.
+    PRICING_IS_FREE = "PricingIsFree"
+    # A studio offering was marked pricing_kind=free while carrying a nonzero price;
+    # "free" and a nonzero price are mutually exclusive.
+    PRICING_FREE_REQUIRES_ZERO_PRICE = "PricingFreeRequiresZeroPrice"
 
     # --- notification (push) ------------------------------------------------
     # The operator push-dispatch surface fails closed (503) when no real push
