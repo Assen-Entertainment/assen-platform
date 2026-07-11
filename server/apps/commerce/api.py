@@ -39,13 +39,17 @@ from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
-from apps.payments.services import record_mock_settlement
+from apps.payments.services import record_free_grant, record_mock_settlement
 from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ApiError, ErrorCode
 from config.pagination import paginate
 from config.patch import apply_optional
-from config.payment import PaymentProvenance, require_payment_available
+from config.payment import (
+    PaymentProvenance,
+    PricingKind,
+    require_payment_available,
+)
 from config.throttle import user_write_throttle
 
 # Money-path observability (order/refund lifecycle). Structured, PII-free: only
@@ -117,6 +121,9 @@ class ProductOut(Schema):
     sold_out: bool
     locked: bool
     is_adult: bool = False
+    # Explicit price intent (ASS-297): "free" offerings are acquired via /orders/free,
+    # not the paid checkout. Default "paid" (a price-0 row is a placeholder).
+    pricing_kind: str = PricingKind.PAID.value
 
 
 class ProductPage(Schema):
@@ -146,6 +153,7 @@ def _product_out(product: Product) -> ProductOut:
         sold_out=product.sold_out,
         locked=product.locked,
         is_adult=product.adult_only,
+        pricing_kind=product.pricing_kind,
     )
 
 
@@ -253,6 +261,9 @@ class StudioProductOut(Schema):
     is_adult: bool
     created_at: datetime
     sold: int
+    # Explicit price intent (ASS-297): mirrors the fan-facing ProductOut so the owner
+    # studio can read/set whether an offering is genuinely free vs a price-0 paid row.
+    pricing_kind: str = PricingKind.PAID.value
 
 
 class StudioProductIn(Schema):
@@ -270,12 +281,21 @@ class StudioProductIn(Schema):
     locked: bool = False
     status: str = ProductStatus.SELLING.value
     is_adult: bool = False
+    pricing_kind: str = PricingKind.PAID.value
 
     @field_validator("media_url")
     @classmethod
     def _check_media_url(cls, value: str) -> str:
         """Reject non-http(s) / non-relative media URLs (A5, mirrors content)."""
         return _validated_media_url(value)
+
+    @field_validator("pricing_kind")
+    @classmethod
+    def _check_pricing_kind(cls, value: str) -> str:
+        """Reject a pricing_kind outside the known choices (ASS-297 → 422)."""
+        if value not in PricingKind.values:
+            raise ValueError("pricing_kind must be 'paid' or 'free'.")
+        return value
 
 
 class StudioProductPatch(Schema):
@@ -293,12 +313,21 @@ class StudioProductPatch(Schema):
     locked: bool | None = None
     status: str | None = None
     is_adult: bool | None = None
+    pricing_kind: str | None = None
 
     @field_validator("media_url")
     @classmethod
     def _check_media_url(cls, value: str | None) -> str | None:
         """Validate media_url only when provided (A5, mirrors content)."""
         return None if value is None else _validated_media_url(value)
+
+    @field_validator("pricing_kind")
+    @classmethod
+    def _check_pricing_kind(cls, value: str | None) -> str | None:
+        """Validate pricing_kind only when provided (ASS-297 → 422)."""
+        if value is not None and value not in PricingKind.values:
+            raise ValueError("pricing_kind must be 'paid' or 'free'.")
+        return value
 
 
 class StudioAck(Schema):
@@ -351,6 +380,7 @@ def _studio_product_out(product: Product) -> StudioProductOut:
         is_adult=product.adult_only,
         created_at=product.created_at,
         sold=_product_sold(product),
+        pricing_kind=product.pricing_kind,
     )
 
 
@@ -407,6 +437,14 @@ def studio_create_product(
         return 422, CommerceError(
             detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
         )
+    # Coherence guard (ASS-297): a genuinely free offering must carry a zero price —
+    # "free" and a nonzero price are mutually exclusive, else the free-grant path
+    # would silently ignore a stated price.
+    if payload.pricing_kind == PricingKind.FREE.value and payload.price != 0:
+        return 422, CommerceError(
+            detail="무료 상품의 가격은 0이어야 해요.",
+            code=ErrorCode.PRICING_FREE_REQUIRES_ZERO_PRICE.value,
+        )
     product = Product.objects.create(
         creator=creator,
         type=payload.type,
@@ -421,6 +459,7 @@ def studio_create_product(
         locked=payload.locked,
         status=payload.status,
         adult_only=payload.is_adult,
+        pricing_kind=payload.pricing_kind,
     )
     return 201, _studio_product_out(product)
 
@@ -457,10 +496,25 @@ def studio_update_product(
                 detail="상품 상태가 올바르지 않아요.", code=ErrorCode.PRODUCT_STATUS_INVALID.value
             )
         product.status = payload.status
+    # Coherence guard on the EFFECTIVE post-patch values (ASS-297): a patch may set
+    # either field, so compute what the row would become and reject a free offering
+    # left with a nonzero price (whether the price or the kind was the one changed).
+    effective_kind = (
+        payload.pricing_kind if payload.pricing_kind is not None else product.pricing_kind
+    )
+    effective_price = payload.price if payload.price is not None else product.price
+    if effective_kind == PricingKind.FREE.value and effective_price != 0:
+        return 422, CommerceError(
+            detail="무료 상품의 가격은 0이어야 해요.",
+            code=ErrorCode.PRICING_FREE_REQUIRES_ZERO_PRICE.value,
+        )
     apply_optional(
         product,
         payload,
-        ["title", "price", "meta", "media_url", "description", "options", "sold_out", "locked"],
+        [
+            "title", "price", "meta", "media_url", "description", "options",
+            "sold_out", "locked", "pricing_kind",
+        ],
     )
     # ``is_adult`` maps to a differently-named model field (``adult_only``), so it
     # stays inline rather than going through the same-name apply_optional pass.
@@ -813,6 +867,15 @@ def create_order(
         return 404, CommerceError(
             detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
         )
+    # A free offering is acquired only via the dedicated free-grant path (/orders/
+    # free), never the paid checkout — this keeps require_payment_available() an
+    # unconditional head-guard and stops a free item minting a mock/external
+    # settlement (ASS-297).
+    if product.pricing_kind == PricingKind.FREE:
+        return 422, CommerceError(
+            detail="무료 상품은 '무료로 받기'로 신청해 주세요.",
+            code=ErrorCode.PRICING_IS_FREE.value,
+        )
     # Personal-block consistency (F4): the catalog read stays allowed (a personal
     # block is not existence hiding), but placing a new order against a creator this
     # buyer has blocked is refused. One set query, before the stock/state checks.
@@ -961,6 +1024,169 @@ def create_order(
             "product_id": str(product.id),
             "qty": payload.qty,
             "total": total,
+        },
+    )
+    loaded = _load_order(order.id, account)
+    assert loaded is not None  # just created for this buyer
+    return 201, _order_detail_out(loaded)
+
+
+@orders_router.post(
+    "/free",
+    response={
+        200: OrderDetailOut,
+        201: OrderDetailOut,
+        404: CommerceError,
+        422: CommerceError,
+    },
+    throttle=user_write_throttle("20/min"),
+)
+def create_free_order(
+    request: HttpRequest, payload: CreateOrderIn
+) -> tuple[int, OrderDetailOut | CommerceError]:
+    """Acquire an explicitly free product — no payment, provenance=free (ASS-297).
+
+    The ONLY way to obtain a ``pricing_kind=free`` product: the paid checkout
+    refuses it (``PricingIsFree``) and this path refuses a paid product
+    (``PricingNotFree``), so a price-0 placeholder can never be taken for free.
+    Every non-payment gate the paid path enforces still applies — visibility,
+    personal block, sell-out/stock, and (for goods) the shipping-checkout gate and
+    a complete delivery address — so "free" drops only the payment requirement, not
+    the shipping-PII or availability guards. Amounts are forced to 0 and a FREE
+    ``PaymentAttempt`` is ledgered exactly like a paid settlement.
+    """
+    account = authed(request)
+    # No require_payment_available() — a free grant settles nothing. Idempotency
+    # still applies so a retried grant returns the original instead of duplicating.
+    if payload.idempotency_key:
+        existing = _load_order_by_key(account, payload.idempotency_key)
+        if existing is not None:
+            return 200, _order_detail_out(existing)
+    product = _public_product_qs(account).filter(id=payload.product_id).first()
+    if product is None:
+        return 404, CommerceError(
+            detail="상품을 찾을 수 없어요.", code=ErrorCode.PRODUCT_NOT_FOUND.value
+        )
+    # Only an explicitly free offering may be acquired here — a paid product (incl.
+    # a price-0 placeholder) must go through the normal, payment-gated path.
+    if product.pricing_kind != PricingKind.FREE:
+        return 422, CommerceError(
+            detail="무료로 받을 수 있는 상품이 아니에요.",
+            code=ErrorCode.PRICING_NOT_FREE.value,
+        )
+    if product.creator_id in blocked_creator_ids(account):
+        return 422, CommerceError(
+            detail="차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요.",
+            code=ErrorCode.INTERACTION_BLOCKED.value,
+        )
+    if product.status != ProductStatus.SELLING.value:
+        return 422, CommerceError(
+            detail="판매 중인 상품이 아니에요.", code=ErrorCode.PRODUCT_NOT_ORDERABLE.value
+        )
+    if product.locked:
+        return 422, CommerceError(
+            detail="멤버십 전용 상품이에요.", code=ErrorCode.MEMBERSHIP_ONLY_PRODUCT.value
+        )
+    if product.sold_out or (product.stock is not None and product.stock <= 0):
+        return 422, CommerceError(
+            detail="품절된 상품이에요.", code=ErrorCode.OUT_OF_STOCK.value
+        )
+    if product.stock is not None and payload.qty > product.stock:
+        return 422, CommerceError(
+            detail="재고가 부족해요.", code=ErrorCode.INSUFFICIENT_STOCK.value
+        )
+    # Free goods still pass the shipping gate SEPARATELY (ASS-297): the payment gate
+    # is dropped, the shipping-PII / delivery-address gate is not.
+    if product.type == ProductType.GOODS.value and not settings.ENABLE_SHIPPING_CHECKOUT:
+        raise ApiError(
+            503,
+            "배송 결제가 아직 준비되지 않았어요.",
+            code=ErrorCode.SHIPPING_CHECKOUT_UNAVAILABLE,
+        )
+    if product.type == ProductType.GOODS.value and not _shipping_is_complete(
+        payload.shipping
+    ):
+        return 422, CommerceError(
+            detail="배송지를 입력해 주세요.",
+            code=ErrorCode.SHIPPING_ADDRESS_REQUIRED.value,
+        )
+    ship = payload.shipping
+    if product.type == ProductType.GOODS.value and ship is not None:
+        shipping_snapshot = {
+            "recipient_name": ship.recipient_name.strip(),
+            "recipient_phone": ship.recipient_phone.strip(),
+            "postal_code": ship.postal_code.strip(),
+            "address1": ship.address1.strip(),
+            "address2": ship.address2.strip(),
+        }
+    else:
+        shipping_snapshot = {
+            "recipient_name": "",
+            "recipient_phone": "",
+            "postal_code": "",
+            "address1": "",
+            "address2": "",
+        }
+    try:
+        with transaction.atomic():
+            if product.stock is not None:
+                deducted = Product.objects.filter(
+                    id=product.id, stock__gte=payload.qty
+                ).update(stock=F("stock") - payload.qty)
+                if deducted == 0:
+                    if payload.idempotency_key:
+                        existing = _load_order_by_key(
+                            account, payload.idempotency_key
+                        )
+                        if existing is not None:
+                            return 200, _order_detail_out(existing)
+                    return 422, CommerceError(
+                        detail="재고가 부족해요.",
+                        code=ErrorCode.INSUFFICIENT_STOCK.value,
+                    )
+                Product.objects.filter(id=product.id, stock=0).update(sold_out=True)
+            # A free grant is a settled order at amount 0, tagged FREE provenance.
+            order = Order.objects.create(
+                buyer=account,
+                status=OrderStatus.PAID,
+                subtotal=0,
+                shipping_fee=0,
+                total=0,
+                idempotency_key=payload.idempotency_key or None,
+                payment_provenance=PaymentProvenance.FREE,
+                **shipping_snapshot,
+            )
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                title=product.title,
+                item_type=product.type,
+                option=payload.option,
+                qty=payload.qty,
+                price=0,
+            )
+            record_free_grant(
+                order=order, idempotency_key=payload.idempotency_key or None
+            )
+    except IntegrityError:
+        if payload.idempotency_key:
+            existing = _load_order_by_key(account, payload.idempotency_key)
+            if existing is not None:
+                return 200, _order_detail_out(existing)
+        raise
+    notify(
+        account,
+        NotificationKind.ORDER.value,
+        f"'{product.title}' 무료 상품을 받았어요.",
+        "/orders",
+    )
+    logger.info(
+        "commerce.order.free_grant",
+        extra={
+            "order_id": order.id,
+            "buyer_id": str(account.fan_id),
+            "product_id": str(product.id),
+            "qty": payload.qty,
         },
     )
     loaded = _load_order(order.id, account)

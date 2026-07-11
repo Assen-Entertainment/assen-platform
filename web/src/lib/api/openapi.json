@@ -1259,6 +1259,77 @@
         ]
       }
     },
+    "/api/orders/free": {
+      "post": {
+        "operationId": "apps_commerce_api_create_free_order",
+        "summary": "Create Free Order",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailOut"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Acquire an explicitly free product — no payment, provenance=free (ASS-297).\n\nThe ONLY way to obtain a ``pricing_kind=free`` product: the paid checkout\nrefuses it (``PricingIsFree``) and this path refuses a paid product\n(``PricingNotFree``), so a price-0 placeholder can never be taken for free.\nEvery non-payment gate the paid path enforces still applies — visibility,\npersonal block, sell-out/stock, and (for goods) the shipping-checkout gate and\na complete delivery address — so \"free\" drops only the payment requirement, not\nthe shipping-PII or availability guards. Amounts are forced to 0 and a FREE\n``PaymentAttempt`` is ledgered exactly like a paid settlement.",
+        "tags": [
+          "commerce-orders"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/orders/{order_id}": {
       "get": {
         "operationId": "apps_commerce_api_get_order",
@@ -4477,6 +4548,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
           }
         },
         "description": "Create a membership tier owned by the caller's creator; 403 if they operate none.",
@@ -4542,6 +4623,16 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
             "content": {
               "application/json": {
                 "schema": {
@@ -4729,6 +4820,67 @@
         "tags": [
           "membership-subscriptions"
         ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/subscriptions/free": {
+      "post": {
+        "operationId": "apps_membership_api_subscribe_free",
+        "summary": "Subscribe Free",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Join an explicitly free tier — no payment, provenance=free (ASS-297).\n\nThe ONLY way to join a ``pricing_kind=free`` tier: the paid subscribe refuses\nit (``PricingIsFree``) and this path refuses a paid tier (``PricingNotFree``),\nso a price-0 placeholder tier can never be joined free. A free membership has\nno billing anchor (``next_billing_date=None``) and never auto-converts to paid;\nthe one-active-membership-per-creator rule still applies.",
+        "tags": [
+          "membership-subscriptions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribeIn"
+              }
+            }
+          },
+          "required": true
+        },
         "security": [
           {
             "FanBearerAuth": []
@@ -8900,6 +9052,11 @@
             "default": false,
             "title": "Is Adult",
             "type": "boolean"
+          },
+          "pricing_kind": {
+            "default": "paid",
+            "title": "Pricing Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -9050,6 +9207,11 @@
           "sold": {
             "title": "Sold",
             "type": "integer"
+          },
+          "pricing_kind": {
+            "default": "paid",
+            "title": "Pricing Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -9146,6 +9308,11 @@
             "default": false,
             "title": "Is Adult",
             "type": "boolean"
+          },
+          "pricing_kind": {
+            "default": "paid",
+            "title": "Pricing Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -9299,6 +9466,17 @@
               }
             ],
             "title": "Is Adult"
+          },
+          "pricing_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Kind"
           }
         },
         "title": "StudioProductPatch",
@@ -11523,6 +11701,11 @@
           "sort_order": {
             "title": "Sort Order",
             "type": "integer"
+          },
+          "pricing_kind": {
+            "default": "paid",
+            "title": "Pricing Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -11601,6 +11784,11 @@
           "subscribers": {
             "title": "Subscribers",
             "type": "integer"
+          },
+          "pricing_kind": {
+            "default": "paid",
+            "title": "Pricing Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -11687,6 +11875,11 @@
             "minimum": 0,
             "title": "Sort Order",
             "type": "integer"
+          },
+          "pricing_kind": {
+            "default": "paid",
+            "title": "Pricing Kind",
+            "type": "string"
           }
         },
         "required": [
@@ -11794,6 +11987,17 @@
               }
             ],
             "title": "Sort Order"
+          },
+          "pricing_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Kind"
           }
         },
         "title": "StudioTierPatch",
@@ -11870,12 +12074,24 @@
             "type": "string"
           },
           "next_billing_date": {
-            "format": "date",
-            "title": "Next Billing Date",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Billing Date"
           },
           "cancel_scheduled": {
             "title": "Cancel Scheduled",
+            "type": "boolean"
+          },
+          "is_free": {
+            "default": false,
+            "title": "Is Free",
             "type": "boolean"
           }
         },
@@ -11887,7 +12103,6 @@
           "price",
           "period",
           "status",
-          "next_billing_date",
           "cancel_scheduled"
         ],
         "title": "SubscriptionOut",

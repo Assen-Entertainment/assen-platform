@@ -397,6 +397,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orders/free": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Free Order
+         * @description Acquire an explicitly free product — no payment, provenance=free (ASS-297).
+         *
+         *     The ONLY way to obtain a ``pricing_kind=free`` product: the paid checkout
+         *     refuses it (``PricingIsFree``) and this path refuses a paid product
+         *     (``PricingNotFree``), so a price-0 placeholder can never be taken for free.
+         *     Every non-payment gate the paid path enforces still applies — visibility,
+         *     personal block, sell-out/stock, and (for goods) the shipping-checkout gate and
+         *     a complete delivery address — so "free" drops only the payment requirement, not
+         *     the shipping-PII or availability guards. Amounts are forced to 0 and a FREE
+         *     ``PaymentAttempt`` is ledgered exactly like a paid settlement.
+         */
+        post: operations["apps_commerce_api_create_free_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/orders/{order_id}": {
         parameters: {
             query?: never;
@@ -1722,6 +1751,32 @@ export interface paths {
          *     creator (one active membership per creator).
          */
         post: operations["apps_membership_api_subscribe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/free": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subscribe Free
+         * @description Join an explicitly free tier — no payment, provenance=free (ASS-297).
+         *
+         *     The ONLY way to join a ``pricing_kind=free`` tier: the paid subscribe refuses
+         *     it (``PricingIsFree``) and this path refuses a paid tier (``PricingNotFree``),
+         *     so a price-0 placeholder tier can never be joined free. A free membership has
+         *     no billing anchor (``next_billing_date=None``) and never auto-converts to paid;
+         *     the one-active-membership-per-creator rule still applies.
+         */
+        post: operations["apps_membership_api_subscribe_free"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3246,6 +3301,11 @@ export interface components {
              * @default false
              */
             is_adult: boolean;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * ProductPage
@@ -3316,6 +3376,11 @@ export interface components {
             created_at: string;
             /** Sold */
             sold: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * StudioProductIn
@@ -3370,6 +3435,11 @@ export interface components {
              * @default false
              */
             is_adult: boolean;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * StudioProductPatch
@@ -3400,6 +3470,8 @@ export interface components {
             status?: string | null;
             /** Is Adult */
             is_adult?: boolean | null;
+            /** Pricing Kind */
+            pricing_kind?: string | null;
         };
         /**
          * StudioAck
@@ -4556,6 +4628,11 @@ export interface components {
             featured: boolean;
             /** Sort Order */
             sort_order: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * StudioTierOut
@@ -4596,6 +4673,11 @@ export interface components {
             created_at: string;
             /** Subscribers */
             subscribers: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * SubscriptionError
@@ -4649,6 +4731,11 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * StudioTierPatch
@@ -4671,6 +4758,8 @@ export interface components {
             active?: boolean | null;
             /** Sort Order */
             sort_order?: number | null;
+            /** Pricing Kind */
+            pricing_kind?: string | null;
         };
         /**
          * StudioTierAck
@@ -4709,13 +4798,15 @@ export interface components {
             period: string;
             /** Status */
             status: string;
-            /**
-             * Next Billing Date
-             * Format: date
-             */
-            next_billing_date: string;
+            /** Next Billing Date */
+            next_billing_date?: string | null;
             /** Cancel Scheduled */
             cancel_scheduled: boolean;
+            /**
+             * Is Free
+             * @default false
+             */
+            is_free: boolean;
         };
         /**
          * SubscribeIn
@@ -6755,6 +6846,57 @@ export interface operations {
             };
         };
     };
+    apps_commerce_api_create_free_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrderIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
     apps_commerce_api_get_order: {
         parameters: {
             query?: never;
@@ -8728,6 +8870,15 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionError"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
         };
     };
     apps_membership_api_studio_delete_tier: {
@@ -8821,6 +8972,15 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionError"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
         };
     };
     apps_membership_api_list_subscriptions: {
@@ -8844,6 +9004,48 @@ export interface operations {
         };
     };
     apps_membership_api_subscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_subscribe_free: {
         parameters: {
             query?: never;
             header?: never;

@@ -17,7 +17,7 @@ from typing import Any
 
 from django.db import models
 
-from config.payment import PaymentProvenance
+from config.payment import PaymentProvenance, PricingKind
 
 
 class MembershipTier(models.Model):
@@ -34,6 +34,11 @@ class MembershipTier(models.Model):
     name = models.CharField(max_length=40)
     # Display price in whole KRW per period. Not a billing/settlement figure.
     price = models.PositiveIntegerField(default=0)
+    # Explicit price intent (ASS-297): PAID by default, so a price-0 tier is a
+    # placeholder, not free. Only a FREE tier may be acquired via /subscriptions/free.
+    pricing_kind = models.CharField(
+        max_length=8, choices=PricingKind.choices, default=PricingKind.PAID
+    )
     period = models.CharField(max_length=8, default="월")
     # List of benefit strings (frontend ``benefits: string[]``).
     benefits = models.JSONField(default=list)
@@ -98,8 +103,10 @@ class Subscription(models.Model):
         max_length=16, choices=SubscriptionStatus.choices, default=SubscriptionStatus.ACTIVE
     )
     started_at = models.DateTimeField(auto_now_add=True)
-    # Mock billing anchor (display only; no PG/settlement — B7 gated).
-    next_billing_date = models.DateField()
+    # Mock billing anchor (display only; no PG/settlement — B7 gated). NULL for a
+    # free membership (ASS-297): a free grant has no next charge, so a fabricated
+    # date is never stored or shown.
+    next_billing_date = models.DateField(null=True, blank=True)
     # Set when the fan schedules end-of-period cancellation; status stays active.
     cancelled_at = models.DateTimeField(null=True, blank=True)
     # How this ACTIVE membership was settled (ASS-298). Set explicitly on every

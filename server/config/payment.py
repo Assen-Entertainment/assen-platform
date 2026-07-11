@@ -43,6 +43,21 @@ class PaymentProvenance(models.TextChoices):
     LEGACY_UNKNOWN = "legacy_unknown", "legacy unknown"
 
 
+class PricingKind(models.TextChoices):
+    """Explicit price intent for an offering (ASS-297).
+
+    Distinguishes a genuinely free product/tier (:attr:`FREE`) from a default-0
+    placeholder ``price`` on a paid offering (:attr:`PAID`). Defaults to
+    :attr:`PAID` everywhere, so a price-0 row is never treated as free — a free
+    offering is only ever created by an explicit studio action, and acquiring it
+    goes through the dedicated free-grant path, never the ``amount==0`` bypass the
+    payment gate forbids.
+    """
+
+    PAID = "paid", "paid"
+    FREE = "free", "free"
+
+
 class PaymentError(Exception):
     """Raised when a payment method cannot be tokenized."""
 

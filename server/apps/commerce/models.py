@@ -17,7 +17,7 @@ import uuid
 
 from django.db import models
 
-from config.payment import PaymentProvenance
+from config.payment import PaymentProvenance, PricingKind
 
 
 class ProductType(models.TextChoices):
@@ -59,6 +59,11 @@ class Product(models.Model):
     title = models.CharField(max_length=120)
     # Catalog display price in whole KRW (integer currency). Not a settlement.
     price = models.PositiveIntegerField(default=0)
+    # Explicit price intent (ASS-297): PAID by default, so a price-0 row is a
+    # placeholder, not free. Only a FREE offering may be acquired via /orders/free.
+    pricing_kind = models.CharField(
+        max_length=8, choices=PricingKind.choices, default=PricingKind.PAID
+    )
     meta = models.CharField(max_length=120, blank=True, default="")
     media_url = models.CharField(max_length=500, blank=True, default="")
     # Long-form description shown on the product detail page.
