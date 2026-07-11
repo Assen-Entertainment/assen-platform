@@ -26,6 +26,21 @@ String _resolveBaseUrl() {
   return kReleaseMode ? _baseUrlFromEnv : 'http://localhost:8000';
 }
 
+/// Fails fast at startup — release builds only — when no API base URL was
+/// configured, so a release launched without
+/// `--dart-define=ASSEN_API_BASE_URL=...` crashes immediately and
+/// deterministically from main rather than lazily on the first request
+/// (ASS-294: a release artifact must never launch pointing at nothing). A
+/// debug/profile build falls back to the local dev server, so this is a no-op.
+void assertApiBaseUrlConfigured() {
+  if (kReleaseMode && _baseUrlFromEnv.isEmpty) {
+    throw StateError(
+      'ASSEN_API_BASE_URL was not provided at build time — a release build '
+      'must pass --dart-define=ASSEN_API_BASE_URL=<https URL>.',
+    );
+  }
+}
+
 /// The validated connection settings the HTTP client is built from.
 ///
 /// Constructing this in a release build with no `ASSEN_API_BASE_URL` define
