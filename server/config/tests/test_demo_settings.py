@@ -22,6 +22,10 @@ def test_demo_profile_enables_all_mock_gates(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("DATABASE_URL", "postgres://u:p@localhost:5432/demo")
     monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+    # prod also requires the dedicated phone-identifier HMAC key (ASS-287 A-2).
+    monkeypatch.setenv(
+        "PHONE_IDENTIFIER_HMAC_KEY", "demo-smoke-phone-hmac-key-not-real-0123456789"
+    )
     # Evaluate demo (and its prod parent) fresh under the env set above.
     for module in ("config.settings.demo", "config.settings.prod"):
         sys.modules.pop(module, None)

@@ -10,6 +10,7 @@ DJANGO_ALLOWED_HOSTS raises at boot instead of silently shipping the dev key
 from __future__ import annotations
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 from config.observability import init_sentry
 from config.settings.base import *  # noqa: F403
@@ -37,6 +38,13 @@ ALLOWED_HOSTS = _required.list("DJANGO_ALLOWED_HOSTS")
 DATABASES = {"default": _required.db("DATABASE_URL")}
 CELERY_BROKER_URL = _required("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = _required("CELERY_RESULT_BACKEND")
+
+# Phone-identifier HMAC key (ASS-287 A-2): a dedicated secret keying
+# Account.auth_subject_hash, separate from SECRET_KEY. Required and >= 32 bytes so
+# a missing/weak key fails closed at boot rather than silently weakening the hash.
+PHONE_IDENTIFIER_HMAC_KEY = _required("PHONE_IDENTIFIER_HMAC_KEY")
+if len(PHONE_IDENTIFIER_HMAC_KEY) < 32:
+    raise ImproperlyConfigured("PHONE_IDENTIFIER_HMAC_KEY must be at least 32 bytes.")
 
 # TLS terminates at the ALB; trust its forwarded proto header so Django knows
 # the original request was HTTPS (required for secure-cookie/redirect logic).

@@ -46,6 +46,8 @@ ENABLE_MOCK_PAYMENT = True
 # Exercise the (privacy-gated) delivery checkout in fixtures; base/prod/demo keep
 # it hardcoded False (ASS-287 A-1).
 ENABLE_SHIPPING_CHECKOUT = True
+# Distinct insecure key for the phone-identifier HMAC in tests (ASS-287 A-2).
+PHONE_IDENTIFIER_HMAC_KEY = "test-insecure-phone-identifier-hmac-key-0123456789abcdef"
 
 # Disable per-user write throttling: the suite fires many writes for one fixture
 # account, and the shared LocMem throttle cache would otherwise leak state across

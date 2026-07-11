@@ -62,6 +62,7 @@ from apps.identity.signup_services import (
     SignupError,
     hash_phone,
     membership_card,
+    migrate_legacy_subject_hash,
     normalize_phone,
     register_fan,
 )
@@ -344,6 +345,9 @@ def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> Signup
             422, "인증번호가 올바르지 않아요.", code=ErrorCode.OTP_INVALID
         )
 
+    # Migrate a pre-A-2 (bare SHA-256) row to the v1 HMAC hash so the lookup below
+    # finds it (ASS-287 A-2 dual-read). No-op for accounts already on the v1 hash.
+    migrate_legacy_subject_hash(phone)
     account = Account.objects.filter(
         auth_subject_hash=hash_phone(phone),
         role=Role.FAN.value,

@@ -76,6 +76,16 @@ ENABLE_SHIPPING_CHECKOUT: bool = False
 # See config.throttle.
 FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", default=True)
 
+# Dedicated HMAC key for the phone-identifier hash (Account.auth_subject_hash) —
+# separate from SECRET_KEY (ASS-287 A-2). Keying the hash means a stolen DB alone
+# cannot brute-force the small phone-number space. dev/test/demo carry an insecure,
+# env-overridable default; production (config.settings.prod) REQUIRES a real
+# >=32-byte key from the environment and fails closed at boot without it.
+PHONE_IDENTIFIER_HMAC_KEY: str = env.str(
+    "PHONE_IDENTIFIER_HMAC_KEY",
+    default="dev-insecure-phone-identifier-hmac-key-not-for-prod",
+)
+
 # Rate-limiter backend for the cross-cutting middleware limiter (config.ratelimit).
 # "memory" (default) is the per-process in-memory limiter; "redis" selects the shared
 # cross-worker limiter (config.ratelimit.RedisRateLimiter). Default stays "memory" so
