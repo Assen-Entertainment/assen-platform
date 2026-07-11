@@ -76,6 +76,14 @@ jobs:
         run: uv run pytest
       - name: Migrations are committed (sqlite test settings, no DB server)
         run: uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test
+      - name: OpenAPI snapshot matches the live schema (no drift, ASS-290)
+        run: |
+          uv run python scripts/export_openapi.py
+          if ! git -C "$GITHUB_WORKSPACE" diff --quiet -- web/src/lib/api/openapi.json; then
+            echo "::error::web/src/lib/api/openapi.json is stale. Run server/scripts/export_openapi.py + (cd web && npm run gen:types), then commit."
+            git -C "$GITHUB_WORKSPACE" --no-pager diff --stat -- web/src/lib/api/openapi.json
+            exit 1
+          fi
 
   flutter:
     name: Flutter (format + analyze + test + web/android build smoke)
