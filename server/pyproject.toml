@@ -14,7 +14,7 @@ dependencies = [
     # a MAX_IMAGE_PIXELS decompression-bomb guard, beyond the 64-byte magic sniff.
     "Pillow>=10.0,<12.0",
     "psycopg[binary]>=3.2,<4.0",
-    "gunicorn>=23.0,<24.0",
+    "gunicorn>=26.0,<27.0",
     "django-linear-migrations>=2.3,<3.0",
     # Realtime (ASS-240): Channels adds the ASGI WebSocket stack; daphne is the
     # ASGI server (must lead INSTALLED_APPS to override runserver). The shared
