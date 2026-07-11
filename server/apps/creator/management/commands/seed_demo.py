@@ -20,10 +20,12 @@ NOTE (differences from the web mock):
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 
 from apps.commerce.models import Product
 from apps.content.models import Comment, Post
@@ -115,6 +117,39 @@ def _seed_id(kind: str, key: str) -> uuid.UUID:
     return uuid.uuid5(_SEED_NS, f"{kind}:{key}")
 
 
+def _guard_demo_seed() -> None:
+    """Refuse to seed demo data outside an explicitly opted-in mock environment.
+
+    ``seed_demo`` writes demo accounts/creators/products; running it against a real
+    database pollutes production (ASS-288). Three independent guards must all pass:
+
+    1. a non-prod (mock) profile — a hardened/prod profile has every mock gate off,
+       so ``ENABLE_MOCK_FAN_OTP`` being False means "refuse outright";
+    2. an explicit opt-in — ``ALLOW_DEMO_SEED=1`` in the environment;
+    3. a disposable-looking database — sqlite, or a NAME marked demo/dev/test/e2e,
+       so a real prod DB carrying a mock profile by misconfiguration is still refused.
+    """
+    if not settings.ENABLE_MOCK_FAN_OTP:
+        raise CommandError(
+            "seed_demo is refused on a non-mock (prod-like) profile (ASS-288)."
+        )
+    if os.environ.get("ALLOW_DEMO_SEED") != "1":
+        raise CommandError(
+            "seed_demo requires ALLOW_DEMO_SEED=1 — an explicit opt-in to writing "
+            "demo data (ASS-288)."
+        )
+    default_db = settings.DATABASES["default"]
+    db_name = str(default_db.get("NAME", ""))
+    is_disposable = "sqlite" in str(default_db.get("ENGINE", "")) or any(
+        marker in db_name.lower() for marker in ("demo", "dev", "test", "e2e")
+    )
+    if not is_disposable:
+        raise CommandError(
+            f"seed_demo refused: database {db_name!r} is not a demo/dev/test target "
+            "(ASS-288). Point at a disposable demo DB."
+        )
+
+
 class Command(BaseCommand):
     """Populate demo creators, owners, posts, comments, products, tiers, and a fan."""
 
@@ -123,6 +158,7 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         """Create the demo graph, keyed on natural keys so re-runs are safe."""
         del args, options
+        _guard_demo_seed()
         creators: dict[str, Creator] = {}
         for handle, name, category, verified, accent, bio in _CREATORS:
             creator, _ = Creator.objects.get_or_create(
