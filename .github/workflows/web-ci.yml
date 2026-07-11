@@ -24,7 +24,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -73,7 +73,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # NEXT_PUBLIC_API_URL placeholder — Dockerfile 프로드 가드가 빈 값을 거부한다(인증 미들웨어 풋건 방지).
       # 이 이미지는 푸시하지 않는 패키징 스모크이므로 실 API 대신 비배포 placeholder를 주입한다.
       - name: Build web standalone image

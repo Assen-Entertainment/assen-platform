@@ -47,7 +47,7 @@ jobs:
       # 429가 난다. e2e는 결정성을 위해 off(base.py FAN_WRITE_THROTTLE_ENABLED, env override).
       FAN_WRITE_THROTTLE_ENABLED: "False"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # --- 서버(Django) 부트스트랩 — ci.yml server 잡의 uv 패턴 미러 ------------------
       - name: Install uv
