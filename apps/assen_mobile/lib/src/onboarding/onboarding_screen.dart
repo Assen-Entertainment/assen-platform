@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assen_mobile/src/app/router.dart';
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
@@ -75,9 +77,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _finish();
       return;
     }
-    _controller.nextPage(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+    unawaited(
+      _controller.nextPage(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      ),
     );
   }
 

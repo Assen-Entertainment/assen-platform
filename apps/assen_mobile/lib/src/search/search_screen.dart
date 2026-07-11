@@ -51,14 +51,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     setState(() => _query = value);
     if (value.trim().isEmpty) {
       _pending = false;
-      ref.read(searchControllerProvider.notifier).search('');
+      unawaited(ref.read(searchControllerProvider.notifier).search(''));
       return;
     }
     setState(() => _pending = true);
     _debounceTimer = Timer(_debounce, () {
       if (!mounted) return;
       setState(() => _pending = false);
-      ref.read(searchControllerProvider.notifier).search(value);
+      unawaited(ref.read(searchControllerProvider.notifier).search(value));
     });
   }
 

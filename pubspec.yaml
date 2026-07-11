@@ -31,10 +31,10 @@ workspace:
 
 # Shared dev tooling resolved once for the whole workspace.
 dev_dependencies:
-  melos: ^7.0.0
+  melos: ^8.0.0
   # Lint set + strict analysis, included relatively by every member package
   # (see ./analysis_options.yaml). Declared here so it resolves workspace-wide.
-  very_good_analysis: ^9.0.0
+  very_good_analysis: ^10.0.0
 
 # Melos 7 task runner. CI invokes these same scripts, so local and CI behaviour
 # stay identical (see .github/workflows/ci.yml and AGENTS.md validation block).
