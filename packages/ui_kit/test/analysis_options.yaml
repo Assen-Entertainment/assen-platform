@@ -1,0 +1,11 @@
+# ui_kit test tree — inherits the workspace ruleset, with one scoped exception.
+#
+# very_good_analysis 10 turns `discarded_futures` on more aggressively. Alchemist's
+# `goldenTest(...)` is a fire-and-forget test registration (like `testWidgets`), so
+# every golden test in this tree trips the rule even though the returned future is
+# owned by the test framework, not us. Disable it HERE ONLY (test/) so the rule keeps
+# guarding real discarded futures in lib/.
+include: ../analysis_options.yaml
+linter:
+  rules:
+    discarded_futures: false

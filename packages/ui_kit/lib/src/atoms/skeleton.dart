@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core_tokens/core_tokens.dart';
 import 'package:flutter/material.dart';
 
@@ -68,7 +70,7 @@ class _AssenSkeletonState extends State<AssenSkeleton>
       );
     }
     if (!_controller.isAnimating) {
-      _controller.repeat(reverse: true);
+      unawaited(_controller.repeat(reverse: true));
     }
 
     return AnimatedBuilder(

@@ -54,7 +54,6 @@ class ThemeModeController extends Notifier<ThemeMode> {
   /// A verb-named method (not a setter) to match every other [Notifier]
   /// mutator in this codebase (`AuthController.signOut`,
   /// `SettingsController.updateNickname`, …).
-  // ignore: use_setters_to_change_properties
   void setThemeMode(ThemeMode mode) {
     _userSet = true;
     state = mode;
