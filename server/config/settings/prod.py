@@ -43,7 +43,7 @@ CELERY_RESULT_BACKEND = _required("CELERY_RESULT_BACKEND")
 # Account.auth_subject_hash, separate from SECRET_KEY. Required and >= 32 bytes so
 # a missing/weak key fails closed at boot rather than silently weakening the hash.
 PHONE_IDENTIFIER_HMAC_KEY = _required("PHONE_IDENTIFIER_HMAC_KEY")
-if len(PHONE_IDENTIFIER_HMAC_KEY) < 32:
+if len(PHONE_IDENTIFIER_HMAC_KEY.encode("utf-8")) < 32:
     raise ImproperlyConfigured("PHONE_IDENTIFIER_HMAC_KEY must be at least 32 bytes.")
 
 # TLS terminates at the ALB; trust its forwarded proto header so Django knows

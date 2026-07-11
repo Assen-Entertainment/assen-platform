@@ -115,13 +115,24 @@ def _phone_hmac_key() -> bytes:
     Production requires a real >=32-byte key at boot (config.settings.prod);
     dev/test carry an insecure default. This runtime guard is defence in depth so a
     misconfigured environment can never fall back to an unkeyed/short-keyed hash.
+
+    ⚠️ ROTATION IS A BREAKING MIGRATION. Changing this key changes every ``v1:``
+    hash, so every existing account's login lookup would miss and a re-signup would
+    mint a duplicate (the unique constraint does not even fire — the values differ).
+    :func:`migrate_legacy_subject_hash` only rekeys the pre-A-2 *bare SHA-256* rows,
+    NOT rows keyed by a previous key's ``v1``. Rotating safely requires a ``v2``
+    dual-read (compute v2, then rekey from the previous key's v1) before the swap;
+    until that exists, treat the key as immutable and hold it in a KMS/secret
+    manager (security review 2026-07-11).
     """
     key = settings.PHONE_IDENTIFIER_HMAC_KEY
-    if not key or len(key) < 32:
+    key_bytes = key.encode("utf-8") if isinstance(key, str) else key
+    # Byte length (not code-point count) — the requirement is >= 32 bytes of key.
+    if not key_bytes or len(key_bytes) < 32:
         raise RuntimeError(
             "PHONE_IDENTIFIER_HMAC_KEY is not configured (must be >= 32 bytes)."
         )
-    return key.encode("utf-8") if isinstance(key, str) else key
+    return key_bytes
 
 
 def _legacy_phone_hash(phone: str) -> str:
