@@ -31,7 +31,7 @@ dev = [
     "pytest>=9.0,<10.0",
     "pytest-django>=4.11,<5.0",
     "factory-boy>=3.3,<4.0",
-    "ruff>=0.8,<1.0",
+    "ruff>=0.15.21,<1.0",
     "mypy>=1.13,<2.0",
     "django-stubs[compatible-mypy]>=6.0,<7.0",
     # Async test driver for the Channels WebSocket tests (ASS-240).
