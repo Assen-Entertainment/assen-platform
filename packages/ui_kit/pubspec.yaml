@@ -21,7 +21,7 @@ dependencies:
 dev_dependencies:
   # Golden testing for the widget catalogue. `--update-goldens` is human-gated
   # (CONSTRAINTS #31); agents never regenerate goldens autonomously.
-  alchemist: ^0.12.0
+  alchemist: ^0.14.0
   flutter_test:
     sdk: flutter
 
