@@ -21,8 +21,26 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.db import models
 
 from config.errors import ApiError, ErrorCode
+
+
+class PaymentProvenance(models.TextChoices):
+    """Where a PAID/ACTIVE record's settlement actually came from (ASS-298).
+
+    Recorded on ``Order``/``Subscription`` so a paid/active record can always
+    answer "how was this settled" before a real PG exists. Pre-ASS-298 rows are
+    never guessed — they backfill to :attr:`LEGACY_UNKNOWN`. Today only
+    :attr:`MOCK` (deterministic mock, ``ENABLE_MOCK_PAYMENT``) and :attr:`FREE`
+    (an explicit free grant, ASS-297) are ever written; :attr:`EXTERNAL` is
+    reserved for when a real PG replaces the mock behind the same flag.
+    """
+
+    FREE = "free", "free"
+    MOCK = "mock", "mock"
+    EXTERNAL = "external", "external"
+    LEGACY_UNKNOWN = "legacy_unknown", "legacy unknown"
 
 
 class PaymentError(Exception):

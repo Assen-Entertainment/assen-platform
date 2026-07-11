@@ -17,6 +17,8 @@ import uuid
 
 from django.db import models
 
+from config.payment import PaymentProvenance
+
 
 class ProductType(models.TextChoices):
     """Monetizable item kinds (mirror the frontend ``MonetizableItemType``)."""
@@ -159,11 +161,20 @@ class Order(models.Model):
     # the same (buyer, key) returns the existing order instead of duplicating it;
     # the partial unique constraint below makes that race-safe. NULL = not supplied.
     idempotency_key = models.CharField(max_length=64, null=True, blank=True, default=None)
+    # How this order's PAID state was settled (ASS-298). Set explicitly on every
+    # write (mock/free); the LEGACY_UNKNOWN default only ever applies to rows that
+    # predate this column — never a guessed value.
+    payment_provenance = models.CharField(
+        max_length=16,
+        choices=PaymentProvenance.choices,
+        default=PaymentProvenance.LEGACY_UNKNOWN,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
             models.Index(fields=["buyer", "-created_at"]),
+            models.Index(fields=["payment_provenance"]),
         ]
         ordering = ["-created_at"]
         constraints = [

@@ -22,11 +22,12 @@ from apps.creator.models import Creator
 from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
+from apps.payments.services import record_mock_settlement
 from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ErrorCode
 from config.patch import apply_optional
-from config.payment import require_payment_available
+from config.payment import PaymentProvenance, require_payment_available
 from config.throttle import user_write_throttle
 
 # Mock billing cycle length; there is no real recurring billing (B7 gated).
@@ -445,7 +446,12 @@ def subscribe(
                 tier=tier,
                 status=SubscriptionStatus.ACTIVE,
                 next_billing_date=timezone.localdate() + _BILLING_CYCLE,
+                # Settled by the deterministic mock (the only path past the
+                # payment gate today); never guessed (ASS-298).
+                payment_provenance=PaymentProvenance.MOCK,
             )
+            # Ledger the settlement in the same transaction (ASS-298).
+            record_mock_settlement(subscription=sub, amount=tier.price)
     except IntegrityError:
         return 422, SubscriptionError(
             detail="이미 구독 중인 크리에이터예요.", code=ErrorCode.DUPLICATE_SUBSCRIPTION.value
@@ -562,7 +568,12 @@ def change_subscription_tier(
             detail="변경할 수 있는 멤버십 등급이 아니에요.", code=ErrorCode.TIER_NOT_FOUND.value
         )
     sub.tier = new_tier
-    sub.save(update_fields=["tier"])
+    # A tier change is a fresh mock settlement — refresh provenance and ledger it
+    # in one transaction so the record and its attempt never diverge (ASS-298).
+    sub.payment_provenance = PaymentProvenance.MOCK
+    with transaction.atomic():
+        sub.save(update_fields=["tier", "payment_provenance"])
+        record_mock_settlement(subscription=sub, amount=new_tier.price)
     return 200, _subscription_out(sub)
 
 

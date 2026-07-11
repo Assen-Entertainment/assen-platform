@@ -17,6 +17,8 @@ from typing import Any
 
 from django.db import models
 
+from config.payment import PaymentProvenance
+
 
 class MembershipTier(models.Model):
     """A creator's membership tier (maps to the frontend ``MembershipTier``)."""
@@ -100,10 +102,19 @@ class Subscription(models.Model):
     next_billing_date = models.DateField()
     # Set when the fan schedules end-of-period cancellation; status stays active.
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    # How this ACTIVE membership was settled (ASS-298). Set explicitly on every
+    # write (mock/free); the LEGACY_UNKNOWN default only ever applies to rows that
+    # predate this column — never a guessed value.
+    payment_provenance = models.CharField(
+        max_length=16,
+        choices=PaymentProvenance.choices,
+        default=PaymentProvenance.LEGACY_UNKNOWN,
+    )
 
     class Meta:
         indexes = [
             models.Index(fields=["fan", "-started_at"]),
+            models.Index(fields=["payment_provenance"]),
         ]
         ordering = ["-started_at"]
         constraints = [

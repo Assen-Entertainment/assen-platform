@@ -39,12 +39,13 @@ from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
+from apps.payments.services import record_mock_settlement
 from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ApiError, ErrorCode
 from config.pagination import paginate
 from config.patch import apply_optional
-from config.payment import require_payment_available
+from config.payment import PaymentProvenance, require_payment_available
 from config.throttle import user_write_throttle
 
 # Money-path observability (order/refund lifecycle). Structured, PII-free: only
@@ -916,6 +917,9 @@ def create_order(
                 shipping_fee=shipping_fee,
                 total=total,
                 idempotency_key=payload.idempotency_key or None,
+                # Settled by the deterministic mock (the only path past the
+                # payment gate today); never guessed (ASS-298).
+                payment_provenance=PaymentProvenance.MOCK,
                 **shipping_snapshot,
             )
             OrderItem.objects.create(
@@ -926,6 +930,13 @@ def create_order(
                 option=payload.option,
                 qty=payload.qty,
                 price=product.price,
+            )
+            # Ledger the settlement inside the same transaction (ASS-298): a
+            # rolled-back order can never leave a dangling attempt.
+            record_mock_settlement(
+                order=order,
+                amount=total,
+                idempotency_key=payload.idempotency_key or None,
             )
     except IntegrityError:
         # A concurrent retry with the same key won the insert race — return its
