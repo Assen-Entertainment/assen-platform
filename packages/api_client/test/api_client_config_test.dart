@@ -21,5 +21,18 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('rejects an http-prefixed but non-http scheme (ASS-296)', () {
+      // startsWith('http') admitted these; scheme is now exact-matched.
+      expect(
+        () => ApiClientConfig(baseUrl: 'httpx://example.com'),
+        throwsArgumentError,
+      );
+    });
+
+    test('accepts a plain http URL', () {
+      final config = ApiClientConfig(baseUrl: 'http://localhost:8000');
+      expect(config.baseUrl, 'http://localhost:8000');
+    });
   });
 }
