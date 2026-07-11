@@ -33,7 +33,10 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
       onSuccess: () =>
         toast({
           title: "구독을 해지했어요",
-          description: `${sub.creatorName} · ${sub.tierName} — 다음 결제일부터 중단됩니다.`,
+          // 무료 멤버십은 결제가 없어 결제 중단 문구를 쓰지 않는다(ASS-297).
+          description: sub.isFree
+            ? `${sub.creatorName} · ${sub.tierName} — 멤버십 혜택 이용이 종료됩니다.`
+            : `${sub.creatorName} · ${sub.tierName} — 다음 결제일부터 중단됩니다.`,
         }),
       onError: (e) => {
         // 401은 전역 세션 가드가 처리 → 그 외는 error code로 안내(SubscriptionNotCancellable 등, detail 폴백).
@@ -52,6 +55,7 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
         <div className="flex flex-col gap-3">
           {subs.map((sub) => {
             const done = isCancelled(sub);
+            const free = Boolean(sub.isFree);
             return (
               <Card key={sub.id}>
                 <CardBody className="flex flex-col gap-3">
@@ -65,19 +69,28 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
                       </Link>
                       <span className="text-caption text-on-surface-variant">{sub.tierName} 멤버십</span>
                     </div>
-                    <StatusChip variant={done ? "neutral" : "success"}>{done ? "해지 예정" : "구독 중"}</StatusChip>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {/* 무료 멤버십 표기(ASS-297) — 결제일·금액 행을 숨기고 무료임을 명시. */}
+                      {free ? <StatusChip variant="info">무료 멤버십</StatusChip> : null}
+                      <StatusChip variant={done ? "neutral" : "success"}>{done ? "해지 예정" : "구독 중"}</StatusChip>
+                    </div>
                   </div>
                   <Divider />
-                  <div className="flex items-center justify-between text-body-s">
-                    <span className="text-on-surface-variant">{done ? "종료 예정일" : "다음 결제일"}</span>
-                    <span className="tabular-nums text-on-surface">{sub.nextBillingDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-body-s">
-                    <span className="text-on-surface-variant">결제 금액</span>
-                    <span className="tabular-nums text-on-surface">
-                      {won(sub.price)} / {sub.period}
-                    </span>
-                  </div>
+                  {/* 무료 멤버십은 결제 앵커/금액이 없어 결제일·결제 금액 행을 노출하지 않는다. */}
+                  {free ? null : (
+                    <>
+                      <div className="flex items-center justify-between text-body-s">
+                        <span className="text-on-surface-variant">{done ? "종료 예정일" : "다음 결제일"}</span>
+                        <span className="tabular-nums text-on-surface">{sub.nextBillingDate}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-body-s">
+                        <span className="text-on-surface-variant">결제 금액</span>
+                        <span className="tabular-nums text-on-surface">
+                          {won(sub.price)} / {sub.period}
+                        </span>
+                      </div>
+                    </>
+                  )}
                   {!done ? (
                     <div className="flex flex-wrap gap-2">
                       {/* 티어 변경은 크리에이터 프로필(멤버십 탭)에서 — 대상 크리에이터 컨텍스트 유지. */}
@@ -93,8 +106,9 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
                       <SheetContent side="bottom">
                         <SheetTitle>구독을 해지할까요?</SheetTitle>
                         <SheetDescription>
-                          {sub.creatorName}의 {sub.tierName} 멤버십을 해지합니다. 다음 결제일({sub.nextBillingDate})부터
-                          결제가 중단되며, 남은 기간 동안은 혜택을 계속 이용할 수 있어요.
+                          {free
+                            ? `${sub.creatorName}의 ${sub.tierName} 무료 멤버십을 해지합니다. 해지하면 전용 혜택을 더 이상 이용할 수 없어요.`
+                            : `${sub.creatorName}의 ${sub.tierName} 멤버십을 해지합니다. 다음 결제일(${sub.nextBillingDate})부터 결제가 중단되며, 남은 기간 동안은 혜택을 계속 이용할 수 있어요.`}
                         </SheetDescription>
                         <div className="mt-2 flex flex-col gap-2">
                           <SheetClose asChild>

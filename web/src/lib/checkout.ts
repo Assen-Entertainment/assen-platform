@@ -25,6 +25,11 @@ export interface OrderSummary {
   option?: string;
   /** 상품 종류 — 배송지 스텝(goods) 노출 판단·표기용. 멤버십은 없음. */
   productType?: Product["type"];
+  /**
+   * 무료 획득 대상(pricing_kind=free) — true면 결제 없이 무료 받기/시작하기(ASS-297). 체크아웃이
+   * 결제수단 UI를 숨기고 무료 hook(createOrderFree/subscribeFree)을 호출한다. 배송(굿즈)은 유지.
+   */
+  free?: boolean;
   /** 멤버십 결제 확인용 — 대상 크리에이터/티어를 명시(대상 불투명 해소). */
   creatorName?: string;
   creatorHandle?: string;
@@ -60,6 +65,7 @@ export function summarizeProduct(product: Product, qty: number, option?: string)
     productType: product.type,
     creatorName: product.creatorName,
     creatorHandle: product.creatorHandle,
+    free: product.pricingKind === "free",
   };
 }
 
@@ -77,6 +83,7 @@ export function summarizeTier(tier: MembershipTier, creator?: Creator): OrderSum
     creatorName: creator?.name,
     creatorHandle: creator?.handle,
     tierName: tier.name,
+    free: tier.pricingKind === "free",
   };
 }
 

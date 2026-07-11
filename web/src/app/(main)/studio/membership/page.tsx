@@ -49,7 +49,7 @@ export default function StudioMembershipPage() {
 
   const saveTier = (next: StudioTier) => {
     updateTier.mutate(
-      { id: next.id, name: next.name, price: next.price, benefits: next.benefits },
+      { id: next.id, name: next.name, price: next.price, benefits: next.benefits, pricingKind: next.pricingKind ?? "paid" },
       {
         onSuccess: () => {
           setEditingId(null);
@@ -108,9 +108,11 @@ export default function StudioMembershipPage() {
                     <div className="flex items-center gap-2">
                       <h2 className="text-title-l text-on-surface">{t.name}</h2>
                       <Badge variant={t.active ? "success" : "neutral"}>{t.active ? "활성" : "비활성"}</Badge>
+                      {/* 무료 멤버십 표기(ASS-297). */}
+                      {t.pricingKind === "free" ? <Badge variant="primary">무료</Badge> : null}
                     </div>
                     <span className="text-body-s text-on-surface-variant">
-                      {won(t.price)}/월 · 구독자{" "}
+                      {t.pricingKind === "free" ? "무료" : `${won(t.price)}/월`} · 구독자{" "}
                       {/* 집계 게이트 미도입: undefined면 "—"(집계 예정). 0/날조 수치 노출 금지. */}
                       {t.subscribers === undefined ? (
                         <span title="집계 예정">—</span>
@@ -172,11 +174,13 @@ function TierCreateDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   pending: boolean;
-  onCreate: (input: { name: string; price: number; benefits: string[] }) => void;
+  onCreate: (input: { name: string; price: number; benefits: string[]; pricingKind: "paid" | "free" }) => void;
 }) {
   const [name, setName] = React.useState("");
   const [price, setPrice] = React.useState("");
   const [benefits, setBenefits] = React.useState("");
+  // 무료 멤버십(ASS-297) — 켜면 가격 입력을 비활성·0원으로(서버 free-requires-zero-price 불변식 미러).
+  const [free, setFree] = React.useState(false);
 
   // 다이얼로그를 닫을 때 입력 초기화.
   React.useEffect(() => {
@@ -184,17 +188,19 @@ function TierCreateDialog({
       setName("");
       setPrice("");
       setBenefits("");
+      setFree(false);
     }
   }, [open]);
 
   const submit = () =>
     onCreate({
       name: name.trim() || "새 티어",
-      price: Number(price) || 0,
+      price: free ? 0 : Number(price) || 0,
       benefits: benefits
         .split("\n")
         .map((b) => b.trim())
         .filter(Boolean),
+      pricingKind: free ? "free" : "paid",
     });
 
   return (
@@ -206,7 +212,20 @@ function TierCreateDialog({
         <DialogTitle>새 티어 만들기</DialogTitle>
         <DialogDescription>멤버십 티어 정보를 입력하세요.</DialogDescription>
         <TextField label="티어 이름" placeholder="예: 스탠다드" value={name} onChange={(e) => setName(e.target.value)} />
-        <TextField label="월 가격 (원)" type="number" inputMode="numeric" placeholder="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+        <div className="flex items-center justify-between gap-3 text-body-s text-on-surface">
+          <span>무료 멤버십 (결제 없이 가입)</span>
+          <Switch aria-label="무료 멤버십" checked={free} onCheckedChange={setFree} />
+        </div>
+        <TextField
+          label="월 가격 (원)"
+          type="number"
+          inputMode="numeric"
+          placeholder="0"
+          value={free ? "0" : price}
+          onChange={(e) => setPrice(e.target.value)}
+          disabled={free}
+          helperText={free ? "무료 멤버십은 0원으로 고정돼요." : undefined}
+        />
         <TextArea
           label="혜택 (한 줄에 하나씩)"
           placeholder={"멤버 전용 포스트\n월 1회 라이브"}
@@ -249,6 +268,8 @@ function TierEditForm({
   const seq = React.useRef(0);
   const [name, setName] = React.useState(tier.name);
   const [price, setPrice] = React.useState(String(tier.price));
+  // 무료 멤버십(ASS-297) — 켜면 가격 입력을 비활성·0원으로(서버 free-requires-zero-price 불변식 미러).
+  const [free, setFree] = React.useState(tier.pricingKind === "free");
   const [benefits, setBenefits] = React.useState<{ id: string; text: string }[]>(
     () => tier.benefits.map((text) => ({ id: `b${seq.current++}`, text })),
   );
@@ -262,8 +283,9 @@ function TierEditForm({
     onSave({
       ...tier,
       name: name.trim() || tier.name,
-      price: Number(price) || 0,
+      price: free ? 0 : Number(price) || 0,
       benefits: benefits.map((b) => b.text.trim()).filter(Boolean),
+      pricingKind: free ? "free" : "paid",
     });
   };
 
@@ -271,12 +293,18 @@ function TierEditForm({
     <section className="flex flex-col gap-4 rounded-lg border border-outline bg-surface p-5" aria-label="티어 편집">
       <h2 className="text-title-l text-on-surface">티어 편집 — {tier.name}</h2>
       <TextField label="티어 이름" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="flex items-center justify-between gap-3 text-body-s text-on-surface">
+        <span>무료 멤버십 (결제 없이 가입)</span>
+        <Switch aria-label="무료 멤버십" checked={free} onCheckedChange={setFree} />
+      </div>
       <TextField
         label="월 가격 (원)"
         type="number"
         inputMode="numeric"
-        value={price}
+        value={free ? "0" : price}
         onChange={(e) => setPrice(e.target.value)}
+        disabled={free}
+        helperText={free ? "무료 멤버십은 0원으로 고정돼요." : undefined}
       />
       <div className="flex flex-col gap-2">
         <span className="text-label text-on-surface">혜택</span>

@@ -33,6 +33,8 @@ export interface StudioProduct {
   /** 재고(디지털/무제한형은 null). */
   stock: number | null;
   updatedAt: string;
+  /** 가격 종류(서버 pricing_kind, 기본 "paid") — "free"면 무료 상품(가격 0 강제). */
+  pricingKind?: "paid" | "free";
 }
 
 // sold/subscribers는 실 API 경로(ASS-264 집계)와 패리티를 위해 mock에도 합리적인 값을 채운다.
@@ -54,6 +56,8 @@ export interface StudioTier {
   /** 활성(status=active) 구독자수(ASS-264). 카운트만 — 수익 금액 아님. */
   subscribers?: number;
   active: boolean;
+  /** 가격 종류(서버 pricing_kind, 기본 "paid") — "free"면 무료 멤버십(가격 0 강제). */
+  pricingKind?: "paid" | "free";
 }
 
 // subscribers도 실 API 경로와 패리티를 위해 mock에 합리적인 값을 채운다(카운트만, 수익 아님).

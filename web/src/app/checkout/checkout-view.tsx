@@ -26,7 +26,13 @@ import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError, apiErrorMessage, ERROR_CODES, type ShippingAddress } from "@/lib/api";
-import { useCreateOrder, useSubscribe, useShippingCheckoutAvailable } from "@/lib/api/queries";
+import {
+  useCreateOrder,
+  useCreateOrderFree,
+  useSubscribe,
+  useSubscribeFree,
+  useShippingCheckoutAvailable,
+} from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { mockOrderId, won, type OrderSummary } from "@/lib/checkout";
 
@@ -61,9 +67,13 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   const { user } = useSession();
   const adultVerified = user?.adultVerified === true;
   const createOrder = useCreateOrder();
+  const createOrderFree = useCreateOrderFree();
   const subscribe = useSubscribe();
+  const subscribeFree = useSubscribeFree();
   const live = Boolean(config.apiUrl);
   const isMembership = summary.kind === "membership";
+  // 무료 획득(ASS-297) — 결제수단·정기결제 동의 UI를 숨기고 무료 hook을 호출한다. 배송(굿즈)은 유지.
+  const isFree = summary.free === true;
   const isGoods = summary.kind === "product" && summary.productType === "goods";
   // 배송 상품(굿즈)만 배송지 입력 필요 — 디지털/티켓/쿠폰/체험/멤버십은 미노출.
   const needsShipping = isGoods;
@@ -97,7 +107,8 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
     ship.postalCode.trim() !== "" &&
     ship.address1.trim() !== "";
 
-  const canPay = agree && (!isMembership || autoPay) && !processing;
+  // 무료 멤버십은 정기결제 동의(autoPay)를 요구하지 않는다(결제 자체가 없음).
+  const canPay = agree && (isFree || !isMembership || autoPay) && !processing;
 
   // 422(주문 불가/품절/재고/멤버십 전용/배송지 누락/중복 구독)는 서버 error code로 안내(문자열 매칭 제거,
   // ProductNotOrderable·OutOfStock·InsufficientStock·MembershipOnlyProduct·ShippingAddressRequired·
@@ -135,9 +146,11 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
     }
     setProcessing(true);
 
-    // 라이브 백엔드 + 대상 식별자가 있으면 실 주문/구독(mock 결제 확정 — 실 PG·금액이동 없음).
+    // 라이브 백엔드 + 대상 식별자가 있으면 실 주문/구독. 무료면 결제 없는 무료 획득 경로(ASS-297),
+    // 아니면 유료(mock 결제 확정 — 실 PG·금액이동 없음).
     if (live && target?.kind === "product") {
-      createOrder.mutate(
+      const orderMut = isFree ? createOrderFree : createOrder;
+      orderMut.mutate(
         {
           productId: target.productId,
           qty: target.qty,
@@ -155,7 +168,8 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
       return;
     }
     if (live && target?.kind === "membership") {
-      subscribe.mutate(
+      const subMut = isFree ? subscribeFree : subscribe;
+      subMut.mutate(
         { tierId: target.tierId },
         {
           onSuccess: () => router.push("/mypage/subscriptions"),
@@ -285,37 +299,39 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
           </Card>
         ) : null}
 
-        {/* 결제 수단 */}
-        <Card>
-          <CardBody className="flex flex-col gap-3">
-            <span className="text-title-m text-on-surface">결제 수단</span>
-            <RadioGroup value={pay} onValueChange={(v) => setPay(v as PaymentMethod)}>
-              {METHODS.map((m) => (
-                <label key={m} htmlFor={`pay-${m}`} className="flex items-center gap-2.5 text-body-m text-on-surface">
-                  <RadioGroupItem value={m} id={`pay-${m}`} />
-                  <PaymentIcon method={m} showLabel />
-                </label>
-              ))}
-            </RadioGroup>
-          </CardBody>
-        </Card>
+        {/* 결제 수단 — 무료 획득(ASS-297)은 결제가 없어 선택기를 노출하지 않는다. */}
+        {isFree ? null : (
+          <Card>
+            <CardBody className="flex flex-col gap-3">
+              <span className="text-title-m text-on-surface">결제 수단</span>
+              <RadioGroup value={pay} onValueChange={(v) => setPay(v as PaymentMethod)}>
+                {METHODS.map((m) => (
+                  <label key={m} htmlFor={`pay-${m}`} className="flex items-center gap-2.5 text-body-m text-on-surface">
+                    <RadioGroupItem value={m} id={`pay-${m}`} />
+                    <PaymentIcon method={m} showLabel />
+                  </label>
+                ))}
+              </RadioGroup>
+            </CardBody>
+          </Card>
+        )}
 
-        {/* 금액 요약 — 서버 계약 미러(subtotal + 배송비 = total). 배송비는 정책상 무료(날조 금액 없음). */}
+        {/* 금액 요약 — 서버 계약 미러(subtotal + 배송비 = total). 무료 획득은 결제 금액이 0(무료 표기). */}
         <Card>
           <CardBody className="flex flex-col gap-2">
-            <Row label={isMembership ? "구독 금액" : "상품 금액"} value={won(summary.subtotal)} />
+            <Row label={isMembership ? "구독 금액" : "상품 금액"} value={isFree ? "무료" : won(summary.subtotal)} />
             {needsShipping ? <Row label="배송비" value={summary.shipping > 0 ? won(summary.shipping) : "무료"} /> : null}
             <Divider className="my-1" />
             <div className="flex items-center justify-between">
-              <span className="text-title-m text-on-surface">총 결제금액</span>
-              <span className="text-title-l tabular-nums text-primary">{won(summary.total)}</span>
+              <span className="text-title-m text-on-surface">{isFree ? "결제 금액" : "총 결제금액"}</span>
+              <span className="text-title-l tabular-nums text-primary">{isFree ? "무료" : won(summary.total)}</span>
             </div>
-            <p className="text-caption text-on-surface-variant">부가세(VAT 10%) 포함 금액입니다.</p>
+            {isFree ? null : <p className="text-caption text-on-surface-variant">부가세(VAT 10%) 포함 금액입니다.</p>}
           </CardBody>
         </Card>
 
-        {/* 정책 컴포넌트 */}
-        {isMembership ? (
+        {/* 정책 컴포넌트 — 무료 멤버십은 정기결제가 없어 자동결제 동의를 노출하지 않는다. */}
+        {isMembership && !isFree ? (
           <AutoPayConsentSheet
             checked={autoPay}
             onCheckedChange={setAutoPay}
@@ -334,22 +350,28 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
 
         <div className="flex items-center gap-2 px-1 text-body-s text-on-surface-variant">
           <Checkbox id="checkout-agree" checked={agree} onCheckedChange={(v) => setAgree(v === true)} />
-          <label htmlFor="checkout-agree">주문 내용을 확인했으며 결제 진행에 동의합니다</label>
+          <label htmlFor="checkout-agree">
+            {isFree ? "주문 내용을 확인했으며 진행에 동의합니다" : "주문 내용을 확인했으며 결제 진행에 동의합니다"}
+          </label>
         </div>
 
         <Button size="lg" disabled={!canPay} className="w-full" onClick={submit}>
           {processing ? (
             <>
-              <Spinner className="size-5 text-on-primary" /> 결제 처리 중…
+              <Spinner className="size-5 text-on-primary" /> {isFree ? "처리 중…" : "결제 처리 중…"}
             </>
+          ) : isFree ? (
+            isMembership ? "무료로 시작하기" : "무료로 받기"
           ) : (
             `${won(summary.total)} 결제하기`
           )}
         </Button>
         <TermsLinkFooter className="justify-center" />
-        <p className="text-center text-caption text-on-surface-variant">
-          ※ 실결제/PG 연동은 대표·법무 게이트 — 본 결제 흐름은 UI mock입니다.
-        </p>
+        {isFree ? null : (
+          <p className="text-center text-caption text-on-surface-variant">
+            ※ 실결제/PG 연동은 대표·법무 게이트 — 본 결제 흐름은 UI mock입니다.
+          </p>
+        )}
       </div>
     </main>
   );

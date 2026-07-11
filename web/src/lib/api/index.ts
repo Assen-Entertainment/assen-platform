@@ -124,6 +124,8 @@ interface RawProduct {
   is_adult?: boolean;
   // status는 오너 스코프(StudioProductOut) 전용 — 공개 ProductOut엔 없어 옵셔널.
   status?: string;
+  // 서버 ProductOut.pricing_kind(기본 "paid") — "free"면 무료 획득 대상(ASS-297).
+  pricing_kind?: string;
 }
 interface RawTier {
   id: string;
@@ -135,6 +137,8 @@ interface RawTier {
   badge: string;
   featured: boolean;
   sort_order: number;
+  // 서버 TierOut.pricing_kind(기본 "paid") — "free"면 무료 멤버십(ASS-297).
+  pricing_kind?: string;
 }
 /** /search 결과의 축약 상품(ProductBrief — creator_id/media_url 없음). */
 interface RawProductBrief {
@@ -194,8 +198,11 @@ interface RawSubscription {
   price: number;
   period: string;
   status: string;
-  next_billing_date: string;
+  // 무료 멤버십은 결제 앵커가 없어 null(서버 SubscriptionOut.next_billing_date=None).
+  next_billing_date: string | null;
   cancel_scheduled: boolean;
+  // 무료 멤버십 여부(서버 SubscriptionOut.is_free, 기본 false).
+  is_free?: boolean;
 }
 interface RawNotification {
   id: string;
@@ -225,6 +232,8 @@ interface RawStudioProduct {
   created_at: string;
   // 비취소 주문 기준 누적 판매 수량(ASS-264). 카운트만 — 수익 금액 아님.
   sold: number;
+  // 서버 StudioProductOut.pricing_kind(기본 "paid") — "free"면 무료 상품(ASS-297).
+  pricing_kind?: string;
 }
 /** 오너 뷰 티어(StudioTierOut) — active 관리 플래그 포함. */
 interface RawStudioTier {
@@ -241,6 +250,8 @@ interface RawStudioTier {
   created_at: string;
   // status=active 구독 수(ASS-264). 카운트만 — 수익 금액 아님.
   subscribers: number;
+  // 서버 StudioTierOut.pricing_kind(기본 "paid") — "free"면 무료 멤버십(ASS-297).
+  pricing_kind?: string;
 }
 /** 저장된 결제수단(SavedPaymentMethod wire) — brand+last4만(PAN 미보관). */
 interface RawPaymentMethod {
@@ -359,6 +370,7 @@ const mapProduct = (p: RawProduct): Product => ({
   locked: p.locked || undefined,
   isAdult: p.is_adult || undefined,
   status: p.status || undefined,
+  pricingKind: p.pricing_kind === "free" ? "free" : "paid",
 });
 const mapTier = (t: RawTier): MembershipTier => ({
   id: t.id,
@@ -369,6 +381,7 @@ const mapTier = (t: RawTier): MembershipTier => ({
   benefits: t.benefits,
   badge: t.badge || undefined,
   featured: t.featured,
+  pricingKind: t.pricing_kind === "free" ? "free" : "paid",
 });
 const mapProductBrief = (p: RawProductBrief): Product => ({
   id: p.id,
@@ -427,9 +440,11 @@ const mapSubscription = (s: RawSubscription): Subscription => ({
   tierName: s.tier_name,
   price: s.price,
   period: s.period,
-  nextBillingDate: dateLabel(s.next_billing_date),
+  // 무료 멤버십은 next_billing_date=null → 결제일 UI를 숨긴다(날조 날짜 금지).
+  nextBillingDate: s.next_billing_date ? dateLabel(s.next_billing_date) : null,
   status: s.status === "cancelled" ? "cancelled" : "active",
   cancelScheduled: s.cancel_scheduled,
+  isFree: s.is_free ?? false,
 });
 const NOTIFICATION_KINDS: NotificationKind[] = ["like", "comment", "follow", "order", "system"];
 const mapNotification = (n: RawNotification): Notification => {
@@ -463,6 +478,7 @@ const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
   sold: p.sold,
   stock: p.stock ?? null,
   updatedAt: relativeTime(p.created_at),
+  pricingKind: p.pricing_kind === "free" ? "free" : "paid",
 });
 /** 오너 티어 매핑 — subscribers는 서버가 집계한 활성(status=active) 구독자 수(ASS-264, 카운트만). */
 const mapStudioTier = (t: RawStudioTier): StudioTier => ({
@@ -472,6 +488,7 @@ const mapStudioTier = (t: RawStudioTier): StudioTier => ({
   benefits: t.benefits,
   subscribers: t.subscribers,
   active: t.active,
+  pricingKind: t.pricing_kind === "free" ? "free" : "paid",
 });
 const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({
   id: m.id,
@@ -878,20 +895,42 @@ export async function apiCreateOrder(input: {
 }): Promise<Order> {
   const raw = await apiFetch<RawOrder>("/orders", {
     method: "POST",
-    body: JSON.stringify({
-      product_id: input.productId,
-      qty: input.qty,
-      option: input.option,
-      shipping: input.shipping
-        ? {
-            recipient_name: input.shipping.recipientName,
-            recipient_phone: input.shipping.recipientPhone,
-            postal_code: input.shipping.postalCode,
-            address1: input.shipping.address1,
-            address2: input.shipping.address2,
-          }
-        : undefined,
-    }),
+    body: JSON.stringify(orderInBody(input)),
+  });
+  return mapOrder(raw);
+}
+/** CreateOrderIn wire 바디(snake_case) — 유료(/orders)·무료(/orders/free) 공용 계약. */
+function orderInBody(input: { productId: string; qty: number; option?: string; shipping?: ShippingAddress }) {
+  return {
+    product_id: input.productId,
+    qty: input.qty,
+    option: input.option,
+    shipping: input.shipping
+      ? {
+          recipient_name: input.shipping.recipientName,
+          recipient_phone: input.shipping.recipientPhone,
+          postal_code: input.shipping.postalCode,
+          address1: input.shipping.address1,
+          address2: input.shipping.address2,
+        }
+      : undefined,
+  };
+}
+/**
+ * 무료 상품 획득(ASS-297) — 결제 없이 `POST /api/orders/free`(pricing_kind=free 전용). 바디는
+ * apiCreateOrder와 동일한 CreateOrderIn. 배송·품절·차단 등 비결제 게이트는 유료 경로와 동일하게
+ * 적용된다(무료는 결제만 뺀다). 유료 상품엔 서버가 422 PricingNotFree, 유료 경로에 무료 상품이면
+ * 422 PricingIsFree로 거부한다.
+ */
+export async function apiCreateOrderFree(input: {
+  productId: string;
+  qty: number;
+  option?: string;
+  shipping?: ShippingAddress;
+}): Promise<Order> {
+  const raw = await apiFetch<RawOrder>("/orders/free", {
+    method: "POST",
+    body: JSON.stringify(orderInBody(input)),
   });
   return mapOrder(raw);
 }
@@ -910,6 +949,19 @@ export async function apiRequestRefund(input: { id: string; reason: string; deta
 /** 구독 시작(mock-paid) → 201 Subscription. */
 export async function apiSubscribe(tierId: string): Promise<Subscription> {
   const raw = await apiFetch<RawSubscription>("/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({ tier_id: tierId }),
+  });
+  return mapSubscription(raw);
+}
+/**
+ * 무료 멤버십 가입(ASS-297) — 결제 없이 `POST /api/subscriptions/free`(pricing_kind=free 전용).
+ * 바디는 apiSubscribe와 동일한 SubscribeIn({tier_id}). 무료 멤버십은 결제 앵커가 없어
+ * next_billing_date=null이고 유료로 자동 전환되지 않는다. 유료 티어엔 422 PricingNotFree,
+ * 유료 경로에 무료 티어면 422 PricingIsFree로 거부한다.
+ */
+export async function apiSubscribeFree(tierId: string): Promise<Subscription> {
+  const raw = await apiFetch<RawSubscription>("/subscriptions/free", {
     method: "POST",
     body: JSON.stringify({ tier_id: tierId }),
   });
@@ -1107,6 +1159,8 @@ export interface StudioProductCreate {
   price: number;
   description?: string;
   status?: ProductStatus;
+  /** 가격 종류(기본 "paid") — "free"면 서버가 0원을 강제(PricingFreeRequiresZeroPrice). */
+  pricingKind?: "paid" | "free";
 }
 /** 상품 수정 입력 — 제공한 필드만 반영(PATCH). */
 export interface StudioProductUpdate {
@@ -1115,6 +1169,7 @@ export interface StudioProductUpdate {
   price?: number;
   status?: ProductStatus;
   stock?: number | null;
+  pricingKind?: "paid" | "free";
 }
 export async function apiCreateStudioProduct(input: StudioProductCreate): Promise<StudioProduct> {
   const raw = await apiFetch<RawStudioProduct>("/studio/products", {
@@ -1125,6 +1180,7 @@ export async function apiCreateStudioProduct(input: StudioProductCreate): Promis
       price: input.price,
       description: input.description ?? "",
       status: input.status ?? "draft",
+      pricing_kind: input.pricingKind ?? "paid",
     }),
   });
   return mapStudioProduct(raw);
@@ -1133,7 +1189,7 @@ export async function apiUpdateStudioProduct(id: string, patch: StudioProductUpd
   const raw = await apiFetch<RawStudioProduct>(`/studio/products/${encodeURIComponent(id)}`, {
     method: "PATCH",
     // undefined 필드는 JSON.stringify가 제거 → 미제공 필드는 서버에서 무변경.
-    body: JSON.stringify({ type: patch.type, title: patch.title, price: patch.price, status: patch.status, stock: patch.stock }),
+    body: JSON.stringify({ type: patch.type, title: patch.title, price: patch.price, status: patch.status, stock: patch.stock, pricing_kind: patch.pricingKind }),
   });
   return mapStudioProduct(raw);
 }
@@ -1157,24 +1213,27 @@ export interface StudioTierCreate {
   name: string;
   price: number;
   benefits: string[];
+  /** 가격 종류(기본 "paid") — "free"면 서버가 0원을 강제(PricingFreeRequiresZeroPrice). */
+  pricingKind?: "paid" | "free";
 }
 export interface StudioTierUpdate {
   name?: string;
   price?: number;
   benefits?: string[];
   active?: boolean;
+  pricingKind?: "paid" | "free";
 }
 export async function apiCreateStudioTier(input: StudioTierCreate): Promise<StudioTier> {
   const raw = await apiFetch<RawStudioTier>("/studio/tiers", {
     method: "POST",
-    body: JSON.stringify({ name: input.name, price: input.price, benefits: input.benefits }),
+    body: JSON.stringify({ name: input.name, price: input.price, benefits: input.benefits, pricing_kind: input.pricingKind ?? "paid" }),
   });
   return mapStudioTier(raw);
 }
 export async function apiUpdateStudioTier(id: string, patch: StudioTierUpdate): Promise<StudioTier> {
   const raw = await apiFetch<RawStudioTier>(`/studio/tiers/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify({ name: patch.name, price: patch.price, benefits: patch.benefits, active: patch.active }),
+    body: JSON.stringify({ name: patch.name, price: patch.price, benefits: patch.benefits, active: patch.active, pricing_kind: patch.pricingKind }),
   });
   return mapStudioTier(raw);
 }

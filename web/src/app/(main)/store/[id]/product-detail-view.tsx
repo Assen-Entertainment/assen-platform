@@ -43,6 +43,9 @@ export function ProductDetailView({ product }: { product: Product }) {
   const meta = TYPE_META[p.type];
   const label = PRODUCT_TYPE_LABEL[p.type];
   const soldOut = Boolean(p.soldOut) || p.stock === 0;
+  // 무료 획득(ASS-297) — pricing_kind=free면 CTA 라벨을 "무료로 받기/시작하기"로. 체크아웃이 무료 획득을 처리한다.
+  const isFree = p.pricingKind === "free";
+  const ctaLabel = isFree ? (p.type === "membership" ? "무료로 시작하기" : "무료로 받기") : meta.cta;
   // 배송(굿즈) 결제 게이트(ASS-287) — 서버 capability가 열렸다고 확인되기 전까지 굿즈 구매를 막는다(배송 PII 폼 도달 차단).
   const shippingBlocked = p.type === "goods" && !shippingAvailable;
   // 19+ 방어 게이트 — 서버가 이미 미인증 뷰어에게 숨기지만 UI도 구매·미디어를 잠근다.
@@ -75,7 +78,7 @@ export function ProductDetailView({ product }: { product: Product }) {
     </Button>
   ) : (
     <Button size="lg" className="w-full" disabled={soldOut} onClick={buy}>
-      {soldOut ? "품절" : meta.cta}
+      {soldOut ? "품절" : ctaLabel}
     </Button>
   );
 
