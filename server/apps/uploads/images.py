@@ -38,6 +38,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any
 
 from PIL import Image
 
@@ -144,6 +145,60 @@ def verify_image_decodes(
     except Exception:
         return False
     return True
+
+
+# Info keys that some Pillow encoders re-embed from the *source* image's ``info``
+# when the caller does not override them (empirically verified against Pillow 11.3):
+# the PNG encoder re-writes ``icc_profile`` and the GIF encoder re-writes ``comment``
+# on a plain re-save. The JPEG and WEBP encoders read metadata only from explicit
+# save params, so a plain re-encode already drops their EXIF/XMP/ICC; EXIF text
+# chunks are likewise not re-embedded by any of the four encoders. Deleting these
+# keys before saving makes the re-encode drop ALL metadata for every allowed format.
+_METADATA_INFO_KEYS: tuple[str, ...] = (
+    "exif",
+    "xmp",
+    "icc_profile",
+    "comment",
+    "photoshop",
+    "iptc",
+)
+
+
+def strip_metadata(data: bytes, kind: ImageKind) -> bytes:
+    """Canonically re-encode ``data`` as ``kind``, returning bytes with no metadata.
+
+    A structurally valid JPEG/PNG/WEBP can carry EXIF/XMP/GPS/ICC metadata (an
+    embedded phone number, a GPS location, a serial number, …). :func:`verify_image_decodes`
+    only *decode-verifies*; it does not strip that metadata, so the original bytes —
+    PII and all — would otherwise be stored and served verbatim. This re-encodes the
+    pixels through Pillow in the *same* sniffed format, which is the authoritative way
+    to guarantee only image data (no ancillary metadata chunks) survives.
+
+    Must run only *after* :func:`verify_image_decodes` has passed: at that point the
+    image's dimensions and total pixel count are already capped, so the full decode
+    this performs (re-encoding necessarily loads every pixel, unlike the lazy
+    ``verify()``) cannot be a decompression bomb — it re-uses the same bounded bytes.
+
+    Animated GIF/WEBP keep their frames (``save_all``); frame timing/loop and
+    transparency live under structural ``info`` keys that are preserved — only the
+    metadata keys in :data:`_METADATA_INFO_KEYS` are dropped. JPEG is re-saved with
+    ``quality="keep"`` so re-encoding a photo does not add a generation of lossy
+    recompression artifacts (the source is always a Pillow-decodable JPEG here).
+    """
+    with Image.open(BytesIO(data)) as img:
+        animated = bool(getattr(img, "is_animated", False))
+        # Drop the metadata keys the encoders would otherwise carry over from the
+        # source; structural keys (duration/loop/disposal/transparency/…) are kept.
+        for key in _METADATA_INFO_KEYS:
+            img.info.pop(key, None)
+        save_kwargs: dict[str, Any] = {}
+        if animated:
+            save_kwargs["save_all"] = True
+        if kind.pillow_format == "JPEG":
+            save_kwargs["quality"] = "keep"
+        out = BytesIO()
+        img.save(out, format=kind.pillow_format, **save_kwargs)
+        return out.getvalue()
 
 
 def looks_scriptable(head: bytes) -> bool:

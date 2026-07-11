@@ -28,7 +28,12 @@ from PIL import Image
 from apps.content.api import _validated_media_url
 from apps.identity.models import Account, Role
 from apps.identity.services import issue_token_pair
-from apps.uploads.images import looks_scriptable, sniff_image_kind, verify_image_decodes
+from apps.uploads.images import (
+    looks_scriptable,
+    sniff_image_kind,
+    strip_metadata,
+    verify_image_decodes,
+)
 from apps.uploads.models import Upload
 
 pytestmark = pytest.mark.django_db
@@ -313,3 +318,112 @@ def test_looks_scriptable_flags_markup() -> None:
     assert looks_scriptable(b"  <!DOCTYPE html>")
     assert looks_scriptable(b"<?xml version='1.0'?>")
     assert not looks_scriptable(PNG)
+
+
+# --- metadata stripping (ASS-293) ---------------------------------------------
+# A valid raster can carry EXIF/XMP/GPS/ICC metadata (an embedded phone number or
+# GPS location). The endpoint canonically re-encodes through Pillow before storing,
+# so only pixel data — never metadata — is persisted and served.
+
+_MARKER = "010-1234-5678"
+
+
+def _jpeg_with_exif(marker: str, *, size: tuple[int, int] = (16, 16)) -> bytes:
+    """A genuinely decodable JPEG carrying ``marker`` in its EXIF ImageDescription."""
+    buf = BytesIO()
+    exif = Image.Exif()
+    exif[0x010E] = marker  # ImageDescription — round-trips through _getexif()
+    Image.new("RGB", size, color=(10, 120, 200)).save(buf, "JPEG", exif=exif, quality=90)
+    return buf.getvalue()
+
+
+def _animated(fmt: str, *, frames: int = 3) -> bytes:
+    """A multi-frame GIF/WEBP whose frames differ (so they are not merged into one)."""
+    imgs = []
+    for i in range(frames):
+        frame = Image.new("RGB", (16, 16), (0, 0, 0))
+        frame.paste(Image.new("RGB", (6, 6), (255, 60 * i, 0)), (i * 3, i * 3))
+        imgs.append(frame.convert("P") if fmt == "GIF" else frame)
+    buf = BytesIO()
+    imgs[0].save(buf, fmt, save_all=True, append_images=imgs[1:], duration=100, loop=0)
+    return buf.getvalue()
+
+
+def _stored_bytes(url: str) -> bytes:
+    name = url.split("/media/", 1)[1]
+    with default_storage.open(name) as fh:
+        return bytes(fh.read())
+
+
+def test_exif_fixture_actually_carries_the_marker() -> None:
+    # Guards against a vacuous strip test: the source JPEG must really embed the PII.
+    src = _jpeg_with_exif(_MARKER)
+    with Image.open(BytesIO(src)) as img:
+        assert img._getexif()[0x010E] == _MARKER
+    assert _MARKER.encode() in src
+
+
+def test_stored_jpeg_has_no_exif_metadata(client: Client) -> None:
+    # The headline ASS-293 assertion: an uploaded JPEG's EXIF (with an embedded phone
+    # number) must NOT survive into the stored object.
+    fan = _fan()
+    res = _upload(
+        client, _jpeg_with_exif(_MARKER), content_type="image/jpeg", headers=_auth(fan)
+    )
+    assert res.status_code == 201, res.content
+    stored = _stored_bytes(res.json()["url"])
+    with Image.open(BytesIO(stored)) as img:
+        img.load()
+        assert img.format == "JPEG"
+        assert img._getexif() is None  # entire EXIF block stripped
+    assert _MARKER.encode() not in stored  # the embedded PII marker is gone
+
+
+def test_stored_image_still_decodable_after_strip(client: Client) -> None:
+    # A normal PNG/JPEG still uploads (201) and is a valid decodable image post-strip.
+    fan = _fan()
+    for data, content_type in ((PNG, "image/png"), (JPEG, "image/jpeg")):
+        res = _upload(client, data, content_type=content_type, headers=_auth(fan))
+        assert res.status_code == 201, (content_type, res.content)
+        with Image.open(BytesIO(_stored_bytes(res.json()["url"]))) as img:
+            img.verify()  # structurally valid after re-encode
+
+
+def test_strip_metadata_preserves_gif_and_webp_animation() -> None:
+    for fmt in ("GIF", "WEBP"):
+        data = _animated(fmt)
+        kind = sniff_image_kind(data)
+        assert kind is not None
+        with Image.open(BytesIO(data)) as before:
+            assert before.n_frames == 3
+        stripped = strip_metadata(data, kind)
+        with Image.open(BytesIO(stripped)) as after:
+            assert after.n_frames == 3  # animation preserved
+            after.seek(after.n_frames - 1)  # every frame remains decodable
+
+
+def test_strip_metadata_drops_exif_icc_and_comment() -> None:
+    # EXIF (JPEG): stripped, and the raw marker bytes are gone from the output.
+    jpeg = _jpeg_with_exif(_MARKER)
+    jpeg_kind = sniff_image_kind(jpeg)
+    assert jpeg_kind is not None
+    stripped_jpeg = strip_metadata(jpeg, jpeg_kind)
+    with Image.open(BytesIO(stripped_jpeg)) as img:
+        assert img._getexif() is None
+    assert _MARKER.encode() not in stripped_jpeg
+
+    # ICC profile (PNG): the encoder re-embeds it from source info unless dropped.
+    png_buf = BytesIO()
+    Image.new("RGB", (8, 8), (0, 255, 0)).save(png_buf, "PNG", icc_profile=b"FAKEICC")
+    png_kind = sniff_image_kind(png_buf.getvalue())
+    assert png_kind is not None
+    with Image.open(BytesIO(strip_metadata(png_buf.getvalue(), png_kind))) as img:
+        assert "icc_profile" not in img.info
+
+    # Comment (GIF): the encoder re-embeds it from source info unless dropped.
+    gif_buf = BytesIO()
+    Image.new("P", (8, 8), 1).save(gif_buf, "GIF", comment=b"010-secret-note")
+    gif_kind = sniff_image_kind(gif_buf.getvalue())
+    assert gif_kind is not None
+    with Image.open(BytesIO(strip_metadata(gif_buf.getvalue(), gif_kind))) as img:
+        assert "comment" not in img.info
