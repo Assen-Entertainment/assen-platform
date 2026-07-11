@@ -154,7 +154,7 @@ jobs:
       # 실패 시 트레이스/리포트/서버 로그를 업로드해 원격 디버깅을 돕는다.
       - name: Upload Playwright report + traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
@@ -163,7 +163,7 @@ jobs:
           retention-days: 7
       - name: Upload server/web logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-server-logs
           path: |
