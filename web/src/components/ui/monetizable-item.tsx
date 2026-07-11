@@ -37,11 +37,13 @@ export interface MonetizableItemProps extends React.HTMLAttributes<HTMLDivElemen
   creator?: React.ReactNode;
   /** 기본 CTA 라벨은 type 파생; 필요 시 오버라이드. */
   ctaLabel?: string;
+  /** CTA 비활성 — 상위 게이트(예: 배송 결제 준비 중)에서 액션을 막을 때. 라벨은 ctaLabel로 함께 조정. */
+  actionDisabled?: boolean;
   onAction?: () => void;
 }
 
 export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemProps>(
-  ({ type, title, price, meta, media, creator, ctaLabel, onAction, className, ...props }, ref) => {
+  ({ type, title, price, meta, media, creator, ctaLabel, actionDisabled, onAction, className, ...props }, ref) => {
     const t = TYPE_META[type];
     return (
       <div
@@ -70,7 +72,7 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
           ) : null}
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <span className="text-title-l tabular-nums text-on-surface">{price}</span>
-            <Button size="sm" onClick={onAction}>
+            <Button size="sm" onClick={onAction} disabled={actionDisabled}>
               {ctaLabel ?? t.cta}
             </Button>
           </div>

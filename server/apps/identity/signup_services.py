@@ -14,10 +14,13 @@ stored raw; only ``auth_subject_hash`` and the display-only nickname persist.
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 from dataclasses import dataclass
 
-from django.db import transaction
+from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.consent.models import ConsentKind
@@ -91,8 +94,72 @@ def normalize_phone(phone: str) -> str:
 
 
 def hash_phone(phone: str) -> str:
-    """Return the SHA-256 of a phone number — the only phone-derived value stored."""
+    """Return the account key derived from a phone number — the only phone-derived
+    value stored (the raw number never is).
+
+    A keyed **HMAC-SHA256** (``v1:<base64url>``), not a bare digest: the phone-number
+    space is small enough to brute-force a plain SHA-256 offline, so the hash is
+    keyed with a dedicated server secret (``PHONE_IDENTIFIER_HMAC_KEY``, separate
+    from ``SECRET_KEY``) — a stolen DB alone can no longer enumerate numbers
+    (ASS-287 A-2). Still pseudonymous PII, not anonymisation. Callers pass an
+    already-:func:`normalize_phone`d value; rows created before A-2 (bare SHA-256)
+    are migrated in place on access (:func:`migrate_legacy_subject_hash`).
+    """
+    mac = hmac.new(_phone_hmac_key(), phone.encode("utf-8"), hashlib.sha256).digest()
+    return "v1:" + base64.urlsafe_b64encode(mac).rstrip(b"=").decode("ascii")
+
+
+def _phone_hmac_key() -> bytes:
+    """The dedicated phone-identifier HMAC key, or fail closed (never unkeyed).
+
+    Production requires a real >=32-byte key at boot (config.settings.prod);
+    dev/test carry an insecure default. This runtime guard is defence in depth so a
+    misconfigured environment can never fall back to an unkeyed/short-keyed hash.
+
+    ⚠️ ROTATION IS A BREAKING MIGRATION. Changing this key changes every ``v1:``
+    hash, so every existing account's login lookup would miss and a re-signup would
+    mint a duplicate (the unique constraint does not even fire — the values differ).
+    :func:`migrate_legacy_subject_hash` only rekeys the pre-A-2 *bare SHA-256* rows,
+    NOT rows keyed by a previous key's ``v1``. Rotating safely requires a ``v2``
+    dual-read (compute v2, then rekey from the previous key's v1) before the swap;
+    until that exists, treat the key as immutable and hold it in a KMS/secret
+    manager (security review 2026-07-11).
+    """
+    key = settings.PHONE_IDENTIFIER_HMAC_KEY
+    key_bytes = key.encode("utf-8") if isinstance(key, str) else key
+    # Byte length (not code-point count) — the requirement is >= 32 bytes of key.
+    if not key_bytes or len(key_bytes) < 32:
+        raise RuntimeError(
+            "PHONE_IDENTIFIER_HMAC_KEY is not configured (must be >= 32 bytes)."
+        )
+    return key_bytes
+
+
+def _legacy_phone_hash(phone: str) -> str:
+    """The pre-A-2 bare SHA-256 key — used ONLY to find and rekey legacy rows."""
     return hashlib.sha256(phone.encode("utf-8")).hexdigest()
+
+
+def migrate_legacy_subject_hash(phone: str) -> None:
+    """Rekey a pre-A-2 (bare SHA-256) account row to the v1 HMAC hash, in place.
+
+    Dual-read migration: rows created before A-2 are keyed by ``SHA-256(phone)``;
+    new logins/signups key by the v1 HMAC. On access we rekey the legacy row so the
+    caller then finds it under the v1 hash — no duplicate account and no lock-out.
+    A no-op when there is no legacy row, or when the v1 row already exists. ``phone``
+    must already be :func:`normalize_phone`d (as at both call sites).
+    """
+    v1 = hash_phone(phone)
+    if Account.objects.filter(auth_subject_hash=v1).exists():
+        return
+    try:
+        with transaction.atomic():
+            Account.objects.filter(auth_subject_hash=_legacy_phone_hash(phone)).update(
+                auth_subject_hash=v1
+            )
+    except IntegrityError:
+        # A concurrent request rekeyed it first — the caller finds the v1 row.
+        pass
 
 
 @dataclass(frozen=True)
@@ -137,6 +204,10 @@ def register_fan(
         raise SignupError("Invalid OTP.", code=ErrorCode.OTP_INVALID)
 
     subject_hash = hash_phone(phone)
+    # Rekey any pre-A-2 (bare SHA-256) row to the v1 HMAC hash first, so the
+    # get_or_create below matches it instead of creating a duplicate account
+    # (ASS-287 A-2 dual-read migration). No-op for fresh (v1) accounts.
+    migrate_legacy_subject_hash(phone)
     # get_or_create wraps the INSERT in a savepoint, so a concurrent signup that
     # loses the uniq_fan_auth_subject race surfaces as IntegrityError and is
     # retried as a fetch — no duplicate fan, and the outer atomic stays usable.

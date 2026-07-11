@@ -14,7 +14,7 @@ import {
   Divider,
   type MonetizableItemType,
 } from "@/components/ui";
-import { useProduct } from "@/lib/api/queries";
+import { useProduct, useShippingCheckoutAvailable } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { won } from "@/lib/checkout";
 import { PRODUCT_TYPE_LABEL } from "@/lib/product-labels";
@@ -38,10 +38,13 @@ export function ProductDetailView({ product }: { product: Product }) {
   const { user, mounted } = useSession();
   const adultVerified = user?.adultVerified === true;
   const { data } = useProduct(product.id, product);
+  const shippingAvailable = useShippingCheckoutAvailable();
   const p = data ?? product;
   const meta = TYPE_META[p.type];
   const label = PRODUCT_TYPE_LABEL[p.type];
   const soldOut = Boolean(p.soldOut) || p.stock === 0;
+  // 배송(굿즈) 결제 게이트(ASS-287) — 서버 capability가 열렸다고 확인되기 전까지 굿즈 구매를 막는다(배송 PII 폼 도달 차단).
+  const shippingBlocked = p.type === "goods" && !shippingAvailable;
   // 19+ 방어 게이트 — 서버가 이미 미인증 뷰어에게 숨기지만 UI도 구매·미디어를 잠근다.
   // 세션 복원 전(mounted=false)엔 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지(실누출 0, 시각 개선).
   const adultBlocked = mounted && Boolean(p.isAdult) && !adultVerified;
@@ -52,12 +55,12 @@ export function ProductDetailView({ product }: { product: Product }) {
   const total = p.price * (allowQty ? qty : 1);
 
   const buy = () => {
-    if (soldOut || p.locked || adultBlocked) return;
+    if (soldOut || p.locked || adultBlocked || shippingBlocked) return;
     const optParam = option ? `&opt=${encodeURIComponent(option)}` : "";
     router.push(`/checkout?item=${encodeURIComponent(p.id)}&qty=${qty}${optParam}`);
   };
 
-  /** 성인 미인증=인증 유도 / 잠금=구독 유도 / 품절=비활성 / 그 외=구매 CTA. */
+  /** 성인 미인증=인증 유도 / 잠금=구독 유도 / 배송 준비 중=비활성 / 품절=비활성 / 그 외=구매 CTA. */
   const primaryCta = adultBlocked ? (
     <Button size="lg" className="w-full" asChild>
       <Link href="/age-gate">성인 인증하고 보기</Link>
@@ -65,6 +68,10 @@ export function ProductDetailView({ product }: { product: Product }) {
   ) : p.locked ? (
     <Button size="lg" className="w-full" asChild>
       <Link href="/membership">멤버십 구독하고 보기</Link>
+    </Button>
+  ) : shippingBlocked ? (
+    <Button size="lg" className="w-full" disabled>
+      배송 결제 준비 중이에요
     </Button>
   ) : (
     <Button size="lg" className="w-full" disabled={soldOut} onClick={buy}>

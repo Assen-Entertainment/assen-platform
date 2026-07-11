@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import subprocess
 
+from django.conf import settings
 from django.http import HttpRequest
 from ninja import NinjaAPI, Schema
 
@@ -71,6 +72,28 @@ def health(request: HttpRequest) -> HealthResponse:
         status="ok",
         version=api.version,
         commit=_GIT_COMMIT,
+    )
+
+
+class CapabilitiesResponse(Schema):
+    """Runtime capability flags the web reads to gate UI and flows.
+
+    Single source of truth for whether a boundary flow is currently open, so the
+    web consumes these instead of duplicating the server settings (which would
+    drift). No secrets — only whether a gated flow is available.
+    """
+
+    shipping_checkout_available: bool
+    payment_available: bool
+
+
+@api.get("/capabilities", response=CapabilitiesResponse)
+def capabilities(request: HttpRequest) -> CapabilitiesResponse:
+    """Report which gated flows are open (see the settings behind each flag)."""
+    del request
+    return CapabilitiesResponse(
+        shipping_checkout_available=settings.ENABLE_SHIPPING_CHECKOUT,
+        payment_available=settings.ENABLE_MOCK_PAYMENT,
     )
 
 

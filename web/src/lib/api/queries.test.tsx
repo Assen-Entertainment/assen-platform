@@ -2,7 +2,7 @@ import * as React from "react";
 import { describe, it, expect } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, useStudioStats, useChangeSubscriptionTier, useUpdatePost, useDeletePost, useStudioPosts, qk } from "./queries";
+import { useToggleLike, useAddComment, useBlockCreator, useUnblockCreator, useStudioStats, useChangeSubscriptionTier, useUpdatePost, useDeletePost, useStudioPosts, useCapabilities, useShippingCheckoutAvailable, qk } from "./queries";
 import type { Post, Comment, Creator, BlockedCreator, StudioStats, Subscription } from "./types";
 
 function makeWrapper(qc: QueryClient) {
@@ -294,6 +294,29 @@ describe("useStudioPosts (오너 스코프)", () => {
       expect(item?.body).toBe("수정된 본문");
       expect(item?.isAdult).toBe(true);
     });
+  });
+});
+
+describe("useCapabilities (ASS-287 배송 게이트)", () => {
+  it("mock 폴백(USE_API=false)은 배송 결제를 닫힘으로 취급한다(fail-closed)", async () => {
+    const qc = new QueryClient();
+    const { result } = renderHook(() => useCapabilities(), { wrapper: makeWrapper(qc) });
+    await waitFor(() => expect(result.current.data).toBeTruthy());
+    // 실제로 일어날 수 없는 배송 결제를 mock에서 노출하지 않는다.
+    expect(result.current.data?.shippingCheckoutAvailable).toBe(false);
+  });
+
+  it("useShippingCheckoutAvailable은 시드된 capability를 반영한다(개방 시 true)", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    qc.setQueryData(qk.capabilities, { shippingCheckoutAvailable: true, paymentAvailable: true });
+    const { result } = renderHook(() => useShippingCheckoutAvailable(), { wrapper: makeWrapper(qc) });
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it("useShippingCheckoutAvailable은 데이터 미확정(로딩) 시 false다(fail-closed)", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
+    const { result } = renderHook(() => useShippingCheckoutAvailable(), { wrapper: makeWrapper(qc) });
+    expect(result.current).toBe(false);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   getCommentsPage,
   getFeedPage,
   getSearch,
+  getCapabilities,
   getOrdersPage,
   getOrder,
   getNotificationsPage,
@@ -171,6 +172,7 @@ export const qk = {
   notifications: ["notifications"] as const,
   subscriptions: ["subscriptions"] as const,
   blocks: ["blocks"] as const,
+  capabilities: ["capabilities"] as const,
   paymentMethods: ["payment-methods"] as const,
   studioStats: ["studio-stats"] as const,
   studioProducts: ["studio-products"] as const,
@@ -331,6 +333,24 @@ export function useNotifications(initialData?: Page<Notification>) {
 /** 구독 목록 — USE_API면 실 조회. */
 export function useSubscriptions(initialData?: Subscription[]) {
   return useQuery({ queryKey: qk.subscriptions, queryFn: getSubscriptions, initialData });
+}
+
+/**
+ * 런타임 capability 플래그(ASS-287) — GET /api/capabilities(서버 설정 단일 출처). 배송 결제 게이트
+ * UI가 소비한다. 자주 바뀌지 않으므로 staleTime을 길게 잡아 과도한 재요청을 막는다. mock 폴백은
+ * getCapabilities가 게이트 닫힘(shipping=false)을 반환한다(fail-closed).
+ */
+export function useCapabilities() {
+  return useQuery({ queryKey: qk.capabilities, queryFn: getCapabilities, staleTime: 5 * 60_000 });
+}
+
+/**
+ * 배송(굿즈) 결제 가용 여부 — 로딩/오류/mock 중이면 false(fail-closed). 굿즈 CTA·배송지 PII 폼을
+ * 서버 게이트가 열려 있다고 확인되기 전까지 노출하지 않기 위한 단일 판정점(방어심층).
+ */
+export function useShippingCheckoutAvailable(): boolean {
+  const { data } = useCapabilities();
+  return data?.shippingCheckoutAvailable === true;
 }
 
 /**

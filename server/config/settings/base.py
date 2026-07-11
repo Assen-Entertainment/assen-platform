@@ -60,6 +60,14 @@ ENABLE_MOCK_KYC: bool = False
 ENABLE_ADULT_CONTENT: bool = False
 ENABLE_MOCK_PAYMENT: bool = False
 
+# Delivery (shipping-address) checkout — OFF until the postal-shipping privacy
+# policy is approved (ASS-287 A-1). While off, any physical (goods) order is
+# refused (503 SHIPPING_CHECKOUT_UNAVAILABLE) so NO recipient name/phone/address
+# PII is collected. Hardcoded (never read from env) so a stray env cannot open
+# PII collection in base/prod/demo; dev inherits this False, and test.py + the
+# disposable e2e settings turn it on to exercise the flow.
+ENABLE_SHIPPING_CHECKOUT: bool = False
+
 # Per-user rate limiting on the fan write endpoints (follow/like/comment/post,
 # SDLC 09 §4, E11/B4). On by default so dev/prod throttle real traffic; the test
 # suite turns it off (config/settings/test.py) to stay deterministic across the
@@ -67,6 +75,16 @@ ENABLE_MOCK_PAYMENT: bool = False
 # prod stays throttled) for rapid smoke/load runs that fire many writes at once.
 # See config.throttle.
 FAN_WRITE_THROTTLE_ENABLED: bool = env.bool("FAN_WRITE_THROTTLE_ENABLED", default=True)
+
+# Dedicated HMAC key for the phone-identifier hash (Account.auth_subject_hash) —
+# separate from SECRET_KEY (ASS-287 A-2). Keying the hash means a stolen DB alone
+# cannot brute-force the small phone-number space. dev/test/demo carry an insecure,
+# env-overridable default; production (config.settings.prod) REQUIRES a real
+# >=32-byte key from the environment and fails closed at boot without it.
+PHONE_IDENTIFIER_HMAC_KEY: str = env.str(
+    "PHONE_IDENTIFIER_HMAC_KEY",
+    default="dev-insecure-phone-identifier-hmac-key-not-for-prod",
+)
 
 # Rate-limiter backend for the cross-cutting middleware limiter (config.ratelimit).
 # "memory" (default) is the per-process in-memory limiter; "redis" selects the shared

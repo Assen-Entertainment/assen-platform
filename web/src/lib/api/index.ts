@@ -511,6 +511,31 @@ function toPage<R, T>(raw: Paginated<R>, map: (r: R) => T): Page<T> {
   return { items: raw.items.map(map), nextCursor: raw.next_cursor ?? undefined };
 }
 
+// --- 런타임 capability 플래그(ASS-287) — 서버 설정 단일 출처 ------------------
+/** 런타임 capability 플래그(camelCase) — 게이트된 흐름의 개방 여부. 서버 CapabilitiesResponse 미러. */
+export interface Capabilities {
+  /** 배송(굿즈) 결제 흐름 개방 여부(서버 ENABLE_SHIPPING_CHECKOUT). false면 배송 PII 폼에 도달시키지 않는다. */
+  shippingCheckoutAvailable: boolean;
+  /** mock 결제 흐름 개방 여부(서버 ENABLE_MOCK_PAYMENT). */
+  paymentAvailable: boolean;
+}
+interface RawCapabilities {
+  shipping_checkout_available: boolean;
+  payment_available: boolean;
+}
+/**
+ * 런타임 capability — `GET /api/capabilities`(서버 설정 단일 출처, 웹이 플래그를 별도로 복제하지
+ * 않는다 → 서버와 드리프트 방지). mock 폴백(USE_API=false)은 게이트 닫힘으로 취급(fail-closed) —
+ * 실제로 일어날 수 없는 배송 결제를 mock에서 노출하지 않는다(방어심층).
+ */
+export async function getCapabilities(): Promise<Capabilities> {
+  if (USE_API) {
+    const raw = await apiFetch<RawCapabilities>("/capabilities");
+    return { shippingCheckoutAvailable: raw.shipping_checkout_available, paymentAvailable: raw.payment_available };
+  }
+  return { shippingCheckoutAvailable: false, paymentAvailable: false };
+}
+
 // --- 도메인 함수 (apiUrl 설정 시 실 B2 API, 아니면 mock 폴백) ----------------
 export async function getCreators(): Promise<Creator[]> {
   if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);

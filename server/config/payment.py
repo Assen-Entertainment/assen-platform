@@ -22,6 +22,8 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
+from config.errors import ApiError, ErrorCode
+
 
 class PaymentError(Exception):
     """Raised when a payment method cannot be tokenized."""
@@ -98,3 +100,24 @@ def payment_tokenizer() -> PaymentTokenizer | None:
     if settings.ENABLE_MOCK_PAYMENT:
         return MockPaymentTokenizer()
     return None
+
+
+def require_payment_available() -> None:
+    """Fail closed (503) when no payment path can actually settle a charge.
+
+    Order / subscription creation must never mint a ``PAID``/``ACTIVE`` record when
+    there is no way to take money. Until a real PG is wired, the only settleable
+    state is the deterministic mock (dev/test/demo), gated by ``ENABLE_MOCK_PAYMENT``.
+
+    Gated on the flag, NOT on :func:`payment_tokenizer`: tokenization is not
+    authorization/capture, so a real tokenizer would still let a charge-free
+    ``PAID`` slip through (ASS-286). This is containment — "no false paid/active" —
+    not a PG-ready charge flow. Free products/tiers are a separate, explicit grant
+    (ASS-297), never a zero-amount bypass here.
+    """
+    if not settings.ENABLE_MOCK_PAYMENT:
+        raise ApiError(
+            503,
+            "결제가 아직 준비되지 않았어요.",
+            code=ErrorCode.PAYMENTS_UNAVAILABLE,
+        )
