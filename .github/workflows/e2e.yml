@@ -101,7 +101,7 @@ jobs:
       # 않는 한 매 실행 수백MB 브라우저 재다운로드를 건너뛴다. OS 패키지(--with-deps)는
       # 캐시 대상이 아니라 아래 install 스텝이 캐시 적중 시에도 계속 확인/설치한다.
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
