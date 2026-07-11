@@ -1,10 +1,10 @@
 [project]
 name = "assen-server"
 version = "0.0.1"
-description = "Assen Platform backend — Django 5.2 LTS + Django Ninja (ADR-0001)."
+description = "Assen Platform backend — Django 6.0 + Django Ninja (ADR-0001)."
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "django==5.2.*",
+    "django>=6.0,<7.0",
     "django-ninja>=1.3,<2.0",
     "django-cors-headers>=4.4,<5.0",
     "django-environ>=0.14.0,<1.0",
@@ -33,7 +33,7 @@ dev = [
     "factory-boy>=3.3,<4.0",
     "ruff>=0.8,<1.0",
     "mypy>=1.13,<2.0",
-    "django-stubs[compatible-mypy]>=5.1,<6.0",
+    "django-stubs[compatible-mypy]>=6.0,<7.0",
     # Async test driver for the Channels WebSocket tests (ASS-240).
     "pytest-asyncio>=0.24,<2.0",
 ]
