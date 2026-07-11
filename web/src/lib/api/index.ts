@@ -36,6 +36,10 @@ import {
   type StudioTier,
   type ProductStatus,
 } from "@/lib/studio-mock";
+// 스튜디오 재무 mock(정산/애널리틱스 placeholder 금액) — USE_API=false 폴백에서만 참조(ASS-289 #5
+// 번들 격리). 라이브 빌드에선 아래 데드코드 분기가 접혀 이 모듈이 mock/data.ts와 동일하게
+// 트리셰이킹된다 → 날조 금액이 라이브 산출물에서 제거된다.
+import { SETTLEMENT_ROWS, ANALYTICS_SERIES, type SettlementRow, type AnalyticsPoint } from "@/lib/studio-mock-finance";
 // mock 폴백 데이터/전용 로직 — USE_API=false 경로에서만 참조(R6-W2C 번들 격리).
 // 라이브 빌드에선 USE_API가 빌드타임 상수 true로 접혀 아래 참조가 DCE → 이 모듈이 트리셰이킹된다.
 import {
@@ -1060,6 +1064,27 @@ export async function getStudioStats(): Promise<StudioStats | null> {
     }
   }
   return STUDIO_STATS;
+}
+
+// --- ASS-289(#5): 스튜디오 재무(정산·애널리틱스) 데모 데이터 접근 ------------------
+export type { SettlementRow, AnalyticsPoint } from "@/lib/studio-mock-finance";
+/**
+ * 정산 데모 행 — 서버가 정산/수익 금액을 제공하는 계약이 없으므로(정산 게이트) 라이브(USE_API)에선
+ * null을 반환한다(클라이언트가 금액을 날조하지 않는다 → 호출측이 "준비 중" 렌더). mock 폴백에서만
+ * placeholder 정산표를 반환한다. 라이브 빌드에선 이 else 참조가 데드코드가 되어 studio-mock-finance가
+ * 트리셰이킹된다(mock/data.ts와 동일 규율).
+ */
+export function getSettlementDemoRows(): SettlementRow[] | null {
+  if (USE_API) return null;
+  return SETTLEMENT_ROWS;
+}
+/**
+ * 애널리틱스 데모 시계열 — 서버가 수익/구독자 시계열 계약을 제공하지 않으므로 라이브에선 null(→ "준비 중").
+ * mock 폴백에서만 placeholder 시계열을 반환한다. 라이브 빌드에서 트리셰이킹되는 것은 위와 동일.
+ */
+export function getAnalyticsDemoSeries(): AnalyticsPoint[] | null {
+  if (USE_API) return null;
+  return ANALYTICS_SERIES;
 }
 
 // --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기(오너 스코프) ---------------------

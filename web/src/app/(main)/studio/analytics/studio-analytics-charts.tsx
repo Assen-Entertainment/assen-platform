@@ -1,4 +1,4 @@
-import type { AnalyticsPoint } from "@/lib/studio-mock";
+import type { AnalyticsPoint } from "@/lib/studio-mock-finance";
 
 /**
  * Studio 애널리틱스 차트(R5-W3 #7b) — analytics/page.tsx에서 분리해 next/dynamic으로 지연 로드.
