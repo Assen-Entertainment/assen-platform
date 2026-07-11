@@ -92,6 +92,22 @@ def test_tier_patch_scoped_to_owner_is_404(client: Client) -> None:
     )
 
 
+def test_non_owner_cannot_delete_others_tier(client: Client) -> None:
+    """IDOR regression: another creator cannot delete a tier they do not own.
+
+    ``studio_delete_tier`` scopes by ``creator=_owner_creator(account)``, so a
+    different creator gets 404 (no existence leak); this proves the stranger is
+    rejected and the tier survives.
+    """
+    _owner, creator = _owner_with_creator("stellar")
+    other = Account.objects.create(role=Role.FAN.value)
+    Creator.objects.create(handle="other", name="다른", owner=other)
+    tier = MembershipTier.objects.create(creator=creator, name="라이트", price=4900)
+
+    assert client.delete(f"{STUDIO}/{tier.id}", headers=_auth(other)).status_code == 404
+    assert MembershipTier.objects.filter(id=tier.id).exists()
+
+
 def test_studio_list_tiers_subscribers_counts_active_only(client: Client) -> None:
     """``subscribers`` (ASS-264) = active-status subscriptions; cancelled excluded."""
     owner, creator = _owner_with_creator()

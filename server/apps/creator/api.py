@@ -116,6 +116,31 @@ class SearchOut(Schema):
     next_offset: int | None = None
 
 
+def _adult_allowed(account: Account | None) -> bool:
+    """Whether 19+ (``adult_only``) items may be counted/shown for ``account``.
+
+    Mirrors ``apps.content.api._adult_allowed`` (the single funnel every public post
+    read uses): fail-closed — ``ENABLE_ADULT_CONTENT`` off hides adult items from
+    EVERYONE; on, only an ``adult_verified`` viewer counts them.
+    """
+    return bool(
+        settings.ENABLE_ADULT_CONTENT and account is not None and account.adult_verified
+    )
+
+
+def _visible_posts(account: Account | None) -> QuerySet[Post]:
+    """Posts a given viewer may see, gated by the 19+ rule (:func:`_adult_allowed`).
+
+    Used as the relation for the creator ``posts`` count so the count applies the SAME
+    adult gate as the post *list* (``apps.content.api._post_qs``). Without this the
+    count leaked the existence of hidden adult posts (list 0 / count 1, ASS-296 #12).
+    """
+    posts = Post.objects.all()
+    if not _adult_allowed(account):
+        posts = posts.exclude(adult_only=True)
+    return posts
+
+
 def _creator_relation_count(relation: QuerySet[Any]) -> Coalesce:
     """A correlated ``COUNT(*)`` of ``relation`` rows for the outer creator, 0 when none.
 
@@ -150,7 +175,9 @@ def _annotated(account: Account | None = None) -> QuerySet[Creator]:
     """
     queryset = Creator.objects.annotate(
         followers_count=_creator_relation_count(Follow.objects.all()),
-        posts_count=_creator_relation_count(Post.objects.all()),
+        # 19+ gate: count only posts this viewer may see, so the public ``posts`` count
+        # matches the gated post list and never leaks hidden adult posts (ASS-296 #12).
+        posts_count=_creator_relation_count(_visible_posts(account)),
     )
     if account is not None:
         queryset = queryset.annotate(

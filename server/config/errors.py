@@ -103,6 +103,14 @@ class ErrorCode(StrEnum):
     PAYMENT_CARD_INVALID = "PaymentCardInvalid"
     PAYMENT_METHOD_NOT_FOUND = "PaymentMethodNotFound"
 
+    # --- notification (push) ------------------------------------------------
+    # The operator push-dispatch surface fails closed (503) when no real push
+    # transport (FCM/APNs) is wired: the in-memory mock adapter is gated by
+    # ENABLE_MOCK_PUSH (dev/test/demo only), so production refuses rather than
+    # pretend a notification was delivered. Mirrors OTP_UNAVAILABLE / KYC_UNAVAILABLE
+    # / PAYMENTS_UNAVAILABLE.
+    PUSH_UNAVAILABLE = "PushUnavailable"
+
     # --- dashboard ----------------------------------------------------------
     DATE_RANGE_INVALID = "DateRangeInvalid"
 

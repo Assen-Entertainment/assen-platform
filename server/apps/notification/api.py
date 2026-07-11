@@ -17,6 +17,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
+from django.conf import settings
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
@@ -33,6 +34,7 @@ from apps.notification.policy import (
 )
 from apps.notification.services import send_notification
 from config.api import api
+from config.errors import ApiError, ErrorCode
 from config.pagination import paginate
 from config.throttle import user_write_throttle
 
@@ -43,13 +45,18 @@ _DATA_MAX_KEYS = 20
 _KEY_MAX = 100
 
 
-def _adapter() -> NotificationAdapter:
-    """Return the push adapter. P0/dev uses the in-memory mock (no real FCM).
+def _adapter() -> NotificationAdapter | None:
+    """Return the push adapter, or ``None`` when no transport is wired.
 
-    Mirrors ``apps.identity.api._otp_sender`` — a single seam so the real FCM
-    transport can be injected in P5 without touching callers.
+    Mirrors ``apps.identity.api._otp_sender`` / ``config.payment.payment_tokenizer``:
+    the in-memory mock is gated behind ``ENABLE_MOCK_PUSH`` (dev/test/demo only) so it
+    can never back a "delivered" claim in production. With no real FCM/APNs transport
+    yet, production returns ``None`` and the dispatch surface fails closed (503) rather
+    than pretend a push was sent — the real transport lands in P5 behind this same seam.
     """
-    return MockNotificationAdapter()
+    if settings.ENABLE_MOCK_PUSH:
+        return MockNotificationAdapter()
+    return None
 
 
 class NotificationError(Schema):
@@ -124,13 +131,20 @@ def dispatch_notification(
     # the map symmetric so a 20-key payload cannot smuggle arbitrarily large blobs).
     if any(len(k) > _KEY_MAX or len(v) > _TEXT_MAX for k, v in payload.data.items()):
         return 422, NotificationError(detail="A data key or value is too long.")
+    adapter = _adapter()
+    if adapter is None:
+        # Fail closed (503) when no real push transport is wired, mirroring the OTP /
+        # KYC / payment mock gates — never claim delivery we can't perform.
+        raise ApiError(
+            503, "푸시 알림을 사용할 수 없어요.", code=ErrorCode.PUSH_UNAVAILABLE
+        )
     try:
         result = send_notification(
             category=payload.category,
             token=payload.token,
             title=payload.title,
             body=payload.body,
-            adapter=_adapter(),
+            adapter=adapter,
             data=payload.data,
             scheduled_date=payload.scheduled_date,
         )

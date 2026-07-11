@@ -203,6 +203,46 @@ def test_refund_request_flow(client: Client) -> None:
     assert dup.status_code == 422
 
 
+def test_non_owner_cannot_cancel_or_refund_others_order(client: Client) -> None:
+    """IDOR regression: fan B cannot cancel or request a refund on fan A's order.
+
+    Both endpoints load the order via ``_load_order(order_id, buyer=account)``, so a
+    stranger gets 404 (no existence leak); this proves fan B is rejected and fan A's
+    order state is unchanged (never cancelled, no refund request created).
+    """
+    fan_a = _fan()
+    fan_b = _fan()
+    product = _product()
+    order_id = client.post(
+        BASE,
+        data=json.dumps({"product_id": str(product.id), "shipping": SHIPPING}),
+        content_type=JSON,
+        headers=_auth(fan_a),
+    ).json()["id"]
+
+    # Fan B: cancel is rejected (404) and the order stays paid.
+    cancel = client.post(
+        f"{BASE}/{order_id}/cancel", content_type=JSON, headers=_auth(fan_b)
+    )
+    assert cancel.status_code == 404
+    assert Order.objects.get(id=order_id).status == OrderStatus.PAID.value
+
+    # Move the order to a refundable state, then fan B's refund is rejected (404).
+    order = Order.objects.get(id=order_id)
+    order.status = OrderStatus.SHIPPING.value
+    order.save(update_fields=["status"])
+    refund = client.post(
+        f"{BASE}/{order_id}/refund",
+        data=json.dumps({"reason": "탈취 시도"}),
+        content_type=JSON,
+        headers=_auth(fan_b),
+    )
+    assert refund.status_code == 404
+    order.refresh_from_db()
+    assert order.status == OrderStatus.SHIPPING.value
+    assert not order.refund_requests.exists()
+
+
 def test_refund_on_paid_order_is_422(client: Client) -> None:
     """A paid (not yet shipping/completed) order cannot be refunded."""
     fan = _fan()
