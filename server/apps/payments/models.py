@@ -139,7 +139,9 @@ class PaymentAttempt(models.Model):
             # An attempt settles exactly one target — an order XOR a subscription,
             # never both and never neither. Materialised by the app's migration.
             models.CheckConstraint(
-                check=(
+                # ``condition=`` (not the ``check=`` removed in Django 6.0); the new
+                # kwarg name is accepted since Django 5.1, so this stays valid on both.
+                condition=(
                     models.Q(order__isnull=False, subscription__isnull=True)
                     | models.Q(order__isnull=True, subscription__isnull=False)
                 ),

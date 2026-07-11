@@ -299,7 +299,10 @@ def search(
                 output_field=IntegerField(),
             )
         )
-        .order_by("match_rank", "-followers_count", "handle")
+        # ``match_rank``/``followers_count`` are annotations added above and in
+        # ``_annotated``; django-stubs 6 can't resolve annotated fields inside
+        # order_by (a known plugin limitation — valid at runtime, covered by tests).
+        .order_by("match_rank", "-followers_count", "handle")  # type: ignore[misc]
     )
     # Fetch one past the page to detect whether a further page exists.
     creators = list(creator_qs[offset : offset + size + 1])
