@@ -23,6 +23,8 @@ export const ERROR_CODES = {
   TierInUse: "TierInUse",
   PaymentCardInvalid: "PaymentCardInvalid",
   PaymentMethodNotFound: "PaymentMethodNotFound",
+  // 배송(굿즈) 결제 게이트(ASS-287 A-1) — ENABLE_SHIPPING_CHECKOUT off 시 굿즈 주문을 503으로 거부.
+  ShippingCheckoutUnavailable: "ShippingCheckoutUnavailable",
   InteractionBlocked: "InteractionBlocked",
   // 이미지 업로드(R12) — POST /api/uploads 실패 사유(서버 config.errors.ErrorCode 미러).
   UploadTypeUnsupported: "UploadTypeUnsupported",
@@ -62,6 +64,8 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   // 결제수단
   PaymentCardInvalid: "카드 정보가 올바르지 않아요. 다시 확인해 주세요.",
   PaymentMethodNotFound: "결제수단을 찾을 수 없어요.",
+  // 배송 결제 준비 중(ASS-287): 배송 상품 결제 흐름이 아직 열리지 않았어요(정책 게이트).
+  ShippingCheckoutUnavailable: "배송 상품 결제가 아직 준비 중이에요. 잠시 후 다시 시도해 주세요.",
   // 개인 차단(R4): 차단한 크리에이터 콘텐츠에 like/댓글/주문 시 서버가 422로 거부.
   InteractionBlocked: "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요.",
   // 이미지 업로드(R12): POST /api/uploads 실패 — 파일형식(415)·크기(413)·거부(422)·준비중(503).

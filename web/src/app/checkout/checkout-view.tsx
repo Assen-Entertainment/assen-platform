@@ -25,8 +25,8 @@ import {
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
-import { ApiError, apiErrorMessage, type ShippingAddress } from "@/lib/api";
-import { useCreateOrder, useSubscribe } from "@/lib/api/queries";
+import { ApiError, apiErrorMessage, ERROR_CODES, type ShippingAddress } from "@/lib/api";
+import { useCreateOrder, useSubscribe, useShippingCheckoutAvailable } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { mockOrderId, won, type OrderSummary } from "@/lib/checkout";
 
@@ -64,8 +64,13 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   const subscribe = useSubscribe();
   const live = Boolean(config.apiUrl);
   const isMembership = summary.kind === "membership";
+  const isGoods = summary.kind === "product" && summary.productType === "goods";
   // 배송 상품(굿즈)만 배송지 입력 필요 — 디지털/티켓/쿠폰/체험/멤버십은 미노출.
-  const needsShipping = summary.kind === "product" && summary.productType === "goods";
+  const needsShipping = isGoods;
+  // 배송(굿즈) 결제 게이트(ASS-287) — 서버 capability가 열렸다고 확인되기 전까지 배송지 PII 폼에 도달시키지 않는다.
+  const shippingAvailable = useShippingCheckoutAvailable();
+  // 굿즈 결제 시도 중 서버가 503(ShippingCheckoutUnavailable)을 반환한 레이스 — 준비 중 상태로 전환.
+  const [raceBlocked, setRaceBlocked] = React.useState(false);
   const [pay, setPay] = React.useState<PaymentMethod>("card");
   const [agree, setAgree] = React.useState(false);
   const [autoPay, setAutoPay] = React.useState(false);
@@ -100,6 +105,11 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   const onCheckoutError = (e: unknown) => {
     setProcessing(false);
     if (e instanceof ApiError) {
+      // 배송 결제 준비 중(503 ShippingCheckoutUnavailable) — 일반 오류 토스트 대신 준비 중 상태로 전환(레이스 방어).
+      if (e.code === ERROR_CODES.ShippingCheckoutUnavailable) {
+        setRaceBlocked(true);
+        return;
+      }
       if (e.status === 422) {
         const fallback = isMembership
           ? "이 멤버십은 이미 구독하고 있어요."
@@ -162,6 +172,22 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   };
 
   const initial = summary.creatorName?.slice(0, 1) ?? "";
+
+  // 배송(굿즈) 결제가 준비 중이면 배송지 PII 폼·결제 UI 대신 준비 중 상태만 노출한다.
+  // 직접 `/checkout?...` 접근·파라미터 없는 데모 굿즈 폴백도 모두 이 경로로 수렴(PII 폼에 절대 도달 안 함).
+  if (isGoods && (!shippingAvailable || raceBlocked)) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface-container-high px-4 text-center">
+        <h1 className="text-headline text-on-surface">배송 결제 준비 중이에요</h1>
+        <p className="max-w-sm text-body-m text-on-surface-variant">
+          배송 상품 결제 흐름을 준비하고 있어요. 지금은 배송이 필요 없는 디지털·멤버십 상품을 이용해 주세요.
+        </p>
+        <Button asChild>
+          <Link href="/store">스토어로 돌아가기</Link>
+        </Button>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-surface-container-high py-10">
