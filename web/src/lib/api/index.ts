@@ -28,6 +28,13 @@ import type {
   Subscription,
   SearchResult,
 } from "./types";
+// ASS-290: consume the generated OpenAPI DTOs (schema.d.ts, produced by
+// `npm run gen:types`) directly as the wire types, so the client is compile-time
+// coupled to the contract — tsc breaks here if the server schema drifts (the
+// CI drift gate catches the snapshot; this makes a domain's client code fail to
+// build too). Migrated incrementally; `Notification` is the first domain, the
+// rest keep their hand-written Raw* shapes until each is field-verified.
+import type { components } from "./schema";
 // 스튜디오 카탈로그 타입/목업은 studio-mock의 순수 유틸을 정본으로 재사용(데이터만 실 API로 전환).
 import {
   STUDIO_PRODUCTS,
@@ -204,14 +211,10 @@ interface RawSubscription {
   // 무료 멤버십 여부(서버 SubscriptionOut.is_free, 기본 false).
   is_free?: boolean;
 }
-interface RawNotification {
-  id: string;
-  kind: string;
-  title: string;
-  href: string;
-  read: boolean;
-  created_at: string;
-}
+// Wire shape = the generated NotificationOut DTO (ASS-290), not a hand-written
+// mirror: any server-side field/nullability change to NotificationOut surfaces
+// here as a compile error rather than a silent runtime mismatch.
+type RawNotification = components["schemas"]["NotificationOut"];
 // --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기·결제수단 wire 계약(snake_case) ------
 /** 오너 뷰 상품(StudioProductOut) — 관리 필드(status/is_adult/timestamp) 포함. */
 interface RawStudioProduct {
