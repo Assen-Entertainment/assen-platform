@@ -50,9 +50,7 @@ class Creator {
     final dynamic rawId = json['id'];
     final handle = json['handle'] as String?;
     if (rawId == null || handle == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
+      throw ArgumentError(
         'creator payload is missing the required "id"/"handle" fields',
       );
     }

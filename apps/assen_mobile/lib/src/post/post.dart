@@ -39,19 +39,11 @@ class Post {
   factory Post.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
     if (rawId == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
-        'post payload is missing the required "id" field',
-      );
+      throw ArgumentError('post payload is missing the required "id" field');
     }
     final createdAt = DateTime.tryParse(requireString(json, 'created_at'));
     if (createdAt == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
-        'post "created_at" is not a valid ISO-8601 datetime',
-      );
+      throw ArgumentError('post "created_at" is not a valid ISO-8601 datetime');
     }
     return Post(
       id: rawId.toString(),

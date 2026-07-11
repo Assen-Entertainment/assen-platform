@@ -96,11 +96,7 @@ class Product {
   static String _requireId(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
     if (rawId == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
-        'product payload is missing the required "id" field',
-      );
+      throw ArgumentError('product payload is missing the required "id" field');
     }
     return rawId.toString();
   }

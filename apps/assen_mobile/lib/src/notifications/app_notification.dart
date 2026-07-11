@@ -31,11 +31,9 @@ class AppNotification {
     final title = json['title'] as String?;
     final createdAt = DateTime.tryParse(json['created_at'] as String? ?? '');
     if (rawId == null || kind == null || title == null || createdAt == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
+      throw ArgumentError(
         'notification payload is missing a required '
-            '"id"/"kind"/"title"/"created_at" field',
+        '"id"/"kind"/"title"/"created_at" field',
       );
     }
     return AppNotification(

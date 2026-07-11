@@ -29,17 +29,11 @@ class Comment {
   factory Comment.fromJson(Map<String, dynamic> json) {
     final dynamic rawId = json['id'];
     if (rawId == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
-        'comment payload is missing the required "id" field',
-      );
+      throw ArgumentError('comment payload is missing the required "id" field');
     }
     final createdAt = DateTime.tryParse(requireString(json, 'created_at'));
     if (createdAt == null) {
-      throw ArgumentError.value(
-        json,
-        'json',
+      throw ArgumentError(
         'comment "created_at" is not a valid ISO-8601 datetime',
       );
     }
