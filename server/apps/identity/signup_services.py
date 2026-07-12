@@ -37,11 +37,12 @@ from apps.identity.services import (
 from config.errors import ErrorCode
 from config.otp import OtpSender
 
-# Consent wording version recorded at signup. The wording is the human-approved
-# draft from the 2026-07-12 privacy decisions (docs/ops/privacy-retention-consent-
-# decisions-2026-07-12.md §5); storing the version lets the gate require re-consent
-# when 법무 finalises or materially changes the copy (bump this string → re-consent).
-SIGNUP_CONSENT_VERSION = "2026-07-12-draft-v1"
+# Consent wording version recorded at signup. The wording is the 법무-approved copy
+# from the 2026-07-12 privacy decisions (docs/ops/privacy-retention-consent-
+# decisions-2026-07-12.md §5), approved-of-record 2026-07-12; storing the version
+# lets the gate require re-consent when the copy materially changes (bump this
+# string → re-consent).
+SIGNUP_CONSENT_VERSION = "2026-07-12-v1"
 
 
 class SignupError(Exception):
