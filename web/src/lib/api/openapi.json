@@ -11474,6 +11474,11 @@
             "title": "Consent Privacy",
             "type": "boolean"
           },
+          "age_over_14": {
+            "default": false,
+            "title": "Age Over 14",
+            "type": "boolean"
+          },
           "web": {
             "default": false,
             "title": "Web",

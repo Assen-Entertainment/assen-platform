@@ -136,6 +136,10 @@ class SignupIn(Schema):
     nickname: str = Field(min_length=1, max_length=40)
     consent_terms: bool
     consent_privacy: bool
+    # 만 14세 이상 확인(D5, 2026-07-12 privacy decisions). Fail-closed default: an
+    # omitted field is treated as "not confirmed" → the service rejects with
+    # UNDERAGE. The web sends the explicit checkbox value.
+    age_over_14: bool = False
     web: bool = False
 
 
@@ -310,6 +314,7 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
             nickname=data.nickname,
             consent_terms=data.consent_terms,
             consent_privacy=data.consent_privacy,
+            age_over_14=data.age_over_14,
             otp_code=data.otp_code,
             otp_sender=sender,
         )

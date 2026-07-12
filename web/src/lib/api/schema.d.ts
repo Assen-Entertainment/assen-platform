@@ -4498,6 +4498,11 @@ export interface components {
             /** Consent Privacy */
             consent_privacy: boolean;
             /**
+             * Age Over 14
+             * @default false
+             */
+            age_over_14: boolean;
+            /**
              * Web
              * @default false
              */

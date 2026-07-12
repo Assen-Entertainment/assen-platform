@@ -261,6 +261,7 @@ def _signup(client: Client, **overrides: object) -> tuple[int, dict[str, object]
         "nickname": "미오팬",
         "consent_terms": True,
         "consent_privacy": True,
+        "age_over_14": True,
     }
     body.update(overrides)
     response = client.post(
@@ -279,6 +280,32 @@ def test_signup_endpoint_issues_token(client: Client) -> None:
 def test_signup_endpoint_rejects_missing_consent(client: Client) -> None:
     status, _ = _signup(client, consent_privacy=False)
     assert status == 422
+    assert not Account.objects.filter(role=Role.FAN.value).exists()
+
+
+def test_signup_endpoint_rejects_underage(client: Client) -> None:
+    # D5 (2026-07-12 privacy decisions): 만 14세 미만은 가입 차단. The wire field
+    # defaults fail-closed, so an unconfirmed age is rejected before any account is
+    # created — no 법정대리인(guardian) consent flow needed.
+    status, _ = _signup(client, age_over_14=False)
+    assert status == 422
+    assert not Account.objects.filter(role=Role.FAN.value).exists()
+
+
+def test_signup_endpoint_rejects_omitted_age_confirmation(client: Client) -> None:
+    # Fail-closed at the wire: omitting age_over_14 entirely is treated as
+    # "not confirmed" (SignupIn default False) → rejected, not silently allowed.
+    body = {
+        "phone": _PHONE,
+        "otp_code": _code(),
+        "nickname": "미오팬",
+        "consent_terms": True,
+        "consent_privacy": True,
+    }
+    response = client.post(
+        "/api/fan/signup", data=json.dumps(body), content_type="application/json"
+    )
+    assert response.status_code == 422
     assert not Account.objects.filter(role=Role.FAN.value).exists()
 
 

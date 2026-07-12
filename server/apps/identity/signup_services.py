@@ -37,9 +37,11 @@ from apps.identity.services import (
 from config.errors import ErrorCode
 from config.otp import OtpSender
 
-# Consent wording version recorded at signup. The final copy is human-approved;
-# storing the version lets the gate require re-consent when the wording changes.
-SIGNUP_CONSENT_VERSION = "1.0"
+# Consent wording version recorded at signup. The wording is the human-approved
+# draft from the 2026-07-12 privacy decisions (docs/ops/privacy-retention-consent-
+# decisions-2026-07-12.md §5); storing the version lets the gate require re-consent
+# when 법무 finalises or materially changes the copy (bump this string → re-consent).
+SIGNUP_CONSENT_VERSION = "2026-07-12-draft-v1"
 
 
 class SignupError(Exception):
@@ -182,22 +184,34 @@ def register_fan(
     consent_privacy: bool,
     otp_code: str,
     otp_sender: OtpSender,
+    age_over_14: bool = True,
     anonymous_id: str = "",
     version: str = SIGNUP_CONSENT_VERSION,
 ) -> IssuedTokenPair:
     """Register (or re-attach) a fan from a verified phone OTP and consent.
 
-    Rejects a bad OTP and missing terms/privacy consent (both mandatory —
-    Fan_Signup_Privacy_Policy §5). Reuses an existing fan with the same phone
-    (hash match) so a re-signup merges rather than duplicates, folds in any
-    anonymous activity, records both consents, emits ``fan_signed_up`` on first
-    creation only (a re-signup must not re-emit), and returns a fresh token pair
-    from the unchanged token core.
+    Rejects a bad OTP, missing terms/privacy consent (both mandatory —
+    Fan_Signup_Privacy_Policy §5), and a caller who has not confirmed the 만 14세
+    이상 age floor (D5, privacy decisions 2026-07-12: under-14 signup is blocked so
+    no 법정대리인 consent flow is needed — a self-declared checkbox, not verified
+    age). Reuses an existing fan with the same phone (hash match) so a re-signup
+    merges rather than duplicates, folds in any anonymous activity, records both
+    consents, emits ``fan_signed_up`` on first creation only (a re-signup must not
+    re-emit), and returns a fresh token pair from the unchanged token core.
+
+    ``age_over_14`` defaults to True only for internal/test convenience; the sole
+    production caller (the /signup endpoint) always passes the client's explicit
+    value from a required request field, so the gate is enforced at the wire.
     """
     if not (consent_terms and consent_privacy):
         raise SignupError(
             "Both terms and privacy consent are required.",
             code=ErrorCode.CONSENT_REQUIRED,
+        )
+    if not age_over_14:
+        raise SignupError(
+            "만 14세 이상만 가입할 수 있습니다.",
+            code=ErrorCode.UNDERAGE,
         )
     phone = normalize_phone(phone)
     if not otp_sender.verify(phone=phone, code=otp_code):

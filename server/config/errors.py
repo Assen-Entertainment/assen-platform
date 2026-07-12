@@ -49,6 +49,10 @@ class ErrorCode(StrEnum):
     OTP_UNAVAILABLE = "OtpUnavailable"
     PHONE_INVALID = "PhoneInvalid"
     CONSENT_REQUIRED = "ConsentRequired"
+    # Signup was attempted without confirming the 만 14세 이상 age floor (D5,
+    # privacy decisions 2026-07-12): under-14 signup is blocked so no 법정대리인
+    # (guardian) consent flow is needed. A self-declared checkbox, not verified age.
+    UNDERAGE = "Underage"
     CSRF_FAILED = "CsrfFailed"
     REFRESH_TOKEN_REQUIRED = "RefreshTokenRequired"
     REFRESH_TOKEN_INVALID = "RefreshTokenInvalid"

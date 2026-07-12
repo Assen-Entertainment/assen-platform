@@ -21,6 +21,7 @@ test('phone-OTP signup issues a token and serves the membership card', async ({ 
       nickname: '미오팬',
       consent_terms: true,
       consent_privacy: true,
+      age_over_14: true,
     },
   });
   expect(signup.status()).toBe(200);
@@ -61,6 +62,7 @@ test('signup with a wrong OTP is rejected (422)', async ({ request }) => {
       nickname: 'x',
       consent_terms: true,
       consent_privacy: true,
+      age_over_14: true,
     },
   });
   expect(res.status()).toBe(422);
@@ -80,6 +82,7 @@ test('web signup delivers httpOnly cookies and authenticates the card via cookie
       nickname: '웹팬',
       consent_terms: true,
       consent_privacy: true,
+      age_over_14: true,
       web: true,
     },
   });
