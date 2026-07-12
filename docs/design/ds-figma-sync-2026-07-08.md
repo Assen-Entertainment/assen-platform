@@ -77,8 +77,11 @@ R7 감사(`ds-parity-audit-2026-07-06.md`)는 코드↔Figma 매핑 83.8%와 미
 | 9 | Sidebar | `303:28` | web/src/components/ui/sidebar.tsx |
 | 10 | TopBar | `302:28` | web/src/components/ui/topbar.tsx |
 | 11 | RightRail | `304:28` | web/src/components/ui/right-rail.tsx |
+| 12 | LoadMore | `313:126` (component set: `313:116` Default / `313:119` Loading) | web/src/components/ui/load-more.tsx |
 
 **토큰 규율**: 전 surface/text/container/border fill을 `sys/*` 변수 바인딩, 그라데이션 아트는 `gradient/brand` Paint Style, 타이포 Noto Sans KR + DS 타입램프(title-l/m·label·body-m/s·caption), radius 6/8/12/full. 각 컴포넌트 `description`=코드 경로.
+
+**★델타 동기화 (2026-07-12)**: 07-08 이후 신규 DS 컴포넌트 **LoadMore**(07-10 추가, `web/src/components/ui/load-more.tsx`)를 Code-Sync 섹션에 additive 등재(위 12행). **첫 COMPONENT_SET 엔트리**(Default/Loading 변형 — 스피너·dimmed 로딩 버튼). 기존 11개 엔트리+전 섹션 무손상(라이브 재감사·스크린샷 검증). ★free-grant UI(ASS-297)는 앱 뷰(checkout/membership/studio)이지 DS 컴포넌트가 아니라 Figma DS 델타 없음. 브랜드색 #5A4DF0는 07-08 미러 유지. → **DS 대상 매핑 74/74 = 100%**.
 
 **알려진 편차 1건(드리프트 로그 등재)**: MediaViewer Figma에 좌/우 nav 화살표 존재하나 현행 `media-viewer.tsx`는 단일 미디어(scrim+미디어+close, 화살표 없음). → 후속: 코드에 화살표 추가 또는 Figma 화살표 제거로 정합(경미, 표준 라이트박스 크롬). 오버레이 크롬 색(black/85·white/10)은 시맨틱 토큰 부재로 코드 리터럴값 미러(허용).
 
