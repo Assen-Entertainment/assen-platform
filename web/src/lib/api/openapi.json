@@ -4357,6 +4357,76 @@
         ]
       }
     },
+    "/api/fan/marketing": {
+      "get": {
+        "operationId": "apps_identity_api_get_marketing",
+        "summary": "Get Marketing",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketingConsentOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the caller's current per-channel marketing opt-in state (D8).",
+        "tags": [
+          "fan-signup"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "apps_identity_api_set_marketing",
+        "summary": "Set Marketing",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketingConsentOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Set the caller's per-channel marketing opt-in (settings save, D8).\n\nOptional consent — any combination (including all-off) is valid and never blocks\nservice use. Each channel change appends a durable ConsentRecord audit row. Scope\nis always the authenticated account (never the body).",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketingConsentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/fan/verify/start": {
       "post": {
         "operationId": "apps_identity_api_verify_start",
@@ -11625,6 +11695,54 @@
           "nickname"
         ],
         "title": "FanMeUpdateIn",
+        "type": "object"
+      },
+      "MarketingConsentOut": {
+        "description": "A fan's current per-channel marketing opt-in state (D8, optional consent).\n\n``email`` is reported for forward compatibility but email is not collected yet,\nso the settings UI shows it disabled and the send path never uses it.",
+        "properties": {
+          "push": {
+            "title": "Push",
+            "type": "boolean"
+          },
+          "sms": {
+            "title": "Sms",
+            "type": "boolean"
+          },
+          "email": {
+            "title": "Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "push",
+          "sms",
+          "email"
+        ],
+        "title": "MarketingConsentOut",
+        "type": "object"
+      },
+      "MarketingConsentIn": {
+        "description": "Desired per-channel marketing opt-in (settings save writes all three).",
+        "properties": {
+          "push": {
+            "title": "Push",
+            "type": "boolean"
+          },
+          "sms": {
+            "title": "Sms",
+            "type": "boolean"
+          },
+          "email": {
+            "title": "Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "push",
+          "sms",
+          "email"
+        ],
+        "title": "MarketingConsentIn",
         "type": "object"
       },
       "VerifyConfirmOut": {

@@ -289,7 +289,12 @@ def withdraw_account(account: Account) -> None:
     """
     if account.withdrawn_at is not None:
         return
+    # Lazy import: consent.services imports identity.models, so importing it at
+    # module load would risk an identity<->consent cycle. Resolved per call.
+    from apps.consent.services import clear_marketing_consent
+
     revoke_all_for_account(account, reason="withdrawal")
+    clear_marketing_consent(account)
     account.nickname = ""
     account.auth_subject_hash = ""
     account.is_active = False

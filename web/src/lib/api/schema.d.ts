@@ -1577,6 +1577,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fan/marketing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketing
+         * @description Return the caller's current per-channel marketing opt-in state (D8).
+         */
+        get: operations["apps_identity_api_get_marketing"];
+        /**
+         * Set Marketing
+         * @description Set the caller's per-channel marketing opt-in (settings save, D8).
+         *
+         *     Optional consent — any combination (including all-off) is valid and never blocks
+         *     service use. Each channel change appends a durable ConsentRecord audit row. Scope
+         *     is always the authenticated account (never the body).
+         */
+        put: operations["apps_identity_api_set_marketing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fan/verify/start": {
         parameters: {
             query?: never;
@@ -4607,6 +4635,33 @@ export interface components {
         FanMeUpdateIn: {
             /** Nickname */
             nickname: string;
+        };
+        /**
+         * MarketingConsentOut
+         * @description A fan's current per-channel marketing opt-in state (D8, optional consent).
+         *
+         *     ``email`` is reported for forward compatibility but email is not collected yet,
+         *     so the settings UI shows it disabled and the send path never uses it.
+         */
+        MarketingConsentOut: {
+            /** Push */
+            push: boolean;
+            /** Sms */
+            sms: boolean;
+            /** Email */
+            email: boolean;
+        };
+        /**
+         * MarketingConsentIn
+         * @description Desired per-channel marketing opt-in (settings save writes all three).
+         */
+        MarketingConsentIn: {
+            /** Push */
+            push: boolean;
+            /** Sms */
+            sms: boolean;
+            /** Email */
+            email: boolean;
         };
         /**
          * VerifyConfirmOut
@@ -8759,6 +8814,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    apps_identity_api_get_marketing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketingConsentOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_set_marketing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketingConsentIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketingConsentOut"];
+                };
             };
         };
     };
