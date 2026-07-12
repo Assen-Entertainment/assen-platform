@@ -119,6 +119,16 @@ jobs:
         if: ${{ hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
         working-directory: apps/assen_mobile
         run: flutter build web --no-pub
+      # Regression guard for the mobile release breaker: a release/profile build has
+      # network access ONLY if the MAIN manifest declares INTERNET (the Flutter
+      # template shipped it in the debug manifest only, so release builds could not
+      # reach the API). A build smoke would not catch this (it is a runtime miss), so
+      # assert the permission is present in the committed main manifest.
+      - name: Release manifest declares INTERNET (assen_mobile release-breaker guard)
+        if: ${{ hashFiles('apps/assen_mobile/android/app/src/main/AndroidManifest.xml') != '' }}
+        run: |
+          grep -q 'android.permission.INTERNET' apps/assen_mobile/android/app/src/main/AndroidManifest.xml \
+            || { echo "::error::apps/assen_mobile main AndroidManifest is missing INTERNET — release builds cannot reach the network"; exit 1; }
       - name: Android build smoke (assen_mobile, debug)
         if: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
         working-directory: apps/assen_mobile
