@@ -1,0 +1,62 @@
+name: deploy
+
+# Production deploy — wraps scripts/deploy-prod-ecs.sh (does NOT reimplement it) so the
+# manual laptop deploy becomes a gated, auditable GitHub Actions run.
+#
+# ⚠️ CANNOT RUN until AWS is provisioned (E10 gate) AND the following are configured:
+#   - a GitHub Environment named `production` with required reviewers (manual approval)
+#   - OIDC role secret AWS_ROLE_TO_ASSUME (federated deploy role, no static keys)
+#   - repo variables/secrets for the ASSEN_ECS_* / ASSEN_PROD_* values (terraform outputs)
+# With any of these absent the script fails closed (it `: "${VAR:?}"`-asserts every input).
+#
+# GitOps contract (AGENTS.md): `main` is the production desired state. This is
+# workflow_dispatch-only (deploy is a deliberate, approved action, not every push).
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to roll the ECS services to (defaults to the commit SHA build)."
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC federation to assume the AWS deploy role
+
+jobs:
+  deploy:
+    name: Deploy to ECS (production)
+    runs-on: ubuntu-latest
+    # The production Environment carries the manual-approval gate (required reviewers)
+    # and the deploy secrets/variables. The run pauses here until a reviewer approves.
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+
+      - name: Deploy
+        env:
+          ASSEN_PROD_DEPLOY_APPROVED: "1" # the Environment approval IS the human gate
+          ASSEN_ALLOW_NON_MAIN_PROD_DEPLOY: ${{ github.ref_name == 'main' && '' || '1' }}
+          ASSEN_SKIP_GITHUB_CI_CHECK: "1" # CI is already green to reach main; skip the gh re-check
+          AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+          ASSEN_ECR_REPOSITORY_URI: ${{ vars.ASSEN_ECR_REPOSITORY_URI }}
+          ASSEN_ECS_CLUSTER: ${{ vars.ASSEN_ECS_CLUSTER }}
+          ASSEN_ECS_API_SERVICE: ${{ vars.ASSEN_ECS_API_SERVICE }}
+          ASSEN_ECS_WORKER_SERVICE: ${{ vars.ASSEN_ECS_WORKER_SERVICE }}
+          ASSEN_ECS_BEAT_SERVICE: ${{ vars.ASSEN_ECS_BEAT_SERVICE }}
+          ASSEN_ECS_MIGRATE_TASKDEF: ${{ vars.ASSEN_ECS_MIGRATE_TASKDEF }}
+          ASSEN_ECS_MIGRATE_NETWORK: ${{ vars.ASSEN_ECS_MIGRATE_NETWORK }}
+          ASSEN_PROD_API_URL: ${{ vars.ASSEN_PROD_API_URL }}
+          ASSEN_PROD_IMAGE_TAG: "prod"
+          COMMIT_SHA: ${{ inputs.image_tag != '' && inputs.image_tag || github.sha }}
+        run: scripts/deploy-prod-ecs.sh
