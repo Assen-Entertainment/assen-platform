@@ -75,6 +75,19 @@ ENABLE_MOCK_PUSH: bool = False
 # disposable e2e settings turn it on to exercise the flow.
 ENABLE_SHIPPING_CHECKOUT: bool = False
 
+# Hosted-commerce bridge (apps.commerce_bridge) — the integration seam for a hosted
+# commerce SaaS (Cafe24/아임웹) if the platform adopts the "hosted commerce + custom
+# fan platform" hybrid. OFF by default and hardcoded here (never env in base) so the
+# inbound webhook fails closed (503) unless a deployment deliberately enables it AND
+# supplies a signing secret. Keeping it wired-but-off means BOTH tracks (full custom
+# vs hybrid) stay viable without re-architecting.
+ENABLE_COMMERCE_BRIDGE: bool = False
+
+# HMAC signing secret for inbound hosted-commerce webhooks. Empty → every webhook is
+# rejected (fail-closed), even when ENABLE_COMMERCE_BRIDGE is on. Set per-provider in
+# the deployment env; never committed.
+COMMERCE_BRIDGE_WEBHOOK_SECRET: str = ""
+
 # Per-user rate limiting on the fan write endpoints (follow/like/comment/post,
 # SDLC 09 §4, E11/B4). On by default so dev/prod throttle real traffic; the test
 # suite turns it off (config/settings/test.py) to stay deterministic across the
@@ -158,6 +171,9 @@ LOCAL_APPS = [
     # Saved payment methods (R3): brand + last4 + mock PG token only — never a card
     # PAN/expiry/cvc. Migrated like the rest (`migrate` applies `0001_initial`).
     "apps.payments",
+    # Hosted-commerce bridge — provider-agnostic integration seam (inbound webhook +
+    # external order/settlement records) for a hosted commerce SaaS, fail-closed off.
+    "apps.commerce_bridge",
     # Image uploads (R11): validated image → storage (local FS mock now, S3 후행).
     # Tracks only a server-minted media URL + content-type + owner (no filename/PII).
     # Migrated like the rest (`migrate` applies `0001_initial`).
