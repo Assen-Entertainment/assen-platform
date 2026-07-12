@@ -4,9 +4,11 @@ import 'package:assen_mobile/src/creator/creator_screen.dart';
 import 'package:assen_mobile/src/discovery/discovery_screen.dart';
 import 'package:assen_mobile/src/feed/feed_screen.dart';
 import 'package:assen_mobile/src/login/login_screen.dart';
+import 'package:assen_mobile/src/membership/subscriptions_screen.dart';
 import 'package:assen_mobile/src/mypage/mypage_screen.dart';
 import 'package:assen_mobile/src/notifications/notifications_screen.dart';
 import 'package:assen_mobile/src/onboarding/onboarding_screen.dart';
+import 'package:assen_mobile/src/orders/order_detail_screen.dart';
 import 'package:assen_mobile/src/orders/orders_screen.dart';
 import 'package:assen_mobile/src/post/post_screen.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
@@ -50,6 +52,12 @@ abstract final class RoutePaths {
 
   /// The signed-in fan's own orders (reached from the 마이 tab).
   static const String orders = '/orders';
+
+  /// Builds the order-detail location for [id] (reached from the orders list).
+  static String orderDetail(String id) => '/orders/$id';
+
+  /// The 내 구독 (subscriptions) screen (reached from the 마이 tab).
+  static const String subscriptions = '/mypage/subscriptions';
 
   /// The creator owner's studio dashboard (reached from the 마이 tab).
   static const String studio = '/studio';
@@ -187,6 +195,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.orders,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const OrdersScreen(),
+      ),
+      GoRoute(
+        path: '/orders/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            OrderDetailScreen(orderId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: RoutePaths.subscriptions,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SubscriptionsScreen(),
       ),
       GoRoute(
         path: RoutePaths.studio,

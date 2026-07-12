@@ -100,6 +100,11 @@ class _MyPageBody extends ConsumerWidget {
           onTap: () => context.go(RoutePaths.orders),
         ),
         AssenListItem(
+          title: '내 구독',
+          leading: Icon(Icons.card_membership_outlined, color: colors.ink600),
+          onTap: () => context.push(RoutePaths.subscriptions),
+        ),
+        AssenListItem(
           title: '스튜디오',
           leading: Icon(Icons.dashboard_outlined, color: colors.ink600),
           onTap: () => context.go(RoutePaths.studio),
