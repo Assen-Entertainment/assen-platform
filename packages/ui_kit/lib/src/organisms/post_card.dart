@@ -12,11 +12,12 @@ import 'package:flutter/material.dart';
 /// supplies the avatar widget and pre-formats every string; every colour,
 /// spacing and radius is a token.
 ///
-/// Browse-only (partial parity with the web card): the like/comment affordances
-/// render as *static counts*, not buttons — there is no `onLike`/`onComment`
-/// here. Interaction (liking, commenting) is an auth/payment gate not built on
-/// mobile yet; [onTap] navigates to the post detail. [liked] only tints the
-/// heart to reflect the caller's existing like state.
+/// The comment affordance renders as a *static count*; the like affordance is a
+/// static count too **until** an [onLike] handler is supplied, at which point
+/// the heart becomes a tappable like/unlike button (announced as such to screen
+/// readers). Liking is auth-gated, so a signed-out host omits [onLike] and the
+/// heart stays a display-only count; [onTap] navigates to the post detail and
+/// [liked] tints the heart to reflect the caller's existing like state.
 class AssenPostCard extends StatelessWidget {
   /// Creates a post card for [creatorName].
   ///
@@ -25,7 +26,8 @@ class AssenPostCard extends StatelessWidget {
   /// [verified] shows an inline verified mark after the name; [body] is the
   /// post
   /// text; [media] fills the media banner; [likeCount]/[commentCount] render as
-  /// static counts and [liked] tints the heart. Pass [onTap] to open the post.
+  /// counts and [liked] tints the heart. Pass [onLike] to make the heart a
+  /// like/unlike button, and [onTap] to open the post.
   const AssenPostCard({
     required this.creatorName,
     this.avatar,
@@ -37,6 +39,7 @@ class AssenPostCard extends StatelessWidget {
     this.likeCount = 0,
     this.commentCount = 0,
     this.liked = false,
+    this.onLike,
     this.onTap,
     super.key,
   });
@@ -68,8 +71,12 @@ class AssenPostCard extends StatelessWidget {
   /// The comment count shown in the footer (static — not a button).
   final int commentCount;
 
-  /// Whether the caller has liked this post — tints the heart only.
+  /// Whether the caller has liked this post — tints the heart.
   final bool liked;
+
+  /// Optional like/unlike handler. When set, the heart becomes a tappable
+  /// button (announced as one); when null the heart is a display-only count.
+  final VoidCallback? onLike;
 
   /// Optional tap handler; when set the whole card opens the post.
   final VoidCallback? onTap;
@@ -121,6 +128,7 @@ class AssenPostCard extends StatelessWidget {
             likeCount: likeCount,
             commentCount: commentCount,
             liked: liked,
+            onLike: onLike,
           ),
         ],
       ),
@@ -232,36 +240,63 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// The static like/comment count footer (display-only — no interaction).
+/// The like/comment count footer. The comment side is display-only; the like
+/// side is a tappable like/unlike button when [onLike] is set, else a static
+/// count.
 class _CountFooter extends StatelessWidget {
   const _CountFooter({
     required this.colors,
     required this.likeCount,
     required this.commentCount,
     required this.liked,
+    required this.onLike,
   });
 
   final AssenColors colors;
   final int likeCount;
   final int commentCount;
   final bool liked;
+  final VoidCallback? onLike;
 
   @override
   Widget build(BuildContext context) {
+    // The icon + number, hidden from the reader so the wrapping Semantics owns
+    // the single "좋아요 128" phrase (avoids a duplicate icon/number readout).
+    final likeVisual = ExcludeSemantics(
+      child: _Count(
+        icon: liked ? Icons.favorite : Icons.favorite_border,
+        iconColor: liked ? colors.indigo500 : colors.ink500,
+        label: '$likeCount',
+        colors: colors,
+      ),
+    );
+
     return Row(
       children: [
-        // Merge the icon + number into one screen-reader phrase ("좋아요 128").
-        Semantics(
-          label: '좋아요 $likeCount',
-          child: ExcludeSemantics(
-            child: _Count(
-              icon: liked ? Icons.favorite : Icons.favorite_border,
-              iconColor: liked ? colors.indigo500 : colors.ink500,
-              label: '$likeCount',
-              colors: colors,
+        if (onLike == null)
+          Semantics(label: '좋아요 $likeCount', child: likeVisual)
+        else
+          // MergeSemantics folds the InkWell's tap action and the label/button
+          // flag onto one node, so the heart reads as a single labelled button.
+          MergeSemantics(
+            child: Semantics(
+              label: liked ? '좋아요 취소 $likeCount' : '좋아요 $likeCount',
+              button: true,
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: onLike,
+                  borderRadius: const BorderRadius.all(
+                    Radius.circular(RadiusTokens.md),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(SpacingTokens.s2),
+                    child: likeVisual,
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
         const SizedBox(width: SpacingTokens.s5),
         Semantics(
           label: '댓글 $commentCount',

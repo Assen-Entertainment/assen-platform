@@ -30,6 +30,12 @@ class _FakeCreatorRepository implements CreatorRepository {
     if (error != null) throw error;
     return _creator!;
   }
+
+  @override
+  Future<FollowState> setFollow(
+    String handle, {
+    required bool following,
+  }) async => (following: following, followers: _creator?.followers ?? 0);
 }
 
 /// A membership repository stand-in reporting no tiers, so the profile's

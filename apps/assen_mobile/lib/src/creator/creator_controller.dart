@@ -23,6 +23,10 @@ class CreatorController extends AsyncNotifier<Creator>
   /// The @-handle whose profile this controller loads.
   final String handle;
 
+  /// Guards against overlapping follow toggles (a double-tap): a second toggle
+  /// is ignored until the first resolves, so the optimistic count can't drift.
+  bool _followInFlight = false;
+
   @override
   Future<Creator> build() {
     return ref.watch(creatorRepositoryProvider).fetchCreator(handle);
@@ -31,6 +35,44 @@ class CreatorController extends AsyncNotifier<Creator>
   @override
   Future<Creator> fetch() =>
       ref.read(creatorRepositoryProvider).fetchCreator(handle);
+
+  /// Toggles the caller's follow on this creator, optimistically.
+  ///
+  /// Flips [Creator.following] and nudges [Creator.followers] at once so the
+  /// button responds without waiting on the network, then reconciles with the
+  /// server's authoritative `{following, followers}` — or rolls back to the
+  /// pre-toggle profile if the write fails. A no-op while the profile is still
+  /// loading or errored, or while a previous toggle is still in flight.
+  Future<void> toggleFollow() async {
+    final current = state.value;
+    if (current == null || _followInFlight) return;
+    _followInFlight = true;
+    final target = !current.following;
+    final delta = target ? 1 : -1;
+    final nextFollowers = current.followers + delta < 0
+        ? 0
+        : current.followers + delta;
+    state = AsyncData(
+      current.copyWith(following: target, followers: nextFollowers),
+    );
+    try {
+      final result = await ref
+          .read(creatorRepositoryProvider)
+          .setFollow(handle, following: target);
+      // Reconcile against the server's fresh follower count.
+      state = AsyncData(
+        current.copyWith(
+          following: result.following,
+          followers: result.followers,
+        ),
+      );
+    } on Object {
+      // The write failed: restore the pre-toggle profile.
+      state = AsyncData(current);
+    } finally {
+      _followInFlight = false;
+    }
+  }
 }
 
 /// Exposes each creator profile's [AsyncValue], keyed by handle.

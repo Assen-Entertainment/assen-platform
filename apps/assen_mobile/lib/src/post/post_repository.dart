@@ -22,6 +22,14 @@ class PostNotFoundException implements Exception {
   String toString() => 'PostNotFoundException($postId)';
 }
 
+/// The like state a like/unlike toggle resolves to: the server's fresh truth.
+///
+/// A tiny record (not a model) carrying just the two fields
+/// `PUT|DELETE /api/posts/{id}/like` answers with (`{liked, like_count}`), so
+/// the controller can reconcile its optimistic flip against the authoritative
+/// count.
+typedef LikeState = ({bool liked, int likeCount});
+
 /// Fetches a single post and its comments from the backend.
 ///
 /// A thin repository over [Dio] owning the endpoint paths and the JSON→model
@@ -75,6 +83,55 @@ class PostRepository {
       return items
           .map((item) => Comment.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        throw PostNotFoundException(postId);
+      }
+      rethrow;
+    }
+  }
+
+  /// Likes or unlikes a post via `PUT`/`DELETE /api/posts/{id}/like`.
+  ///
+  /// [liked] true sends the PUT (like), false the DELETE (unlike); both are
+  /// idempotent server-side and answer `{liked, like_count}`, returned here as
+  /// the authoritative [LikeState] the controller reconciles against. A 404
+  /// (an unknown or 19+-gated post) is translated into a
+  /// [PostNotFoundException]; other transport errors (e.g. a 422 personal-block
+  /// refusal) propagate for the caller to surface.
+  Future<LikeState> setLike(String postId, {required bool liked}) async {
+    final path = '/api/posts/${Uri.encodeComponent(postId)}/like';
+    try {
+      final response = liked
+          ? await _dio.put<Map<String, dynamic>>(path)
+          : await _dio.delete<Map<String, dynamic>>(path);
+      final body = response.data ?? const <String, dynamic>{};
+      return (
+        liked: requireBool(body, 'liked'),
+        likeCount: requireInt(body, 'like_count'),
+      );
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        throw PostNotFoundException(postId);
+      }
+      rethrow;
+    }
+  }
+
+  /// Adds a comment to a post via `POST /api/posts/{id}/comments`.
+  ///
+  /// Sends `{body}` and maps the returned `CommentOut` (HTTP 201) into a
+  /// [Comment] the controller appends to the thread. A 404 (an unknown or
+  /// gated post) is translated into a [PostNotFoundException]; other transport
+  /// errors (e.g. a 422 personal-block refusal) propagate for the caller to
+  /// surface.
+  Future<Comment> addComment(String postId, String body) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/posts/${Uri.encodeComponent(postId)}/comments',
+        data: <String, dynamic>{'body': body},
+      );
+      return Comment.fromJson(response.data ?? const <String, dynamic>{});
     } on DioException catch (error) {
       if (error.response?.statusCode == 404) {
         throw PostNotFoundException(postId);

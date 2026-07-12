@@ -37,6 +37,24 @@ class _FakePostRepository implements PostRepository {
     if (_notFound) throw PostNotFoundException(postId);
     return _comments;
   }
+
+  @override
+  Future<LikeState> setLike(String postId, {required bool liked}) async {
+    if (_notFound) throw PostNotFoundException(postId);
+    return (liked: liked, likeCount: _post!.likeCount + (liked ? 1 : 0));
+  }
+
+  @override
+  Future<Comment> addComment(String postId, String body) async {
+    if (_notFound) throw PostNotFoundException(postId);
+    return Comment(
+      id: 'c-new',
+      postId: postId,
+      author: '나',
+      body: body,
+      createdAt: DateTime(2026, 7, 11),
+    );
+  }
 }
 
 Map<String, dynamic> _commentRow() => {

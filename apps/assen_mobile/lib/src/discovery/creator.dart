@@ -121,4 +121,28 @@ class Creator {
   /// returns the row instead of a 404); the profile screen renders a blocked
   /// state rather than the creator's content when it is true.
   final bool blocked;
+
+  /// Returns a copy with the follow-affected fields overridden.
+  ///
+  /// Only [following] and [followers] — the fields a follow toggle mutates —
+  /// are parameterised, so the profile controller can apply an optimistic
+  /// follow (and reconcile it with the server's fresh follower count) without
+  /// rebuilding the whole profile.
+  Creator copyWith({bool? following, int? followers}) {
+    return Creator(
+      id: id,
+      handle: handle,
+      displayName: displayName,
+      category: category,
+      avatarUrl: avatarUrl,
+      bio: bio,
+      coverUrl: coverUrl,
+      accentColor: accentColor,
+      verified: verified,
+      followers: followers ?? this.followers,
+      posts: posts,
+      following: following ?? this.following,
+      blocked: blocked,
+    );
+  }
 }
