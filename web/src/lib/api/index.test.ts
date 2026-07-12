@@ -11,6 +11,8 @@ import {
   getNotifications,
   getSubscriptions,
   getBlocks,
+  getMarketingConsent,
+  setMarketingConsent,
   getCreator,
   getStudioStats,
   mockSetBlocked,
@@ -115,5 +117,13 @@ describe("차단 mock (R4-W3)", () => {
     mockSetBlocked("c1", false);
     expect(await getBlocks()).toEqual([]);
     expect((await getCreator("stellar"))?.blocked).toBe(false);
+  });
+});
+
+describe("마케팅 수신 동의 (D8) mock", () => {
+  it("mock 폴백은 전부 off로 시작하고, setMarketingConsent는 입력 상태를 그대로 반영한다", async () => {
+    expect(await getMarketingConsent()).toEqual({ push: false, sms: false, email: false });
+    const saved = await setMarketingConsent({ push: true, sms: false, email: false });
+    expect(saved).toEqual({ push: true, sms: false, email: false });
   });
 });

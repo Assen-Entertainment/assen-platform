@@ -12,6 +12,7 @@ import type {
   Comment,
   Creator,
   CreatorSort,
+  MarketingConsentState,
   MembershipTier,
   Notification,
   NotificationKind,
@@ -700,6 +701,35 @@ export async function getBlocks(): Promise<BlockedCreator[]> {
     name: c.name,
     handle: c.handle,
   }));
+}
+
+/** 내 마케팅 수신 동의(채널별, D8) — USE_API면 GET /fan/marketing, 401(비로그인)은 전부 off(fail-closed). */
+export async function getMarketingConsent(): Promise<MarketingConsentState> {
+  if (USE_API) {
+    try {
+      const raw = await apiFetch<components["schemas"]["MarketingConsentOut"]>("/fan/marketing");
+      return { push: raw.push, sms: raw.sms, email: raw.email };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { push: false, sms: false, email: false };
+      throw e;
+    }
+  }
+  // mock 폴백(오프라인·데모): 서버가 없어 저장되지 않으니 전부 off로 시작한다.
+  return { push: false, sms: false, email: false };
+}
+
+/** 마케팅 수신 동의 저장 — PUT /fan/marketing(채널 전체 상태). mock은 입력을 그대로 반영(비영속). */
+export async function setMarketingConsent(
+  state: MarketingConsentState,
+): Promise<MarketingConsentState> {
+  if (USE_API) {
+    const raw = await apiFetch<components["schemas"]["MarketingConsentOut"]>("/fan/marketing", {
+      method: "PUT",
+      body: JSON.stringify(state satisfies components["schemas"]["MarketingConsentIn"]),
+    });
+    return { push: raw.push, sms: raw.sms, email: raw.email };
+  }
+  return state;
 }
 
 // --- 뮤테이션 API(실 호출 전용 — queries.ts가 USE_API로 분기해 호출) ----------

@@ -25,6 +25,8 @@ import {
   getNotificationsPage,
   getSubscriptions,
   getBlocks,
+  getMarketingConsent,
+  setMarketingConsent,
   mockSetBlocked,
   type Page,
   apiToggleFollow,
@@ -71,7 +73,7 @@ import {
   type StudioTierUpdate,
   type StudioProfileUpdate,
 } from "./index";
-import type { Creator, CreatorSort, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, ShippingAddress, BlockedCreator, StudioStats } from "./types";
+import type { Creator, CreatorSort, Post, Comment, Product, Order, Notification, Subscription, SavedPaymentMethod, ShippingAddress, BlockedCreator, MarketingConsentState, StudioStats } from "./types";
 import type { StudioProduct, StudioTier } from "@/lib/studio-mock";
 import { emitNotificationRead, emitAllNotificationsRead } from "./notification-events";
 import { track } from "@/lib/analytics";
@@ -174,6 +176,7 @@ export const qk = {
   notifications: ["notifications"] as const,
   subscriptions: ["subscriptions"] as const,
   blocks: ["blocks"] as const,
+  marketing: ["marketing"] as const,
   capabilities: ["capabilities"] as const,
   paymentMethods: ["payment-methods"] as const,
   studioStats: ["studio-stats"] as const,
@@ -801,6 +804,23 @@ export function useReport() {
 /** 내 차단 목록(설정 차단 화면). */
 export function useBlocks() {
   return useQuery({ queryKey: qk.blocks, queryFn: getBlocks });
+}
+
+// --- 마케팅 수신 동의(D8) — 채널별 opt-in 설정 --------------------------------
+/** 내 마케팅 수신 동의(설정 화면). 비로그인/오프라인은 전부 off(fail-closed). */
+export function useMarketingConsent() {
+  return useQuery({ queryKey: qk.marketing, queryFn: getMarketingConsent });
+}
+
+/** 마케팅 수신 동의 저장(채널 전체 상태) — 성공 시 캐시를 서버 응답으로 갱신. */
+export function useSetMarketingConsent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (state: MarketingConsentState) => setMarketingConsent(state),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.marketing, data);
+    },
+  });
 }
 
 /**
