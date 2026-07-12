@@ -130,13 +130,17 @@ jobs:
   # (android 스모크의 이벤트 게이팅을 따르되 pull_request는 제외). 이로써 감사가 지적한
   # "Flutter 3-target CI: web+Android debug만, iOS 없음"(ASS-294) 갭을 닫는다. --no-codesign은
   # 서명 인증서 없이 컴파일/링크만 검증한다.
-  # ★이력: 이전엔 private 레포의 org 러너 정책이 macos-latest를 불허해 워크플로가 startup에서
-  # 통째로 거부됐다(잡 0개). 레포를 public으로 전환하면서 macOS 러너가 열려 재도입한다.
-  # ★규칙: ci.yml 변경은 base가 dev/main인 PR에서만 검증되므로 스택 PR로 우회하지 말 것.
+  # ★이력: 처음 추가됐을 때 워크플로가 startup에서 통째로 거부됐다(잡 0개). 진짜 원인은
+  # macOS 정책이 아니라 이 잡의 job-level `if:`가 hashFiles()를 호출한 것 — hashFiles는
+  # step 컨텍스트 전용이라 job-level if에선 파싱 실패한다. if를 이벤트 체크만으로 고쳐 재도입.
+  # ★규칙: ci.yml 변경은 base가 dev/main인 PR에서만 검증되므로(workflow_dispatch로 실증) 스택 PR로 우회하지 말 것.
   flutter-ios:
     name: Flutter iOS build smoke (assen_mobile, no-codesign)
     runs-on: macos-latest
-    if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
+    # job-level `if:` can't call hashFiles() (step-context only) — that invalid
+    # expression is what made the workflow fail to start when this job was first
+    # added. assen_mobile always exists, so gate on the event only.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
