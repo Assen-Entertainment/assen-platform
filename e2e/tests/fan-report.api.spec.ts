@@ -23,7 +23,7 @@ async function signupFan(
 ): Promise<string> {
   await request.post('/api/fan/signup/otp', { data: { phone } });
   const signup = await request.post('/api/fan/signup', {
-    data: { phone, otp_code: codeFor(phone), nickname, consent_terms: true, consent_privacy: true },
+    data: { phone, otp_code: codeFor(phone), nickname, consent_terms: true, consent_privacy: true, age_over_14: true },
   });
   expect(signup.status()).toBe(200);
   const token = (await signup.json()).access_token as string;

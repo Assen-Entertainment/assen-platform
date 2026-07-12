@@ -44,6 +44,8 @@ export interface SignupInput {
   nickname: string;
   consentTerms: boolean;
   consentPrivacy: boolean;
+  /** 만 14세 이상 확인(D5). 서버는 미전송을 fail-closed로 거부(SignupIn 기본 false). */
+  ageOver14: boolean;
 }
 
 interface SessionContextValue {
@@ -237,6 +239,7 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
           nickname: input.nickname,
           consent_terms: input.consentTerms,
           consent_privacy: input.consentPrivacy,
+          age_over_14: input.ageOver14,
           web: true,
         }),
       });

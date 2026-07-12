@@ -1550,6 +1550,61 @@ export interface paths {
         patch: operations["apps_identity_api_update_me"];
         trace?: never;
     };
+    "/api/fan/account/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw
+         * @description Withdraw (탈퇴) the authenticated fan's account and end the session.
+         *
+         *     Privacy decisions 2026-07-12 (D3): anonymises the account in place (clears
+         *     nickname + phone hash, sets is_active False, stamps withdrawn_at) and revokes
+         *     every token family, then clears the web auth cookies so the browser is logged
+         *     out. The scope is always the authenticated account (never the body), so a fan can
+         *     only withdraw their own account. Idempotent at the service layer. Legal-hold
+         *     transaction/dispute records stay linked to the now-pseudonymous fan_id.
+         */
+        post: operations["apps_identity_api_withdraw"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/marketing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketing
+         * @description Return the caller's current per-channel marketing opt-in state (D8).
+         */
+        get: operations["apps_identity_api_get_marketing"];
+        /**
+         * Set Marketing
+         * @description Set the caller's per-channel marketing opt-in (settings save, D8).
+         *
+         *     Optional consent — any combination (including all-off) is valid and never blocks
+         *     service use. Each channel change appends a durable ConsentRecord audit row. Scope
+         *     is always the authenticated account (never the body).
+         */
+        put: operations["apps_identity_api_set_marketing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fan/verify/start": {
         parameters: {
             query?: never;
@@ -4498,6 +4553,11 @@ export interface components {
             /** Consent Privacy */
             consent_privacy: boolean;
             /**
+             * Age Over 14
+             * @default false
+             */
+            age_over_14: boolean;
+            /**
              * Web
              * @default false
              */
@@ -4575,6 +4635,33 @@ export interface components {
         FanMeUpdateIn: {
             /** Nickname */
             nickname: string;
+        };
+        /**
+         * MarketingConsentOut
+         * @description A fan's current per-channel marketing opt-in state (D8, optional consent).
+         *
+         *     ``email`` is reported for forward compatibility but email is not collected yet,
+         *     so the settings UI shows it disabled and the send path never uses it.
+         */
+        MarketingConsentOut: {
+            /** Push */
+            push: boolean;
+            /** Sms */
+            sms: boolean;
+            /** Email */
+            email: boolean;
+        };
+        /**
+         * MarketingConsentIn
+         * @description Desired per-channel marketing opt-in (settings save writes all three).
+         */
+        MarketingConsentIn: {
+            /** Push */
+            push: boolean;
+            /** Sms */
+            sms: boolean;
+            /** Email */
+            email: boolean;
         };
         /**
          * VerifyConfirmOut
@@ -8708,6 +8795,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FanMeOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_withdraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apps_identity_api_get_marketing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketingConsentOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_set_marketing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketingConsentIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketingConsentOut"];
                 };
             };
         };

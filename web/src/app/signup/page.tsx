@@ -42,7 +42,9 @@ function OtpSignup() {
   const [consent, setConsent] = React.useState<string[]>([]);
   const [step, setStep] = React.useState<"phone" | "form">("phone");
   const [busy, setBusy] = React.useState(false);
-  const requiredConsent = consent.includes("tos") && consent.includes("priv");
+  // 만 14세 이상(age14)도 필수(D5) — tos/priv와 함께 확인돼야 가입 가능.
+  const requiredConsent =
+    consent.includes("tos") && consent.includes("priv") && consent.includes("age14");
   const canSubmit = otp.length >= 6 && nickname.trim().length > 0 && requiredConsent && !busy;
 
   const sendOtp = async () => {
@@ -69,6 +71,7 @@ function OtpSignup() {
         nickname: nickname.trim(),
         consentTerms: true,
         consentPrivacy: true,
+        ageOver14: true,
       });
       router.push(next);
     } catch {
@@ -122,6 +125,7 @@ function OtpSignup() {
               items={[
                 { id: "tos", label: "이용약관 동의", required: true },
                 { id: "priv", label: "개인정보 처리방침", required: true },
+                { id: "age14", label: "만 14세 이상입니다", required: true },
                 { id: "mkt", label: "마케팅 수신(선택)" },
               ]}
               value={consent}
@@ -153,7 +157,8 @@ function MockSignup() {
   const searchParams = useSearchParams();
   const next = sanitizeNext(searchParams.get("next"));
   const [consent, setConsent] = React.useState<string[]>([]);
-  const required = consent.includes("tos") && consent.includes("priv");
+  const required =
+    consent.includes("tos") && consent.includes("priv") && consent.includes("age14");
 
   const onSignup = () => {
     if (!required) return; // 필수 약관 미동의 시 진행 불가
@@ -164,13 +169,14 @@ function MockSignup() {
   return (
     <AuthShell subtitle="몇 초면 끝나요 — Assen에 오신 걸 환영해요">
         <h2 className="text-title-l text-on-surface">회원가입</h2>
-        <TextField label="이름" placeholder="홍길동" />
-        <TextField label="이메일" type="email" placeholder="you@assen.kr" />
-        <TextField label="비밀번호" type="password" placeholder="••••••••" />
+        {/* 실제 수집 항목과 일치(전화·닉네임)로 표기 — 이메일/비밀번호는 수집하지 않는다. */}
+        <TextField label="휴대폰 번호" type="tel" inputMode="numeric" placeholder="01012345678" />
+        <TextField label="닉네임" placeholder="사용할 닉네임" />
         <ConsentGroup
           items={[
             { id: "tos", label: "이용약관 동의", required: true },
             { id: "priv", label: "개인정보 처리방침", required: true },
+            { id: "age14", label: "만 14세 이상입니다", required: true },
             { id: "mkt", label: "마케팅 수신(선택)" },
           ]}
           value={consent}

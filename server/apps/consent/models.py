@@ -55,3 +55,48 @@ class ConsentRecord(models.Model):
     def __str__(self) -> str:
         """Summarise the grant for admin/log display."""
         return f"consent:{self.account_id}:{self.kind}@{self.version}"
+
+
+class MarketingChannel(models.TextChoices):
+    """The channels a fan can opt into for marketing messages (D8, 2026-07-12).
+
+    Marketing consent is per-channel (채널별 분리) and optional — refusing any/all
+    never blocks service use. ``email`` is listed for forward compatibility even
+    though email is not collected yet (the settings UI shows it disabled).
+    """
+
+    PUSH = "push", "push"
+    SMS = "sms", "sms"
+    EMAIL = "email", "email"
+
+
+class MarketingConsent(models.Model):
+    """A fan's current opt-in state for one marketing channel (D8).
+
+    Unlike the append-only :class:`ConsentRecord` audit trail, this is the *current*
+    state the send-time gate reads: one upserted row per (account, channel) holding
+    the live ``enabled`` flag. Each change also appends a ``ConsentRecord`` (kind
+    ``marketing``, version ``marketing:<channel>:<on|off>``) so the grant/withdraw
+    history stays durable. Absence of a row means not opted in (fail-closed).
+    """
+
+    account = models.ForeignKey(
+        "identity.Account",
+        on_delete=models.CASCADE,
+        related_name="marketing_consents",
+    )
+    channel = models.CharField(max_length=16, choices=MarketingChannel.choices)
+    enabled = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "channel"], name="uniq_marketing_channel"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        """Summarise the channel state for admin/log display."""
+        state = "on" if self.enabled else "off"
+        return f"marketing:{self.account_id}:{self.channel}={state}"

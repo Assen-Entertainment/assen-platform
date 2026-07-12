@@ -41,7 +41,7 @@ from ninja.utils import check_csrf
 from pydantic import Field
 
 from apps.consent.models import ConsentKind
-from apps.consent.services import record_consent
+from apps.consent.services import marketing_consent_state, record_consent, set_marketing_consent
 from apps.identity.auth import access_token_from_request, authed, fan_auth
 from apps.identity.cookies import (
     ACCESS_COOKIE_NAME,
@@ -57,6 +57,7 @@ from apps.identity.services import (
     revoke_family_for_access,
     revoke_family_for_refresh,
     rotate_refresh_token,
+    withdraw_account,
 )
 from apps.identity.signup_services import (
     SignupError,
@@ -136,6 +137,10 @@ class SignupIn(Schema):
     nickname: str = Field(min_length=1, max_length=40)
     consent_terms: bool
     consent_privacy: bool
+    # 만 14세 이상 확인(D5, 2026-07-12 privacy decisions). Fail-closed default: an
+    # omitted field is treated as "not confirmed" → the service rejects with
+    # UNDERAGE. The web sends the explicit checkbox value.
+    age_over_14: bool = False
     web: bool = False
 
 
@@ -220,6 +225,26 @@ class MembershipCardOut(Schema):
     visit_count: int
     points: int
     coupons: int
+
+
+class MarketingConsentOut(Schema):
+    """A fan's current per-channel marketing opt-in state (D8, optional consent).
+
+    ``email`` is reported for forward compatibility but email is not collected yet,
+    so the settings UI shows it disabled and the send path never uses it.
+    """
+
+    push: bool
+    sms: bool
+    email: bool
+
+
+class MarketingConsentIn(Schema):
+    """Desired per-channel marketing opt-in (settings save writes all three)."""
+
+    push: bool
+    sms: bool
+    email: bool
 
 
 def _deliver_token_pair(
@@ -310,6 +335,7 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
             nickname=data.nickname,
             consent_terms=data.consent_terms,
             consent_privacy=data.consent_privacy,
+            age_over_14=data.age_over_14,
             otp_code=data.otp_code,
             otp_sender=sender,
         )
@@ -477,6 +503,51 @@ def update_me(request: HttpRequest, data: FanMeUpdateIn) -> FanMeOut:
     account.nickname = data.nickname
     account.save(update_fields=["nickname"])
     return _fan_me_out(account)
+
+
+@router.post(
+    "/account/withdraw", auth=fan_auth, throttle=user_write_throttle("3/min")
+)
+def withdraw(request: HttpRequest, response: HttpResponse) -> dict[str, str]:
+    """Withdraw (탈퇴) the authenticated fan's account and end the session.
+
+    Privacy decisions 2026-07-12 (D3): anonymises the account in place (clears
+    nickname + phone hash, sets is_active False, stamps withdrawn_at) and revokes
+    every token family, then clears the web auth cookies so the browser is logged
+    out. The scope is always the authenticated account (never the body), so a fan can
+    only withdraw their own account. Idempotent at the service layer. Legal-hold
+    transaction/dispute records stay linked to the now-pseudonymous fan_id.
+    """
+    withdraw_account(authed(request))
+    clear_auth_cookie(response, name=ACCESS_COOKIE_NAME)
+    clear_auth_cookie(response, name=REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
+    return {"status": "withdrawn"}
+
+
+@router.get("/marketing", response=MarketingConsentOut, auth=fan_auth)
+def get_marketing(request: HttpRequest) -> MarketingConsentOut:
+    """Return the caller's current per-channel marketing opt-in state (D8)."""
+    return MarketingConsentOut(**marketing_consent_state(authed(request)))
+
+
+@router.put(
+    "/marketing",
+    response=MarketingConsentOut,
+    auth=fan_auth,
+    throttle=user_write_throttle("12/min"),
+)
+def set_marketing(request: HttpRequest, data: MarketingConsentIn) -> MarketingConsentOut:
+    """Set the caller's per-channel marketing opt-in (settings save, D8).
+
+    Optional consent — any combination (including all-off) is valid and never blocks
+    service use. Each channel change appends a durable ConsentRecord audit row. Scope
+    is always the authenticated account (never the body).
+    """
+    account = authed(request)
+    set_marketing_consent(account=account, channel="push", enabled=data.push)
+    set_marketing_consent(account=account, channel="sms", enabled=data.sms)
+    set_marketing_consent(account=account, channel="email", enabled=data.email)
+    return MarketingConsentOut(**marketing_consent_state(account))
 
 
 @router.post(
