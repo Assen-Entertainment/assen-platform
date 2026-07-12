@@ -124,13 +124,51 @@ jobs:
         working-directory: apps/assen_mobile
         run: flutter build apk --debug --no-pub
 
-  # iOS 빌드 스모크(macos-latest) 잡은 되돌렸다: dev 병합 후 ci.yml이 startup에서 통째로
-  # 거부됐다(잡 0개·실패, if 게이트와 무관 — GitHub은 startup에 러너 라벨을 검증한다).
-  # YAML/구조는 유효하고 유일한 차이가 runs-on: macos-latest이므로, 가장 유력한 원인은
-  # 이 private 레포의 org Actions 러너 정책이 macOS 러너를 불허하는 것. ASS-294의
-  # 빌드타임 assertion + 핸드셰이크 스모크(apps/assen_mobile)는 유지된다. iOS CI 레인은
-  # org의 macOS 러너 허용을 확인/활성화한 뒤 재도입한다(인프라 게이트).
-  # ★교훈: ci.yml 변경은 base가 dev/main인 PR에서만 검증되므로 스택 PR로 우회하지 말 것.
+  # iOS 빌드 스모크(assen_mobile) — iOS 빌드는 macOS 러너 필수라 위 ubuntu `flutter` 잡에
+  # 넣을 수 없어 별도 잡(runs-on: macos-latest)으로 분리한다. macOS 러너는 포함 분(minutes)을
+  # 약 10배 소모하므로 매 PR/push엔 돌리지 않고 수동 dispatch 또는 주간 schedule에서만 돈다
+  # (android 스모크의 이벤트 게이팅을 따르되 pull_request는 제외). 이로써 감사가 지적한
+  # "Flutter 3-target CI: web+Android debug만, iOS 없음"(ASS-294) 갭을 닫는다. --no-codesign은
+  # 서명 인증서 없이 컴파일/링크만 검증한다.
+  # ★이력: 처음 추가됐을 때 워크플로가 startup에서 통째로 거부됐다(잡 0개). 진짜 원인은
+  # macOS 정책이 아니라 이 잡의 job-level `if:`가 hashFiles()를 호출한 것 — hashFiles는
+  # step 컨텍스트 전용이라 job-level if에선 파싱 실패한다. if를 이벤트 체크만으로 고쳐 재도입.
+  # ★규칙: ci.yml 변경은 base가 dev/main인 PR에서만 검증되므로(workflow_dispatch로 실증) 스택 PR로 우회하지 말 것.
+  flutter-ios:
+    name: Flutter iOS build smoke (assen_mobile, no-codesign)
+    runs-on: macos-latest
+    # job-level `if:` can't call hashFiles() (step-context only) — that invalid
+    # expression is what made the workflow fail to start when this job was first
+    # added. assen_mobile always exists, so gate on the event only.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Cache pub-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: pub-cache-${{ runner.os }}-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: pub-cache-${{ runner.os }}-
+      - name: Bootstrap workspace
+        run: dart pub get
+      # iOS는 Swift Package Manager로 Flutter 플러그인을 등재한다. `flutter build ios
+      # --no-pub`은 pub get을 건너뛰어, flutter 툴이 pub get 중 생성하는
+      # ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage(플러그인 SPM
+      # manifest)가 없어 xcodebuild의 SPM 해석이 실패한다("Could not resolve package
+      # dependencies ... FlutterGeneratedPluginSwiftPackage doesn't exist"). web/android
+      # 스모크는 이 패키지가 불필요해 --no-pub로 충분하지만, iOS는 앱 디렉터리 레벨
+      # `flutter pub get`으로 SPM 패키지를 먼저 생성해야 한다(상위 `dart pub get`은
+      # Dart 워크스페이스만 해석하고 flutter 플러그인 SPM 아티팩트는 만들지 않는다).
+      - name: Generate iOS plugin SPM package (flutter pub get)
+        working-directory: apps/assen_mobile
+        run: flutter pub get
+      - name: iOS build smoke (assen_mobile, no-codesign)
+        working-directory: apps/assen_mobile
+        run: flutter build ios --no-codesign --no-pub
 
   compose:
     name: docker compose validate + boot smoke
