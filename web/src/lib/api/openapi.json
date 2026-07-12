@@ -1761,6 +1761,32 @@
         ]
       }
     },
+    "/api/integrations/commerce/{provider}/webhook": {
+      "post": {
+        "operationId": "apps_commerce_bridge_api_commerce_webhook",
+        "summary": "Commerce Webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Receive a hosted-commerce provider webhook. Fail-closed + signature-verified.\n\n503 when the bridge is disabled/unconfigured; 401 on a bad signature; 400 for an\nunsupported provider/event; 200 otherwise. The raw body is read for the HMAC check\nbefore any parsing.",
+        "tags": [
+          "commerce-bridge"
+        ]
+      }
+    },
     "/api/posts": {
       "get": {
         "operationId": "apps_content_api_list_posts",

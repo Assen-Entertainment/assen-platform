@@ -103,6 +103,7 @@ from apps.admin_rbac import api as admin_rbac_api  # noqa: E402,F401
 from apps.cast import api as cast_api  # noqa: E402,F401
 from apps.cheki import api as cheki_api  # noqa: E402,F401
 from apps.commerce import api as commerce_api  # noqa: E402,F401
+from apps.commerce_bridge import api as commerce_bridge_api  # noqa: E402,F401
 from apps.content import api as content_api  # noqa: E402,F401
 from apps.coupon import api as coupon_api  # noqa: E402,F401
 from apps.creator import api as creator_api  # noqa: E402,F401

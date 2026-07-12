@@ -11,6 +11,7 @@ mock transaction id.
 from __future__ import annotations
 
 from apps.commerce.models import Order
+from apps.commerce_bridge.models import ExternalCommerceOrder
 from apps.membership.models import Subscription
 from apps.payments.models import (
     PaymentAttempt,
@@ -65,4 +66,32 @@ def record_free_grant(
         currency="KRW",
         status=PaymentAttemptStatus.SUCCEEDED,
         idempotency_key=idempotency_key,
+    )
+
+
+def record_external_settlement(
+    *, external_order: ExternalCommerceOrder
+) -> PaymentAttempt:
+    """Record a succeeded EXTERNAL settlement for a hosted-commerce order (hybrid track).
+
+    The sale settled on a hosted commerce SaaS (Cafe24/아임웹 — Assen does not own the
+    transaction), so this is an attribution record crediting the creator: provider=
+    ``external``, an opaque ``provider:external_order_id`` as the txn id, the order's
+    amount/currency, status succeeded. Carries no card data. **Idempotent per external
+    order** — a second call (webhook retries are expected) returns the existing succeeded
+    attempt rather than double-crediting.
+    """
+    existing = PaymentAttempt.objects.filter(
+        external_order=external_order,
+        status=PaymentAttemptStatus.SUCCEEDED,
+    ).first()
+    if existing is not None:
+        return existing
+    return PaymentAttempt.objects.create(
+        external_order=external_order,
+        provider=PaymentProvider.EXTERNAL,
+        provider_txn_id=f"{external_order.provider}:{external_order.external_order_id}",
+        authorized_amount=external_order.amount,
+        currency=external_order.currency,
+        status=PaymentAttemptStatus.SUCCEEDED,
     )

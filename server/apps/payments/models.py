@@ -100,6 +100,16 @@ class PaymentAttempt(models.Model):
         on_delete=models.CASCADE,
         related_name="payment_attempts",
     )
+    # A sale that settled on a hosted commerce SaaS (apps.commerce_bridge). Assen does
+    # not own the transaction; this attribution row (provider=external) credits the
+    # creator's earning. The third arm of the XOR below.
+    external_order = models.ForeignKey(
+        "commerce_bridge.ExternalCommerceOrder",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="payment_attempts",
+    )
     provider = models.CharField(max_length=16, choices=PaymentProvider.choices)
     # Opaque PG/mock transaction id — NEVER a PAN. Blank until a provider assigns one.
     provider_txn_id = models.CharField(max_length=128, blank=True, default="")
@@ -133,17 +143,32 @@ class PaymentAttempt(models.Model):
         indexes = [
             models.Index(fields=["order", "-created_at"]),
             models.Index(fields=["subscription", "-created_at"]),
+            models.Index(fields=["external_order", "-created_at"]),
             models.Index(fields=["provider", "status"]),
         ]
         constraints = [
-            # An attempt settles exactly one target — an order XOR a subscription,
-            # never both and never neither. Materialised by the app's migration.
+            # An attempt settles exactly one target — an order XOR a subscription XOR an
+            # external (hosted-commerce) order, never more than one and never none.
+            # Materialised by the app's migration.
             models.CheckConstraint(
                 # ``condition=`` (not the ``check=`` removed in Django 6.0); the new
                 # kwarg name is accepted since Django 5.1, so this stays valid on both.
                 condition=(
-                    models.Q(order__isnull=False, subscription__isnull=True)
-                    | models.Q(order__isnull=True, subscription__isnull=False)
+                    models.Q(
+                        order__isnull=False,
+                        subscription__isnull=True,
+                        external_order__isnull=True,
+                    )
+                    | models.Q(
+                        order__isnull=True,
+                        subscription__isnull=False,
+                        external_order__isnull=True,
+                    )
+                    | models.Q(
+                        order__isnull=True,
+                        subscription__isnull=True,
+                        external_order__isnull=False,
+                    )
                 ),
                 name="payment_attempt_exactly_one_target",
             ),

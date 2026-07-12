@@ -603,6 +603,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrations/commerce/{provider}/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commerce Webhook
+         * @description Receive a hosted-commerce provider webhook. Fail-closed + signature-verified.
+         *
+         *     503 when the bridge is disabled/unconfigured; 401 on a bad signature; 400 for an
+         *     unsupported provider/event; 200 otherwise. The raw body is read for the HMAC check
+         *     before any parsing.
+         */
+        post: operations["apps_commerce_bridge_api_commerce_webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/posts": {
         parameters: {
             query?: never;
@@ -7243,6 +7267,26 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CommerceError"];
                 };
+            };
+        };
+    };
+    apps_commerce_bridge_api_commerce_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
