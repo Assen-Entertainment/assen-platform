@@ -169,9 +169,9 @@ function MockSignup() {
   return (
     <AuthShell subtitle="몇 초면 끝나요 — Assen에 오신 걸 환영해요">
         <h2 className="text-title-l text-on-surface">회원가입</h2>
-        <TextField label="이름" placeholder="홍길동" />
-        <TextField label="이메일" type="email" placeholder="you@assen.kr" />
-        <TextField label="비밀번호" type="password" placeholder="••••••••" />
+        {/* 실제 수집 항목과 일치(전화·닉네임)로 표기 — 이메일/비밀번호는 수집하지 않는다. */}
+        <TextField label="휴대폰 번호" type="tel" inputMode="numeric" placeholder="01012345678" />
+        <TextField label="닉네임" placeholder="사용할 닉네임" />
         <ConsentGroup
           items={[
             { id: "tos", label: "이용약관 동의", required: true },
