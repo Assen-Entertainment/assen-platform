@@ -155,6 +155,17 @@ jobs:
           restore-keys: pub-cache-${{ runner.os }}-
       - name: Bootstrap workspace
         run: dart pub get
+      # iOS는 Swift Package Manager로 Flutter 플러그인을 등재한다. `flutter build ios
+      # --no-pub`은 pub get을 건너뛰어, flutter 툴이 pub get 중 생성하는
+      # ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage(플러그인 SPM
+      # manifest)가 없어 xcodebuild의 SPM 해석이 실패한다("Could not resolve package
+      # dependencies ... FlutterGeneratedPluginSwiftPackage doesn't exist"). web/android
+      # 스모크는 이 패키지가 불필요해 --no-pub로 충분하지만, iOS는 앱 디렉터리 레벨
+      # `flutter pub get`으로 SPM 패키지를 먼저 생성해야 한다(상위 `dart pub get`은
+      # Dart 워크스페이스만 해석하고 flutter 플러그인 SPM 아티팩트는 만들지 않는다).
+      - name: Generate iOS plugin SPM package (flutter pub get)
+        working-directory: apps/assen_mobile
+        run: flutter pub get
       - name: iOS build smoke (assen_mobile, no-codesign)
         working-directory: apps/assen_mobile
         run: flutter build ios --no-codesign --no-pub
