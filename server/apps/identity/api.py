@@ -57,6 +57,7 @@ from apps.identity.services import (
     revoke_family_for_access,
     revoke_family_for_refresh,
     rotate_refresh_token,
+    withdraw_account,
 )
 from apps.identity.signup_services import (
     SignupError,
@@ -482,6 +483,25 @@ def update_me(request: HttpRequest, data: FanMeUpdateIn) -> FanMeOut:
     account.nickname = data.nickname
     account.save(update_fields=["nickname"])
     return _fan_me_out(account)
+
+
+@router.post(
+    "/account/withdraw", auth=fan_auth, throttle=user_write_throttle("3/min")
+)
+def withdraw(request: HttpRequest, response: HttpResponse) -> dict[str, str]:
+    """Withdraw (탈퇴) the authenticated fan's account and end the session.
+
+    Privacy decisions 2026-07-12 (D3): anonymises the account in place (clears
+    nickname + phone hash, sets is_active False, stamps withdrawn_at) and revokes
+    every token family, then clears the web auth cookies so the browser is logged
+    out. The scope is always the authenticated account (never the body), so a fan can
+    only withdraw their own account. Idempotent at the service layer. Legal-hold
+    transaction/dispute records stay linked to the now-pseudonymous fan_id.
+    """
+    withdraw_account(authed(request))
+    clear_auth_cookie(response, name=ACCESS_COOKIE_NAME)
+    clear_auth_cookie(response, name=REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
+    return {"status": "withdrawn"}
 
 
 @router.post(

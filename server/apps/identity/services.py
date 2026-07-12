@@ -271,6 +271,34 @@ def revoke_all_for_account(account: Account, *, reason: str) -> None:
         revoke_family(family, reason=reason)
 
 
+@transaction.atomic
+def withdraw_account(account: Account) -> None:
+    """Withdraw (탈퇴) a fan account: anonymise in place and end every session.
+
+    Privacy decisions 2026-07-12 (D3 — 즉시 익명화). On withdrawal the account's PII
+    is cleared immediately: the display ``nickname`` and the phone-derived
+    ``auth_subject_hash`` are emptied and ``is_active`` is set False. The row itself
+    is **kept, not deleted**, so orders/subscriptions/events that reference
+    ``fan_id`` retain FK integrity under the now-anonymised id (legal-hold records
+    stay linked to a pseudonymous token, not to a person). Every token family is
+    revoked so all sessions end at once, and clearing ``auth_subject_hash`` frees the
+    phone for a fresh signup (the unique constraint only covers non-empty hashes).
+
+    Idempotent: re-withdrawing an already-withdrawn account is a no-op. Per-channel
+    marketing consent is cleared here once that model exists (D8).
+    """
+    if account.withdrawn_at is not None:
+        return
+    revoke_all_for_account(account, reason="withdrawal")
+    account.nickname = ""
+    account.auth_subject_hash = ""
+    account.is_active = False
+    account.withdrawn_at = timezone.now()
+    account.save(
+        update_fields=["nickname", "auth_subject_hash", "is_active", "withdrawn_at"]
+    )
+
+
 def merge_anonymous_into_account(
     *, anonymous_id: str, account: Account
 ) -> int:

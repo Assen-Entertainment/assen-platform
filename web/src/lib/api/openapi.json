@@ -4333,6 +4333,30 @@
         ]
       }
     },
+    "/api/fan/account/withdraw": {
+      "post": {
+        "operationId": "apps_identity_api_withdraw",
+        "summary": "Withdraw",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Withdraw (탈퇴) the authenticated fan's account and end the session.\n\nPrivacy decisions 2026-07-12 (D3): anonymises the account in place (clears\nnickname + phone hash, sets is_active False, stamps withdrawn_at) and revokes\nevery token family, then clears the web auth cookies so the browser is logged\nout. The scope is always the authenticated account (never the body), so a fan can\nonly withdraw their own account. Idempotent at the service layer. Legal-hold\ntransaction/dispute records stay linked to the now-pseudonymous fan_id.",
+        "tags": [
+          "fan-signup"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/fan/verify/start": {
       "post": {
         "operationId": "apps_identity_api_verify_start",

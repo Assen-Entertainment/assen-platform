@@ -108,6 +108,13 @@ class Account(models.Model):
     )
     kyc_verified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Set when the fan withdraws (D3, privacy decisions 2026-07-12). Withdrawal
+    # anonymises the row in place — nickname and auth_subject_hash are cleared and
+    # is_active is set False — so this timestamp is the only record that the row is a
+    # withdrawn (tombstoned) account, kept so legal-hold retention can purge it later.
+    # The row itself is retained (not deleted) so orders/subscriptions/events that
+    # reference fan_id keep their FK integrity under the anonymised id.
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
