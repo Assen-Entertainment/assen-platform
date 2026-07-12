@@ -1,4 +1,5 @@
 import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/common/async_view.dart';
 import 'package:assen_mobile/src/common/json_parse.dart';
 import 'package:assen_mobile/src/creator/creator_controller.dart';
@@ -67,15 +68,19 @@ class CreatorScreen extends ConsumerWidget {
   }
 }
 
-/// The loaded profile: cover header, stats, and bio.
-class _CreatorProfile extends StatelessWidget {
+/// The loaded profile: cover header, stats, an (auth-gated) follow button, and
+/// bio.
+class _CreatorProfile extends ConsumerWidget {
   const _CreatorProfile({required this.creator});
 
   final Creator creator;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).extension<AssenColors>()!;
+    // Following is auth-gated: only a signed-in fan sees the follow button (the
+    // server would 401 a write). A guest still browses the full public profile.
+    final signedIn = ref.watch(authControllerProvider).isAuthenticated;
     final accent = CreatorAccent.fromHex(
       creator.accentColor,
       surface: colors.white,
@@ -133,6 +138,23 @@ class _CreatorProfile extends StatelessWidget {
             ],
           ),
         ),
+        if (signedIn) ...[
+          const SizedBox(height: SpacingTokens.s4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: SpacingTokens.s4),
+            child: AssenButton(
+              label: creator.following ? '팔로잉' : '팔로우',
+              style: creator.following
+                  ? AssenButtonStyle.secondary
+                  : AssenButtonStyle.primary,
+              icon: creator.following ? Icons.check : Icons.add,
+              expand: true,
+              onPressed: () => ref
+                  .read(creatorControllerProvider(creator.handle).notifier)
+                  .toggleFollow(),
+            ),
+          ),
+        ],
         if (creator.bio != null) ...[
           const SizedBox(height: SpacingTokens.s6),
           Padding(

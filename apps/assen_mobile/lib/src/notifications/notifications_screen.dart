@@ -27,8 +27,21 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(notificationsControllerProvider);
     final now = ref.watch(nowProvider);
+    final controller = ref.read(notificationsControllerProvider.notifier);
+    // Only offer "모두 읽음" when the loaded feed still has an unread row.
+    final hasUnread = feed.value?.any((n) => !n.read) ?? false;
     return Scaffold(
-      appBar: const AssenAppBar(title: '알림'),
+      appBar: AssenAppBar(
+        title: '알림',
+        actions: [
+          if (hasUnread)
+            AssenIconButton(
+              icon: Icons.done_all,
+              semanticLabel: '모두 읽음',
+              onPressed: controller.markAllRead,
+            ),
+        ],
+      ),
       body: AssenAsyncView<List<AppNotification>>(
         value: feed,
         loading: const _NotificationsSkeleton(),
@@ -50,9 +63,12 @@ class NotificationsScreen extends ConsumerWidget {
           message: '새로운 소식이 도착하면 이곳에 표시됩니다.',
         ),
         data: (items) => RefreshIndicator(
-          onRefresh: () =>
-              ref.read(notificationsControllerProvider.notifier).refresh(),
-          child: _NotificationList(items: items, now: now),
+          onRefresh: controller.refresh,
+          child: _NotificationList(
+            items: items,
+            now: now,
+            onMarkRead: controller.markRead,
+          ),
         ),
       ),
     );
@@ -61,10 +77,17 @@ class NotificationsScreen extends ConsumerWidget {
 
 /// The loaded feed: a list of notifications, newest first.
 class _NotificationList extends StatelessWidget {
-  const _NotificationList({required this.items, required this.now});
+  const _NotificationList({
+    required this.items,
+    required this.now,
+    required this.onMarkRead,
+  });
 
   final List<AppNotification> items;
   final DateTime now;
+
+  /// Marks the tapped notification read (by id).
+  final void Function(String id) onMarkRead;
 
   @override
   Widget build(BuildContext context) {
@@ -72,18 +95,31 @@ class _NotificationList extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s2),
       itemCount: items.length,
-      itemBuilder: (context, index) =>
-          _NotificationTile(notification: items[index], now: now),
+      itemBuilder: (context, index) => _NotificationTile(
+        notification: items[index],
+        now: now,
+        onMarkRead: onMarkRead,
+      ),
     );
   }
 }
 
 /// One notification row: a bell (rose-tinted when unread) + title + time.
+///
+/// An unread row is tappable to mark it read (optimistically); a read row is
+/// inert (no navigation is wired here — the deep-link `href` is a follow-up).
 class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({required this.notification, required this.now});
+  const _NotificationTile({
+    required this.notification,
+    required this.now,
+    required this.onMarkRead,
+  });
 
   final AppNotification notification;
   final DateTime now;
+
+  /// Marks this notification read (by id) when an unread row is tapped.
+  final void Function(String id) onMarkRead;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +130,7 @@ class _NotificationTile extends StatelessWidget {
       title: notification.title,
       subtitle: relativeTime(notification.createdAt, now),
       showChevron: false,
+      onTap: unread ? () => onMarkRead(notification.id) : null,
       leading: Container(
         width: SpacingTokens.s10,
         height: SpacingTokens.s10,

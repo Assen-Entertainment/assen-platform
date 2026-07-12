@@ -101,4 +101,27 @@ class Post {
 
   /// The `@handle` identity line, or empty when the handle is unknown.
   String get handleLabel => creatorHandle.isEmpty ? '' : '@$creatorHandle';
+
+  /// Returns a copy with the write-affected counters/flags overridden.
+  ///
+  /// Only the fields a fan write mutates are parameterised — [liked] and
+  /// [likeCount] (a like toggle) and [commentCount] (a new comment) — so a
+  /// controller can apply an optimistic change (and reconcile it with the
+  /// server truth) without rebuilding the whole post.
+  Post copyWith({bool? liked, int? likeCount, int? commentCount}) {
+    return Post(
+      id: id,
+      creatorId: creatorId,
+      creatorName: creatorName,
+      creatorHandle: creatorHandle,
+      verified: verified,
+      body: body,
+      mediaUrl: mediaUrl,
+      likeCount: likeCount ?? this.likeCount,
+      commentCount: commentCount ?? this.commentCount,
+      liked: liked ?? this.liked,
+      isAdult: isAdult,
+      createdAt: createdAt,
+    );
+  }
 }

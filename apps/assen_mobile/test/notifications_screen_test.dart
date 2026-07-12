@@ -62,6 +62,20 @@ class _FakeNotificationsRepository implements NotificationsRepository {
     if (error != null) throw error;
     return _items!;
   }
+
+  @override
+  Future<AppNotification> markRead(String id) async {
+    final error = _error;
+    if (error != null) throw error;
+    return _items!.firstWhere((n) => n.id == id).copyWith(read: true);
+  }
+
+  @override
+  Future<int> markAllRead() async {
+    final error = _error;
+    if (error != null) throw error;
+    return _items!.where((n) => !n.read).length;
+  }
 }
 
 Widget _host(NotificationsRepository repository) => ProviderScope(

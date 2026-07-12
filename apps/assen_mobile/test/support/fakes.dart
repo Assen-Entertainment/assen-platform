@@ -64,6 +64,11 @@ class FakeCreatorRepository implements CreatorRepository {
   final Creator creator;
   @override
   Future<Creator> fetchCreator(String handle) async => creator;
+  @override
+  Future<FollowState> setFollow(
+    String handle, {
+    required bool following,
+  }) async => (following: following, followers: creator.followers);
 }
 
 /// Returns a fixed post and comment thread for any id.
@@ -75,6 +80,17 @@ class FakePostRepository implements PostRepository {
   Future<Post> fetchPost(String postId) async => post;
   @override
   Future<List<Comment>> fetchComments(String postId) async => comments;
+  @override
+  Future<LikeState> setLike(String postId, {required bool liked}) async =>
+      (liked: liked, likeCount: post.likeCount);
+  @override
+  Future<Comment> addComment(String postId, String body) async => Comment(
+    id: 'fake-comment',
+    postId: postId,
+    author: '나',
+    body: body,
+    createdAt: DateTime(2026, 7, 11),
+  );
 }
 
 /// Returns a fixed order history.
@@ -91,6 +107,22 @@ class FakeNotificationsRepository implements NotificationsRepository {
   final List<AppNotification> items;
   @override
   Future<List<AppNotification>> fetchNotifications() async => items;
+  @override
+  Future<AppNotification> markRead(String id) async {
+    final match = items.firstWhere(
+      (n) => n.id == id,
+      orElse: () => AppNotification(
+        id: id,
+        kind: '',
+        title: '',
+        createdAt: DateTime(2026),
+      ),
+    );
+    return match.copyWith(read: true);
+  }
+
+  @override
+  Future<int> markAllRead() async => items.where((n) => !n.read).length;
 }
 
 /// Returns a fixed identity summary for the 마이 tab.

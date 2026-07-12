@@ -63,4 +63,17 @@ class AppNotification {
 
   /// Whether the fan has read the notification (server `read`).
   final bool read;
+
+  /// Returns a copy with [read] overridden — the only field a mark-read
+  /// mutates — so the controller can flip a row's unread state optimistically.
+  AppNotification copyWith({bool? read}) {
+    return AppNotification(
+      id: id,
+      kind: kind,
+      title: title,
+      createdAt: createdAt,
+      href: href,
+      read: read ?? this.read,
+    );
+  }
 }
