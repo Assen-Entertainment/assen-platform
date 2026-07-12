@@ -74,205 +74,45 @@ export { mockSetBlocked } from "./mock/data";
 // → 라이브 빌드에서 mock 폴백(./mock/data)이 클라이언트 번들에서 트리셰이킹된다(R6-W2C).
 // 의미론은 기존 Boolean(config.apiUrl)과 동일(config.apiUrl = NEXT_PUBLIC_API_URL || "").
 const USE_API = Boolean(process.env.NEXT_PUBLIC_API_URL);
-interface RawCreator {
-  id: string;
-  handle: string;
-  name: string;
-  bio: string;
-  accent_color: string;
-  avatar_url: string;
-  cover_url: string;
-  category: string;
-  verified: boolean;
-  followers: number;
-  posts: number;
-  following: boolean;
-  // 서버 CreatorOut.blocked(default false) — 단건 조회에서만 신뢰값. 목록엔 없을 수 있어 옵셔널.
-  blocked?: boolean;
-}
-interface RawPost {
-  id: string;
-  creator_id: string;
-  creator_name: string;
-  creator_handle: string;
-  verified: boolean;
-  body: string;
-  media_url: string;
-  like_count: number;
-  comment_count: number;
-  liked: boolean;
-  is_adult?: boolean;
-  created_at: string;
-}
-interface RawComment {
-  id: string;
-  post_id: string;
-  author: string;
-  body: string;
-  created_at: string;
-}
-interface RawProduct {
-  id: string;
-  creator_id: string | null;
-  creator_name: string;
-  // 서버 ProductOut.creator_handle(기본 "") — PDP/스토어의 크리에이터 프로필 링크용.
-  // 검색 브리프(ProductBrief)엔 없고 빈 문자열일 수 있어 옵셔널 방어(없으면 링크 생략).
-  creator_handle?: string | null;
-  type: string;
-  title: string;
-  price: number;
-  meta: string;
-  media_url: string;
-  description: string;
-  options: string[];
-  stock: number | null;
-  sold_out: boolean;
-  locked: boolean;
-  is_adult?: boolean;
-  // status는 오너 스코프(StudioProductOut) 전용 — 공개 ProductOut엔 없어 옵셔널.
-  status?: string;
-  // 서버 ProductOut.pricing_kind(기본 "paid") — "free"면 무료 획득 대상(ASS-297).
-  pricing_kind?: string;
-}
-interface RawTier {
-  id: string;
-  creator_id: string | null;
-  name: string;
-  price: number;
-  period: string;
-  benefits: string[];
-  badge: string;
-  featured: boolean;
-  sort_order: number;
-  // 서버 TierOut.pricing_kind(기본 "paid") — "free"면 무료 멤버십(ASS-297).
-  pricing_kind?: string;
-}
+// ASS-290 확장: 손수 작성한 Raw* 미러를 생성 DTO(schema.d.ts, `npm run gen:types`)로 전면
+// 교체한다. 각 wire 타입이 서버 OpenAPI 스키마에 컴파일타임으로 결합되어, 서버 계약이
+// 드리프트하면 여기서 tsc가 깨진다(CI 스냅샷 게이트가 openapi.json 드리프트를 잡고, 이
+// 결합이 도메인 클라 코드까지 빌드 실패로 밀어붙인다). 필드별 옵셔널/nullable/enum은
+// 이제 서버가 단일 출처 — 아래 매퍼가 그 계약을 그대로 소비한다.
+type RawCreator = components["schemas"]["CreatorOut"];
+type RawPost = components["schemas"]["PostOut"];
+type RawComment = components["schemas"]["CommentOut"];
+type RawProduct = components["schemas"]["ProductOut"];
+type RawTier = components["schemas"]["TierOut"];
 /** /search 결과의 축약 상품(ProductBrief — creator_id/media_url 없음). */
-interface RawProductBrief {
-  id: string;
-  type: string;
-  title: string;
-  price: number;
-  meta: string;
-}
-interface RawSearch {
-  creators: RawCreator[];
-  products: RawProductBrief[];
-  next_offset?: number | null;
-}
-// --- B4 쓰기/커머스 wire 계약(snake_case) ------------------------------------
-interface RawOrderItem {
-  product_id: string | null;
-  title: string;
-  type: string;
-  option: string;
-  price: number;
-  qty: number;
-}
-interface RawRefund {
-  status: string;
-  reason: string;
-}
+type RawProductBrief = components["schemas"]["ProductBrief"];
+type RawSearch = components["schemas"]["SearchOut"];
+// --- B4 쓰기/커머스 wire 계약 -------------------------------------------------
+type RawOrderItem = components["schemas"]["OrderItemOut"];
 /** 배송지 스냅샷 wire(OrderShippingOut) — 배송 상품 주문 조회에만 임베드. */
-interface RawOrderShipping {
-  recipient_name: string;
-  recipient_phone: string;
-  postal_code: string;
-  address1: string;
-  address2: string;
-}
-interface RawOrder {
-  id: string;
-  status: string;
-  created_at: string;
-  items: RawOrderItem[];
-  subtotal: number;
-  shipping: number;
-  // shipping_fee는 model 정합 명시 별칭(shipping과 동일 값) — 있으면 우선, 없으면 shipping 폴백.
-  shipping_fee?: number;
-  total: number;
-  creator_name: string | null;
-  shipping_address?: RawOrderShipping | null;
-  refund: RawRefund | null;
-}
-interface RawSubscription {
-  id: string;
-  creator_id: string | null;
-  creator_name: string;
-  creator_handle: string;
-  tier_id: string | null;
-  tier_name: string;
-  price: number;
-  period: string;
-  status: string;
-  // 무료 멤버십은 결제 앵커가 없어 null(서버 SubscriptionOut.next_billing_date=None).
-  next_billing_date: string | null;
-  cancel_scheduled: boolean;
-  // 무료 멤버십 여부(서버 SubscriptionOut.is_free, 기본 false).
-  is_free?: boolean;
-}
+type RawOrderShipping = components["schemas"]["OrderShippingOut"];
+/** 주문 리스트 wire(OrderOut) — 배송지(shipping_address) 미포함(A-3 정책). */
+type RawOrder = components["schemas"]["OrderOut"];
+/**
+ * 단건 주문 wire(OrderDetailOut) — OrderOut + shipping_address(배송지 스냅샷, 옵셔널).
+ * 조회/생성/취소/환불 등 단건 응답에만 배송지가 실린다(리스트는 미노출). mapOrder는 이
+ * 넓은 타입을 받으므로 리스트의 RawOrder(배송지 없음)도 그대로 넘길 수 있다(구조적 할당).
+ */
+type RawOrderDetail = components["schemas"]["OrderDetailOut"];
+type RawSubscription = components["schemas"]["SubscriptionOut"];
 // Wire shape = the generated NotificationOut DTO (ASS-290), not a hand-written
 // mirror: any server-side field/nullability change to NotificationOut surfaces
 // here as a compile error rather than a silent runtime mismatch.
 type RawNotification = components["schemas"]["NotificationOut"];
-// --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기·결제수단 wire 계약(snake_case) ------
-/** 오너 뷰 상품(StudioProductOut) — 관리 필드(status/is_adult/timestamp) 포함. */
-interface RawStudioProduct {
-  id: string;
-  creator_id: string | null;
-  type: string;
-  title: string;
-  price: number;
-  meta: string;
-  media_url: string;
-  description: string;
-  options: string[];
-  stock: number | null;
-  sold_out: boolean;
-  locked: boolean;
-  status: string;
-  is_adult: boolean;
-  created_at: string;
-  // 비취소 주문 기준 누적 판매 수량(ASS-264). 카운트만 — 수익 금액 아님.
-  sold: number;
-  // 서버 StudioProductOut.pricing_kind(기본 "paid") — "free"면 무료 상품(ASS-297).
-  pricing_kind?: string;
-}
-/** 오너 뷰 티어(StudioTierOut) — active 관리 플래그 포함. */
-interface RawStudioTier {
-  id: string;
-  creator_id: string | null;
-  name: string;
-  price: number;
-  period: string;
-  benefits: string[];
-  badge: string;
-  featured: boolean;
-  active: boolean;
-  sort_order: number;
-  created_at: string;
-  // status=active 구독 수(ASS-264). 카운트만 — 수익 금액 아님.
-  subscribers: number;
-  // 서버 StudioTierOut.pricing_kind(기본 "paid") — "free"면 무료 멤버십(ASS-297).
-  pricing_kind?: string;
-}
-/** 저장된 결제수단(SavedPaymentMethod wire) — brand+last4만(PAN 미보관). */
-interface RawPaymentMethod {
-  id: string;
-  brand: string;
-  last4: string;
-  is_primary: boolean;
-  created_at: string;
-}
-/** 스튜디오 대시보드 실 카운트 wire(StudioStatsOut) — 전부 정수 카운트(금액 필드 없음·정산 게이트). */
-interface RawStudioStats {
-  followers: number;
-  posts: number;
-  products: number;
-  products_selling: number;
-  orders: number;
-  subscribers: number;
-}
+// --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기·결제수단 wire 계약 -----------------
+/** 오너 뷰 상품(StudioProductOut) — 관리 필드(status/is_adult/sold/timestamp) 포함. */
+type RawStudioProduct = components["schemas"]["StudioProductOut"];
+/** 오너 뷰 티어(StudioTierOut) — active/subscribers 관리 필드 포함. */
+type RawStudioTier = components["schemas"]["StudioTierOut"];
+/** 저장된 결제수단(PaymentMethodOut) — brand+last4만(PAN 미보관). */
+type RawPaymentMethod = components["schemas"]["PaymentMethodOut"];
+/** 스튜디오 대시보드 실 카운트(StudioStatsOut) — 전부 정수 카운트(금액 필드 없음·정산 게이트). */
+type RawStudioStats = components["schemas"]["StudioStatsOut"];
 /** 소셜 토글 응답(카운트 정정용). */
 export interface FollowResult {
   following: boolean;
@@ -294,11 +134,7 @@ export interface BlockResult {
   creatorId: string;
 }
 /** 설정 차단 목록 wire(BlockedCreatorOut). */
-interface RawBlockedCreator {
-  creator_id: string;
-  name: string;
-  handle: string;
-}
+type RawBlockedCreator = components["schemas"]["BlockedCreatorOut"];
 const mapBlockedCreator = (b: RawBlockedCreator): BlockedCreator => ({
   creatorId: b.creator_id,
   name: b.name,
@@ -372,7 +208,8 @@ const mapProduct = (p: RawProduct): Product => ({
   soldOut: p.sold_out || undefined,
   locked: p.locked || undefined,
   isAdult: p.is_adult || undefined,
-  status: p.status || undefined,
+  // status(판매 상태)는 오너 스코프(StudioProductOut) 전용 — 공개 ProductOut 계약엔 없어
+  // (생성 DTO에 미존재) 매핑하지 않는다. Product.status는 스튜디오 매핑에서만 채워진다.
   pricingKind: p.pricing_kind === "free" ? "free" : "paid",
 });
 const mapTier = (t: RawTier): MembershipTier => ({
@@ -419,14 +256,17 @@ const mapShipping = (s: RawOrderShipping): ShippingAddress => ({
   address1: s.address1,
   address2: s.address2,
 });
-const mapOrder = (o: RawOrder): Order => ({
+// RawOrderDetail(OrderDetailOut) — 리스트의 RawOrder(OrderOut, 배송지 없음)도 구조적으로
+// 할당 가능하므로 리스트/단건 응답 모두 이 매퍼로 처리한다. shipping_address는 단건에만
+// 실려 옵셔널 — 없으면 undefined.
+const mapOrder = (o: RawOrderDetail): Order => ({
   id: o.id,
   createdAt: dateLabel(o.created_at),
   status: o.status as OrderStatus,
   items: o.items.map(mapOrderItem),
   subtotal: o.subtotal,
-  // shipping_fee(model 정합 별칭) 우선, 없으면 기존 shipping 필드 폴백(둘은 동일 값).
-  shipping: o.shipping_fee ?? o.shipping,
+  // shipping_fee = model 정합 별칭(shipping과 동일 값). 서버 계약상 항상 존재.
+  shipping: o.shipping_fee,
   total: o.total,
   creatorName: o.creator_name ?? undefined,
   shippingAddress: o.shipping_address ? mapShipping(o.shipping_address) : undefined,
@@ -543,10 +383,7 @@ export interface Capabilities {
   /** mock 결제 흐름 개방 여부(서버 ENABLE_MOCK_PAYMENT). */
   paymentAvailable: boolean;
 }
-interface RawCapabilities {
-  shipping_checkout_available: boolean;
-  payment_available: boolean;
-}
+type RawCapabilities = components["schemas"]["CapabilitiesResponse"];
 /**
  * 런타임 capability — `GET /api/capabilities`(서버 설정 단일 출처, 웹이 플래그를 별도로 복제하지
  * 않는다 → 서버와 드리프트 방지). mock 폴백(USE_API=false)은 게이트 닫힘으로 취급(fail-closed) —
@@ -803,7 +640,7 @@ export async function getOrdersPage(cursor?: string): Promise<Page<Order>> {
 export async function getOrder(id: string): Promise<Order | undefined> {
   if (USE_API) {
     try {
-      return mapOrder(await apiFetch<RawOrder>(`/orders/${encodeURIComponent(id)}`));
+      return mapOrder(await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(id)}`));
     } catch (e) {
       if (e instanceof ApiError && (e.status === 404 || e.status === 422 || e.status === 401)) return undefined;
       throw e;
@@ -896,7 +733,7 @@ export async function apiCreateOrder(input: {
   option?: string;
   shipping?: ShippingAddress;
 }): Promise<Order> {
-  const raw = await apiFetch<RawOrder>("/orders", {
+  const raw = await apiFetch<RawOrderDetail>("/orders", {
     method: "POST",
     body: JSON.stringify(orderInBody(input)),
   });
@@ -931,7 +768,7 @@ export async function apiCreateOrderFree(input: {
   option?: string;
   shipping?: ShippingAddress;
 }): Promise<Order> {
-  const raw = await apiFetch<RawOrder>("/orders/free", {
+  const raw = await apiFetch<RawOrderDetail>("/orders/free", {
     method: "POST",
     body: JSON.stringify(orderInBody(input)),
   });
@@ -939,11 +776,11 @@ export async function apiCreateOrderFree(input: {
 }
 /** 주문 취소(paid/shipping) → Order. */
 export async function apiCancelOrder(id: string): Promise<Order> {
-  return mapOrder(await apiFetch<RawOrder>(`/orders/${encodeURIComponent(id)}/cancel`, { method: "POST" }));
+  return mapOrder(await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(id)}/cancel`, { method: "POST" }));
 }
 /** 환불 신청(shipping/completed) → refund 임베드 포함 Order. */
 export async function apiRequestRefund(input: { id: string; reason: string; detail?: string }): Promise<Order> {
-  const raw = await apiFetch<RawOrder>(`/orders/${encodeURIComponent(input.id)}/refund`, {
+  const raw = await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(input.id)}/refund`, {
     method: "POST",
     body: JSON.stringify({ reason: input.reason, detail: input.detail }),
   });
