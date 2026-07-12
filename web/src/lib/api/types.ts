@@ -31,6 +31,16 @@ export interface BlockedCreator {
   handle: string;
 }
 
+/**
+ * 마케팅 수신 동의 — 채널별 opt-in 상태(D8). 선택 동의라 전부 off여도 서비스 이용 무제한.
+ * email은 아직 미수집이라 설정 UI에서 비활성 표시(발송 경로도 미사용).
+ */
+export interface MarketingConsentState {
+  push: boolean;
+  sms: boolean;
+  email: boolean;
+}
+
 export interface Post {
   id: string;
   creatorId: string;
