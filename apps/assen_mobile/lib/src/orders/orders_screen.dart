@@ -99,6 +99,7 @@ class _OrderCard extends StatelessWidget {
     final refund = order.refund;
 
     return AssenCard(
+      onTap: () => context.push(RoutePaths.orderDetail(order.id)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
