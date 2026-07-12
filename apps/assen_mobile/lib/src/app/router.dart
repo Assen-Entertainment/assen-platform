@@ -10,6 +10,10 @@ import 'package:assen_mobile/src/onboarding/onboarding_screen.dart';
 import 'package:assen_mobile/src/orders/orders_screen.dart';
 import 'package:assen_mobile/src/post/post_screen.dart';
 import 'package:assen_mobile/src/search/search_screen.dart';
+import 'package:assen_mobile/src/settings/account_screen.dart';
+import 'package:assen_mobile/src/settings/blocked_screen.dart';
+import 'package:assen_mobile/src/settings/notification_settings_screen.dart';
+import 'package:assen_mobile/src/settings/payment_methods_screen.dart';
 import 'package:assen_mobile/src/settings/settings_screen.dart';
 import 'package:assen_mobile/src/store/product_screen.dart';
 import 'package:assen_mobile/src/store/store_screen.dart';
@@ -52,6 +56,18 @@ abstract final class RoutePaths {
 
   /// The account settings screen (reached from the 마이 tab).
   static const String settings = '/settings';
+
+  /// The 계정 관리 screen — profile info + 회원 탈퇴 (reached from 설정).
+  static const String settingsAccount = '/settings/account';
+
+  /// The 알림 설정 screen — per-channel marketing consent (reached from 설정).
+  static const String settingsNotifications = '/settings/notifications';
+
+  /// The 차단 관리 screen — the fan's personal block list (reached from 설정).
+  static const String settingsBlocked = '/settings/blocked';
+
+  /// The 결제 수단 screen — the fan's saved payment methods (reached from 설정).
+  static const String settingsPayments = '/settings/payments';
 
   /// The app intro / onboarding (reached from 설정 → "앱 소개 다시 보기").
   static const String onboarding = '/onboarding';
@@ -181,6 +197,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.settings,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsAccount,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const AccountScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsNotifications,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsBlocked,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BlockedScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.settingsPayments,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const PaymentMethodsScreen(),
       ),
       GoRoute(
         path: RoutePaths.onboarding,

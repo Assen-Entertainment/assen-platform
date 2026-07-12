@@ -174,6 +174,29 @@ class _SettingsBody extends ConsumerWidget {
         _KycAction(fan: fan),
 
         const SizedBox(height: SpacingTokens.s4),
+        const AssenSectionHeader(title: '관리'),
+        AssenListItem(
+          title: '계정 관리',
+          subtitle: '회원 탈퇴 등 계정 설정',
+          onTap: () => context.push(RoutePaths.settingsAccount),
+        ),
+        AssenListItem(
+          title: '알림 설정',
+          subtitle: '마케팅 정보 수신 동의',
+          onTap: () => context.push(RoutePaths.settingsNotifications),
+        ),
+        AssenListItem(
+          title: '차단 관리',
+          subtitle: '차단한 크리에이터',
+          onTap: () => context.push(RoutePaths.settingsBlocked),
+        ),
+        AssenListItem(
+          title: '결제 수단',
+          subtitle: '저장된 결제 수단',
+          onTap: () => context.push(RoutePaths.settingsPayments),
+        ),
+
+        const SizedBox(height: SpacingTokens.s4),
         const AssenSectionHeader(title: '앱'),
         Padding(
           padding: const EdgeInsets.only(bottom: SpacingTokens.s2),
