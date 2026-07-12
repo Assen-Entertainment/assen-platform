@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network access is required in ALL build types, not just debug. The Flutter
+         template only declares INTERNET in the debug manifest (for hot reload), so a
+         release/profile build shipped WITHOUT this line and could not reach the API
+         (release breaker). Declared here in main so every build type has it. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="assen_mobile"
+        android:label="Assen"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
