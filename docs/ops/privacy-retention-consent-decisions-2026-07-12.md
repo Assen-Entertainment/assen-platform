@@ -4,7 +4,7 @@
 > 이 문서는 그동안 "승인권자 결정 대기(B항목)"로 차단됐던 3건을 해소하는 **승인 기록(approval-of-record)** 이다.
 >
 > ✅ **최종 승인 (2026-07-12)**: **동의 문구(§5)와 보유기간(§2)이 법무/대표 승인·확정**됐다(§5 초안 그대로 확정). 이에 따라 consent 버전은 `2026-07-12-v1`(draft 라벨 제거), web `/policy/privacy`·`/policy/terms`는 전문으로 확장해 **2026-07-12 시행**으로 게시했다.
-> ⚠️ **잔여 경계**: 법정 의무 보존기간(전자상거래법 5년/3년 등)은 준수 필수. 개인정보보호책임자(CPO) 성명·연락처, 사업자 정보 등 **회사 등기 사항은 공개 전 회사가 채워야** 한다. 실 게이트(PG/KYC/SMS/배송/IAP)는 여전히 mock/fail-closed(별도 승인).
+> ⚠️ **잔여 경계**: 법정 의무 보존기간(전자상거래법 5년/3년 등)은 준수 필수. 회사 등기 사항(CPO 김건용·사업자 정보)은 assen-landing 공개 처리방침 기준으로 반영 완료(§8). 실 게이트(PG/KYC/SMS/배송/IAP)는 여전히 mock/fail-closed(별도 승인).
 
 관련: [[assen-production-readiness-program]](ASS-287 P0 배송-PII·ASS-296 consent) · `docs/ops/external-inspection-brief-2026-07-10.md`(#3 프라이버시 반증) · `server/apps/consent/` · `server/apps/identity/models.py` · `web/src/app/policy/*`
 
@@ -201,7 +201,7 @@ Assen 서비스 이용약관에 동의합니다. 약관 전문은 [이용약관 
 - [x] 만 14세 확인 방식(자기확인)의 적법성 판단(D5) (승인)
 - [x] 접속로그 3개월(D6)·익명세션 1년 적정성 (승인)
 - [x] 개인정보 처리방침 전문 작성(§2·§3 기반) + web `/policy/privacy`·`/policy/terms` 전문 게시(2026-07-12 시행)
-- [ ] **공개 전 회사 등기 사항 채움**: 개인정보보호책임자 성명·직위·연락처, 사업자 정보(현재 "대표이사 또는 회사 지정 책임자"·"고객센터" placeholder). 실 서비스 공개 시 회사가 확정.
+- [x] **회사 등기 사항 채움** (assen-landing 참고, 2026-07-12): 개인정보보호책임자 김건용(owsqix@gmail.com) + 사업자 정보(상호 Assen Entertainment·대표자 신진명·사업자등록번호 432-87-03563·주소 서울 마포구 서교동 405-13 서교빌딩 4층)를 `/policy/privacy`·`/policy/terms`에 반영. 출처=assen-landing/public/privacy.html(회사 공개 처리방침).
 
 **여전히 승인 게이트(미개방)**: 실 PG(결제 PII·PG사 제공)·실 KYC(본인인증 기관)·실 SMS·우편체키 배송(D1 재검토)·IAP. 전부 mock/fail-closed 불변.
 
