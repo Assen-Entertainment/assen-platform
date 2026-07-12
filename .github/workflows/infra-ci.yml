@@ -1,0 +1,42 @@
+name: infra-ci
+
+# Config-validate the terraform IaC (infra/terraform) on every change. `terraform
+# validate` resolves the provider schema (catches wrong resource/attribute names) and
+# needs NO AWS credentials — so the stack is genuinely verified even though it has
+# never been applied to a live account (the apply is the E10 gate).
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/infra-ci.yml"
+  push:
+    branches: [dev, main]
+    paths:
+      - "infra/terraform/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-validate:
+    name: terraform fmt + validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      # Style check — informational (does not block the merge on formatting alone).
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff
+        continue-on-error: true
+      # No backend + no creds: validate the configuration against the provider schema.
+      - name: terraform init (no backend)
+        run: terraform init -backend=false
+      - name: terraform validate
+        run: terraform validate
