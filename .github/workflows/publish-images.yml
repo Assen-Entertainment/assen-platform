@@ -1,0 +1,99 @@
+name: publish-images
+
+# Build + push production container images to the GitHub Container Registry (GHCR).
+#
+# This is the CD image-publish step the audit found missing: previously images were
+# only built by a manual laptop script (scripts/build-prod-image.sh). Auth uses the
+# built-in GITHUB_TOKEN (no external cloud credentials), so this runs unchanged in CI.
+#
+# The SERVER image bakes no build-time environment and is always published. The WEB
+# image bakes NEXT_PUBLIC_API_URL at build time (Next.js inlines it), so it is
+# published only when the repo variable PROD_API_URL is configured — otherwise a
+# wrong/placeholder API URL would be permanently baked into the image. Set the repo
+# variable (Settings → Variables → Actions → PROD_API_URL) to enable the web image.
+#
+# ⚠️ Like ci.yml, this workflow only triggers on push to main / manual dispatch, so it
+# is validated by a workflow_dispatch run after merge, not by a PR to dev.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: "Additional mutable image tag (besides the commit SHA)"
+        default: "latest"
+
+# One publish per ref; do not cancel an in-flight push (a half-pushed manifest is bad).
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  server-image:
+    name: Build + push server image (GHCR)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/assen-platform-api
+          tags: |
+            type=sha,format=long
+            type=raw,value=${{ github.event.inputs.extra_tag || 'latest' }}
+      - name: Build + push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  web-image:
+    name: Build + push web image (GHCR — requires PROD_API_URL var)
+    runs-on: ubuntu-latest
+    # Skip unless the target API URL is configured — the web image inlines it, so
+    # publishing without it would bake a wrong URL. Set vars.PROD_API_URL to enable.
+    if: ${{ vars.PROD_API_URL != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/assen-platform-web
+          tags: |
+            type=sha,format=long
+            type=raw,value=${{ github.event.inputs.extra_tag || 'latest' }}
+      - name: Build + push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.PROD_API_URL }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
