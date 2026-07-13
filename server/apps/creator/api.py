@@ -255,6 +255,82 @@ def get_creator(
     return 200, _creator_out(creator)
 
 
+class FollowerOut(Schema):
+    """One follower of a creator — already-public display identity only.
+
+    Carries only fields that are already public elsewhere: the follower's
+    ``nickname`` (shown on comments and in follow notifications) and, when the
+    follower themselves operates a creator, that creator's ``handle``/
+    ``avatar_url`` so the row can link to their profile. No contact/identity PII
+    (phone, birth date, etc.) is ever exposed here.
+    """
+
+    id: uuid.UUID
+    nickname: str
+    is_creator: bool
+    handle: str = ""
+    avatar_url: str = ""
+
+
+class FollowerPage(Schema):
+    """One keyset page of a creator's followers plus the next-page cursor."""
+
+    items: list[FollowerOut]
+    next_cursor: str | None = None
+
+
+def _follower_out(follow: Follow) -> FollowerOut:
+    """Build a public follower row from a follow edge (nickname + creator link).
+
+    The follower's own creator profile (reverse 1:1 ``creator_profile``) is
+    read to add a profile link when they are a creator; a plain fan has none.
+    """
+    account = follow.follower
+    try:
+        creator: Creator | None = account.creator_profile
+    except Creator.DoesNotExist:
+        creator = None
+    return FollowerOut(
+        id=follow.id,
+        nickname=account.nickname,
+        is_creator=creator is not None,
+        handle=creator.handle if creator is not None else "",
+        avatar_url=creator.avatar_url if creator is not None else "",
+    )
+
+
+@creators_router.get(
+    "/{handle}/followers", response={200: FollowerPage, 404: ErrorOut}
+)
+def list_followers(
+    request: HttpRequest,
+    handle: str,
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> tuple[int, FollowerPage | ErrorOut]:
+    """List a creator's followers, newest first (public, keyset-paginated).
+
+    A public read: a follower's ``nickname`` is already public (comments, follow
+    notifications), so listing followers introduces no new PII exposure. Withdrawn
+    (deactivated) accounts are excluded so an anonymised fan is not surfaced. A
+    404 for an unknown handle keeps parity with the profile read (no existence
+    leak). ``select_related`` folds the follower + their optional creator profile
+    into the page query so the row build stays O(page), not O(followers).
+    """
+    creator = Creator.objects.filter(handle=handle).first()
+    if creator is None:
+        return 404, ErrorOut(detail="creator not found")
+    followers = (
+        Follow.objects.filter(creator=creator, follower__is_active=True)
+        .select_related("follower__creator_profile")
+        .order_by("-created_at", "id")
+    )
+    items, next_cursor = paginate(followers, cursor=cursor, limit=limit)
+    return 200, FollowerPage(
+        items=[_follower_out(f) for f in items], next_cursor=next_cursor
+    )
+
+
 @search_router.get("", response=SearchOut)
 def search(
     request: HttpRequest, q: str = "", limit: int | None = None, offset: int = 0
