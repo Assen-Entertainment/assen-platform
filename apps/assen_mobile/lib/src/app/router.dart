@@ -1,5 +1,6 @@
 import 'package:assen_mobile/src/app/app_shell.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
+import 'package:assen_mobile/src/checkout/checkout_screen.dart';
 import 'package:assen_mobile/src/creator/creator_screen.dart';
 import 'package:assen_mobile/src/discovery/discovery_screen.dart';
 import 'package:assen_mobile/src/feed/feed_screen.dart';
@@ -104,6 +105,21 @@ abstract final class RoutePaths {
 
   /// Builds the product detail location for [id].
   static String product(String id) => '/product/$id';
+
+  /// Builds the (mock) checkout location for [productId], with optional [qty]
+  /// and [option] carried as query parameters.
+  static String checkout(
+    String productId, {
+    int qty = 1,
+    String option = '',
+  }) {
+    final params = <String, String>{
+      if (qty != 1) 'qty': '$qty',
+      if (option.isNotEmpty) 'opt': option,
+    };
+    if (params.isEmpty) return '/checkout/$productId';
+    return '/checkout/$productId?${Uri(queryParameters: params).query}';
+  }
 }
 
 // Root navigator key so pushed routes (creator, login) sit above the shell.
@@ -212,6 +228,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             ProductScreen(productId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/checkout/:productId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final rawQty = int.tryParse(state.uri.queryParameters['qty'] ?? '');
+          return CheckoutScreen(
+            productId: state.pathParameters['productId']!,
+            qty: rawQty == null || rawQty < 1 ? 1 : rawQty,
+            option: state.uri.queryParameters['opt'] ?? '',
+          );
+        },
       ),
       GoRoute(
         path: RoutePaths.orders,
