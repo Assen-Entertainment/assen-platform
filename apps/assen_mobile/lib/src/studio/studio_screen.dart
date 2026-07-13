@@ -76,14 +76,33 @@ class _StudioDashboard extends StatelessWidget {
     ];
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SpacingTokens.s4),
-      child: AssenFeedGrid(
-        minColumnWidth: 150,
-        maxColumns: 2,
-        columnSpacing: SpacingTokens.s3,
-        rowSpacing: SpacingTokens.s3,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final (label, value) in metrics)
-            AssenStatCard(value: formatThousands(value), label: label),
+          AssenFeedGrid(
+            minColumnWidth: 150,
+            maxColumns: 2,
+            columnSpacing: SpacingTokens.s3,
+            rowSpacing: SpacingTokens.s3,
+            children: [
+              for (final (label, value) in metrics)
+                AssenStatCard(value: formatThousands(value), label: label),
+            ],
+          ),
+          const SizedBox(height: SpacingTokens.s6),
+          const AssenSectionHeader(title: '관리'),
+          AssenListItem(
+            title: '게시물 관리',
+            onTap: () => context.push(RoutePaths.studioPosts),
+          ),
+          AssenListItem(
+            title: '상품 관리',
+            onTap: () => context.push(RoutePaths.studioProducts),
+          ),
+          AssenListItem(
+            title: '멤버십 관리',
+            onTap: () => context.push(RoutePaths.studioMembership),
+          ),
         ],
       ),
     );
