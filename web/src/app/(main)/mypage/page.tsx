@@ -19,6 +19,12 @@ export default function MyPage() {
   const { user } = useSession();
   const name = user?.name ?? "게스트";
   const initial = name.slice(0, 1);
+  // 크리에이터면 스튜디오로, 아니면 셀프 개설로 안내(팬/크리에이터 모드 진입점).
+  const isCreator = user?.isCreator ?? false;
+  const creatorEntry = isCreator
+    ? { label: "크리에이터 스튜디오", subtitle: "내 페이지·상품 관리", href: "/studio" }
+    : { label: "크리에이터 되기", subtitle: "내 크리에이터 페이지 개설", href: "/become-creator" };
+  const menu = [creatorEntry, ...MENU];
   // 핸들이 raw UUID(=id 폴백)면 @UUID 노출 대신 미표기 — 닉네임만 보여준다.
   const rawHandle = user?.handle ?? "";
   const showHandle = Boolean(rawHandle) && rawHandle !== user?.id && !UUID_RE.test(rawHandle);
@@ -39,7 +45,7 @@ export default function MyPage() {
       </section>
 
       <div className="overflow-hidden rounded-lg border border-outline">
-        {MENU.map((m, i) => (
+        {menu.map((m, i) => (
           <div key={m.label}>
             {i > 0 ? <Divider /> : null}
             <Link href={m.href} className="block transition-colors hover:bg-surface-container-high">
