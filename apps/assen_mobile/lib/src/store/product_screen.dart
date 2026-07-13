@@ -16,11 +16,10 @@ import 'package:ui_kit/ui_kit.dart';
 /// Wired to `GET /api/products/{id}` through [productControllerProvider]: it
 /// renders the async states through ui_kit only — a skeleton while loading, a
 /// dedicated "없는 상품" state on 404 ([ProductNotFoundException]) and
-/// [AssenErrorState] (with retry) otherwise. On success it shows a
-/// *browse-only*
-/// detail: media, title, price, description and options, plus sold-out / locked
-/// / 19+ badges. There is deliberately no purchase CTA — checkout is a payment
-/// gate (IAP) not built on mobile yet; a notice states the browse-only intent.
+/// [AssenErrorState] (with retry) otherwise. On success it shows the detail —
+/// media, title, price, description and options, plus sold-out / locked / 19+
+/// badges — and a 구매하기 CTA that opens the (mock) checkout. A sold-out item
+/// shows a disabled button; a 멤버십 전용 item routes through the tier instead.
 class ProductScreen extends ConsumerWidget {
   /// Creates the detail screen for the product identified by [productId].
   const ProductScreen({required this.productId, super.key});
@@ -152,15 +151,40 @@ class _ProductDetail extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: SpacingTokens.s6),
-              // Browse-only: no purchase CTA — checkout is a payment gate (IAP)
-              // not built on mobile yet.
-              const AssenNoticeBar(
-                message: '지금은 상품을 둘러볼 수 있어요. 구매 기능은 준비 중입니다.',
-              ),
+              _PurchaseCta(product: product),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The purchase call-to-action: 구매하기 → the (mock) checkout, or a disabled/
+/// notice state for a sold-out or membership-locked product.
+///
+/// The checkout itself is fail-closed behind the payment gate; this CTA only
+/// decides whether a purchase is *offered* at all — a sold-out listing is not
+/// orderable, and a 멤버십 전용 item is acquired through the tier, not checkout.
+class _PurchaseCta extends StatelessWidget {
+  const _PurchaseCta({required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    if (product.locked) {
+      return const AssenNoticeBar(
+        message: '멤버십 전용 상품이에요. 크리에이터의 멤버십에 가입하면 이용할 수 있어요.',
+      );
+    }
+    if (product.soldOut) {
+      return const AssenButton(label: '품절', expand: true, onPressed: null);
+    }
+    return AssenButton(
+      label: '구매하기',
+      expand: true,
+      onPressed: () => context.push(RoutePaths.checkout(product.id)),
     );
   }
 }
