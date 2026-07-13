@@ -19,7 +19,10 @@ import 'package:assen_mobile/src/settings/payment_methods_screen.dart';
 import 'package:assen_mobile/src/settings/settings_screen.dart';
 import 'package:assen_mobile/src/store/product_screen.dart';
 import 'package:assen_mobile/src/store/store_screen.dart';
+import 'package:assen_mobile/src/studio/studio_posts_screen.dart';
+import 'package:assen_mobile/src/studio/studio_products_screen.dart';
 import 'package:assen_mobile/src/studio/studio_screen.dart';
+import 'package:assen_mobile/src/studio/studio_tiers_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -61,6 +64,15 @@ abstract final class RoutePaths {
 
   /// The creator owner's studio dashboard (reached from the 마이 tab).
   static const String studio = '/studio';
+
+  /// The 게시물 관리 screen — the creator's own posts (reached from 스튜디오).
+  static const String studioPosts = '/studio/posts';
+
+  /// The 상품 관리 screen — the creator's catalog (reached from 스튜디오).
+  static const String studioProducts = '/studio/products';
+
+  /// The 멤버십 관리 screen — the creator's tiers (reached from 스튜디오).
+  static const String studioMembership = '/studio/membership';
 
   /// The account settings screen (reached from the 마이 tab).
   static const String settings = '/settings';
@@ -211,6 +223,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.studio,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const StudioScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.studioPosts,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const StudioPostsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.studioProducts,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const StudioProductsScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.studioMembership,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const StudioTiersScreen(),
       ),
       GoRoute(
         path: RoutePaths.settings,
