@@ -11,10 +11,12 @@ broken). Auth is resolved silently with
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.db.models import (
     Case,
     Count,
@@ -464,6 +466,65 @@ def studio_update_profile(
     # follower/post counts and the caller's own following flag, like every read.
     annotated = _annotated(account).get(pk=creator.pk)
     return 200, _creator_out(annotated)
+
+
+# Handles that could impersonate the platform or collide with reserved surfaces.
+_RESERVED_HANDLES = frozenset(
+    {"admin", "api", "studio", "me", "support", "official", "assen", "help", "settings"}
+)
+
+
+class StudioProfileCreateIn(Schema):
+    """Payload for a fan to open (self-serve) their own creator page."""
+
+    handle: str
+    name: str
+
+
+@studio_profile_router.post(
+    "",
+    response={201: CreatorOut, 409: ErrorOut, 422: ErrorOut},
+    throttle=user_write_throttle("6/min"),
+)
+def studio_create_profile(
+    request: HttpRequest, payload: StudioProfileCreateIn
+) -> tuple[int, CreatorOut | ErrorOut]:
+    """Open the caller's own creator page — the self-serve "크리에이터 되기" flow (D4).
+
+    A signed-in fan becomes a creator by claiming a unique ``handle`` + display
+    ``name``; this creates their :class:`~apps.creator.models.Creator`
+    (``owner`` = the caller). "Creator" is derived from operating a creator
+    profile (``handle`` present on ``/fan/me``), not a separate role — so no
+    privilege change is made here. Idempotency is NOT wanted: a second call
+    (already a creator, or a taken handle) is a 409, and the unique(handle) /
+    one-to-one(owner) constraints close the concurrent-claim race even if two
+    requests both pass the pre-checks.
+    """
+    account = authed(request)
+    handle = payload.handle.strip().lower()
+    name = payload.name.strip()
+    if not 2 <= len(handle) <= 32 or re.fullmatch(r"[a-z0-9_]+", handle) is None:
+        return 422, ErrorOut(
+            detail="핸들은 소문자·숫자·밑줄(_) 2~32자로 입력해 주세요."
+        )
+    if not 1 <= len(name) <= 80:
+        return 422, ErrorOut(detail="이름은 1~80자로 입력해 주세요.")
+    if handle in _RESERVED_HANDLES:
+        return 409, ErrorOut(detail="사용할 수 없는 핸들이에요.")
+    if Creator.objects.filter(owner=account).exists():
+        return 409, ErrorOut(detail="이미 크리에이터 페이지를 운영 중이에요.")
+    if Creator.objects.filter(handle=handle).exists():
+        return 409, ErrorOut(detail="이미 사용 중인 핸들이에요.")
+    try:
+        with transaction.atomic():
+            creator = Creator.objects.create(
+                owner=account, handle=handle, name=name
+            )
+    except IntegrityError:
+        # A concurrent claim won the unique(handle) / one-to-one(owner) race.
+        return 409, ErrorOut(detail="이미 사용 중인 핸들이에요.")
+    annotated = _annotated(account).get(pk=creator.pk)
+    return 201, _creator_out(annotated)
 
 
 api.add_router("/studio/profile", studio_profile_router)
