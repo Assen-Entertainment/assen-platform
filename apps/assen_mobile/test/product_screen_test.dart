@@ -1,6 +1,6 @@
-// Render tests for the product detail: the browse-only detail renders title /
-// price / options with sold-out & locked badges and NO purchase CTA, and a 404
-// surfaces the "없는 상품" state. Fake repository, no network.
+// Render tests for the product detail: renders title / price / options with
+// sold-out & locked badges, offers a 구매하기 CTA (→ checkout) for an orderable
+// item, and a 404 surfaces the "없는 상품" state. Fake repository, no network.
 
 import 'package:assen_mobile/src/store/product.dart';
 import 'package:assen_mobile/src/store/product_screen.dart';
@@ -55,9 +55,7 @@ Widget _host(StoreRepository repo) => ProviderScope(
 );
 
 void main() {
-  testWidgets('renders the browse-only detail with no purchase CTA', (
-    tester,
-  ) async {
+  testWidgets('renders the detail with a 구매하기 checkout CTA', (tester) async {
     await tester.pumpWidget(_host(_FakeStoreRepository.data(_product())));
     await tester.pump();
     await tester.pump();
@@ -66,10 +64,14 @@ void main() {
     expect(find.text('₩18,000'), findsOneWidget);
     expect(find.text('고급 아크릴 굿즈입니다.'), findsOneWidget);
     expect(find.text('A타입'), findsOneWidget); // option chip
-    expect(find.text('지금은 상품을 둘러볼 수 있어요. 구매 기능은 준비 중입니다.'), findsOneWidget);
 
-    // Browse-only: there is no purchase/reserve action button of any kind.
-    expect(find.byType(AssenButton), findsNothing);
+    // An orderable item offers a 구매하기 CTA into the (mock) checkout; the old
+    // browse-only "준비 중" notice is gone.
+    expect(find.widgetWithText(AssenButton, '구매하기'), findsOneWidget);
+    expect(
+      find.text('지금은 상품을 둘러볼 수 있어요. 구매 기능은 준비 중입니다.'),
+      findsNothing,
+    );
   });
 
   testWidgets('shows the sold-out and locked badges', (tester) async {
