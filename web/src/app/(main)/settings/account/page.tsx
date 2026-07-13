@@ -28,7 +28,7 @@ export default function AccountSettingsPage() {
   const { toast } = useToast();
   const { user, logout } = useSession();
   const updateMe = useUpdateMe();
-  const isCreator = user?.role === "creator";
+  const isCreator = user?.isCreator ?? false;
 
   const [nickname, setNickname] = React.useState(user?.name ?? "");
   const [confirmText, setConfirmText] = React.useState("");

@@ -31,6 +31,8 @@ export interface SessionUser {
   handle: string;
   role: "fan" | "creator";
   avatarUrl?: string;
+  /** 크리에이터 페이지 운영 여부 — /fan/me의 handle 존재로 파생(Role enum엔 creator 값이 없음). */
+  isCreator: boolean;
   /** 성인(19+) 인증 여부 — 파생 플래그(원본 PII 아님). 기본 fail-closed=false. */
   adultVerified: boolean;
   /** 본인인증 상태 — KYC 배너·게이팅 분기. 기본 fail-closed="unverified". */
@@ -64,6 +66,8 @@ interface SessionContextValue {
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
   /** OTP 가입(신규 계정). */
   signupWithOtp: (input: SignupInput) => Promise<void>;
+  /** 셀프 "크리에이터 되기" — POST /studio/profile 후 세션 갱신. 실패 시 ApiError 전파. */
+  becomeCreator: (input: { handle: string; name: string }) => Promise<void>;
   /**
    * 본인인증 완료 결과를 세션에 반영 — mock은 로컬 persist, 실 경로는 ['auth','me'] 갱신.
    * age-gate/KYC 확인 성공 후 호출(파생 플래그만 — 원본 PII 미보관).
@@ -77,6 +81,7 @@ const DEFAULT_USER: SessionUser = {
   name: "데모 유저",
   handle: "me",
   role: "fan",
+  isCreator: false,
   adultVerified: false,
   kycStatus: "unverified",
 };
@@ -98,6 +103,8 @@ function readStored(): SessionUser | null {
         handle: parsed.handle,
         role: parsed.role === "creator" ? "creator" : "fan",
         avatarUrl: typeof parsed.avatarUrl === "string" ? parsed.avatarUrl : undefined,
+        // 크리에이터 여부는 mock에선 명시 저장값으로 복원(fail-closed).
+        isCreator: parsed.isCreator === true,
         // 인증 플래그는 fail-closed 복원 — 저장값이 참일 때만 유지.
         adultVerified: parsed.adultVerified === true,
         kycStatus: coerceKycStatus(parsed.kycStatus),
@@ -151,6 +158,12 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
     async (input: SignupInput) => persist({ ...DEFAULT_USER, name: input.nickname }),
     [persist],
   );
+  // mock: 크리에이터 전환을 로컬 세션에 반영(handle + isCreator).
+  const becomeCreator = React.useCallback(
+    async ({ handle, name }: { handle: string; name: string }) =>
+      persist({ ...(user ?? DEFAULT_USER), handle, name, isCreator: true }),
+    [persist, user],
+  );
   // mock: 인증 완료 플래그를 로컬 세션에 반영(로그인 상태가 없으면 DEFAULT_USER를 기준으로 합성).
   const markAdultVerified = React.useCallback(
     (result: { adultVerified: boolean; kycStatus: string }) =>
@@ -163,8 +176,8 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = React.useMemo<SessionContextValue>(
-    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, markAdultVerified }),
-    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, markAdultVerified],
+    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified }),
+    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -189,6 +202,9 @@ export function mapMe(raw: RawMe): SessionUser {
     handle: raw.handle ?? raw.id,
     role: raw.role === "creator" ? "creator" : "fan",
     avatarUrl: raw.avatar_url ?? undefined,
+    // 크리에이터 = 크리에이터 프로필 운영 여부. 서버 role엔 creator 값이 없어(fan/staff만)
+    // raw.handle 존재(널 아님)로 파생한다 — role 기반 분기가 매칭 안 되던 버그의 정본 신호.
+    isCreator: raw.handle != null,
     adultVerified: raw.adult_verified === true,
     kycStatus: coerceKycStatus(raw.kyc_status),
   };
@@ -272,6 +288,18 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
     [qc],
   );
 
+  // 실 경로: 셀프 크리에이터 등록 후 ['auth','me'] 재조회로 handle(=isCreator 신호)을 반영.
+  const becomeCreator = React.useCallback(
+    async ({ handle, name }: { handle: string; name: string }) => {
+      await apiFetch("/studio/profile", {
+        method: "POST",
+        body: JSON.stringify({ handle, name }),
+      });
+      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
+    [qc],
+  );
+
   const value = React.useMemo<SessionContextValue>(
     () => ({
       user: meQuery.data ?? null,
@@ -284,9 +312,10 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
       requestOtp,
       loginWithOtp,
       signupWithOtp,
+      becomeCreator,
       markAdultVerified,
     }),
-    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, markAdultVerified],
+    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -315,6 +344,7 @@ export function useSession(): SessionContextValue {
       requestOtp: async () => {},
       loginWithOtp: async () => {},
       signupWithOtp: async () => {},
+      becomeCreator: async () => {},
       markAdultVerified: () => {},
     };
   }
