@@ -3,6 +3,7 @@ import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/creator/creator_screen.dart';
 import 'package:assen_mobile/src/discovery/discovery_screen.dart';
 import 'package:assen_mobile/src/feed/feed_screen.dart';
+import 'package:assen_mobile/src/followers/followers_screen.dart';
 import 'package:assen_mobile/src/login/login_screen.dart';
 import 'package:assen_mobile/src/membership/subscriptions_screen.dart';
 import 'package:assen_mobile/src/mypage/mypage_screen.dart';
@@ -95,6 +96,9 @@ abstract final class RoutePaths {
   /// Builds the deep-linkable creator profile location for [handle].
   static String creator(String handle) => '/creator/$handle';
 
+  /// Builds the followers-list location for the creator [handle].
+  static String followers(String handle) => '/creator/$handle/followers';
+
   /// Builds the post detail location for [id].
   static String post(String id) => '/post/$id';
 
@@ -180,6 +184,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) =>
             CreatorScreen(handle: state.pathParameters['handle']!),
+      ),
+      GoRoute(
+        path: '/creator/:handle/followers',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            FollowersScreen(handle: state.pathParameters['handle']!),
       ),
       GoRoute(
         path: RoutePaths.feed,

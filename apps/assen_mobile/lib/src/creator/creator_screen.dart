@@ -138,6 +138,10 @@ class _CreatorProfile extends ConsumerWidget {
             ],
           ),
         ),
+        AssenListItem(
+          title: '팔로워 보기',
+          onTap: () => context.push(RoutePaths.followers(creator.handle)),
+        ),
         if (signedIn) ...[
           const SizedBox(height: SpacingTokens.s4),
           Padding(
