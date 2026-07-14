@@ -8,6 +8,7 @@ creator profile (handle present on /fan/me), not a separate role.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 from django.test import Client
@@ -31,7 +32,7 @@ def _bearer(account: Account) -> dict[str, str]:
     return {"authorization": f"Bearer {issue_token_pair(account).access_token}"}
 
 
-def _open(client: Client, account: Account, body: dict[str, object]):
+def _open(client: Client, account: Account, body: dict[str, object]) -> Any:
     """POST the create-profile body as the given account."""
     return client.post(
         URL,

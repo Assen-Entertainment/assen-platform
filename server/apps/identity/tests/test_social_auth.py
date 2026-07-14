@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 import pytest
+from django.test import Client
+from pytest_django.fixtures import SettingsWrapper
 
 from apps.identity.models import Account, Role
 from apps.identity.signup_services import SignupError
@@ -17,14 +19,14 @@ from config.social_auth import (
 )
 
 
-def test_provider_gated_on_flag(settings):
+def test_provider_gated_on_flag(settings: SettingsWrapper) -> None:
     settings.ENABLE_MOCK_SOCIAL_AUTH = True
     assert isinstance(social_auth_provider(), MockSocialAuthProvider)
     settings.ENABLE_MOCK_SOCIAL_AUTH = False
     assert social_auth_provider() is None
 
 
-def test_mock_authorize_url_bounces_back_with_code():
+def test_mock_authorize_url_bounces_back_with_code() -> None:
     url = MockSocialAuthProvider().authorize_url(
         provider="kakao", state="st", redirect_uri="http://web/auth/callback"
     )
@@ -33,7 +35,7 @@ def test_mock_authorize_url_bounces_back_with_code():
     assert "state=st" in url
 
 
-def test_mock_exchange_returns_stable_profile():
+def test_mock_exchange_returns_stable_profile() -> None:
     profile = MockSocialAuthProvider().exchange(
         provider="kakao", code="mock-kakao", redirect_uri="http://web/cb"
     )
@@ -42,7 +44,7 @@ def test_mock_exchange_returns_stable_profile():
     assert profile.subject == "mock-kakao-user"
 
 
-def test_hash_social_namespaced_and_deterministic():
+def test_hash_social_namespaced_and_deterministic() -> None:
     key = hash_social("kakao", "u1")
     assert key.startswith("s1:")
     assert key == hash_social("kakao", "u1")  # deterministic
@@ -51,7 +53,7 @@ def test_hash_social_namespaced_and_deterministic():
 
 
 @pytest.mark.django_db
-def test_register_social_new_requires_consent():
+def test_register_social_new_requires_consent() -> None:
     with pytest.raises(SignupError) as exc:
         register_or_login_social(provider="kakao", subject="u1", display_name="X")
     assert exc.value.code == ErrorCode.CONSENT_REQUIRED
@@ -62,7 +64,7 @@ def test_register_social_new_requires_consent():
 
 
 @pytest.mark.django_db
-def test_register_social_creates_then_reuses():
+def test_register_social_creates_then_reuses() -> None:
     pair = register_or_login_social(
         provider="kakao",
         subject="u1",
@@ -84,7 +86,7 @@ def test_register_social_creates_then_reuses():
 
 
 @pytest.mark.django_db
-def test_start_endpoint_returns_authorize_url(client):
+def test_start_endpoint_returns_authorize_url(client: Client) -> None:
     resp = client.get(
         "/api/fan/social/kakao/start",
         {"redirect_uri": "http://web/auth/callback"},
@@ -96,7 +98,7 @@ def test_start_endpoint_returns_authorize_url(client):
 
 
 @pytest.mark.django_db
-def test_start_endpoint_rejects_unknown_provider(client):
+def test_start_endpoint_rejects_unknown_provider(client: Client) -> None:
     resp = client.get(
         "/api/fan/social/nope/start", {"redirect_uri": "http://web/cb"}
     )
@@ -105,7 +107,7 @@ def test_start_endpoint_rejects_unknown_provider(client):
 
 
 @pytest.mark.django_db
-def test_callback_signs_up_and_sets_cookie(client):
+def test_callback_signs_up_and_sets_cookie(client: Client) -> None:
     resp = client.post(
         "/api/fan/social/kakao/callback",
         data=json.dumps(
@@ -127,7 +129,7 @@ def test_callback_signs_up_and_sets_cookie(client):
 
 
 @pytest.mark.django_db
-def test_callback_new_without_consent_is_422(client):
+def test_callback_new_without_consent_is_422(client: Client) -> None:
     resp = client.post(
         "/api/fan/social/google/callback",
         data=json.dumps(

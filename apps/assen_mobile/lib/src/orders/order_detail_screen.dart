@@ -41,9 +41,8 @@ class OrderDetailScreen extends ConsumerWidget {
       body: AssenAsyncView<Order>(
         value: order,
         loading: const _DetailSkeleton(),
-        onRetry: () => ref
-            .read(orderDetailControllerProvider(orderId).notifier)
-            .refresh(),
+        onRetry: () =>
+            ref.read(orderDetailControllerProvider(orderId).notifier).refresh(),
         errorBuilder: (error, _) {
           if (error is OrdersAuthRequiredException) {
             return AssenEmptyState(
