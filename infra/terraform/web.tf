@@ -61,20 +61,6 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
-# The web tasks accept the web port from the ALB (the shared service SG only opened
-# the API port). Added as a rule so the inline service-SG block in security.tf is left
-# intact for the API-only case.
-resource "aws_security_group_rule" "web_from_alb" {
-  count                    = var.deploy_web ? 1 : 0
-  type                     = "ingress"
-  from_port                = var.web_container_port
-  to_port                  = var.web_container_port
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.service.id
-  source_security_group_id = aws_security_group.alb.id
-  description              = "Web container port from the ALB"
-}
-
 # API paths stay on the API service; the listener default action (alb.tf) sends
 # everything else to the web target group. Attaches to whichever listener is active
 # (HTTPS with a cert, else HTTP).
