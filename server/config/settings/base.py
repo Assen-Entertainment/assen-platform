@@ -64,6 +64,18 @@ ENABLE_MOCK_PAYMENT: bool = False
 #   Naver OAuth app is wired (a credential gate). dev/test/demo opt in.
 ENABLE_MOCK_SOCIAL_AUTH: bool = False
 
+# Real social OAuth credentials (empty = that provider uses the mock / is unavailable).
+# Set per-env (prod: Secrets Manager; local test: a local .env). config.social_auth
+# activates a provider's REAL adapter only when BOTH its id and secret are present, so
+# a partial config is explicit. These are read here (schema-full env) so dev/test with
+# nothing set keep the mock; a stray value never silently changes behaviour.
+SOCIAL_KAKAO_CLIENT_ID = env("SOCIAL_KAKAO_CLIENT_ID", default="")
+SOCIAL_KAKAO_CLIENT_SECRET = env("SOCIAL_KAKAO_CLIENT_SECRET", default="")
+SOCIAL_GOOGLE_CLIENT_ID = env("SOCIAL_GOOGLE_CLIENT_ID", default="")
+SOCIAL_GOOGLE_CLIENT_SECRET = env("SOCIAL_GOOGLE_CLIENT_SECRET", default="")
+SOCIAL_NAVER_CLIENT_ID = env("SOCIAL_NAVER_CLIENT_ID", default="")
+SOCIAL_NAVER_CLIENT_SECRET = env("SOCIAL_NAVER_CLIENT_SECRET", default="")
+
 # Push-notification transport gate (#16 P5). The operator push-dispatch surface
 # uses an in-memory mock adapter (apps.notification.adapters) — no real FCM/APNs is
 # wired. Hardcoded False here (NOT env-driven), so production fails closed (503
