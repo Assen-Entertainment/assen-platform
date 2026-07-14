@@ -46,6 +46,22 @@ class VerificationResult:
     adult: bool
 
 
+@dataclass(frozen=True)
+class VerificationChallenge:
+    """Provider handshake params a client needs to complete 본인인증.
+
+    A real adapter fills these (the provider session id + the redirect / SDK
+    entry the client is sent to); the client returns to
+    :meth:`IdentityVerifier.confirm` afterwards with the provider token. The mock
+    has no provider, so :meth:`IdentityVerifier.start` returns ``None`` and the
+    client is confirmed directly. Carries NO PII — only opaque handshake refs.
+    """
+
+    provider: str
+    redirect_url: str
+    session_id: str
+
+
 class IdentityVerifier(ABC):
     """Boundary for 본인인증 (KYC / 성인 인증).
 
@@ -64,13 +80,26 @@ class IdentityVerifier(ABC):
     """
 
     @abstractmethod
-    def start(self, *, account: Account) -> None:
-        """Begin a verification challenge for ``account``; raise on failure."""
+    def start(self, *, account: Account) -> VerificationChallenge | None:
+        """Begin a verification challenge for ``account``; raise on failure.
+
+        Returns the provider handshake params the client must act on (a real
+        adapter → redirect/SDK), or ``None`` when there is no provider step to
+        arrange (the mock, which is confirmed directly).
+        """
         raise NotImplementedError
 
     @abstractmethod
-    def confirm(self, *, account: Account) -> VerificationResult:
-        """Resolve the challenge to a :class:`VerificationResult`; raise on failure."""
+    def confirm(
+        self, *, account: Account, token: str | None = None
+    ) -> VerificationResult:
+        """Resolve the challenge to a :class:`VerificationResult`; raise on failure.
+
+        ``token`` is the provider's post-cert verification reference (imp_uid /
+        verification id) the client returns after completing 본인인증; a real
+        adapter verifies it with the provider. The mock ignores it — there is no
+        provider to verify, and the source 주민번호/CI/DI never enters here.
+        """
         raise NotImplementedError
 
 
@@ -84,13 +113,16 @@ class MockIdentityVerifier(IdentityVerifier):
     :class:`~config.otp.MockOtpSender`, which never stores the phone number).
     """
 
-    def start(self, *, account: Account) -> None:
+    def start(self, *, account: Account) -> VerificationChallenge | None:
         """No-op start: there is no provider challenge to arrange in the mock."""
         del account
+        return None
 
-    def confirm(self, *, account: Account) -> VerificationResult:
-        """Return a deterministic adult result (mock passes; no PII consulted)."""
-        del account
+    def confirm(
+        self, *, account: Account, token: str | None = None
+    ) -> VerificationResult:
+        """Return a deterministic adult result (mock passes; no PII, no token)."""
+        del account, token
         return VerificationResult(adult=True)
 
 

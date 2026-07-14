@@ -567,13 +567,21 @@ def verify_start(request: HttpRequest) -> dict[str, str]:
         raise ApiError(
             503, "본인인증을 사용할 수 없어요.", code=ErrorCode.KYC_UNAVAILABLE
         )
-    verifier.start(account=account)
+    challenge = verifier.start(account=account)
     # Move an unconfirmed account into 'pending' so the state machine reflects an
     # in-flight challenge; an already-verified account is left as-is (no downgrade).
     if account.kyc_status != KycStatus.VERIFIED.value:
         account.kyc_status = KycStatus.PENDING.value
         account.save(update_fields=["kyc_status"])
-    return {"status": KycStatus.PENDING.value}
+    # Expose the provider handshake params when a real adapter returns them, so the
+    # client can be redirected / SDK-launched. The mock returns None → the response
+    # stays the bare pending ack (byte-identical to before).
+    response = {"status": KycStatus.PENDING.value}
+    if challenge is not None:
+        response["provider"] = challenge.provider
+        response["redirect_url"] = challenge.redirect_url
+        response["session_id"] = challenge.session_id
+    return response
 
 
 @router.post(
