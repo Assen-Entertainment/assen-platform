@@ -130,3 +130,58 @@ variable "log_retention_days" {
   type        = number
   default     = 30
 }
+
+# --- Web (Next.js) service — optional same-origin frontend on the same ALB ------
+variable "deploy_web" {
+  description = "Deploy the Next.js web app as a second ECS service behind the same ALB (same-origin). Default action → web; /api/*, /healthz, /readyz stay on the API. false = API-only stack (unchanged)."
+  type        = bool
+  default     = false
+}
+
+variable "web_image_repository_url" {
+  description = "ECR repository URL for the web image (required when deploy_web=true)."
+  type        = string
+  default     = ""
+}
+
+variable "web_image_tag" {
+  description = "Mutable web image tag the web service tracks."
+  type        = string
+  default     = "dev"
+}
+
+variable "web_container_port" {
+  description = "Port the Next.js standalone server listens on."
+  type        = number
+  default     = 3000
+}
+
+variable "web_desired_count" {
+  description = "Desired number of web service tasks."
+  type        = number
+  default     = 1
+}
+
+variable "web_task_cpu" {
+  description = "Fargate CPU units for the web task."
+  type        = number
+  default     = 256
+}
+
+variable "web_task_memory" {
+  description = "Fargate memory (MiB) for the web task."
+  type        = number
+  default     = 512
+}
+
+variable "web_api_internal_url" {
+  description = "Absolute API base URL the web server uses for SSR fetches (API_INTERNAL_URL), e.g. http://<alb-dns>/api."
+  type        = string
+  default     = ""
+}
+
+variable "web_container_environment" {
+  description = "Extra non-secret env for the web container."
+  type        = map(string)
+  default     = {}
+}
