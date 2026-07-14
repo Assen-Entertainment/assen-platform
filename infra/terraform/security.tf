@@ -44,6 +44,20 @@ resource "aws_security_group" "service" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # Web port from the ALB when the same-origin web service is deployed. Kept INLINE
+  # (not a separate aws_security_group_rule) — mixing the two makes each apply revoke
+  # the other's rules, which silently drops the web target out of the ALB.
+  dynamic "ingress" {
+    for_each = var.deploy_web ? [1] : []
+    content {
+      description     = "Web port from the ALB (same-origin web service)"
+      from_port       = var.web_container_port
+      to_port         = var.web_container_port
+      protocol        = "tcp"
+      security_groups = [aws_security_group.alb.id]
+    }
+  }
+
   egress {
     description = "All egress"
     from_port   = 0
