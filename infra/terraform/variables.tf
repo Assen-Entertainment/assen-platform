@@ -185,3 +185,9 @@ variable "web_container_environment" {
   type        = map(string)
   default     = {}
 }
+
+variable "media_s3_bucket" {
+  description = "S3 bucket for user media (uploads). Empty (default) = local filesystem storage (dev/demo). When set, the app's task role gets scoped S3 access; also pass DJANGO_MEDIA_S3_BUCKET in container_environment so the backend actually routes to it."
+  type        = string
+  default     = ""
+}
