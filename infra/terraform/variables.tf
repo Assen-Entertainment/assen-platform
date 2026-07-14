@@ -35,6 +35,12 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
+variable "assign_public_ip" {
+  description = "Assign public IPs to the Fargate tasks. false (default) = private subnets behind NAT (production). true = a NAT-less deploy where the tasks sit on public subnets and reach ECR/Secrets/internet via the IGW directly (free-tier staging on the default VPC)."
+  type        = bool
+  default     = false
+}
+
 # --- Image ---------------------------------------------------------------------
 variable "create_ecr_repository" {
   description = "Create the api ECR repository here (false = reference an existing one via image_repository_url)."

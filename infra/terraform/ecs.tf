@@ -38,7 +38,7 @@ locals {
     name             = "worker"
     image            = local.image
     essential        = true
-    command          = ["celery", "-A", "config", "worker", "-l", "info"]
+    command          = ["uv", "run", "--no-sync", "celery", "-A", "config", "worker", "-l", "info"]
     environment      = local.container_environment
     secrets          = local.container_secrets
     logConfiguration = local.worker_log_config
@@ -57,7 +57,7 @@ locals {
     name        = "beat"
     image       = local.image
     essential   = true
-    command     = ["celery", "-A", "config", "beat", "-l", "info"]
+    command     = ["uv", "run", "--no-sync", "celery", "-A", "config", "beat", "-l", "info"]
     environment = local.container_environment
     secrets     = local.container_secrets
     logConfiguration = {
@@ -76,7 +76,7 @@ locals {
     name        = "migrate"
     image       = local.image
     essential   = true
-    command     = ["python", "manage.py", "migrate", "--noinput"]
+    command     = ["uv", "run", "--no-sync", "python", "manage.py", "migrate", "--noinput"]
     environment = local.container_environment
     secrets     = local.container_secrets
     logConfiguration = {
@@ -145,7 +145,7 @@ resource "aws_ecs_service" "api" {
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.service.id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   load_balancer {
@@ -173,7 +173,7 @@ resource "aws_ecs_service" "worker" {
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.service.id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   lifecycle {
@@ -191,6 +191,6 @@ resource "aws_ecs_service" "beat" {
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.service.id]
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 }
