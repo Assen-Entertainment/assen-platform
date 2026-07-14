@@ -1043,6 +1043,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/creators/{handle}/followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Followers
+         * @description List a creator's followers, newest first (public, keyset-paginated).
+         *
+         *     A public read: a follower's ``nickname`` is already public (comments, follow
+         *     notifications), so listing followers introduces no new PII exposure. Withdrawn
+         *     (deactivated) accounts are excluded so an anonymised fan is not surfaced. A
+         *     404 for an unknown handle keeps parity with the profile read (no existence
+         *     leak). ``select_related`` folds the follower + their optional creator profile
+         *     into the page query so the row build stays O(page), not O(followers).
+         */
+        get: operations["apps_creator_api_list_followers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -1081,7 +1108,20 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Studio Create Profile
+         * @description Open the caller's own creator page — the self-serve "크리에이터 되기" flow (D4).
+         *
+         *     A signed-in fan becomes a creator by claiming a unique ``handle`` + display
+         *     ``name``; this creates their :class:`~apps.creator.models.Creator`
+         *     (``owner`` = the caller). "Creator" is derived from operating a creator
+         *     profile (``handle`` present on ``/fan/me``), not a separate role — so no
+         *     privilege change is made here. Idempotency is NOT wanted: a second call
+         *     (already a creator, or a taken handle) is a 409, and the unique(handle) /
+         *     one-to-one(owner) constraints close the concurrent-claim race even if two
+         *     requests both pass the pre-checks.
+         */
+        post: operations["apps_creator_api_studio_create_profile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1449,6 +1489,53 @@ export interface paths {
          *     httpOnly cookies (no token in the body); the app gets the tokens in the body.
          */
         post: operations["apps_identity_api_signup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/social/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Social Start
+         * @description Begin social login: return the provider consent URL + an opaque state.
+         *
+         *     Fails closed (503) when no provider is wired (the mock is gated by
+         *     ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces.
+         */
+        get: operations["apps_identity_api_social_start"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/social/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Social Callback
+         * @description Complete social login: exchange the code, then log in / register the fan.
+         *
+         *     Delivery follows the requested surface (ADR-0002) — the web flow gets hardened
+         *     httpOnly cookies. A first-time social identity requires terms/privacy + 만 14세
+         *     consent (422 CONSENT_REQUIRED/UNDERAGE if missing); a returning one does not.
+         */
+        post: operations["apps_identity_api_social_callback"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4190,6 +4277,47 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * FollowerOut
+         * @description One follower of a creator — already-public display identity only.
+         *
+         *     Carries only fields that are already public elsewhere: the follower's
+         *     ``nickname`` (shown on comments and in follow notifications) and, when the
+         *     follower themselves operates a creator, that creator's ``handle``/
+         *     ``avatar_url`` so the row can link to their profile. No contact/identity PII
+         *     (phone, birth date, etc.) is ever exposed here.
+         */
+        FollowerOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nickname */
+            nickname: string;
+            /** Is Creator */
+            is_creator: boolean;
+            /**
+             * Handle
+             * @default
+             */
+            handle: string;
+            /**
+             * Avatar Url
+             * @default
+             */
+            avatar_url: string;
+        };
+        /**
+         * FollowerPage
+         * @description One keyset page of a creator's followers plus the next-page cursor.
+         */
+        FollowerPage: {
+            /** Items */
+            items: components["schemas"]["FollowerOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
          * ProductBrief
          * @description Minimal product shape for search results.
          */
@@ -4237,6 +4365,16 @@ export interface components {
             accent_color?: string | null;
             /** Category */
             category?: string | null;
+        };
+        /**
+         * StudioProfileCreateIn
+         * @description Payload for a fan to open (self-serve) their own creator page.
+         */
+        StudioProfileCreateIn: {
+            /** Handle */
+            handle: string;
+            /** Name */
+            name: string;
         };
         /**
          * StudioStatsOut
@@ -4575,6 +4713,55 @@ export interface components {
             /** Consent Terms */
             consent_terms: boolean;
             /** Consent Privacy */
+            consent_privacy: boolean;
+            /**
+             * Age Over 14
+             * @default false
+             */
+            age_over_14: boolean;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
+        };
+        /**
+         * SocialStartOut
+         * @description Where to send the client to begin social login (+ the state to echo back).
+         */
+        SocialStartOut: {
+            /** Authorize Url */
+            authorize_url: string;
+            /** State */
+            state: string;
+        };
+        /**
+         * SocialCallbackIn
+         * @description Callback body: the provider's authorization ``code`` + first-login consent.
+         *
+         *     ``consent_*`` / ``age_over_14`` are enforced only when the social identity is new
+         *     (first login = signup); a returning identity ignores them. ``web`` asks for cookie
+         *     delivery (ADR-0002), matching the phone signup/login surface.
+         */
+        SocialCallbackIn: {
+            /** Code */
+            code: string;
+            /**
+             * State
+             * @default
+             */
+            state: string;
+            /** Redirect Uri */
+            redirect_uri: string;
+            /**
+             * Consent Terms
+             * @default false
+             */
+            consent_terms: boolean;
+            /**
+             * Consent Privacy
+             * @default false
+             */
             consent_privacy: boolean;
             /**
              * Age Over 14
@@ -8066,6 +8253,40 @@ export interface operations {
             };
         };
     };
+    apps_creator_api_list_followers: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowerPage"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apps_creator_api_search: {
         parameters: {
             query?: {
@@ -8086,6 +8307,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+        };
+    };
+    apps_creator_api_studio_create_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioProfileCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -8719,6 +8982,56 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SignupIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_social_start: {
+        parameters: {
+            query: {
+                redirect_uri: string;
+            };
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialStartOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_social_callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SocialCallbackIn"];
             };
         };
         responses: {

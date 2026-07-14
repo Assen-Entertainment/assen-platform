@@ -6,12 +6,15 @@ coverage is a NEW file — HTTP is monkeypatched, no live provider call is made.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from config import social_auth as sa
 
 
-def test_real_authorize_url_builds_provider_consent_url():
+def test_real_authorize_url_builds_provider_consent_url() -> None:
     provider = sa.RealSocialAuthProvider({"kakao": ("KID", "KSEC")})
     url = provider.authorize_url(
         provider="kakao", state="st", redirect_uri="https://app/cb"
@@ -23,7 +26,7 @@ def test_real_authorize_url_builds_provider_consent_url():
     assert "scope=profile_nickname" in url
 
 
-def test_real_falls_back_to_mock_for_unconfigured_provider():
+def test_real_falls_back_to_mock_for_unconfigured_provider() -> None:
     provider = sa.RealSocialAuthProvider(
         {"kakao": ("KID", "KSEC")}, fallback=sa.MockSocialAuthProvider()
     )
@@ -33,7 +36,7 @@ def test_real_falls_back_to_mock_for_unconfigured_provider():
     assert "code=mock-google" in url  # google unconfigured → mock bounce
 
 
-def test_real_raises_for_unconfigured_provider_without_fallback():
+def test_real_raises_for_unconfigured_provider_without_fallback() -> None:
     provider = sa.RealSocialAuthProvider({"kakao": ("KID", "KSEC")})
     with pytest.raises(sa.SocialAuthError):
         provider.authorize_url(
@@ -54,7 +57,13 @@ def test_real_raises_for_unconfigured_provider_without_fallback():
         ("naver", {"response": {"id": "n-1", "nickname": "네이버님"}}, "n-1", "네이버님"),
     ],
 )
-def test_real_exchange_maps_profile(monkeypatch, provider, userinfo, subject, name):
+def test_real_exchange_maps_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    userinfo: dict[str, Any],
+    subject: str,
+    name: str,
+) -> None:
     monkeypatch.setattr(sa, "_post_form", lambda url, data: {"access_token": "tok"})
     monkeypatch.setattr(sa, "_get_json", lambda url, headers: userinfo)
     prof = sa.RealSocialAuthProvider({provider: ("id", "sec")}).exchange(
@@ -65,7 +74,7 @@ def test_real_exchange_maps_profile(monkeypatch, provider, userinfo, subject, na
     assert prof.display_name == name
 
 
-def test_real_exchange_raises_without_token(monkeypatch):
+def test_real_exchange_raises_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sa, "_post_form", lambda url, data: {})
     with pytest.raises(sa.SocialAuthError):
         sa.RealSocialAuthProvider({"kakao": ("id", "sec")}).exchange(
@@ -73,7 +82,7 @@ def test_real_exchange_raises_without_token(monkeypatch):
         )
 
 
-def test_accessor_prefers_real_and_mocks_the_rest(settings):
+def test_accessor_prefers_real_and_mocks_the_rest(settings: SettingsWrapper) -> None:
     settings.ENABLE_MOCK_SOCIAL_AUTH = True
     settings.SOCIAL_KAKAO_CLIENT_ID = "KID"
     settings.SOCIAL_KAKAO_CLIENT_SECRET = "KSEC"
