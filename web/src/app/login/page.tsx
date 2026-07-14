@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TextField, Button, Divider, OTPInput } from "@/components/ui";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { SocialButtons } from "@/components/auth/social-buttons";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError, ERROR_CODES } from "@/lib/api";
@@ -150,17 +151,7 @@ function OtpLogin({ next }: { next: string }) {
         >
           처음이신가요? 회원가입
         </Link>
-        <div className="flex flex-col gap-2">
-          <Button variant="outline" className="w-full" disabled={busy} onClick={() => void startSocial("kakao", next)}>
-            카카오로 계속
-          </Button>
-          <Button variant="outline" className="w-full" disabled={busy} onClick={() => void startSocial("google", next)}>
-            Google로 계속
-          </Button>
-          <Button variant="outline" className="w-full" disabled={busy} onClick={() => void startSocial("naver", next)}>
-            네이버로 계속
-          </Button>
-        </div>
+        <SocialButtons onProvider={(provider) => void startSocial(provider, next)} disabled={busy} />
         <p className="text-center text-caption text-on-surface-variant">
           소셜 계정으로 계속하면{" "}
           <Link href="/policy/terms" className="text-primary underline underline-offset-2">이용약관</Link>
