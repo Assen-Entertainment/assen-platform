@@ -13,12 +13,8 @@ import 'package:ui_kit/ui_kit.dart';
 
 /// A repository stand-in: returns a fixed order, or the 401/404 errors.
 class _FakeOrderDetailRepository implements OrderDetailRepository {
-  _FakeOrderDetailRepository(Order order)
-    : _order = order,
-      _notFound = false;
-  _FakeOrderDetailRepository.authRequired()
-    : _order = null,
-      _notFound = false;
+  _FakeOrderDetailRepository(Order order) : _order = order, _notFound = false;
+  _FakeOrderDetailRepository.authRequired() : _order = null, _notFound = false;
   _FakeOrderDetailRepository.notFound() : _order = null, _notFound = true;
 
   final Order? _order;

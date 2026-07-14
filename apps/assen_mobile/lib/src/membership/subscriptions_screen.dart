@@ -35,8 +35,7 @@ class SubscriptionsScreen extends ConsumerWidget {
         loading: const _SubscriptionsSkeleton(),
         onRetry: () =>
             ref.read(subscriptionsControllerProvider.notifier).refresh(),
-        errorBuilder: (error, _) =>
-            error is SubscriptionsAuthRequiredException
+        errorBuilder: (error, _) => error is SubscriptionsAuthRequiredException
             ? AssenEmptyState(
                 title: '로그인이 필요해요',
                 message: '구독 내역을 보려면 먼저 로그인해 주세요.',
