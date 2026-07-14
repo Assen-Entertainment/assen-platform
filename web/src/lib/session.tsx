@@ -73,6 +73,10 @@ interface SessionContextValue {
    * age-gate/KYC 확인 성공 후 호출(파생 플래그만 — 원본 PII 미보관).
    */
   markAdultVerified: (result: { adultVerified: boolean; kycStatus: string }) => void;
+  /** 소셜 로그인 시작 — provider start 조회 후 브라우저를 authorize_url로 리다이렉트(현 페이지 이탈). */
+  startSocial: (provider: string, next?: string) => Promise<void>;
+  /** 소셜 콜백 완료 — provider callback POST(implied consent) 후 세션 갱신. 실패 시 ApiError 전파. */
+  completeSocial: (input: { provider: string; code: string; state: string }) => Promise<void>;
 }
 
 // mock 기본값은 fail-closed — 성인 인증 미완료(adultVerified:false·kycStatus:"unverified").
@@ -175,9 +179,13 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
     [persist, user],
   );
 
+  // mock: 소셜 로그인도 즉시 로그인으로 합성(실 리다이렉트/콜백 없음 — 오프라인·CI).
+  const startSocial = React.useCallback(async () => persist(DEFAULT_USER), [persist]);
+  const completeSocial = React.useCallback(async () => persist(DEFAULT_USER), [persist]);
+
   const value = React.useMemo<SessionContextValue>(
-    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified }),
-    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified],
+    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified, startSocial, completeSocial }),
+    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified, startSocial, completeSocial],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -300,6 +308,42 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
     [qc],
   );
 
+  const startSocial = React.useCallback(async (provider: string, next = "/discovery") => {
+    // next는 콜백 후 복귀 경로 — provider 리다이렉트가 쿼리를 덮어쓰므로 sessionStorage로 전달.
+    try {
+      sessionStorage.setItem("assen.social.next", next);
+    } catch {
+      /* storage 불가 무시 — 콜백은 기본 /discovery로 복귀 */
+    }
+    const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
+    const { authorize_url } = await apiFetch<{ authorize_url: string; state: string }>(
+      `/fan/social/${provider}/start?redirect_uri=${encodeURIComponent(redirectUri)}`,
+    );
+    window.location.href = authorize_url;
+  }, []);
+
+  const completeSocial = React.useCallback(
+    async ({ provider, code, state }: { provider: string; code: string; state: string }) => {
+      const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
+      // Implied consent: 사용자가 소셜 버튼 옆 고지(이용약관·개인정보·만 14세)를 지나 진행함.
+      await apiFetch(`/fan/social/${provider}/callback`, {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          state,
+          redirect_uri: redirectUri,
+          consent_terms: true,
+          consent_privacy: true,
+          age_over_14: true,
+          web: true,
+        }),
+      });
+      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      track("login_completed", { method: "social" });
+    },
+    [qc],
+  );
+
   const value = React.useMemo<SessionContextValue>(
     () => ({
       user: meQuery.data ?? null,
@@ -314,8 +358,10 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
       signupWithOtp,
       becomeCreator,
       markAdultVerified,
+      startSocial,
+      completeSocial,
     }),
-    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified],
+    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified, startSocial, completeSocial],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -346,6 +392,8 @@ export function useSession(): SessionContextValue {
       signupWithOtp: async () => {},
       becomeCreator: async () => {},
       markAdultVerified: () => {},
+      startSocial: async () => {},
+      completeSocial: async () => {},
     };
   }
   return ctx;

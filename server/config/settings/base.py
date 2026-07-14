@@ -59,6 +59,10 @@ ENABLE_MOCK_FAN_OTP: bool = False
 ENABLE_MOCK_KYC: bool = False
 ENABLE_ADULT_CONTENT: bool = False
 ENABLE_MOCK_PAYMENT: bool = False
+# - ENABLE_MOCK_SOCIAL_AUTH: the deterministic mock social-login provider
+#   (config.social_auth). Off → /fan/social/* fails closed (503); no real Kakao/Google/
+#   Naver OAuth app is wired (a credential gate). dev/test/demo opt in.
+ENABLE_MOCK_SOCIAL_AUTH: bool = False
 
 # Push-notification transport gate (#16 P5). The operator push-dispatch surface
 # uses an in-memory mock adapter (apps.notification.adapters) — no real FCM/APNs is

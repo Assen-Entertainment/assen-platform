@@ -28,6 +28,7 @@ ENABLE_MOCK_KYC = True
 ENABLE_MOCK_PAYMENT = True
 ENABLE_ADULT_CONTENT = True
 ENABLE_MOCK_PUSH = True
+ENABLE_MOCK_SOCIAL_AUTH = True
 
 # DEMO ONLY: serve uploaded media off the local filesystem (config.urls) and enable
 # the upload endpoint. prod (DEBUG off) keeps this False — real prod serves media

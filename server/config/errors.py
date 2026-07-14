@@ -57,6 +57,12 @@ class ErrorCode(StrEnum):
     REFRESH_TOKEN_REQUIRED = "RefreshTokenRequired"
     REFRESH_TOKEN_INVALID = "RefreshTokenInvalid"
     KYC_UNAVAILABLE = "KycUnavailable"
+    # Social login (OAuth): fails closed (503 → SOCIAL_UNAVAILABLE) when no provider is
+    # wired (the mock is gated by ENABLE_MOCK_SOCIAL_AUTH, dev/test/demo only); an
+    # unknown provider path segment is 422 → SOCIAL_PROVIDER_UNSUPPORTED. Mirrors
+    # OTP_UNAVAILABLE / KYC_UNAVAILABLE.
+    SOCIAL_UNAVAILABLE = "SocialUnavailable"
+    SOCIAL_PROVIDER_UNSUPPORTED = "SocialProviderUnsupported"
 
     # --- commerce (catalog / studio) ----------------------------------------
     OWNER_REQUIRED = "OwnerRequired"

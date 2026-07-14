@@ -30,6 +30,7 @@ see :mod:`config.identity_verify`).
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import datetime
 
 from django.conf import settings
@@ -67,10 +68,16 @@ from apps.identity.signup_services import (
     normalize_phone,
     register_fan,
 )
+from apps.identity.social_services import register_or_login_social
 from config.api import api
 from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
 from config.otp import MockOtpSender, OtpSender
+from config.social_auth import (
+    SUPPORTED_SOCIAL_PROVIDERS,
+    SocialAuthError,
+    social_auth_provider,
+)
 from config.throttle import anon_throttle, user_write_throttle
 
 # Auth-failure observability. Structured and strictly PII-free: raw phone numbers
@@ -342,6 +349,118 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
     except SignupError as exc:
         raise ApiError(422, str(exc), code=exc.code) from exc
 
+    return _deliver_token_pair(pair, response, web=data.web)
+
+
+class SocialStartOut(Schema):
+    """Where to send the client to begin social login (+ the state to echo back)."""
+
+    authorize_url: str
+    state: str
+
+
+class SocialCallbackIn(Schema):
+    """Callback body: the provider's authorization ``code`` + first-login consent.
+
+    ``consent_*`` / ``age_over_14`` are enforced only when the social identity is new
+    (first login = signup); a returning identity ignores them. ``web`` asks for cookie
+    delivery (ADR-0002), matching the phone signup/login surface.
+    """
+
+    code: str
+    state: str = ""
+    redirect_uri: str
+    consent_terms: bool = False
+    consent_privacy: bool = False
+    age_over_14: bool = False
+    web: bool = False
+
+
+def _require_supported_provider(provider: str) -> None:
+    """Reject an unknown provider path segment (422) before touching the adapter."""
+    if provider not in SUPPORTED_SOCIAL_PROVIDERS:
+        raise ApiError(
+            422,
+            "Unsupported social provider.",
+            code=ErrorCode.SOCIAL_PROVIDER_UNSUPPORTED,
+        )
+
+
+@router.get(
+    "/social/{provider}/start",
+    response=SocialStartOut,
+    throttle=anon_throttle("10/min"),
+)
+def social_start(
+    request: HttpRequest, provider: str, redirect_uri: str
+) -> SocialStartOut:
+    """Begin social login: return the provider consent URL + an opaque state.
+
+    Fails closed (503) when no provider is wired (the mock is gated by
+    ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces.
+    """
+    del request
+    _require_supported_provider(provider)
+    adapter = social_auth_provider()
+    if adapter is None:
+        raise ApiError(
+            503,
+            "Social login is temporarily unavailable.",
+            code=ErrorCode.SOCIAL_UNAVAILABLE,
+        )
+    # Opaque anti-replay state the client echoes back on callback. A real adapter also
+    # binds it server-side; the mock round-trips entirely on our origin.
+    state = secrets.token_urlsafe(24)
+    return SocialStartOut(
+        authorize_url=adapter.authorize_url(
+            provider=provider, state=state, redirect_uri=redirect_uri
+        ),
+        state=state,
+    )
+
+
+@router.post(
+    "/social/{provider}/callback",
+    response=SignupOut,
+    throttle=anon_throttle("10/min"),
+)
+def social_callback(
+    request: HttpRequest,
+    provider: str,
+    data: SocialCallbackIn,
+    response: HttpResponse,
+) -> SignupOut:
+    """Complete social login: exchange the code, then log in / register the fan.
+
+    Delivery follows the requested surface (ADR-0002) — the web flow gets hardened
+    httpOnly cookies. A first-time social identity requires terms/privacy + 만 14세
+    consent (422 CONSENT_REQUIRED/UNDERAGE if missing); a returning one does not.
+    """
+    del request
+    _require_supported_provider(provider)
+    adapter = social_auth_provider()
+    if adapter is None:
+        raise ApiError(
+            503,
+            "Social login is temporarily unavailable.",
+            code=ErrorCode.SOCIAL_UNAVAILABLE,
+        )
+    try:
+        profile = adapter.exchange(
+            provider=provider, code=data.code, redirect_uri=data.redirect_uri
+        )
+        pair = register_or_login_social(
+            provider=provider,
+            subject=profile.subject,
+            display_name=profile.display_name,
+            consent_terms=data.consent_terms,
+            consent_privacy=data.consent_privacy,
+            age_over_14=data.age_over_14,
+        )
+    except SocialAuthError as exc:
+        raise ApiError(422, str(exc), code=ErrorCode.SOCIAL_UNAVAILABLE) from exc
+    except SignupError as exc:
+        raise ApiError(422, str(exc), code=exc.code) from exc
     return _deliver_token_pair(pair, response, web=data.web)
 
 

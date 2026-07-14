@@ -35,7 +35,7 @@ function LoginContent() {
 function OtpLogin({ next }: { next: string }) {
   const router = useRouter();
   const { toast } = useToast();
-  const { requestOtp, loginWithOtp } = useSession();
+  const { requestOtp, loginWithOtp, startSocial } = useSession();
   const [phone, setPhone] = React.useState("");
   const [otp, setOtp] = React.useState("");
   const [step, setStep] = React.useState<"phone" | "otp">("phone");
@@ -150,8 +150,23 @@ function OtpLogin({ next }: { next: string }) {
         >
           처음이신가요? 회원가입
         </Link>
+        <div className="flex flex-col gap-2">
+          <Button variant="outline" className="w-full" disabled={busy} onClick={() => void startSocial("kakao", next)}>
+            카카오로 계속
+          </Button>
+          <Button variant="outline" className="w-full" disabled={busy} onClick={() => void startSocial("google", next)}>
+            Google로 계속
+          </Button>
+          <Button variant="outline" className="w-full" disabled={busy} onClick={() => void startSocial("naver", next)}>
+            네이버로 계속
+          </Button>
+        </div>
         <p className="text-center text-caption text-on-surface-variant">
-          ※ 소셜·이메일 로그인은 준비 중이에요.
+          소셜 계정으로 계속하면{" "}
+          <Link href="/policy/terms" className="text-primary underline underline-offset-2">이용약관</Link>
+          {" 및 "}
+          <Link href="/policy/privacy" className="text-primary underline underline-offset-2">개인정보처리방침</Link>
+          에 동의하고 만 14세 이상임을 확인합니다.
         </p>
     </AuthShell>
   );
