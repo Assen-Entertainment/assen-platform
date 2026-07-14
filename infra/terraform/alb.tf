@@ -37,7 +37,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    target_group_arn = var.deploy_web ? one(aws_lb_target_group.web[*].arn) : aws_lb_target_group.api.arn
   }
 }
 
@@ -69,6 +69,6 @@ resource "aws_lb_listener" "http_forward" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    target_group_arn = var.deploy_web ? one(aws_lb_target_group.web[*].arn) : aws_lb_target_group.api.arn
   }
 }

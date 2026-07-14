@@ -154,7 +154,11 @@ sh scripts/deploy-prod-ecs.sh
 ---
 
 ## Phase 6 — 웹(Next.js) = AWS Amplify Hosting
-1. Amplify 콘솔 → **Host web app** → GitHub `Assen-Entertainment/assen-platform` 연결, 브랜치 `main`, **앱 루트 `web/`**.
+
+> ⚠️ **선행 조건(중요)**: Amplify 웹은 **HTTPS**로 서빙된다. HTTPS 페이지가 **HTTP** API를 호출하면 브라우저가 **mixed-content로 차단**하므로, 이 Phase 전에 **API가 반드시 HTTPS**여야 한다(= Phase 2 ACM + Phase 4에서 `acm_certificate_arn` 지정 → ALB 443 리스너, `api.assenent.com`). staging은 이 이유로 웹 연결 없이 HTTP로만 검증했다.
+> **Amplify 요금**: 신규 계정 12개월 프리티어(빌드 1000분/월·서빙 15GB·저장 5GB) — 소규모 웹은 사실상 무료.
+
+1. Amplify 콘솔 → **Host web app** → GitHub `Assen-Entertainment/assen-platform` 연결, 브랜치 `main`, **앱 루트 `web/`**(monorepo — Amplify가 web/를 빌드하도록 app root 지정).
 2. **환경변수**: `NEXT_PUBLIC_API_URL=https://api.assenent.com` (★빌드타임에 이미지에 각인 — Amplify 빌드 설정에 반드시 지정).
 3. 빌드 설정(Next.js 자동 감지) 확인 → 배포. Amplify가 SSR 컴퓨트·CDN·SSL 관리.
 4. **도메인**: Amplify Domain management → `assenent.com`(또는 `app.assenent.com`) 연결(SSL 자동).
@@ -180,4 +184,9 @@ prod에선 mock 전부 OFF라 아래가 fail-closed. **staging(demo)로 스택 �
 - **필수 시크릿**: `SECRET_KEY`·`DATABASE_URL`·`REDIS_URL`·`PHONE_IDENTIFIER_HMAC_KEY` (+ 후행: PG키·본인인증키·SMS키·S3 자격).
 - **롤백**: `deploy-prod-ecs.sh`는 mutable `:prod` 태그를 롤. 이전 커밋 태그로 서비스 `update-service --force-new-deployment` 하거나 이전 태스크데프 리비전으로 롤백.
 - **staging 최소경로**: Phase 1~5를 기본 VPC + `DJANGO_SETTINGS_MODULE=config.settings.demo`(mock ON)로 1회 → 스택/부팅/서빙 확인 → prod 전환.
+- **dev/prod 2환경 + 승격**: 한 terraform 디렉터리로 두 환경을 tfstate 키로 분리한다.
+  - **상태 전환**: `terraform init -reconfigure -backend-config="key=dev/ecs.tfstate" …`(prod은 `key=prod/ecs.tfstate`). 각 환경은 `dev.tfvars`/`prod.tfvars`(둘 다 git-ignored)로 apply → 리소스는 `assen-dev-*`/`assen-prod-*`로 완전 격리(별도 ALB·ECS·RDS·Redis).
+  - **★설정 프로파일**: 배포되는 **dev 서버 = `config.settings.demo`**(prod 하드닝 + mock ON). 절대 `config.settings.dev`(로컬 전용·DEBUG·insecure) 아님. **prod 서버 = `config.settings.prod`**. provider 붙은 뒤 dev는 `prod` + provider **샌드박스** 키로 실 연동 QA.
+  - **승격(빌드 1회, 두 곳 배포)**: 커밋에서 이미지 `:{sha}` 1회 빌드·push → `:{sha}`를 `:dev`로 태깅·push → dev 서비스 `update-service --force-new-deployment` + `assen-dev-migrate` 태스크 → **QA 통과** → **같은 `:{sha}`** 를 `:prod`로 태깅·push → prod 승격(`deploy-prod-ecs.sh`). dev↔prod가 **동일 아티팩트**임을 보장.
+  - **비용**: dev 상시 24/7 = ALB+Fargate 크레딧 소모. RDS/Redis는 환경당 1개라 두 환경 동시엔 프리티어(각 1개)를 초과 → 두 번째는 크레딧.
 - 관련: `docs/deployment.md` · `docs/adr/0003-hosting-aws.md` · `infra/terraform/README.md` · `docs/ops/mvp-release-boundary-2026-07-13.md`.
