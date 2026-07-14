@@ -2,7 +2,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Sidebar, TopBar, SearchField, Button, Avatar, BottomNav, Logo } from "@/components/ui";
+import {
+  Sidebar,
+  TopBar,
+  SearchField,
+  Button,
+  Avatar,
+  BottomNav,
+  Logo,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui";
 import { HomeIcon, FeedIcon, StoreIcon, HeartIcon, BellIcon, PersonIcon, SunIcon, MoonIcon, SettingsIcon } from "@/lib/icons";
 import { useTheme } from "@/components/theme-provider";
 import { useSession } from "@/lib/session";
@@ -49,9 +62,17 @@ function SidebarFooter() {
   const initial = user ? user.name.slice(0, 1) : "나";
   return (
     <div className="flex flex-col gap-3 border-t border-outline pt-3">
-      <Button className="w-full" asChild>
-        <Link href="/studio">크리에이터 스튜디오</Link>
-      </Button>
+      {/* 크리에이터면 스튜디오, 비크리에이터(로그인)면 셀프 개설로 유도(mypage와 동일 규칙).
+          미로그인·복원 전에는 스튜디오 CTA로 폴백(가입 유도 퍼널). */}
+      {mounted && user && !user.isCreator ? (
+        <Button className="w-full" variant="outline" asChild>
+          <Link href="/become-creator">크리에이터 되기</Link>
+        </Button>
+      ) : (
+        <Button className="w-full" asChild>
+          <Link href="/studio">크리에이터 스튜디오</Link>
+        </Button>
+      )}
 
       {/* 내 프로필(#4) — 미로그인·세션 복원 전에는 로그인 CTA로 폴백(플래시 방지). */}
       {mounted && user ? (
@@ -62,7 +83,9 @@ function SidebarFooter() {
           <Avatar fallback={initial} tone={user.handle} size="sm" />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-label text-on-surface">{user.name}</span>
-            <span className="truncate text-caption text-on-surface-variant">@{user.handle}</span>
+            {user.isCreator ? (
+              <span className="truncate text-caption text-on-surface-variant">@{user.handle}</span>
+            ) : null}
           </span>
           <PersonIcon aria-hidden className="size-5 shrink-0 text-on-surface-variant" />
         </Link>
@@ -98,7 +121,7 @@ function SidebarFooter() {
 export function WebShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const router = useRouter();
-  const { user, mounted } = useSession();
+  const { user, mounted, logout } = useSession();
   // 실시간 알림 소켓(R4-W4) — 셸에서 1회 마운트. wsUrl 미설정/비로그인이면 no-op(0 반환·회귀 0).
   const unread = useNotificationSocket();
   const [q, setQ] = React.useState("");
@@ -184,9 +207,44 @@ export function WebShell({ children }: { children: React.ReactNode }) {
                   <Link href={`/login?next=${encodeURIComponent(pathname || "/discovery")}`}>로그인</Link>
                 </Button>
               ) : (
-                <Link href="/mypage" aria-label="내 페이지">
-                  <Avatar fallback={initial} size="sm" />
-                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="내 계정 메뉴"
+                      className="rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <Avatar fallback={initial} tone={user?.handle} size="sm" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {user ? (
+                      <div className="flex flex-col px-3 py-2">
+                        <span className="truncate text-label text-on-surface">{user.name}</span>
+                        {user.isCreator ? (
+                          <span className="truncate text-caption text-on-surface-variant">@{user.handle}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/mypage">내 페이지</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings">설정</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      destructive
+                      onSelect={() => {
+                        logout();
+                        router.push("/discovery");
+                      }}
+                    >
+                      로그아웃
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </>
           }
