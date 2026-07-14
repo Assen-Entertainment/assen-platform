@@ -1,0 +1,45 @@
+name: deploy-dev
+
+# Continuous deploy to the dev QA environment. On every push to `dev`, build+push the
+# api and web images to ECR, run the schema migrate, roll the ECS services, and smoke
+# the ALB — by invoking scripts/deploy-dev.sh (does NOT reimplement it).
+#
+# Unlike deploy.yml (production, workflow_dispatch + manual-approval Environment), this
+# is automatic: `dev` IS the integration target, so a merge to dev promotes onto the
+# dev stack for QA before a later, deliberate promotion to prod.
+#
+# Auth: OIDC federation to vars.AWS_DEV_ROLE_TO_ASSUME (no static keys). The dev stack
+# must already exist (terraform apply -var-file=dev.tfvars). Doc-only pushes are skipped.
+on:
+  push:
+    branches: [dev]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC federation to assume the AWS deploy role
+
+jobs:
+  deploy:
+    name: Deploy to ECS (dev)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+
+      - name: Deploy dev (build+push api & web, migrate, roll, smoke)
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+        run: sh scripts/deploy-dev.sh dev
