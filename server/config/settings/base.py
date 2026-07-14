@@ -370,10 +370,32 @@ UPLOAD_MAX_DIMENSION: int = env.int("UPLOAD_MAX_DIMENSION", default=12_000)
 #      Content-Disposition, signed reads for gated media (above).
 #   3. Real content moderation (see apps.uploads.api._moderation_accepts) — a
 #      대표·법무 gate, HUMAN-REVIEW-REQUIRED.
-STORAGES = {
+STORAGES: dict[str, dict[str, object]] = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
+
+# Real object storage (S3) — opt-in via env, behaviour-preserving when unset. Set
+# DJANGO_MEDIA_S3_BUCKET to route default_storage to a PRIVATE S3 bucket
+# (django-storages[s3]); call sites are unchanged (they use default_storage). Objects
+# are private (the bucket blocks public access; no ACL) and gated reads use signed
+# URLs (config.storage.SignedUrlAdapter). Empty (default) keeps the local filesystem
+# backend for dev/test. This wires the storage BACKEND only — accepting untrusted
+# user uploads for real serving still requires the content-moderation gate above
+# (#3 — 대표·법무, HUMAN-REVIEW-REQUIRED) and the upload-accept flag (SERVE_LOCAL_MEDIA).
+_media_s3_bucket = env("DJANGO_MEDIA_S3_BUCKET", default="")
+if _media_s3_bucket:
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": _media_s3_bucket,
+            "region_name": env("DJANGO_MEDIA_S3_REGION", default="ap-northeast-2"),
+            "default_acl": None,
+            "querystring_auth": True,
+            "file_overwrite": False,
+            "signature_version": "s3v4",
+        },
+    }
 
 # CORS — fail-closed: no origin is allowed unless the environment says so.
 # dev.py opts in localhost web origins; prod supplies the real web origin(s).
