@@ -3136,6 +3136,81 @@
         ]
       }
     },
+    "/api/creators/{handle}/followers": {
+      "get": {
+        "operationId": "apps_creator_api_list_followers",
+        "summary": "List Followers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handle",
+            "schema": {
+              "title": "Handle",
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowerPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "List a creator's followers, newest first (public, keyset-paginated).\n\nA public read: a follower's ``nickname`` is already public (comments, follow\nnotifications), so listing followers introduces no new PII exposure. Withdrawn\n(deactivated) accounts are excluded so an anonymised fan is not surfaced. A\n404 for an unknown handle keeps parity with the profile read (no existence\nleak). ``select_related`` folds the follower + their optional creator profile\ninto the page query so the row build stays O(page), not O(followers).",
+        "tags": [
+          "creator"
+        ]
+      }
+    },
     "/api/search": {
       "get": {
         "operationId": "apps_creator_api_search",
@@ -3232,6 +3307,65 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/StudioProfilePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "apps_creator_api_studio_create_profile",
+        "summary": "Studio Create Profile",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Open the caller's own creator page — the self-serve \"크리에이터 되기\" flow (D4).\n\nA signed-in fan becomes a creator by claiming a unique ``handle`` + display\n``name``; this creates their :class:`~apps.creator.models.Creator`\n(``owner`` = the caller). \"Creator\" is derived from operating a creator\nprofile (``handle`` present on ``/fan/me``), not a separate role — so no\nprivilege change is made here. Idempotency is NOT wanted: a second call\n(already a creator, or a taken handle) is a 409, and the unique(handle) /\none-to-one(owner) constraints close the concurrent-claim race even if two\nrequests both pass the pre-checks.",
+        "tags": [
+          "studio-creator"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioProfileCreateIn"
               }
             }
           },
@@ -4193,6 +4327,91 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SignupIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/social/{provider}/start": {
+      "get": {
+        "operationId": "apps_identity_api_social_start",
+        "summary": "Social Start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "schema": {
+              "title": "Redirect Uri",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialStartOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Begin social login: return the provider consent URL + an opaque state.\n\nFails closed (503) when no provider is wired (the mock is gated by\nENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces.",
+        "tags": [
+          "fan-signup"
+        ]
+      }
+    },
+    "/api/fan/social/{provider}/callback": {
+      "post": {
+        "operationId": "apps_identity_api_social_callback",
+        "summary": "Social Callback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete social login: exchange the code, then log in / register the fan.\n\nDelivery follows the requested surface (ADR-0002) — the web flow gets hardened\nhttpOnly cookies. A first-time social identity requires terms/privacy + 만 14세\nconsent (422 CONSENT_REQUIRED/UNDERAGE if missing); a returning one does not.",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SocialCallbackIn"
               }
             }
           },
@@ -10811,6 +11030,69 @@
         "title": "CreatorPage",
         "type": "object"
       },
+      "FollowerOut": {
+        "description": "One follower of a creator — already-public display identity only.\n\nCarries only fields that are already public elsewhere: the follower's\n``nickname`` (shown on comments and in follow notifications) and, when the\nfollower themselves operates a creator, that creator's ``handle``/\n``avatar_url`` so the row can link to their profile. No contact/identity PII\n(phone, birth date, etc.) is ever exposed here.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "is_creator": {
+            "title": "Is Creator",
+            "type": "boolean"
+          },
+          "handle": {
+            "default": "",
+            "title": "Handle",
+            "type": "string"
+          },
+          "avatar_url": {
+            "default": "",
+            "title": "Avatar Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nickname",
+          "is_creator"
+        ],
+        "title": "FollowerOut",
+        "type": "object"
+      },
+      "FollowerPage": {
+        "description": "One keyset page of a creator's followers plus the next-page cursor.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FollowerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "FollowerPage",
+        "type": "object"
+      },
       "ProductBrief": {
         "description": "Minimal product shape for search results.",
         "properties": {
@@ -10960,6 +11242,25 @@
           }
         },
         "title": "StudioProfilePatch",
+        "type": "object"
+      },
+      "StudioProfileCreateIn": {
+        "description": "Payload for a fan to open (self-serve) their own creator page.",
+        "properties": {
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle",
+          "name"
+        ],
+        "title": "StudioProfileCreateIn",
         "type": "object"
       },
       "StudioStatsOut": {
@@ -11613,6 +11914,69 @@
           "consent_privacy"
         ],
         "title": "SignupIn",
+        "type": "object"
+      },
+      "SocialStartOut": {
+        "description": "Where to send the client to begin social login (+ the state to echo back).",
+        "properties": {
+          "authorize_url": {
+            "title": "Authorize Url",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorize_url",
+          "state"
+        ],
+        "title": "SocialStartOut",
+        "type": "object"
+      },
+      "SocialCallbackIn": {
+        "description": "Callback body: the provider's authorization ``code`` + first-login consent.\n\n``consent_*`` / ``age_over_14`` are enforced only when the social identity is new\n(first login = signup); a returning identity ignores them. ``web`` asks for cookie\ndelivery (ADR-0002), matching the phone signup/login surface.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "state": {
+            "default": "",
+            "title": "State",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          },
+          "consent_terms": {
+            "default": false,
+            "title": "Consent Terms",
+            "type": "boolean"
+          },
+          "consent_privacy": {
+            "default": false,
+            "title": "Consent Privacy",
+            "type": "boolean"
+          },
+          "age_over_14": {
+            "default": false,
+            "title": "Age Over 14",
+            "type": "boolean"
+          },
+          "web": {
+            "default": false,
+            "title": "Web",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "redirect_uri"
+        ],
+        "title": "SocialCallbackIn",
         "type": "object"
       },
       "LoginIn": {
