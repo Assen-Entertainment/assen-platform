@@ -154,3 +154,101 @@ def require_payment_available() -> None:
             "결제가 아직 준비되지 않았어요.",
             code=ErrorCode.PAYMENTS_UNAVAILABLE,
         )
+
+
+class ChargeStatus(models.TextChoices):
+    """Outcome of a payment charge attempt through a :class:`PaymentGateway`.
+
+    ``approved`` = authorized + captured (money is taken); ``pending`` = the PG
+    needs an out-of-band step (redirect/webhook) before it settles, so the order
+    must stay unsettled until a later confirm; ``failed`` = declined. The mock
+    only ever returns ``approved`` (deterministic, synchronous); ``pending`` /
+    ``failed`` exist so the enum is stable when a real async PG is wired.
+    """
+
+    APPROVED = "approved", "approved"
+    PENDING = "pending", "pending"
+    FAILED = "failed", "failed"
+
+
+@dataclass(frozen=True)
+class PaymentCharge:
+    """The non-sensitive result of charging an order through a payment gateway.
+
+    ``provider_ref`` is the gateway's own transaction reference (a mock id today,
+    a real PG's imp_uid/tid when wired) — never a card PAN. ``provenance`` records
+    which rail settled it (mock today; external for a real PG) so the ledger and
+    the order's ``payment_provenance`` agree.
+    """
+
+    status: ChargeStatus
+    provider_ref: str
+    provenance: PaymentProvenance
+
+    @property
+    def approved(self) -> bool:
+        """Whether the charge authorized + captured (money was actually taken)."""
+        return self.status == ChargeStatus.APPROVED
+
+
+class PaymentGateway(ABC):
+    """Boundary for authorizing + capturing a charge against a fan's order.
+
+    Distinct from :class:`PaymentTokenizer` (which only saves a card): a gateway
+    *takes money*. The single method captures a charge and returns a
+    :class:`PaymentCharge` — never a PAN. A real adapter (포트원/토스 등) delegates to
+    the PG's authorize/capture: a synchronous-capture PG returns ``approved``
+    inline, while a redirect/webhook PG returns ``pending`` (the order stays
+    unsettled until a later confirm — a follow-up to the order lifecycle).
+
+    TODO (real PG — HUMAN-REVIEW-REQUIRED, 대표·법무·PG gate, PCI): a production
+    adapter verifies + captures a PG-widget payment (the PAN never transits our
+    server — R4) and returns the PG's reference + the approved/pending/failed
+    status.
+    """
+
+    @abstractmethod
+    def charge(
+        self, *, order_id: str, amount: int, currency: str
+    ) -> PaymentCharge:
+        """Authorize + capture ``amount`` (whole KRW) for ``order_id``.
+
+        Returns the outcome. Must never persist or return a card PAN.
+        """
+        raise NotImplementedError
+
+
+class MockPaymentGateway(PaymentGateway):
+    """Deterministic local gateway for dev/tests — approves inline, moves no money.
+
+    Mirrors :class:`MockPaymentTokenizer`: it takes no card and returns a
+    deterministic approved charge (``provider_ref = mock_{order_id}`` — the same
+    id ``payments.record_mock_settlement`` ledgers) so the order flow can settle
+    without a real PG. Not for production: a real adapter delegates to a PG.
+    """
+
+    def charge(
+        self, *, order_id: str, amount: int, currency: str
+    ) -> PaymentCharge:
+        """Return a deterministic approved charge (no money moves)."""
+        # amount/currency are snapshotted on the order + ledger; the mock does not
+        # consult them (there is nothing to authorize against).
+        del amount, currency
+        return PaymentCharge(
+            status=ChargeStatus.APPROVED,
+            provider_ref=f"mock_{order_id}",
+            provenance=PaymentProvenance.MOCK,
+        )
+
+
+def payment_gateway() -> PaymentGateway | None:
+    """Return the configured payment gateway, or ``None`` when none is wired.
+
+    The deterministic mock is gated behind ``ENABLE_MOCK_PAYMENT`` (off in
+    production) so it can never back a real charge. With no real PG wired yet,
+    production returns ``None`` and the order flow fails closed — mirroring
+    :func:`payment_tokenizer` and :func:`require_payment_available`.
+    """
+    if settings.ENABLE_MOCK_PAYMENT:
+        return MockPaymentGateway()
+    return None

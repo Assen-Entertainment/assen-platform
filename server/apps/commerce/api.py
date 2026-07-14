@@ -48,6 +48,7 @@ from config.patch import apply_optional
 from config.payment import (
     PaymentProvenance,
     PricingKind,
+    payment_gateway,
     require_payment_available,
 )
 from config.throttle import user_write_throttle
@@ -994,6 +995,23 @@ def create_order(
                 qty=payload.qty,
                 price=product.price,
             )
+            # Authorize + capture through the payment gateway (ASS-298 seam): the
+            # mock approves inline; a real PG (포트원/토스) plugs in behind this
+            # boundary without touching the order flow. require_payment_available()
+            # above already guaranteed a gateway is wired, but fail closed so a
+            # charge-less order can never end up PAID (defence in depth, ASS-286).
+            gateway = payment_gateway()
+            if (
+                gateway is None
+                or not gateway.charge(
+                    order_id=str(order.id), amount=total, currency="KRW"
+                ).approved
+            ):
+                raise ApiError(
+                    503,
+                    "결제가 아직 준비되지 않았어요.",
+                    code=ErrorCode.PAYMENTS_UNAVAILABLE,
+                )
             # Ledger the settlement inside the same transaction (ASS-298): a
             # rolled-back order can never leave a dangling attempt.
             record_mock_settlement(
