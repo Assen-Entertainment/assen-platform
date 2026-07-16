@@ -40,7 +40,11 @@ export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const next = guardRedirectTarget({
     mockMode: MOCK_MODE,
-    hasSession: req.cookies.has("assen_access"),
+    // 15분 access 쿠키가 만료돼도(브라우저가 드롭) 14일 refresh 세션이 살아있으면 통과시킨다.
+    // refresh 쿠키는 Path=/api/fan이라 페이지 라우트/미들웨어에 안 보이므로, 서버가 심는 비밀 없는
+    // assen_session 마커(존재만·path="/")로 "refresh 세션 있음"을 판정한다. 값은 검증하지 않는다
+    // (httpOnly라 Edge에서 검증 불가) — 실 유효성은 서버 401을 받는 SessionGuard가 세밀 판정.
+    hasSession: req.cookies.has("assen_access") || req.cookies.has("assen_session"),
     pathname,
     search,
   });

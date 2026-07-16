@@ -19,6 +19,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogClose,
+  Spinner,
+  EmptyState,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { useOrder, useCancelOrder, useRequestRefund } from "@/lib/api/queries";
@@ -36,6 +38,42 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
       <span className={strong ? "text-title-m tabular-nums text-on-surface" : "tabular-nums text-on-surface"}>
         {value}
       </span>
+    </div>
+  );
+}
+
+/**
+ * 주문 상세(클라이언트 진입점) — SSR로 주문을 미리 받지 않는다. 만료된 15분 access 쿠키가 SSR에서
+ * 401을 내면 getOrder가 notFound로 오변환하던 버그(유효 refresh 세션인데 가짜 404)를 없애기 위해,
+ * useOrder가 client.ts의 401 refresh-and-retry를 소유하도록 클라이언트에서 id로 조회한다.
+ * - 성공: 실 주문 렌더(만료 세션은 토큰 갱신 후 재시도되어 여기로 온다).
+ * - 로딩: 스피너.
+ * - 실제 없음(404·422): getOrder가 undefined 반환 → RQ 에러 → "주문을 찾을 수 없어요"(진짜 not-found 유지).
+ */
+export function OrderDetailClient({ id }: { id: string }) {
+  const { data: order, isPending } = useOrder(id);
+  if (order) return <OrderDetailView order={order} />;
+  if (isPending) {
+    return (
+      <div className="mx-auto flex max-w-2xl justify-center py-16">
+        <Spinner />
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <Link href="/orders" className="text-body-s text-on-surface-variant hover:text-on-surface">
+        ← 주문 내역
+      </Link>
+      <EmptyState
+        title="주문을 찾을 수 없어요"
+        description="이미 삭제되었거나 잘못된 주문 번호예요."
+        action={
+          <Button asChild>
+            <Link href="/orders">주문 내역으로</Link>
+          </Button>
+        }
+      />
     </div>
   );
 }

@@ -22,6 +22,14 @@ describe("guardRedirectTarget", () => {
     ).toBeNull();
   });
 
+  it("실 API 모드 + access 만료(부재)라도 assen_session 마커가 있으면 통과한다(가짜 로그아웃 방지)", () => {
+    // 미들웨어는 hasSession = has(assen_access) || has(assen_session)로 계산한다. 15분 access가
+    // 만료돼 없어도 14일 refresh 세션(마커 존재)이 살아있으면 hasSession=true → 통과해야 한다.
+    expect(
+      guardRedirectTarget({ mockMode: false, hasSession: true, pathname: "/orders/ASN-1", search: "" }),
+    ).toBeNull();
+  });
+
   it("실 API 모드 + 세션 쿠키 없으면 원경로(쿼리 포함)를 반환한다", () => {
     expect(
       guardRedirectTarget({ mockMode: false, hasSession: false, pathname: "/orders", search: "" }),
