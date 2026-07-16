@@ -23,3 +23,14 @@ test('store page · sold-out card surfaces 품절', async ({ page }) => {
   await page.screenshot({ path: 'test-results/blindspot/store-soldout.png', fullPage: true });
   await expect(page.getByText('품절').first()).toBeVisible();
 });
+
+test('store filter · category narrows with no empty+load-more contradiction', async ({ page }) => {
+  await page.goto(`${BASE}/store`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: '디지털', exact: true }).click();
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: 'test-results/blindspot/store-filter-digital.png', fullPage: true });
+  // digital is seeded → not empty; and while filtering the manual "더 보기" must be hidden
+  // (auto-load handles pagination) — the empty-state + load-more can never coexist.
+  await expect(page.getByText('상품이 없어요')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '더 보기' })).toHaveCount(0);
+});

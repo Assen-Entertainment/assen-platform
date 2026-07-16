@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Chip, MonetizableItem, EmptyState, LoadMore } from "@/components/ui";
+import { Chip, MonetizableItem, EmptyState, LoadMore, Spinner } from "@/components/ui";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { useProducts, useShippingCheckoutAvailable } from "@/lib/api/queries";
 import type { Page, Product } from "@/lib/api";
@@ -24,7 +24,16 @@ export function StoreView({ products }: { products: Page<Product> }) {
   const shippingAvailable = useShippingCheckoutAvailable();
   const list = data ?? products.items;
   const [f, setF] = React.useState<string>("all");
-  const items = f === "all" ? list : list.filter((p) => p.type === f);
+  const filtering = f !== "all";
+  const items = filtering ? list.filter((p) => p.type === f) : list;
+  // 카테고리 필터는 클라에 로드된 목록에만 적용된다 — 카탈로그가 여러 페이지면 뒤 페이지의 매칭이
+  // 누락되고, 로드된 1페이지에 해당 타입이 없으면 "상품 없어요" 빈 상태와 "더보기" 버튼이 동시에 뜬다.
+  // 필터 활성 시 남은 페이지를 모두 당겨 필터가 전체 집합을 보게 한다(모순 제거·후페이지 도달 보장, #9).
+  React.useEffect(() => {
+    if (filtering && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [filtering, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  // 필터 집합이 아직 완성 전(더 당길 페이지 남음)이면 성급한 빈 상태 대신 로딩을 보여준다.
+  const filteredIncomplete = filtering && hasNextPage;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -74,16 +83,22 @@ export function StoreView({ products }: { products: Page<Product> }) {
             );
           })}
         </Stagger>
+      ) : filteredIncomplete ? (
+        <div className="flex justify-center py-12">
+          <Spinner />
+        </div>
       ) : (
         <EmptyState title="상품이 없어요" description="다른 카테고리를 선택해 보세요." />
       )}
-      {/* 무한 스크롤 sentinel + 폴백 버튼(필터는 클라, 로드는 전체 상품 커서). */}
-      <LoadMore
-        hasNextPage={hasNextPage}
-        isFetchingNextPage={isFetchingNextPage}
-        onLoadMore={() => fetchNextPage()}
-        itemCount={list.length}
-      />
+      {/* 무한 스크롤은 '전체'에서만 — 필터 중엔 위 effect가 남은 페이지를 자동 로드하므로 수동 더보기를 숨긴다. */}
+      {!filtering ? (
+        <LoadMore
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={() => fetchNextPage()}
+          itemCount={list.length}
+        />
+      ) : null}
     </div>
   );
 }

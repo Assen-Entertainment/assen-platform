@@ -4,13 +4,13 @@ import { Avatar, ListItem, Divider, Button } from "@/components/ui";
 import { useSession } from "@/lib/session";
 import { useSubscriptions } from "@/lib/api/queries";
 
+/** 마이 = 내 활동 허브(주문·구독·멤버십). 알림/결제/계정 등 환경설정은 /settings 단일 소유 —
+ *  기존엔 마이가 /settings/* 3개를 그대로 재노출해 두 허브가 같은 목적지로 중복됐다(blindspot #3). */
 const MENU = [
-  { label: "알림 설정", subtitle: "푸시·이메일", href: "/settings/notifications" },
-  { label: "결제 수단", href: "/settings/payments" },
   { label: "주문 내역", href: "/orders" },
   { label: "구독 관리", subtitle: "멤버십 해지·변경", href: "/mypage/subscriptions" },
   { label: "멤버십 둘러보기", href: "/membership" },
-  { label: "계정 설정", href: "/settings/account" },
+  { label: "설정", subtitle: "알림·결제·계정·차단", href: "/settings" },
 ];
 
 /** raw UUID(핸들 미설정 시 id 폴백) 판별 — 이 경우 @핸들을 노출하지 않는다. */

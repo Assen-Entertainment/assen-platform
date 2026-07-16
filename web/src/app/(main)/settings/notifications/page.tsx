@@ -11,7 +11,7 @@ const CATEGORIES: { key: string; title: string; subtitle: string; defaultOn: boo
   { key: "assen.notif.like", title: "좋아요", subtitle: "내 포스트에 눌린 좋아요", defaultOn: false },
   { key: "assen.notif.membership", title: "멤버십·구독", subtitle: "구독 갱신·혜택 안내", defaultOn: true },
   { key: "assen.notif.order", title: "주문·배송", subtitle: "결제·배송 상태 변경", defaultOn: true },
-  { key: "assen.notif.marketing", title: "마케팅·이벤트", subtitle: "혜택·프로모션(선택)", defaultOn: false },
+  // ※마케팅·이벤트는 아래 MarketingConsentSection(서버 저장)이 단일 진실원천 — 로컬 토글로 중복하지 않는다(#7/#8).
 ];
 
 /** 알림 설정 상세 — W3. 카테고리별 스위치(localStorage 영속). */
