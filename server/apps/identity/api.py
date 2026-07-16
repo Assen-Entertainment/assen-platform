@@ -47,6 +47,7 @@ from apps.identity.auth import access_token_from_request, authed, fan_auth
 from apps.identity.cookies import (
     ACCESS_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
+    SESSION_MARKER_COOKIE_NAME,
     clear_auth_cookie,
     set_auth_cookie,
 )
@@ -298,6 +299,21 @@ def _deliver_token_pair(
             secure=secure,
             samesite="Strict",
             path=_REFRESH_COOKIE_PATH,
+        )
+        # Non-secret session-presence marker (path="/") — the refresh cookie is scoped
+        # to the refresh endpoint, so page routes / Edge middleware never see it and
+        # would treat an expired 15-min access cookie as "logged out". This marker (no
+        # token, presence only) lives as long as the refresh token so the middleware
+        # can tell a refresh session still exists. A broad path is safe: it carries no
+        # secret. Raw set_cookie (not set_auth_cookie) — this is not a token cookie.
+        response.set_cookie(
+            SESSION_MARKER_COOKIE_NAME,
+            "1",
+            expires=pair.refresh_expires_at,
+            httponly=True,
+            secure=secure,
+            samesite="Lax",
+            path="/",
         )
         return SignupOut(
             token_delivery="cookie",
@@ -596,6 +612,7 @@ def logout(request: HttpRequest, response: HttpResponse) -> dict[str, str]:
         revoke_family_for_refresh(refresh_cookie)
     clear_auth_cookie(response, name=ACCESS_COOKIE_NAME)
     clear_auth_cookie(response, name=REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
+    response.delete_cookie(SESSION_MARKER_COOKIE_NAME, path="/")
     return {"status": "ok"}
 
 
@@ -699,6 +716,7 @@ def withdraw(request: HttpRequest, response: HttpResponse) -> dict[str, str]:
     withdraw_account(authed(request))
     clear_auth_cookie(response, name=ACCESS_COOKIE_NAME)
     clear_auth_cookie(response, name=REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
+    response.delete_cookie(SESSION_MARKER_COOKIE_NAME, path="/")
     return {"status": "withdrawn"}
 
 

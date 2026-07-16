@@ -637,13 +637,17 @@ export async function getOrdersPage(cursor?: string): Promise<Page<Order>> {
   }
   return { items: ORDERS };
 }
-/** 단일 주문 — USE_API면 실 조회. 미지의 id/비로그인은 undefined(notFound 계약). */
+/**
+ * 단일 주문 — USE_API면 실 조회. 미지의 id/잘못된 식별자(404·422)만 undefined(notFound 계약).
+ * 401(세션 만료)은 삼키지 않고 전파한다 — 만료된 access를 가짜 404로 오변환하면 안 되기 때문(SSR-401≠404).
+ * 클라이언트에서는 client.ts가 401 refresh-and-retry를 하므로, 여기 도달한 401은 회복 불가 세션이다.
+ */
 export async function getOrder(id: string): Promise<Order | undefined> {
   if (USE_API) {
     try {
       return mapOrder(await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(id)}`));
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 404 || e.status === 422 || e.status === 401)) return undefined;
+      if (e instanceof ApiError && (e.status === 404 || e.status === 422)) return undefined;
       throw e;
     }
   }
