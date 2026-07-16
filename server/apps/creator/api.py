@@ -233,7 +233,13 @@ def list_creators(
     cursor-paginated.
     """
     account = resolve_optional_account(request)
-    queryset = _annotated(account).exclude(id__in=blocked_creator_ids(account))
+    # Only published creators are discoverable; an unpublished (e.g. withdrawn-owner)
+    # profile drops out of the aggregate surface.
+    queryset = (
+        _annotated(account)
+        .filter(published=True)
+        .exclude(id__in=blocked_creator_ids(account))
+    )
     if category:
         queryset = queryset.filter(category=category)
     ordering = _RECOMMENDATION_SORTS.get(sort or "")
@@ -250,8 +256,16 @@ def list_creators(
 def get_creator(
     request: HttpRequest, handle: str
 ) -> tuple[int, CreatorOut | ErrorOut]:
-    """Fetch a single creator by handle; 404 if unknown (no existence leak)."""
-    creator = _annotated(resolve_optional_account(request)).filter(handle=handle).first()
+    """Fetch a single creator by handle; 404 if unknown (no existence leak).
+
+    An unpublished profile (``published=False`` — e.g. the owner withdrew) 404s just
+    like an unknown handle, so an offboarded creator's page is no longer viewable.
+    """
+    creator = (
+        _annotated(resolve_optional_account(request))
+        .filter(handle=handle, published=True)
+        .first()
+    )
     if creator is None:
         return 404, ErrorOut(detail="creator not found")
     return 200, _creator_out(creator)
@@ -360,6 +374,7 @@ def search(
     blocked = blocked_creator_ids(account)
     creator_qs = (
         _annotated(account)
+        .filter(published=True)
         .filter(
             Q(name__icontains=term)
             | Q(handle__icontains=term)

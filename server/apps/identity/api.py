@@ -723,13 +723,27 @@ def withdraw(request: HttpRequest, response: HttpResponse) -> dict[str, str]:
     """Withdraw (탈퇴) the authenticated fan's account and end the session.
 
     Privacy decisions 2026-07-12 (D3): anonymises the account in place (clears
-    nickname + phone hash, sets is_active False, stamps withdrawn_at) and revokes
-    every token family, then clears the web auth cookies so the browser is logged
-    out. The scope is always the authenticated account (never the body), so a fan can
-    only withdraw their own account. Idempotent at the service layer. Legal-hold
-    transaction/dispute records stay linked to the now-pseudonymous fan_id.
+    nickname + phone hash, sets is_active False, stamps withdrawn_at), offboards the
+    fan (cancels active subscriptions, unpublishes any creator storefront, pseudonymises
+    comment author snapshots — Codex #13) and revokes every token family, then clears
+    the web auth cookies so the browser is logged out. The scope is always the
+    authenticated account (never the body), so a fan can only withdraw their own
+    account. Idempotent at the service layer. Legal-hold transaction/dispute records
+    stay linked to the now-pseudonymous fan_id.
+
+    Staff guard (Codex #13): a staff account (operator/manager/admin/system) is refused
+    here (403 ``StaffWithdrawalForbidden``) — staff offboarding is a separate ops flow,
+    so the last-admin invariant can never be broken through fan self-service. Regular
+    fans (including creators, who are fans operating a creator page) proceed.
     """
-    withdraw_account(authed(request))
+    account = authed(request)
+    if account.is_operator_account:
+        raise ApiError(
+            403,
+            "관리자 계정은 이 화면에서 탈퇴할 수 없어요. 운영 오프보딩 절차를 이용해 주세요.",
+            code=ErrorCode.STAFF_WITHDRAWAL_FORBIDDEN,
+        )
+    withdraw_account(account)
     clear_auth_cookie(response, name=ACCESS_COOKIE_NAME)
     clear_auth_cookie(response, name=REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
     response.delete_cookie(SESSION_MARKER_COOKIE_NAME, path="/")

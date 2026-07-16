@@ -63,6 +63,10 @@ class ErrorCode(StrEnum):
     # OTP_UNAVAILABLE / KYC_UNAVAILABLE.
     SOCIAL_UNAVAILABLE = "SocialUnavailable"
     SOCIAL_PROVIDER_UNSUPPORTED = "SocialProviderUnsupported"
+    # A staff account (operator/manager/admin/system) attempted self-service 탈퇴 via
+    # the fan withdrawal endpoint (403). Staff offboarding is a separate ops flow, so
+    # refusing here keeps the last-admin invariant unbreakable via self-service.
+    STAFF_WITHDRAWAL_FORBIDDEN = "StaffWithdrawalForbidden"
 
     # --- commerce (catalog / studio) ----------------------------------------
     OWNER_REQUIRED = "OwnerRequired"

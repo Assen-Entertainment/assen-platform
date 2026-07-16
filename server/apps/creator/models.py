@@ -41,6 +41,13 @@ class Creator(models.Model):
     cover_url = models.CharField(max_length=500, blank=True, default="")
     category = models.CharField(max_length=40, blank=True, default="")
     verified = models.BooleanField(default=False)
+    # Public visibility flag. True (default) => discoverable and viewable via the
+    # public list/detail/search surfaces. Set False to unpublish the profile — e.g.
+    # the owner's account withdrawal (탈퇴) offboarding, which also hides the
+    # storefront (see :func:`apps.identity.services.withdraw_account`). The row is
+    # kept, never deleted, so history stays linked; an unpublished creator simply
+    # 404s to the public reads (no existence leak).
+    published = models.BooleanField(default=True)
     # The operating account. 1:1, nullable so seed data can exist accountless.
     owner = models.OneToOneField(
         "identity.Account",
