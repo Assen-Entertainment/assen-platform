@@ -13,6 +13,8 @@ export const ERROR_CODES = {
   InvalidCredentials: "InvalidCredentials",
   EmailUnavailable: "EmailUnavailable",
   EmailVerificationInvalid: "EmailVerificationInvalid",
+  // 본인인증(KYC) 게이트(B2/A2) — 미인증 팬이 팔로우·구독·구매 등 게이트 상호작용 시 서버가 403.
+  IdentityVerificationRequired: "IdentityVerificationRequired",
   OwnerRequired: "OwnerRequired",
   ProductNotOrderable: "ProductNotOrderable",
   OutOfStock: "OutOfStock",
@@ -61,6 +63,8 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   InvalidCredentials: "이메일 또는 비밀번호가 올바르지 않아요.",
   EmailUnavailable: "이메일 인증이 아직 준비 중이에요. 잠시 후 다시 시도해 주세요.",
   EmailVerificationInvalid: "인증 링크가 유효하지 않거나 만료됐어요.",
+  // 본인인증(KYC) 게이트(B2) — 미인증 팬 상호작용 403. 전역 VerifyGate 다이얼로그가 안내를 담당.
+  IdentityVerificationRequired: "본인인증이 필요해요.",
   OwnerRequired: "크리에이터 계정에서만 할 수 있어요.",
   // 커머스(주문/상품)
   ProductNotOrderable: "지금은 주문할 수 없는 상품이에요.",

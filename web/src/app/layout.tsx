@@ -7,6 +7,7 @@ import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme-provider";
 import { SessionProvider } from "@/lib/session";
 import { SessionGuard } from "@/components/session-guard";
+import { VerifyGate } from "@/components/auth/verify-gate";
 import { AnalyticsRouteTracker } from "@/components/analytics-route-tracker";
 import { MotionProvider } from "@/components/motion-provider";
 import { Toaster } from "@/components/ui/use-toast";
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <SessionProvider>
               <Toaster>
                 <SessionGuard />
+                <VerifyGate />
                 <AnalyticsRouteTracker />
                 <MotionProvider>{children}</MotionProvider>
               </Toaster>
