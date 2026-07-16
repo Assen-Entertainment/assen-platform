@@ -1541,49 +1541,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/fan/signup/otp": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Request Otp
-         * @description Send (mock) an OTP for the phone. Returns a bare ack — never the code.
-         */
-        post: operations["apps_identity_api_request_otp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/fan/signup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Signup
-         * @description Create/attach a fan from a verified OTP + consent; issue a token pair.
-         *
-         *     Delivery follows the requested surface (ADR-0002): the web flow gets hardened
-         *     httpOnly cookies (no token in the body); the app gets the tokens in the body.
-         */
-        post: operations["apps_identity_api_signup"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/fan/social/{provider}/start": {
         parameters: {
             query?: never;
@@ -1639,31 +1596,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/fan/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Login
-         * @description Re-authenticate an existing fan (phone + OTP) and issue a fresh token pair.
-         *
-         *     Disclosure minimisation: the OTP is verified *first*, so "가입이 필요해요" (no
-         *     account) is only ever revealed to a caller who already proved control of the
-         *     phone via a valid code — a wrong code and an unregistered number both look the
-         *     same (422) to anyone else. Delivery follows the requested surface (ADR-0002).
-         */
-        post: operations["apps_identity_api_login"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/fan/signup/email": {
         parameters: {
             query?: never;
@@ -1678,7 +1610,7 @@ export interface paths {
          * @description Create an (unverified) email + password fan and send a mock verification mail.
          *
          *     Fails closed (503) when no email sender is wired (the mock is gated by
-         *     ``ENABLE_MOCK_EMAIL``, off in production), mirroring the OTP surface. No token is
+         *     ``ENABLE_MOCK_EMAIL``, off in production), mirroring the social surface. No token is
          *     issued — the fan is logged in on ``/verify-email``. A duplicate verified email is
          *     409; consent/age/password-length failures are 422. The verification token is
          *     echoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else "").
@@ -1933,8 +1865,8 @@ export interface paths {
          * @description Begin (mock) 본인인증/성인 인증 for the authenticated fan.
          *
          *     Fail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)
-         *     this returns 503 rather than pretend a challenge started — mirroring the signup
-         *     OTP surface. On success the mock records a ``pending`` transition and returns a
+         *     this returns 503 rather than pretend a challenge started — mirroring the email
+         *     signup surface. On success the mock records a ``pending`` transition and returns a
          *     bare ack (no PII is sent to or received from the mock).
          */
         post: operations["apps_identity_api_verify_start"];
@@ -4892,12 +4824,14 @@ export interface components {
             status: string;
         };
         /**
-         * OtpRequestIn
-         * @description Request body for sending a signup OTP.
+         * SocialStartOut
+         * @description Where to send the client to begin social login (+ the state to echo back).
          */
-        OtpRequestIn: {
-            /** Phone */
-            phone: string;
+        SocialStartOut: {
+            /** Authorize Url */
+            authorize_url: string;
+            /** State */
+            state: string;
         };
         /**
          * SignupOut
@@ -4906,8 +4840,8 @@ export interface components {
          *     ``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``
          *     (web): both are empty here and delivered as httpOnly cookies instead, so no
          *     secret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned
-         *     either way so the client knows when to refresh. Shared by signup, login, and
-         *     refresh.
+         *     either way so the client knows when to refresh. Shared by verify-email, email
+         *     login, social callback, and refresh.
          */
         SignupOut: {
             /** Token Delivery */
@@ -4934,56 +4868,12 @@ export interface components {
             refresh_expires_at: string;
         };
         /**
-         * SignupIn
-         * @description Request body for completing fan signup.
-         *
-         *     ``web`` lets the web flow ask for cookie delivery (ADR-0002): when true the
-         *     tokens are set as hardened httpOnly cookies and omitted from the body.
-         */
-        SignupIn: {
-            /** Phone */
-            phone: string;
-            /** Otp Code */
-            otp_code: string;
-            /** Nickname */
-            nickname: string;
-            /** Consent Terms */
-            consent_terms: boolean;
-            /** Consent Privacy */
-            consent_privacy: boolean;
-            /**
-             * Age Over 14
-             * @default false
-             */
-            age_over_14: boolean;
-            /**
-             * Marketing Consent
-             * @default false
-             */
-            marketing_consent: boolean;
-            /**
-             * Web
-             * @default false
-             */
-            web: boolean;
-        };
-        /**
-         * SocialStartOut
-         * @description Where to send the client to begin social login (+ the state to echo back).
-         */
-        SocialStartOut: {
-            /** Authorize Url */
-            authorize_url: string;
-            /** State */
-            state: string;
-        };
-        /**
          * SocialCallbackIn
          * @description Callback body: the provider's authorization ``code`` + first-login consent.
          *
          *     ``consent_*`` / ``age_over_14`` are enforced only when the social identity is new
          *     (first login = signup); a returning identity ignores them. ``web`` asks for cookie
-         *     delivery (ADR-0002), matching the phone signup/login surface.
+         *     delivery (ADR-0002), matching the email login surface.
          */
         SocialCallbackIn: {
             /** Code */
@@ -5017,23 +4907,6 @@ export interface components {
             web: boolean;
         };
         /**
-         * LoginIn
-         * @description Request body for re-authenticating an existing fan (phone + OTP).
-         *
-         *     ``web`` selects cookie delivery exactly like :class:`SignupIn`.
-         */
-        LoginIn: {
-            /** Phone */
-            phone: string;
-            /** Otp Code */
-            otp_code: string;
-            /**
-             * Web
-             * @default false
-             */
-            web: boolean;
-        };
-        /**
          * EmailSignupOut
          * @description Email-signup ack. Never carries auth tokens (login happens on verify).
          *
@@ -5051,10 +4924,10 @@ export interface components {
         };
         /**
          * EmailSignupIn
-         * @description Request body for email + password fan signup (additive to phone OTP).
+         * @description Request body for email + password fan signup.
          *
          *     ``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만
-         *     14세) is mandatory, mirroring phone signup. No token is issued here — the fan
+         *     14세) is mandatory, mirroring social signup. No token is issued here — the fan
          *     verifies the emailed link first — so there is no ``web`` surface flag.
          */
         EmailSignupIn: {
@@ -5084,7 +4957,7 @@ export interface components {
          * @description Request body for confirming an email-verification link.
          *
          *     ``web`` selects cookie delivery for the token pair issued on verify, exactly like
-         *     :class:`SignupIn` / :class:`LoginIn`.
+         *     :class:`EmailLoginIn`.
          */
         VerifyEmailIn: {
             /** Token */
@@ -9402,52 +9275,6 @@ export interface operations {
             };
         };
     };
-    apps_identity_api_request_otp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OtpRequestIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    apps_identity_api_signup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignupIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SignupOut"];
-                };
-            };
-        };
-    };
     apps_identity_api_social_start: {
         parameters: {
             query: {
@@ -9484,30 +9311,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SocialCallbackIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SignupOut"];
-                };
-            };
-        };
-    };
-    apps_identity_api_login: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginIn"];
             };
         };
         responses: {

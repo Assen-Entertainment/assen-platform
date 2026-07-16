@@ -9,8 +9,9 @@ Now each helper wraps its rate throttle in ``_FlagGatedThrottle`` whose
 - flag off (the default test setting) → every request is allowed (no 429), and
 - flag on (via ``override_settings``) → the rate is actually enforced (429).
 
-The signup-OTP endpoint (``anon_throttle("5/min")``) is the probe; it needs no auth
-and has a low, deterministic limit.
+The email-signup endpoint (``anon_throttle("10/min")``) is the probe; it needs no
+auth, returns 200 on a valid (idempotent re-signup) body, and has a low,
+deterministic limit.
 """
 
 from __future__ import annotations
@@ -23,13 +24,22 @@ from django.test import Client, override_settings
 
 pytestmark = pytest.mark.django_db
 
-_OTP_URL = "/api/fan/signup/otp"
-_BODY = json.dumps({"phone": "+821012340000"})
+_PROBE_URL = "/api/fan/signup/email"
+_BODY = json.dumps(
+    {
+        "email": "throttle@example.com",
+        "password": "correct horse 8",
+        "nickname": "쓰로틀",
+        "consent_terms": True,
+        "consent_privacy": True,
+        "age_over_14": True,
+    }
+)
 
 
-def _send_otp(client: Client) -> int:
+def _send(client: Client) -> int:
     return int(
-        client.post(_OTP_URL, data=_BODY, content_type="application/json").status_code
+        client.post(_PROBE_URL, data=_BODY, content_type="application/json").status_code
     )
 
 
@@ -37,8 +47,8 @@ def test_gate_off_allows_every_request(client: Client) -> None:
     """With the flag off (default test setting) the bucket never fills."""
     cache.clear()
     try:
-        for _ in range(8):  # well past the 5/min rate — none should be throttled
-            assert _send_otp(client) == 200
+        for _ in range(13):  # well past the 10/min rate — none should be throttled
+            assert _send(client) == 200
     finally:
         cache.clear()
 
@@ -48,8 +58,8 @@ def test_gate_on_enforces_rate_at_request_time(client: Client) -> None:
     """override_settings now re-enables throttling — proof the gate is request-time."""
     cache.clear()
     try:
-        for _ in range(5):  # the 5/min allowance
-            assert _send_otp(client) == 200
-        assert _send_otp(client) == 429  # the sixth from the same IP is throttled
+        for _ in range(10):  # the 10/min allowance
+            assert _send(client) == 200
+        assert _send(client) == 429  # the eleventh from the same IP is throttled
     finally:
         cache.clear()

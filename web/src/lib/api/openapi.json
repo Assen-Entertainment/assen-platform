@@ -4481,65 +4481,6 @@
         ]
       }
     },
-    "/api/fan/signup/otp": {
-      "post": {
-        "operationId": "apps_identity_api_request_otp",
-        "summary": "Request Otp",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "description": "Send (mock) an OTP for the phone. Returns a bare ack — never the code.",
-        "tags": [
-          "fan-signup"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OtpRequestIn"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/fan/signup": {
-      "post": {
-        "operationId": "apps_identity_api_signup",
-        "summary": "Signup",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SignupOut"
-                }
-              }
-            }
-          }
-        },
-        "description": "Create/attach a fan from a verified OTP + consent; issue a token pair.\n\nDelivery follows the requested surface (ADR-0002): the web flow gets hardened\nhttpOnly cookies (no token in the body); the app gets the tokens in the body.",
-        "tags": [
-          "fan-signup"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignupIn"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
     "/api/fan/social/{provider}/start": {
       "get": {
         "operationId": "apps_identity_api_social_start",
@@ -4625,39 +4566,6 @@
         }
       }
     },
-    "/api/fan/login": {
-      "post": {
-        "operationId": "apps_identity_api_login",
-        "summary": "Login",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SignupOut"
-                }
-              }
-            }
-          }
-        },
-        "description": "Re-authenticate an existing fan (phone + OTP) and issue a fresh token pair.\n\nDisclosure minimisation: the OTP is verified *first*, so \"가입이 필요해요\" (no\naccount) is only ever revealed to a caller who already proved control of the\nphone via a valid code — a wrong code and an unregistered number both look the\nsame (422) to anyone else. Delivery follows the requested surface (ADR-0002).",
-        "tags": [
-          "fan-signup"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginIn"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
     "/api/fan/signup/email": {
       "post": {
         "operationId": "apps_identity_api_signup_email",
@@ -4675,7 +4583,7 @@
             }
           }
         },
-        "description": "Create an (unverified) email + password fan and send a mock verification mail.\n\nFails closed (503) when no email sender is wired (the mock is gated by\n``ENABLE_MOCK_EMAIL``, off in production), mirroring the OTP surface. No token is\nissued — the fan is logged in on ``/verify-email``. A duplicate verified email is\n409; consent/age/password-length failures are 422. The verification token is\nechoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else \"\").",
+        "description": "Create an (unverified) email + password fan and send a mock verification mail.\n\nFails closed (503) when no email sender is wired (the mock is gated by\n``ENABLE_MOCK_EMAIL``, off in production), mirroring the social surface. No token is\nissued — the fan is logged in on ``/verify-email``. A duplicate verified email is\n409; consent/age/password-length failures are 422. The verification token is\nechoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else \"\").",
         "tags": [
           "fan-signup"
         ],
@@ -5010,7 +4918,7 @@
             "description": "OK"
           }
         },
-        "description": "Begin (mock) 본인인증/성인 인증 for the authenticated fan.\n\nFail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)\nthis returns 503 rather than pretend a challenge started — mirroring the signup\nOTP surface. On success the mock records a ``pending`` transition and returns a\nbare ack (no PII is sent to or received from the mock).",
+        "description": "Begin (mock) 본인인증/성인 인증 for the authenticated fan.\n\nFail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)\nthis returns 503 rather than pretend a challenge started — mirroring the email\nsignup surface. On success the mock records a ``pending`` transition and returns a\nbare ack (no PII is sent to or received from the mock).",
         "tags": [
           "fan-signup"
         ],
@@ -12215,22 +12123,27 @@
         "title": "EventReserveIn",
         "type": "object"
       },
-      "OtpRequestIn": {
-        "description": "Request body for sending a signup OTP.",
+      "SocialStartOut": {
+        "description": "Where to send the client to begin social login (+ the state to echo back).",
         "properties": {
-          "phone": {
-            "title": "Phone",
+          "authorize_url": {
+            "title": "Authorize Url",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
             "type": "string"
           }
         },
         "required": [
-          "phone"
+          "authorize_url",
+          "state"
         ],
-        "title": "OtpRequestIn",
+        "title": "SocialStartOut",
         "type": "object"
       },
       "SignupOut": {
-        "description": "Token issuance result. ``token_delivery`` says where the tokens are.\n\n``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``\n(web): both are empty here and delivered as httpOnly cookies instead, so no\nsecret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned\neither way so the client knows when to refresh. Shared by signup, login, and\nrefresh.",
+        "description": "Token issuance result. ``token_delivery`` says where the tokens are.\n\n``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``\n(web): both are empty here and delivered as httpOnly cookies instead, so no\nsecret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned\neither way so the client knows when to refresh. Shared by verify-email, email\nlogin, social callback, and refresh.",
         "properties": {
           "token_delivery": {
             "title": "Token Delivery",
@@ -12265,78 +12178,8 @@
         "title": "SignupOut",
         "type": "object"
       },
-      "SignupIn": {
-        "description": "Request body for completing fan signup.\n\n``web`` lets the web flow ask for cookie delivery (ADR-0002): when true the\ntokens are set as hardened httpOnly cookies and omitted from the body.",
-        "properties": {
-          "phone": {
-            "title": "Phone",
-            "type": "string"
-          },
-          "otp_code": {
-            "title": "Otp Code",
-            "type": "string"
-          },
-          "nickname": {
-            "maxLength": 40,
-            "minLength": 1,
-            "title": "Nickname",
-            "type": "string"
-          },
-          "consent_terms": {
-            "title": "Consent Terms",
-            "type": "boolean"
-          },
-          "consent_privacy": {
-            "title": "Consent Privacy",
-            "type": "boolean"
-          },
-          "age_over_14": {
-            "default": false,
-            "title": "Age Over 14",
-            "type": "boolean"
-          },
-          "marketing_consent": {
-            "default": false,
-            "title": "Marketing Consent",
-            "type": "boolean"
-          },
-          "web": {
-            "default": false,
-            "title": "Web",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "phone",
-          "otp_code",
-          "nickname",
-          "consent_terms",
-          "consent_privacy"
-        ],
-        "title": "SignupIn",
-        "type": "object"
-      },
-      "SocialStartOut": {
-        "description": "Where to send the client to begin social login (+ the state to echo back).",
-        "properties": {
-          "authorize_url": {
-            "title": "Authorize Url",
-            "type": "string"
-          },
-          "state": {
-            "title": "State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "authorize_url",
-          "state"
-        ],
-        "title": "SocialStartOut",
-        "type": "object"
-      },
       "SocialCallbackIn": {
-        "description": "Callback body: the provider's authorization ``code`` + first-login consent.\n\n``consent_*`` / ``age_over_14`` are enforced only when the social identity is new\n(first login = signup); a returning identity ignores them. ``web`` asks for cookie\ndelivery (ADR-0002), matching the phone signup/login surface.",
+        "description": "Callback body: the provider's authorization ``code`` + first-login consent.\n\n``consent_*`` / ``age_over_14`` are enforced only when the social identity is new\n(first login = signup); a returning identity ignores them. ``web`` asks for cookie\ndelivery (ADR-0002), matching the email login surface.",
         "properties": {
           "code": {
             "title": "Code",
@@ -12379,30 +12222,6 @@
         "title": "SocialCallbackIn",
         "type": "object"
       },
-      "LoginIn": {
-        "description": "Request body for re-authenticating an existing fan (phone + OTP).\n\n``web`` selects cookie delivery exactly like :class:`SignupIn`.",
-        "properties": {
-          "phone": {
-            "title": "Phone",
-            "type": "string"
-          },
-          "otp_code": {
-            "title": "Otp Code",
-            "type": "string"
-          },
-          "web": {
-            "default": false,
-            "title": "Web",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "phone",
-          "otp_code"
-        ],
-        "title": "LoginIn",
-        "type": "object"
-      },
       "EmailSignupOut": {
         "description": "Email-signup ack. Never carries auth tokens (login happens on verify).\n\n``verification_token`` is populated only when ``EMAIL_VERIFY_RETURN_TOKEN`` is on\n(dev/test) so e2e can confirm without a real inbox; it is \"\" on any real surface.",
         "properties": {
@@ -12423,7 +12242,7 @@
         "type": "object"
       },
       "EmailSignupIn": {
-        "description": "Request body for email + password fan signup (additive to phone OTP).\n\n``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만\n14세) is mandatory, mirroring phone signup. No token is issued here — the fan\nverifies the emailed link first — so there is no ``web`` surface flag.",
+        "description": "Request body for email + password fan signup.\n\n``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만\n14세) is mandatory, mirroring social signup. No token is issued here — the fan\nverifies the emailed link first — so there is no ``web`` surface flag.",
         "properties": {
           "email": {
             "maxLength": 254,
@@ -12473,7 +12292,7 @@
         "type": "object"
       },
       "VerifyEmailIn": {
-        "description": "Request body for confirming an email-verification link.\n\n``web`` selects cookie delivery for the token pair issued on verify, exactly like\n:class:`SignupIn` / :class:`LoginIn`.",
+        "description": "Request body for confirming an email-verification link.\n\n``web`` selects cookie delivery for the token pair issued on verify, exactly like\n:class:`EmailLoginIn`.",
         "properties": {
           "token": {
             "title": "Token",

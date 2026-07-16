@@ -18,27 +18,23 @@ from apps.consent.services import (
     marketing_consent_state,
     set_marketing_consent,
 )
-from apps.identity.models import Account
+from apps.identity.models import Account, Role
 from apps.identity.services import issue_token_pair, withdraw_account
-from apps.identity.signup_services import hash_phone, register_fan
-from config.otp import MockOtpSender
+from apps.identity.signup_services import hash_phone
 
 pytestmark = pytest.mark.django_db
 
-_SENDER = MockOtpSender()
 _PHONE = "+821012345678"
 
 
 def _register(phone: str = _PHONE) -> Account:
-    register_fan(
-        phone=phone,
+    """Create a fan account directly (phone-OTP signup was retired)."""
+    return Account.objects.create(
+        role=Role.FAN.value,
+        auth_subject_hash=hash_phone(phone),
         nickname="미오팬",
-        consent_terms=True,
-        consent_privacy=True,
-        otp_code=_SENDER.code_for(phone),
-        otp_sender=_SENDER,
+        auth_method="phone",
     )
-    return Account.objects.get(auth_subject_hash=hash_phone(phone))
 
 
 def _bearer(token: str) -> dict[str, str]:

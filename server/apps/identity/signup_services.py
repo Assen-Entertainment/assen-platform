@@ -1,11 +1,8 @@
-"""Fan signup + digital membership card (ASS-98 v0).
+"""Phone-identity hashing + digital membership card (ASS-98 v0).
 
-The approved provider is phone OTP (Company-OS
-``20_Operations/Fan_Signup_Privacy_Policy.md``). This service turns a verified
-phone OTP plus mandatory terms/privacy consent into a fan
-:class:`~apps.identity.models.Account` (merging any prior anonymous activity),
-records the consents, emits ``fan_signed_up``, and returns a token pair via the
-**unchanged** token core. It also exposes the read model for the digital
+Phone-OTP signup was retired in favour of email/social auth (auth redesign); this
+module now provides the phone-number canonicalisation + keyed hashing used by the
+demo seed and the legacy phone-hash migration, plus the read model for the digital
 membership card.
 
 Privacy (Fan_Signup_Privacy_Policy §1): the phone number is hashed and never
@@ -21,22 +18,11 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.utils import timezone
 
-from apps.consent.models import ConsentKind
-from apps.consent.services import record_consent, set_marketing_consent
-from apps.consent.versions import consent_doc_version
-from apps.event_log.events import ActorType, EventName, EventSource
+from apps.event_log.events import EventName
 from apps.event_log.models import EventRecord
-from apps.event_log.services import emit_event
-from apps.identity.models import Account, Role
-from apps.identity.services import (
-    IssuedTokenPair,
-    issue_token_pair,
-    merge_anonymous_into_account,
-)
+from apps.identity.models import Account
 from config.errors import ErrorCode
-from config.otp import OtpSender
 
 
 class SignupError(Exception):
@@ -168,113 +154,6 @@ class MembershipCard:
     visit_count: int
     points: int
     coupons: int
-
-
-@transaction.atomic
-def register_fan(
-    *,
-    phone: str,
-    nickname: str,
-    consent_terms: bool,
-    consent_privacy: bool,
-    otp_code: str,
-    otp_sender: OtpSender,
-    age_over_14: bool = True,
-    marketing_consent: bool = False,
-    anonymous_id: str = "",
-    version: str | None = None,
-) -> IssuedTokenPair:
-    """Register (or re-attach) a fan from a verified phone OTP and consent.
-
-    Rejects a bad OTP, missing terms/privacy consent (both mandatory —
-    Fan_Signup_Privacy_Policy §5), and a caller who has not confirmed the 만 14세
-    이상 age floor (D5, privacy decisions 2026-07-12: under-14 signup is blocked so
-    no 법정대리인 consent flow is needed — a self-declared checkbox, not verified
-    age). Reuses an existing fan with the same phone (hash match) so a re-signup
-    merges rather than duplicates, folds in any anonymous activity, records both
-    consents, emits ``fan_signed_up`` on first creation only (a re-signup must not
-    re-emit), and returns a fresh token pair from the unchanged token core.
-
-    ``age_over_14`` defaults to True only for internal/test convenience; the sole
-    production caller (the /signup endpoint) always passes the client's explicit
-    value from a required request field, so the gate is enforced at the wire.
-    """
-    if not (consent_terms and consent_privacy):
-        raise SignupError(
-            "Both terms and privacy consent are required.",
-            code=ErrorCode.CONSENT_REQUIRED,
-        )
-    if not age_over_14:
-        raise SignupError(
-            "만 14세 이상만 가입할 수 있습니다.",
-            code=ErrorCode.UNDERAGE,
-        )
-    phone = normalize_phone(phone)
-    if not otp_sender.verify(phone=phone, code=otp_code):
-        raise SignupError("Invalid OTP.", code=ErrorCode.OTP_INVALID)
-
-    subject_hash = hash_phone(phone)
-    # Rekey any pre-A-2 (bare SHA-256) row to the v1 HMAC hash first, so the
-    # get_or_create below matches it instead of creating a duplicate account
-    # (ASS-287 A-2 dual-read migration). No-op for fresh (v1) accounts.
-    migrate_legacy_subject_hash(phone)
-    # get_or_create wraps the INSERT in a savepoint, so a concurrent signup that
-    # loses the uniq_fan_auth_subject race surfaces as IntegrityError and is
-    # retried as a fetch — no duplicate fan, and the outer atomic stays usable.
-    account, created = Account.objects.get_or_create(
-        auth_subject_hash=subject_hash,
-        role=Role.FAN.value,
-        defaults={"nickname": nickname, "auth_method": "phone"},
-    )
-    if not created and nickname and account.nickname != nickname:
-        account.nickname = nickname  # latest nickname wins on re-signup
-        account.save(update_fields=["nickname"])
-
-    if anonymous_id:
-        merge_anonymous_into_account(anonymous_id=anonymous_id, account=account)
-
-    # Record WHICH document version was presented, per document, from the server
-    # consent version registry (apps.consent.versions — 법무-게이트: placeholder
-    # values). An explicit ``version`` still overrides both (re-consent/back-compat).
-    record_consent(
-        account=account,
-        kind=ConsentKind.TERMS.value,
-        version=version or consent_doc_version(ConsentKind.TERMS.value),
-    )
-    record_consent(
-        account=account,
-        kind=ConsentKind.PRIVACY.value,
-        version=version or consent_doc_version(ConsentKind.PRIVACY.value),
-    )
-
-    if marketing_consent:
-        # 가입 시 도달 가능한 유일한 마케팅 채널은 전화 → SMS. push/email은
-        # /settings/notifications에서 사용자가 켜기 전까지 기본 off로 둔다(D8).
-        # false/미전송이면 어떤 마케팅 옵트인도 기록하지 않는다(fail-closed).
-        set_marketing_consent(account=account, channel="sms", enabled=True)
-
-    if created:
-        # fan_signed_up marks a NEW fan account and feeds the ASS-112 new-signup
-        # KPI. Re-signup / concurrent double-submit returns the existing account
-        # (created=False) and must NOT re-emit, or the append-only ledger would
-        # permanently inflate the signup count (a re-signup is a re-auth, not a
-        # new fan). The fresh token pair below is still issued every time.
-        emit_event(
-            event_name=EventName.FAN_SIGNED_UP.value,
-            occurred_at=timezone.now(),
-            actor_type=ActorType.FAN.value,
-            source=EventSource.WEB.value,
-            fan_id=str(account.fan_id),
-            payload={
-                "fan_id": str(account.fan_id),
-                # Data_Event_Schema signup_method domain is qr/web/admin/import
-                # (signup *channel*); the OTP provider lives on Account.auth_method.
-                "signup_method": "web",
-                "consent_terms": consent_terms,
-                "consent_privacy": consent_privacy,
-            },
-        )
-    return issue_token_pair(account)
 
 
 def membership_card(account: Account) -> MembershipCard:
