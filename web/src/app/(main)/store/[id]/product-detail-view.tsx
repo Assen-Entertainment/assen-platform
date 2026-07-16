@@ -63,7 +63,8 @@ export function ProductDetailView({ product }: { product: Product }) {
     router.push(`/checkout?item=${encodeURIComponent(p.id)}&qty=${qty}${optParam}`);
   };
 
-  /** 성인 미인증=인증 유도 / 잠금=구독 유도 / 배송 준비 중=비활성 / 품절=비활성 / 그 외=구매 CTA. */
+  /** 성인 미인증=인증 유도 / 잠금=구독 유도 / 품절=비활성(배송 게이트보다 우선) / 배송 준비 중=비활성 / 그 외=구매 CTA.
+   *  ※품절은 미디어 배지와 일치하도록 shippingBlocked보다 먼저 판정한다(품절 굿즈가 "배송 준비 중"으로 뜨던 모순 제거). */
   const primaryCta = adultBlocked ? (
     <Button size="lg" className="w-full" asChild>
       <Link href="/age-gate">성인 인증하고 보기</Link>
@@ -72,13 +73,17 @@ export function ProductDetailView({ product }: { product: Product }) {
     <Button size="lg" className="w-full" asChild>
       <Link href="/membership">멤버십 구독하고 보기</Link>
     </Button>
+  ) : soldOut ? (
+    <Button size="lg" className="w-full" disabled>
+      품절
+    </Button>
   ) : shippingBlocked ? (
     <Button size="lg" className="w-full" disabled>
       배송 결제 준비 중이에요
     </Button>
   ) : (
-    <Button size="lg" className="w-full" disabled={soldOut} onClick={buy}>
-      {soldOut ? "품절" : ctaLabel}
+    <Button size="lg" className="w-full" onClick={buy}>
+      {ctaLabel}
     </Button>
   );
 

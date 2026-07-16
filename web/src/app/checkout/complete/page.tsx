@@ -68,7 +68,12 @@ export default async function CheckoutComplete({
         </Card>
       ) : null}
 
-      <p className="text-body-m text-on-surface-variant">주문 내역은 마이페이지에서 확인할 수 있어요.</p>
+      {/* 라이브 주문만 실제 저장된다 — 데모(mock)에서는 주문 내역에 남지 않으므로 거짓 안내를 피한다(blindspot). */}
+      {live ? (
+        <p className="text-body-m text-on-surface-variant">주문 내역은 마이페이지에서 확인할 수 있어요.</p>
+      ) : (
+        <p className="text-body-m text-on-surface-variant">데모 주문이라 실제 주문 내역에는 저장되지 않아요.</p>
+      )}
       <div className="mt-2 flex gap-2">
         <Button variant="outline" asChild>
           <Link href="/orders">주문 내역</Link>

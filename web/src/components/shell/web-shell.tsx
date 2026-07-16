@@ -98,7 +98,7 @@ function SidebarFooter() {
         </div>
       )}
 
-      {/* footer 유틸(#7) — 설정·약관·테마 토글. */}
+      {/* footer 유틸(#7) — 설정·약관. 테마 토글은 상단바에 단일 배치(사이드바 중복 제거). */}
       <div className="flex items-center gap-1 px-1 text-caption text-on-surface-variant">
         <Link
           href="/settings"
@@ -110,9 +110,6 @@ function SidebarFooter() {
         <Link href="/policy/terms" className="rounded-md px-1.5 py-1 transition-colors hover:text-on-surface">
           약관
         </Link>
-        <div className="ml-auto">
-          <ThemeToggle />
-        </div>
       </div>
     </div>
   );

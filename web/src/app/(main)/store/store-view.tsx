@@ -43,7 +43,9 @@ export function StoreView({ products }: { products: Page<Product> }) {
         // 중복을 피하려 StaggerItem lift는 생략(MonetizableItem이 -translate-y 담당). reduced-motion=MotionProvider.
         <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" amount={0.06}>
           {items.map((it) => {
-            // 굿즈는 배송 결제가 열려 있을 때만 구매 CTA 활성 — 준비 중이면 비활성 + "준비 중" 라벨.
+            // 품절이면 최우선으로 비활성 + "품절"(배송 게이트보다 우선) — 품절 상품에 활성 구매
+            // 버튼이 뜨던 blindspot 방지. 굿즈는 배송 결제가 열려 있을 때만 CTA 활성(준비 중 라벨).
+            const soldOut = Boolean(it.soldOut) || it.stock === 0;
             const goodsGated = it.type === "goods" && !shippingAvailable;
             return (
             <StaggerItem key={it.id}>
@@ -51,9 +53,9 @@ export function StoreView({ products }: { products: Page<Product> }) {
                 type={it.type}
                 title={it.title}
                 price={`₩${it.price.toLocaleString("ko-KR")}`}
-                meta={it.soldOut ? "품절" : it.meta}
-                actionDisabled={goodsGated}
-                ctaLabel={goodsGated ? "준비 중" : undefined}
+                meta={soldOut ? "품절" : it.meta}
+                actionDisabled={soldOut || goodsGated}
+                ctaLabel={soldOut ? "품절" : goodsGated ? "준비 중" : undefined}
                 // 크리에이터명 표기 + 프로필 링크(핸들 있을 때). 전역 상품(크리에이터 없음)은 생략.
                 creator={
                   it.creatorName ? (
