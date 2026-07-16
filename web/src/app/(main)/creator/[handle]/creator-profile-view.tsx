@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { MoreIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
 import { gradientStyle } from "@/lib/placeholder";
-import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator, useSubscriptions, useChangeSubscriptionTier } from "@/lib/api/queries";
+import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator, useSubscriptions, useChangeSubscriptionTier, useShippingCheckoutAvailable } from "@/lib/api/queries";
 import { ApiError, apiErrorMessage, type Creator, type Page, type Post, type Product, type MembershipTier } from "@/lib/api";
 import { won } from "@/lib/checkout";
 import { useSession } from "@/lib/session";
@@ -41,6 +41,8 @@ export function CreatorProfileView({
   const { data, isError, refetch } = useCreator(creator.handle, creator);
   const c = data ?? creator;
   const follow = useToggleFollow(creator.handle);
+  // 스토어 탭도 /store와 동일한 배송(굿즈) 결제 게이트를 따른다(상태 일관성).
+  const shippingAvailable = useShippingCheckoutAvailable();
   const accent = c.accentColor;
   const initial = c.name.slice(0, 1);
 
@@ -264,18 +266,32 @@ export function CreatorProfileView({
         </TabsContent>
 
         <TabsContent value="store" className="pt-4">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {products.map((p) => (
-              <MonetizableItem
-                key={p.id}
-                type={p.type}
-                title={p.title}
-                price={`₩${p.price.toLocaleString("ko-KR")}`}
-                meta={p.meta}
-                onAction={() => router.push(`/store/${p.id}`)}
-              />
-            ))}
-          </div>
+          {products.length === 0 ? (
+            <EmptyState
+              title="아직 상품이 없어요"
+              description="이 크리에이터는 아직 상품을 등록하지 않았어요. 포스트·멤버십을 먼저 둘러보세요."
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {products.map((p) => {
+                // /store와 동일한 상태 규칙 — 품절 우선(비활성 "품절"), 굿즈 배송 게이트("준비 중").
+                const soldOut = Boolean(p.soldOut) || p.stock === 0;
+                const goodsGated = p.type === "goods" && !shippingAvailable;
+                return (
+                  <MonetizableItem
+                    key={p.id}
+                    type={p.type}
+                    title={p.title}
+                    price={`₩${p.price.toLocaleString("ko-KR")}`}
+                    meta={soldOut ? "품절" : p.meta}
+                    actionDisabled={soldOut || goodsGated}
+                    ctaLabel={soldOut ? "품절" : goodsGated ? "준비 중" : undefined}
+                    onAction={() => router.push(`/store/${p.id}`)}
+                  />
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="membership" className="pt-4">

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Avatar, ListItem, Divider, Button } from "@/components/ui";
 import { useSession } from "@/lib/session";
+import { useSubscriptions } from "@/lib/api/queries";
 
 const MENU = [
   { label: "알림 설정", subtitle: "푸시·이메일", href: "/settings/notifications" },
@@ -28,6 +29,9 @@ export default function MyPage() {
   // 핸들이 raw UUID(=id 폴백)면 @UUID 노출 대신 미표기 — 닉네임만 보여준다.
   const rawHandle = user?.handle ?? "";
   const showHandle = Boolean(rawHandle) && rawHandle !== user?.id && !UUID_RE.test(rawHandle);
+  // 실 구독 수(하드코딩 "구독 2" 제거) — 취소분 제외. 팔로잉 수는 아직 집계 소스가 없어 표기하지 않는다.
+  const { data: subs } = useSubscriptions();
+  const subCount = (subs ?? []).filter((s) => s.status !== "cancelled").length;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -36,11 +40,11 @@ export default function MyPage() {
         <div className="flex min-w-0 flex-col gap-1">
           <span className="text-title-l text-on-surface">{name}</span>
           <span className="text-body-s text-on-surface-variant">
-            {showHandle ? `@${rawHandle} · ` : ""}팔로잉 24 · 구독 2
+            {showHandle ? `@${rawHandle} · ` : ""}구독 {subCount}
           </span>
         </div>
         <Button variant="outline" className="ml-auto" asChild>
-          <Link href="/settings">프로필 편집</Link>
+          <Link href="/settings/account">프로필 편집</Link>
         </Button>
       </section>
 
