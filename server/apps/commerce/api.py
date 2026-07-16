@@ -1028,12 +1028,15 @@ def create_order(
                 return 200, _order_detail_out(existing)
         raise
 
-    notify(
-        account,
-        NotificationKind.ORDER.value,
-        f"'{product.title}' 주문이 접수되었어요.",
-        "/orders",
-    )
+    try:
+        notify(
+            account,
+            NotificationKind.ORDER.value,
+            f"'{product.title}' 주문이 접수되었어요.",
+            "/orders",
+        )
+    except Exception:  # noqa: BLE001 — a committed order must not 500 on a notification failure
+        logger.warning("commerce.order.notify_failed", extra={"order_id": order.id}, exc_info=True)
     logger.info(
         "commerce.order.created",
         extra={

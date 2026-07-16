@@ -90,6 +90,19 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   const [shipTouched, setShipTouched] = React.useState(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 결제 대상(target)마다 안정된 idempotency key — 네트워크 재시도가 같은 키로 재전송되어
+  // 서버의 (buyer, key) 유니크 제약이 중복 주문을 막는다(Codex #15). 대상이 바뀌면 재생성.
+  const productTarget = target?.kind === "product" ? target : undefined;
+  const idempotencyKey = React.useMemo(
+    () =>
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`,
+    // 의존성은 값을 읽지 않고 재생성 트리거로만 쓴다(대상이 바뀔 때만 새 키) — 의도된 패턴.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [productTarget?.productId, productTarget?.qty, productTarget?.option],
+  );
+
   React.useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
@@ -149,13 +162,31 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
     // 라이브 백엔드 + 대상 식별자가 있으면 실 주문/구독. 무료면 결제 없는 무료 획득 경로(ASS-297),
     // 아니면 유료(mock 결제 확정 — 실 PG·금액이동 없음).
     if (live && target?.kind === "product") {
-      const orderMut = isFree ? createOrderFree : createOrder;
-      orderMut.mutate(
+      if (isFree) {
+        createOrderFree.mutate(
+          {
+            productId: target.productId,
+            qty: target.qty,
+            option: target.option,
+            shipping: needsShipping ? ship : undefined,
+          },
+          {
+            onSuccess: (order) => {
+              const id = order?.id ?? mockOrderId();
+              router.push(`/checkout/complete?order=${encodeURIComponent(id)}`);
+            },
+            onError: onCheckoutError,
+          },
+        );
+        return;
+      }
+      createOrder.mutate(
         {
           productId: target.productId,
           qty: target.qty,
           option: target.option,
           shipping: needsShipping ? ship : undefined,
+          idempotencyKey,
         },
         {
           onSuccess: (order) => {

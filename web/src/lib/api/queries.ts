@@ -511,7 +511,13 @@ export function useAddComment(postId: string) {
 export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { productId: string; qty: number; option?: string; shipping?: ShippingAddress }) => {
+    mutationFn: async (input: {
+      productId: string;
+      qty: number;
+      option?: string;
+      shipping?: ShippingAddress;
+      idempotencyKey?: string;
+    }) => {
       if (USE_API) return apiCreateOrder(input);
       await sleep(400);
       return null;
