@@ -157,9 +157,7 @@ export function OrderDetailView({ order }: { order: Order }) {
             <span className="text-title-m text-on-surface">배송 조회</span>
             <Row label="택배사" value={o.tracking.carrier} />
             <Row label="송장번호" value={o.tracking.number} />
-            <Button variant="outline" size="sm" className="mt-1 self-start" disabled>
-              배송 추적 (준비 중)
-            </Button>
+            {/* 택배사·송장번호로 직접 조회 가능 — 동작하지 않는 "배송 추적 (준비 중)" 죽은 버튼은 제거(#12). */}
           </CardBody>
         </Card>
       ) : null}
@@ -181,6 +179,15 @@ export function OrderDetailView({ order }: { order: Order }) {
             </p>
           </CardBody>
         </Card>
+      ) : null}
+
+      {/* 배송 중 주문은 백엔드가 취소·환불을 모두 허용(_CANCELLABLE∩_REFUNDABLE=shipping) — 두 경로가
+          동시에 뜰 때 차이를 안내해 "무엇을 눌러야 하나" 혼동을 없앤다(#12). */}
+      {canCancel && canRefund ? (
+        <p className="text-caption text-on-surface-variant">
+          배송 중 주문은 <span className="text-on-surface">주문 취소</span>(전체 취소·전액 환급) 또는{" "}
+          <span className="text-on-surface">환불 신청</span>(사유를 남겨 반품·환불) 중 선택할 수 있어요.
+        </p>
       ) : null}
 
       {/* 환불 신청 폼 */}
