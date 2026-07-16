@@ -209,11 +209,18 @@ class PaymentGateway(ABC):
 
     @abstractmethod
     def charge(
-        self, *, order_id: str, amount: int, currency: str
+        self,
+        *,
+        order_id: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str | None = None,
     ) -> PaymentCharge:
         """Authorize + capture ``amount`` (whole KRW) for ``order_id``.
 
-        Returns the outcome. Must never persist or return a card PAN.
+        ``idempotency_key`` is the order's client key (may be ``None``): a real PG
+        uses it to dedup a retried capture so a network retry can never double-charge
+        the same order. Returns the outcome. Must never persist or return a card PAN.
         """
         raise NotImplementedError
 
@@ -228,12 +235,17 @@ class MockPaymentGateway(PaymentGateway):
     """
 
     def charge(
-        self, *, order_id: str, amount: int, currency: str
+        self,
+        *,
+        order_id: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str | None = None,
     ) -> PaymentCharge:
         """Return a deterministic approved charge (no money moves)."""
-        # amount/currency are snapshotted on the order + ledger; the mock does not
-        # consult them (there is nothing to authorize against).
-        del amount, currency
+        # amount/currency/idempotency_key are snapshotted on the order + ledger; the
+        # mock does not consult them (nothing to authorize or dedup against).
+        del amount, currency, idempotency_key
         return PaymentCharge(
             status=ChargeStatus.APPROVED,
             provider_ref=f"mock_{order_id}",

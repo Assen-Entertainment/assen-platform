@@ -120,6 +120,11 @@ class ErrorCode(StrEnum):
     SHIPPING_CHECKOUT_UNAVAILABLE = "ShippingCheckoutUnavailable"
     PAYMENT_CARD_INVALID = "PaymentCardInvalid"
     PAYMENT_METHOD_NOT_FOUND = "PaymentMethodNotFound"
+    # The gateway capture declined (or errored) for a PENDING order (#4/#2 2-phase
+    # checkout): the order is transitioned PENDING→FAILED and its reserved stock is
+    # restored, and the fan sees a 402 so the failure is explicit (never a silent
+    # stuck-pending order). The mock always approves, so this is a real-PG-only path.
+    PAYMENT_DECLINED = "PaymentDeclined"
     # --- pricing / free grant (ASS-297) -------------------------------------
     # The free-acquire path was used on a PAID offering (a price-0 placeholder is
     # still paid) — acquire it through the normal, payment-gated path instead.

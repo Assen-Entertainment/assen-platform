@@ -48,6 +48,7 @@ from config.errors import ApiError, ErrorCode
 from config.pagination import paginate
 from config.patch import apply_optional
 from config.payment import (
+    PaymentCharge,
     PaymentProvenance,
     PricingKind,
     payment_gateway,
@@ -852,29 +853,39 @@ def _restock_order_lines(order: Order) -> None:
 def create_order(
     request: HttpRequest, payload: CreateOrderIn
 ) -> tuple[int, OrderDetailOut | CommerceError]:
-    """Place a mock order for one product.
+    """Place a mock order for one product via a 2-phase payment intent (#4/#2).
 
-    MOCK: records a ``paid`` order and snapshots the line item, but **no real
-    payment is taken and no money moves** (B7 gated). The order amounts
+    MOCK: the deterministic mock captures synchronously and approves, so the endpoint
+    still returns a ``paid`` order and snapshots the line item, but **no real payment
+    is taken and no money moves** (B7 gated). The order amounts
     (``subtotal``/``shipping_fee``/``total``, ``total = subtotal + shipping_fee``)
     are computed server-side so the fan is charged exactly what is shown; shipping
     is a fixed mock ``0`` until the fee policy is set (대표·재무 게이트). A physical
     (``goods``) order must carry a delivery address, else 422.
 
-    Stock (B7 precursor): a stock-tracked product is decremented atomically with a
-    ``stock >= qty`` conditional UPDATE inside the transaction — 0 rows means a
-    concurrent buyer took the last unit (TOCTOU-sealed → 422), and taking the last
-    unit flips ``sold_out``. Cancelling the order restores it (see ``cancel_order``).
+    Two-phase structure (#4/#2 seam — so a real PG plugs in without a lost charge):
+
+    * **PHASE 1 (``transaction.atomic``, then COMMIT):** reserve stock with the
+      ``stock >= qty`` conditional UPDATE (0 rows = a concurrent buyer took the last
+      unit → 422; the last unit flips ``sold_out``), then persist the order as
+      **PENDING** with its line. NO gateway call and NO settlement happen inside this
+      transaction, so a capture that succeeds after a DB-commit failure can never
+      charge a customer with no order — the durable order exists first.
+    * **PHASE 2 (OUTSIDE the transaction):** capture through the gateway (idempotent —
+      the order's key is passed so a real PG dedups a retry). On approval, a SECOND
+      short transaction flips PENDING→PAID (conditional-UPDATE rowcount gate) and
+      ledgers the settlement. On decline/error, PENDING→FAILED and the reserved stock
+      is restored (mirrors ``cancel_order``), and the fan gets a coded 402 — never a
+      leaked stock unit or a silent stuck-pending order.
 
     Idempotency (B1): if the caller supplies ``idempotency_key`` and already has an
-    order for it, the existing order is returned (200) rather than duplicated. The
-    stock deduction, order, and its line are written in one ``transaction.atomic``
-    block so a failure can never leave a header without its item or a decrement
-    without an order; the (buyer, key) unique constraint closes the concurrent-retry
-    race (both requests pass the pre-check, one insert wins, the loser catches
-    ``IntegrityError`` — which also rolls back its decrement — and returns the
-    winner's order). The fan notification is sent only *after* the transaction
-    commits, so a rolled-back order never emits a stray "order received" notice.
+    order for it, the existing order is returned (200) rather than duplicated —
+    PENDING if a capture is still in flight, PAID once settled, so a retry never
+    double-charges or double-orders. The (buyer, key) unique constraint closes the
+    concurrent-retry race in PHASE 1 (both requests pass the pre-check, one insert
+    wins, the loser catches ``IntegrityError`` — which also rolls back its decrement —
+    and returns the winner's order). The fan notification is sent only *after*
+    PENDING→PAID, so a PENDING/FAILED order never emits a stray "order received" notice.
     """
     account = authed(request)
     # Fail closed before ANY side effect — including the idempotency replay below:
@@ -978,6 +989,10 @@ def create_order(
             "address2": "",
         }
 
+    # --- PHASE 1 — persist a PENDING order (stock reserved), then COMMIT. ------ #
+    # No gateway call and no settlement run inside this transaction: the durable
+    # order must exist BEFORE any capture, so a real PG charge that succeeds after a
+    # DB-commit failure can never bill a customer with no order (#4/#2 seam).
     try:
         with transaction.atomic():
             # Atomic stock guard: decrement only while at least ``qty`` remains, so
@@ -1003,13 +1018,14 @@ def create_order(
                 Product.objects.filter(id=product.id, stock=0).update(sold_out=True)
             order = Order.objects.create(
                 buyer=account,
-                status=OrderStatus.PAID,
+                status=OrderStatus.PENDING,
                 subtotal=subtotal,
                 shipping_fee=shipping_fee,
                 total=total,
                 idempotency_key=payload.idempotency_key or None,
-                # Settled by the deterministic mock (the only path past the
-                # payment gate today); never guessed (ASS-298).
+                # Intended settlement rail: require_payment_available() above already
+                # guaranteed the mock is wired, so the order is created against it and
+                # the PHASE-2 capture confirms it (never guessed — ASS-298).
                 payment_provenance=PaymentProvenance.MOCK,
                 **shipping_snapshot,
             )
@@ -1022,48 +1038,99 @@ def create_order(
                 qty=payload.qty,
                 price=product.price,
             )
-            # Authorize + capture through the payment gateway (ASS-298 seam): the
-            # mock approves inline; a real PG (포트원/토스) plugs in behind this
-            # boundary without touching the order flow. require_payment_available()
-            # above already guaranteed a gateway is wired, but fail closed so a
-            # charge-less order can never end up PAID (defence in depth, ASS-286).
-            gateway = payment_gateway()
-            if (
-                gateway is None
-                or not gateway.charge(
-                    order_id=str(order.id), amount=total, currency="KRW"
-                ).approved
-            ):
-                raise ApiError(
-                    503,
-                    "결제가 아직 준비되지 않았어요.",
-                    code=ErrorCode.PAYMENTS_UNAVAILABLE,
-                )
-            # Ledger the settlement inside the same transaction (ASS-298): a
-            # rolled-back order can never leave a dangling attempt.
-            record_mock_settlement(
-                order=order,
-                amount=total,
-                idempotency_key=payload.idempotency_key or None,
-            )
     except IntegrityError:
         # A concurrent retry with the same key won the insert race — return its
-        # order instead of surfacing the constraint error.
+        # order instead of surfacing the constraint error. The loser's stock
+        # decrement rolls back with this transaction, so the winner holds the only
+        # reservation (no double-decrement, no double-order).
         if payload.idempotency_key:
             existing = _load_order_by_key(account, payload.idempotency_key)
             if existing is not None:
                 return 200, _order_detail_out(existing)
         raise
 
-    try:
-        notify(
-            account,
-            NotificationKind.ORDER.value,
-            f"'{product.title}' 주문이 접수되었어요.",
-            "/orders",
+    # --- PHASE 2 — capture OUTSIDE the DB transaction (idempotent). ------------ #
+    # The order is already durable (PENDING), so a capture that commits even as this
+    # request dies leaves a recoverable PENDING order — never a charge with no order.
+    # The order's idempotency key is passed through so a real PG dedups a retried
+    # capture. The mock approves inline; a real PG (포트원/토스) plugs in here.
+    gateway = payment_gateway()
+    charge: PaymentCharge | None = None
+    if gateway is not None:
+        try:
+            charge = gateway.charge(
+                order_id=str(order.id),
+                amount=total,
+                currency="KRW",
+                idempotency_key=payload.idempotency_key or None,
+            )
+        except Exception:  # noqa: BLE001 — any gateway error fails the order closed (declined)
+            logger.warning(
+                "commerce.order.charge_error",
+                extra={"order_id": order.id},
+                exc_info=True,
+            )
+            charge = None
+
+    if charge is None or not charge.approved:
+        # Decline (or gateway error / no gateway): PENDING→FAILED and RESTORE the
+        # reserved stock so a failed checkout never leaks stock. The conditional-
+        # UPDATE rowcount gate makes the restock single-winner (mirrors cancel_order);
+        # the block commits BEFORE the raise so the FAILED state + restock persist.
+        with transaction.atomic():
+            failed = Order.objects.filter(
+                id=order.id, status=OrderStatus.PENDING.value
+            ).update(status=OrderStatus.FAILED.value, failed_at=timezone.now())
+            if failed:
+                _restock_order_lines(order)
+        logger.warning(
+            "commerce.order.payment_declined",
+            extra={"order_id": order.id, "buyer_id": str(account.fan_id)},
         )
-    except Exception:  # noqa: BLE001 — a committed order must not 500 on a notification failure
-        logger.warning("commerce.order.notify_failed", extra={"order_id": order.id}, exc_info=True)
+        raise ApiError(
+            402,
+            "결제가 거절되었어요. 다시 시도해 주세요.",
+            code=ErrorCode.PAYMENT_DECLINED,
+        )
+
+    # Approved: transition PENDING→PAID and ledger the settlement in a SECOND short
+    # transaction. The conditional-UPDATE rowcount gate makes this single-winner, so a
+    # retry can never double-settle; ``payment_ref`` records the gateway's transaction
+    # reference (a mock id today, a real PG's ref when wired).
+    settled = False
+    with transaction.atomic():
+        paid = Order.objects.filter(
+            id=order.id, status=OrderStatus.PENDING.value
+        ).update(
+            status=OrderStatus.PAID.value,
+            paid_at=timezone.now(),
+            payment_ref=charge.provider_ref,
+        )
+        if paid:
+            record_mock_settlement(
+                order=order,
+                amount=total,
+                idempotency_key=payload.idempotency_key or None,
+            )
+            settled = True
+
+    if settled:
+        # Notify only when THIS request won the PENDING→PAID transition — a
+        # PENDING/FAILED order (or a concurrent retry that lost the gate) never emits
+        # a stray "order received" notice.
+        try:
+            notify(
+                account,
+                NotificationKind.ORDER.value,
+                f"'{product.title}' 주문이 접수되었어요.",
+                "/orders",
+            )
+        except Exception:  # noqa: BLE001 — a committed order must not 500 on a notification failure
+            logger.warning(
+                "commerce.order.notify_failed",
+                extra={"order_id": order.id},
+                exc_info=True,
+            )
     logger.info(
         "commerce.order.created",
         extra={

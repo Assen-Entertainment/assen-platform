@@ -99,12 +99,23 @@ class Product(models.Model):
 
 
 class OrderStatus(models.TextChoices):
-    """Order lifecycle states surfaced to the fan (StatusChip on the web)."""
+    """Order lifecycle states surfaced to the fan (StatusChip on the web).
 
+    The 2-phase payment intent (#4/#2) adds two internal states: ``PENDING`` — the
+    order is durably persisted and its stock reserved, but the gateway capture has
+    not been verified yet — and ``FAILED`` — the capture declined, so the order is
+    dead and its reserved stock was restored. A mock checkout passes through PENDING
+    synchronously and ends PAID; PENDING/FAILED become fan-visible only when a real
+    async PG is wired. ``PAID`` and later states are unchanged (fulfillment #11
+    still starts from PAID).
+    """
+
+    PENDING = "pending", "pending"
     PAID = "paid", "paid"
     SHIPPING = "shipping", "shipping"
     COMPLETED = "completed", "completed"
     CANCELLED = "cancelled", "cancelled"
+    FAILED = "failed", "failed"
 
 
 class RefundStatus(models.TextChoices):
@@ -183,6 +194,15 @@ class Order(models.Model):
     tracking_number = models.CharField(max_length=120, blank=True, default="")
     shipped_at = models.DateTimeField(null=True, blank=True, default=None)
     completed_at = models.DateTimeField(null=True, blank=True, default=None)
+    # Payment-intent snapshot (#4/#2 2-phase checkout). An order is persisted PENDING
+    # (stock reserved) and only transitions to PAID after the gateway capture is
+    # verified — or to FAILED (stock restored) on a decline. ``paid_at``/``failed_at``
+    # stamp when each terminal transition happened (NULL until it does); ``payment_ref``
+    # records the gateway's own transaction reference on a verified capture (the mock
+    # id today, a real PG's imp_uid/tid when wired) — never a card PAN.
+    paid_at = models.DateTimeField(null=True, blank=True, default=None)
+    failed_at = models.DateTimeField(null=True, blank=True, default=None)
+    payment_ref = models.CharField(max_length=120, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
