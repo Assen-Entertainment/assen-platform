@@ -30,8 +30,8 @@ see :mod:`config.identity_verify`).
 from __future__ import annotations
 
 import logging
-import secrets
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
@@ -68,7 +68,11 @@ from apps.identity.signup_services import (
     normalize_phone,
     register_fan,
 )
-from apps.identity.social_services import register_or_login_social
+from apps.identity.social_services import (
+    make_social_state,
+    register_or_login_social,
+    verify_social_state,
+)
 from config.api import api
 from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
@@ -99,6 +103,12 @@ _KYC_CONSENT_VERSION = "1.0"
 # to JS) and the one refresh-consuming endpoint (``/refresh``) now enforces CSRF on
 # the cookie surface (A3).
 _REFRESH_COOKIE_PATH = "/api/fan"
+
+# Social-login OAuth state cookie: a signed, httpOnly, path-scoped cookie set at
+# ``/social/{provider}/start`` and re-verified on ``/callback`` so the callback is bound
+# to the browser + provider + redirect_uri that began the flow (anti login-CSRF). The
+# signed value is cross-worker safe (no server-side store); see ``social_services``.
+SOCIAL_STATE_COOKIE = "assen_social_state"
 
 
 def _otp_sender() -> OtpSender | None:
@@ -386,18 +396,37 @@ def _require_supported_provider(provider: str) -> None:
         )
 
 
+def _require_allowed_redirect(redirect_uri: str) -> None:
+    """Reject a redirect_uri whose origin is not allowlisted (when the allowlist is set).
+
+    Empty allowlist (dev/test default) → skip: the signed state cookie already binds the
+    callback to the redirect_uri used at start. Prod configures
+    ``SOCIAL_ALLOWED_REDIRECT_ORIGINS`` to lock the surface to known origins.
+    """
+    allowed = settings.SOCIAL_ALLOWED_REDIRECT_ORIGINS
+    if not allowed:
+        return
+    parts = urlsplit(redirect_uri)
+    origin = f"{parts.scheme}://{parts.netloc}"
+    if origin not in allowed:
+        raise ApiError(400, "redirect_uri is not allowed.", code=ErrorCode.SOCIAL_UNAVAILABLE)
+
+
 @router.get(
     "/social/{provider}/start",
     response=SocialStartOut,
     throttle=anon_throttle("10/min"),
 )
 def social_start(
-    request: HttpRequest, provider: str, redirect_uri: str
+    request: HttpRequest, provider: str, redirect_uri: str, response: HttpResponse
 ) -> SocialStartOut:
     """Begin social login: return the provider consent URL + an opaque state.
 
     Fails closed (503) when no provider is wired (the mock is gated by
-    ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces.
+    ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces. The state is echoed to
+    the provider AND signed into a path-scoped httpOnly cookie, so the callback can be
+    bound to the browser + provider + redirect_uri that started the flow (anti
+    login-CSRF); the signed cookie needs no server-side store (cross-worker safe).
     """
     del request
     _require_supported_provider(provider)
@@ -408,15 +437,21 @@ def social_start(
             "Social login is temporarily unavailable.",
             code=ErrorCode.SOCIAL_UNAVAILABLE,
         )
-    # Opaque anti-replay state the client echoes back on callback. A real adapter also
-    # binds it server-side; the mock round-trips entirely on our origin.
-    state = secrets.token_urlsafe(24)
-    return SocialStartOut(
-        authorize_url=adapter.authorize_url(
-            provider=provider, state=state, redirect_uri=redirect_uri
-        ),
-        state=state,
+    _require_allowed_redirect(redirect_uri)
+    state, signed = make_social_state(provider=provider, redirect_uri=redirect_uri)
+    authorize_url = adapter.authorize_url(
+        provider=provider, state=state, redirect_uri=redirect_uri
     )
+    response.set_cookie(
+        SOCIAL_STATE_COOKIE,
+        signed,
+        max_age=settings.SOCIAL_STATE_TTL_SECONDS,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax",
+        path="/api/fan",
+    )
+    return SocialStartOut(authorize_url=authorize_url, state=state)
 
 
 @router.post(
@@ -435,14 +470,30 @@ def social_callback(
     Delivery follows the requested surface (ADR-0002) — the web flow gets hardened
     httpOnly cookies. A first-time social identity requires terms/privacy + 만 14세
     consent (422 CONSENT_REQUIRED/UNDERAGE if missing); a returning one does not.
+
+    Anti login-CSRF (Codex #7): the signed state cookie set at ``/start`` is re-verified
+    against the echoed ``state`` + provider + redirect_uri BEFORE the code exchange, so a
+    callback forged by an attacker (no matching cookie, mismatched state, or a swapped
+    redirect_uri) is rejected (400) and can never mint tokens into the victim's browser.
     """
-    del request
     _require_supported_provider(provider)
     adapter = social_auth_provider()
     if adapter is None:
         raise ApiError(
             503,
             "Social login is temporarily unavailable.",
+            code=ErrorCode.SOCIAL_UNAVAILABLE,
+        )
+    _require_allowed_redirect(data.redirect_uri)
+    if not verify_social_state(
+        cookie_value=request.COOKIES.get(SOCIAL_STATE_COOKIE),
+        provider=provider,
+        redirect_uri=data.redirect_uri,
+        echoed_state=data.state,
+    ):
+        raise ApiError(
+            400,
+            "Invalid or expired login state; please retry sign-in.",
             code=ErrorCode.SOCIAL_UNAVAILABLE,
         )
     try:
@@ -461,7 +512,10 @@ def social_callback(
         raise ApiError(422, str(exc), code=ErrorCode.SOCIAL_UNAVAILABLE) from exc
     except SignupError as exc:
         raise ApiError(422, str(exc), code=exc.code) from exc
-    return _deliver_token_pair(pair, response, web=data.web)
+    result = _deliver_token_pair(pair, response, web=data.web)
+    # Single-use: consume the state cookie once the flow has completed.
+    response.delete_cookie(SOCIAL_STATE_COOKIE, path="/api/fan")
+    return result
 
 
 @router.post("/login", response=SignupOut, throttle=anon_throttle("10/min"))

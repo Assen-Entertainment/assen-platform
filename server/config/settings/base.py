@@ -76,6 +76,13 @@ SOCIAL_GOOGLE_CLIENT_SECRET = env("SOCIAL_GOOGLE_CLIENT_SECRET", default="")
 SOCIAL_NAVER_CLIENT_ID = env("SOCIAL_NAVER_CLIENT_ID", default="")
 SOCIAL_NAVER_CLIENT_SECRET = env("SOCIAL_NAVER_CLIENT_SECRET", default="")
 
+# Social login OAuth state: signed httpOnly cookie TTL (anti-CSRF, binds callback to the
+# browser session that started the flow). Cross-worker safe (no server store).
+SOCIAL_STATE_TTL_SECONDS: int = env.int("SOCIAL_STATE_TTL_SECONDS", default=600)
+# Optional allowlist of redirect_uri ORIGINS (scheme://host[:port]). Empty = rely on the
+# state-cookie redirect binding as the primary defense; configure in prod to lock down.
+SOCIAL_ALLOWED_REDIRECT_ORIGINS: list[str] = env.list("SOCIAL_ALLOWED_REDIRECT_ORIGINS", default=[])
+
 # Push-notification transport gate (#16 P5). The operator push-dispatch surface
 # uses an in-memory mock adapter (apps.notification.adapters) — no real FCM/APNs is
 # wired. Hardcoded False here (NOT env-driven), so production fails closed (503

@@ -762,6 +762,7 @@ export async function apiCreateOrder(input: {
   qty: number;
   option?: string;
   shipping?: ShippingAddress;
+  idempotencyKey?: string;
 }): Promise<Order> {
   const raw = await apiFetch<RawOrderDetail>("/orders", {
     method: "POST",
@@ -770,7 +771,13 @@ export async function apiCreateOrder(input: {
   return mapOrder(raw);
 }
 /** CreateOrderIn wire 바디(snake_case) — 유료(/orders)·무료(/orders/free) 공용 계약. */
-function orderInBody(input: { productId: string; qty: number; option?: string; shipping?: ShippingAddress }) {
+function orderInBody(input: {
+  productId: string;
+  qty: number;
+  option?: string;
+  shipping?: ShippingAddress;
+  idempotencyKey?: string;
+}) {
   return {
     product_id: input.productId,
     qty: input.qty,
@@ -784,6 +791,7 @@ function orderInBody(input: { productId: string; qty: number; option?: string; s
           address2: input.shipping.address2,
         }
       : undefined,
+    idempotency_key: input.idempotencyKey,
   };
 }
 /**
