@@ -71,7 +71,7 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
           verified={p.verified}
           avatarFallback={p.creatorName.slice(0, 1)}
           avatarTone={p.creatorId}
-          body={p.body}
+          body={p.locked ? "멤버십 전용 콘텐츠예요" : p.body}
           media={
             adultBlocked ? (
               <MediaImage
@@ -86,6 +86,25 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
                   cta={
                     <Button size="sm" asChild>
                       <Link href="/age-gate">성인 인증하기</Link>
+                    </Button>
+                  }
+                />
+              </MediaImage>
+            ) : p.locked ? (
+              // 잠긴 콘텐츠(서버가 body/mediaUrl을 빈 문자열로 redact) — 피드/프로필과 동일한
+              // LockedOverlay + 구독 CTA. 실 미디어가 없어 뷰어 열기 버튼은 노출하지 않음.
+              <MediaImage
+                src={p.mediaUrl}
+                alt={`${p.creatorName}의 포스트 미디어`}
+                gradientStyle={gradientStyle(p.id)}
+                className="aspect-video w-full"
+              >
+                <LockedOverlay
+                  title="멤버십 전용"
+                  description="멤버십에 가입하면 볼 수 있어요."
+                  cta={
+                    <Button size="sm" asChild>
+                      <Link href="/membership">멤버십 구독하고 보기</Link>
                     </Button>
                   }
                 />
