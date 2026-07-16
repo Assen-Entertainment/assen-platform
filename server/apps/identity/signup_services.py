@@ -24,7 +24,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.consent.models import ConsentKind
-from apps.consent.services import record_consent
+from apps.consent.services import record_consent, set_marketing_consent
 from apps.event_log.events import ActorType, EventName, EventSource
 from apps.event_log.models import EventRecord
 from apps.event_log.services import emit_event
@@ -186,6 +186,7 @@ def register_fan(
     otp_code: str,
     otp_sender: OtpSender,
     age_over_14: bool = True,
+    marketing_consent: bool = False,
     anonymous_id: str = "",
     version: str = SIGNUP_CONSENT_VERSION,
 ) -> IssuedTokenPair:
@@ -240,6 +241,12 @@ def register_fan(
 
     record_consent(account=account, kind=ConsentKind.TERMS.value, version=version)
     record_consent(account=account, kind=ConsentKind.PRIVACY.value, version=version)
+
+    if marketing_consent:
+        # 가입 시 도달 가능한 유일한 마케팅 채널은 전화 → SMS. push/email은
+        # /settings/notifications에서 사용자가 켜기 전까지 기본 off로 둔다(D8).
+        # false/미전송이면 어떤 마케팅 옵트인도 기록하지 않는다(fail-closed).
+        set_marketing_consent(account=account, channel="sms", enabled=True)
 
     if created:
         # fan_signed_up marks a NEW fan account and feeds the ASS-112 new-signup

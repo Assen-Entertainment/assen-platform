@@ -158,6 +158,10 @@ class SignupIn(Schema):
     # omitted field is treated as "not confirmed" → the service rejects with
     # UNDERAGE. The web sends the explicit checkbox value.
     age_over_14: bool = False
+    # 마케팅 수신(선택). 가입 시 도달 가능한 유일한 마케팅 채널은 전화 → SMS이므로
+    # true면 SMS 옵트인만 기록한다(push/email은 /settings/notifications에서 별도 설정).
+    # Fail-open 아님 — 미전송/false면 어떤 마케팅 옵트인도 기록하지 않는다.
+    marketing_consent: bool = False
     web: bool = False
 
 
@@ -353,6 +357,7 @@ def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> Sign
             consent_terms=data.consent_terms,
             consent_privacy=data.consent_privacy,
             age_over_14=data.age_over_14,
+            marketing_consent=data.marketing_consent,
             otp_code=data.otp_code,
             otp_sender=sender,
         )

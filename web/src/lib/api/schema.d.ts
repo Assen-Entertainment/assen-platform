@@ -4728,6 +4728,11 @@ export interface components {
              */
             age_over_14: boolean;
             /**
+             * Marketing Consent
+             * @default false
+             */
+            marketing_consent: boolean;
+            /**
              * Web
              * @default false
              */

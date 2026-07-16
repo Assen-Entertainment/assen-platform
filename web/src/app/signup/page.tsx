@@ -72,6 +72,7 @@ function OtpSignup() {
         consentTerms: true,
         consentPrivacy: true,
         ageOver14: true,
+        marketingConsent: consent.includes("mkt"),
       });
       router.push(next);
     } catch {
