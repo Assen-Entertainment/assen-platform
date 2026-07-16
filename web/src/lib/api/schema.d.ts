@@ -366,29 +366,39 @@ export interface paths {
         put?: never;
         /**
          * Create Order
-         * @description Place a mock order for one product.
+         * @description Place a mock order for one product via a 2-phase payment intent (#4/#2).
          *
-         *     MOCK: records a ``paid`` order and snapshots the line item, but **no real
-         *     payment is taken and no money moves** (B7 gated). The order amounts
+         *     MOCK: the deterministic mock captures synchronously and approves, so the endpoint
+         *     still returns a ``paid`` order and snapshots the line item, but **no real payment
+         *     is taken and no money moves** (B7 gated). The order amounts
          *     (``subtotal``/``shipping_fee``/``total``, ``total = subtotal + shipping_fee``)
          *     are computed server-side so the fan is charged exactly what is shown; shipping
          *     is a fixed mock ``0`` until the fee policy is set (대표·재무 게이트). A physical
          *     (``goods``) order must carry a delivery address, else 422.
          *
-         *     Stock (B7 precursor): a stock-tracked product is decremented atomically with a
-         *     ``stock >= qty`` conditional UPDATE inside the transaction — 0 rows means a
-         *     concurrent buyer took the last unit (TOCTOU-sealed → 422), and taking the last
-         *     unit flips ``sold_out``. Cancelling the order restores it (see ``cancel_order``).
+         *     Two-phase structure (#4/#2 seam — so a real PG plugs in without a lost charge):
+         *
+         *     * **PHASE 1 (``transaction.atomic``, then COMMIT):** reserve stock with the
+         *       ``stock >= qty`` conditional UPDATE (0 rows = a concurrent buyer took the last
+         *       unit → 422; the last unit flips ``sold_out``), then persist the order as
+         *       **PENDING** with its line. NO gateway call and NO settlement happen inside this
+         *       transaction, so a capture that succeeds after a DB-commit failure can never
+         *       charge a customer with no order — the durable order exists first.
+         *     * **PHASE 2 (OUTSIDE the transaction):** capture through the gateway (idempotent —
+         *       the order's key is passed so a real PG dedups a retry). On approval, a SECOND
+         *       short transaction flips PENDING→PAID (conditional-UPDATE rowcount gate) and
+         *       ledgers the settlement. On decline/error, PENDING→FAILED and the reserved stock
+         *       is restored (mirrors ``cancel_order``), and the fan gets a coded 402 — never a
+         *       leaked stock unit or a silent stuck-pending order.
          *
          *     Idempotency (B1): if the caller supplies ``idempotency_key`` and already has an
-         *     order for it, the existing order is returned (200) rather than duplicated. The
-         *     stock deduction, order, and its line are written in one ``transaction.atomic``
-         *     block so a failure can never leave a header without its item or a decrement
-         *     without an order; the (buyer, key) unique constraint closes the concurrent-retry
-         *     race (both requests pass the pre-check, one insert wins, the loser catches
-         *     ``IntegrityError`` — which also rolls back its decrement — and returns the
-         *     winner's order). The fan notification is sent only *after* the transaction
-         *     commits, so a rolled-back order never emits a stray "order received" notice.
+         *     order for it, the existing order is returned (200) rather than duplicated —
+         *     PENDING if a capture is still in flight, PAID once settled, so a retry never
+         *     double-charges or double-orders. The (buyer, key) unique constraint closes the
+         *     concurrent-retry race in PHASE 1 (both requests pass the pre-check, one insert
+         *     wins, the loser catches ``IntegrityError`` — which also rolls back its decrement —
+         *     and returns the winner's order). The fan notification is sent only *after*
+         *     PENDING→PAID, so a PENDING/FAILED order never emits a stray "order received" notice.
          */
         post: operations["apps_commerce_api_create_order"];
         delete?: never;
