@@ -27,12 +27,12 @@ from django.utils import timezone
 
 from apps.consent.models import ConsentKind
 from apps.consent.services import record_consent
+from apps.consent.versions import consent_doc_version
 from apps.event_log.events import ActorType, EventName, EventSource
 from apps.event_log.services import emit_event
 from apps.identity.models import Account, Role
 from apps.identity.services import IssuedTokenPair, issue_token_pair
 from apps.identity.signup_services import (
-    SIGNUP_CONSENT_VERSION,
     SignupError,
     _phone_hmac_key,
 )
@@ -120,13 +120,18 @@ def register_or_login_social(
             raise SignupError(
                 "만 14세 이상만 가입할 수 있습니다.", code=ErrorCode.UNDERAGE
             )
+        # Stamp the presented document version per document from the server consent
+        # version registry (apps.consent.versions — 법무-게이트: placeholder values),
+        # so a first social signup records WHICH policy text was agreed to.
         record_consent(
-            account=account, kind=ConsentKind.TERMS.value, version=SIGNUP_CONSENT_VERSION
+            account=account,
+            kind=ConsentKind.TERMS.value,
+            version=consent_doc_version(ConsentKind.TERMS.value),
         )
         record_consent(
             account=account,
             kind=ConsentKind.PRIVACY.value,
-            version=SIGNUP_CONSENT_VERSION,
+            version=consent_doc_version(ConsentKind.PRIVACY.value),
         )
         emit_event(
             event_name=EventName.FAN_SIGNED_UP.value,

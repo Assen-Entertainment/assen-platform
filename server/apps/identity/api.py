@@ -43,6 +43,7 @@ from pydantic import Field
 
 from apps.consent.models import ConsentKind
 from apps.consent.services import marketing_consent_state, record_consent, set_marketing_consent
+from apps.consent.versions import consent_doc_version
 from apps.identity.auth import access_token_from_request, authed, fan_auth
 from apps.identity.cookies import (
     ACCESS_COOKIE_NAME,
@@ -90,9 +91,10 @@ from config.throttle import anon_throttle, user_write_throttle
 # the log stream can surface OTP/refresh abuse without leaking an identity.
 logger = logging.getLogger(__name__)
 
-# Consent wording version recorded when the fan confirms 성인/본인 인증. Like
-# SIGNUP_CONSENT_VERSION, storing the version lets the gate require re-consent when
-# the wording changes. Only the consent fact + version persist — never 생년월일.
+# Consent wording version recorded when the fan confirms 성인/본인 인증. Like the
+# signup consent versions (apps.consent.versions), storing the version lets the gate
+# require re-consent when the wording changes. This 19+ KYC document carries its own
+# version; only the consent fact + version persist — never 생년월일.
 _KYC_CONSENT_VERSION = "1.0"
 
 # The refresh cookie is scoped to the fan surface. It is deliberately broadened
@@ -267,6 +269,20 @@ class MarketingConsentIn(Schema):
     push: bool
     sms: bool
     email: bool
+
+
+class ConsentVersionsOut(Schema):
+    """Current server-issued version string per presented consent document.
+
+    The (anonymous) signup page reads this before the fan authenticates so it can
+    present + echo the exact document versions that get stamped onto each
+    ConsentRecord at signup. 법무-게이트: values are placeholders until legal versions
+    the copy (single source of truth: apps.consent.versions).
+    """
+
+    terms: str
+    privacy: str
+    age: str
 
 
 def _deliver_token_pair(
@@ -744,6 +760,23 @@ def set_marketing(request: HttpRequest, data: MarketingConsentIn) -> MarketingCo
     set_marketing_consent(account=account, channel="sms", enabled=data.sms)
     set_marketing_consent(account=account, channel="email", enabled=data.email)
     return MarketingConsentOut(**marketing_consent_state(account))
+
+
+@router.get("/consent/versions", response=ConsentVersionsOut)
+def get_consent_versions(request: HttpRequest) -> ConsentVersionsOut:
+    """Return the current presented version of each consent document (anonymous).
+
+    Anonymous by design: the signup page runs before auth and reads this to present +
+    echo the exact terms/privacy/age document versions recorded onto each
+    ConsentRecord at signup. Values come from the single source of truth
+    (apps.consent.versions — 법무-게이트: placeholders until legal versions the copy).
+    """
+    del request
+    return ConsentVersionsOut(
+        terms=consent_doc_version(ConsentKind.TERMS.value),
+        privacy=consent_doc_version(ConsentKind.PRIVACY.value),
+        age=consent_doc_version(ConsentKind.AGE.value),
+    )
 
 
 @router.post(

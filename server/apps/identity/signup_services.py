@@ -25,6 +25,7 @@ from django.utils import timezone
 
 from apps.consent.models import ConsentKind
 from apps.consent.services import record_consent, set_marketing_consent
+from apps.consent.versions import consent_doc_version
 from apps.event_log.events import ActorType, EventName, EventSource
 from apps.event_log.models import EventRecord
 from apps.event_log.services import emit_event
@@ -36,13 +37,6 @@ from apps.identity.services import (
 )
 from config.errors import ErrorCode
 from config.otp import OtpSender
-
-# Consent wording version recorded at signup. The wording is the 법무-approved copy
-# from the 2026-07-12 privacy decisions (docs/ops/privacy-retention-consent-
-# decisions-2026-07-12.md §5), approved-of-record 2026-07-12; storing the version
-# lets the gate require re-consent when the copy materially changes (bump this
-# string → re-consent).
-SIGNUP_CONSENT_VERSION = "2026-07-12-v1"
 
 
 class SignupError(Exception):
@@ -188,7 +182,7 @@ def register_fan(
     age_over_14: bool = True,
     marketing_consent: bool = False,
     anonymous_id: str = "",
-    version: str = SIGNUP_CONSENT_VERSION,
+    version: str | None = None,
 ) -> IssuedTokenPair:
     """Register (or re-attach) a fan from a verified phone OTP and consent.
 
@@ -239,8 +233,19 @@ def register_fan(
     if anonymous_id:
         merge_anonymous_into_account(anonymous_id=anonymous_id, account=account)
 
-    record_consent(account=account, kind=ConsentKind.TERMS.value, version=version)
-    record_consent(account=account, kind=ConsentKind.PRIVACY.value, version=version)
+    # Record WHICH document version was presented, per document, from the server
+    # consent version registry (apps.consent.versions — 법무-게이트: placeholder
+    # values). An explicit ``version`` still overrides both (re-consent/back-compat).
+    record_consent(
+        account=account,
+        kind=ConsentKind.TERMS.value,
+        version=version or consent_doc_version(ConsentKind.TERMS.value),
+    )
+    record_consent(
+        account=account,
+        kind=ConsentKind.PRIVACY.value,
+        version=version or consent_doc_version(ConsentKind.PRIVACY.value),
+    )
 
     if marketing_consent:
         # 가입 시 도달 가능한 유일한 마케팅 채널은 전화 → SMS. push/email은

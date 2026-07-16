@@ -1810,6 +1810,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fan/consent/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Consent Versions
+         * @description Return the current presented version of each consent document (anonymous).
+         *
+         *     Anonymous by design: the signup page runs before auth and reads this to present +
+         *     echo the exact terms/privacy/age document versions recorded onto each
+         *     ConsentRecord at signup. Values come from the single source of truth
+         *     (apps.consent.versions — 법무-게이트: placeholders until legal versions the copy).
+         */
+        get: operations["apps_identity_api_get_consent_versions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fan/verify/start": {
         parameters: {
             query?: never;
@@ -5006,6 +5031,23 @@ export interface components {
             sms: boolean;
             /** Email */
             email: boolean;
+        };
+        /**
+         * ConsentVersionsOut
+         * @description Current server-issued version string per presented consent document.
+         *
+         *     The (anonymous) signup page reads this before the fan authenticates so it can
+         *     present + echo the exact document versions that get stamped onto each
+         *     ConsentRecord at signup. 법무-게이트: values are placeholders until legal versions
+         *     the copy (single source of truth: apps.consent.versions).
+         */
+        ConsentVersionsOut: {
+            /** Terms */
+            terms: string;
+            /** Privacy */
+            privacy: string;
+            /** Age */
+            age: string;
         };
         /**
          * VerifyConfirmOut
@@ -9463,6 +9505,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarketingConsentOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_get_consent_versions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentVersionsOut"];
                 };
             };
         };
