@@ -4658,6 +4658,105 @@
         }
       }
     },
+    "/api/fan/signup/email": {
+      "post": {
+        "operationId": "apps_identity_api_signup_email",
+        "summary": "Signup Email",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailSignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create an (unverified) email + password fan and send a mock verification mail.\n\nFails closed (503) when no email sender is wired (the mock is gated by\n``ENABLE_MOCK_EMAIL``, off in production), mirroring the OTP surface. No token is\nissued — the fan is logged in on ``/verify-email``. A duplicate verified email is\n409; consent/age/password-length failures are 422. The verification token is\nechoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else \"\").",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSignupIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/verify-email": {
+      "post": {
+        "operationId": "apps_identity_api_verify_email_endpoint",
+        "summary": "Verify Email Endpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Confirm an email-verification token, mark the account verified, and log in.\n\nOn the first valid confirm the account is marked verified and a token pair is\nissued + delivered by surface (ADR-0002); a forged/expired/mismatched token is 400.",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/fan/login/email": {
+      "post": {
+        "operationId": "apps_identity_api_login_email_endpoint",
+        "summary": "Login Email Endpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Authenticate an email + password fan and issue a fresh token pair.\n\nDisclosure-safe: a wrong email and a wrong password are indistinguishable (422\n``InvalidCredentials``). A correct password on an unverified account is 403\n``EMAIL_NOT_VERIFIED`` (verification is required before login). Delivery follows\nthe requested surface (ADR-0002).",
+        "tags": [
+          "fan-signup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailLoginIn"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/fan/logout": {
       "post": {
         "operationId": "apps_identity_api_logout",
@@ -12302,6 +12401,118 @@
           "otp_code"
         ],
         "title": "LoginIn",
+        "type": "object"
+      },
+      "EmailSignupOut": {
+        "description": "Email-signup ack. Never carries auth tokens (login happens on verify).\n\n``verification_token`` is populated only when ``EMAIL_VERIFY_RETURN_TOKEN`` is on\n(dev/test) so e2e can confirm without a real inbox; it is \"\" on any real surface.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "verification_token": {
+            "default": "",
+            "title": "Verification Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "EmailSignupOut",
+        "type": "object"
+      },
+      "EmailSignupIn": {
+        "description": "Request body for email + password fan signup (additive to phone OTP).\n\n``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만\n14세) is mandatory, mirroring phone signup. No token is issued here — the fan\nverifies the emailed link first — so there is no ``web`` surface flag.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "nickname": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Nickname",
+            "type": "string"
+          },
+          "consent_terms": {
+            "title": "Consent Terms",
+            "type": "boolean"
+          },
+          "consent_privacy": {
+            "title": "Consent Privacy",
+            "type": "boolean"
+          },
+          "age_over_14": {
+            "default": false,
+            "title": "Age Over 14",
+            "type": "boolean"
+          },
+          "marketing_consent": {
+            "default": false,
+            "title": "Marketing Consent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "nickname",
+          "consent_terms",
+          "consent_privacy"
+        ],
+        "title": "EmailSignupIn",
+        "type": "object"
+      },
+      "VerifyEmailIn": {
+        "description": "Request body for confirming an email-verification link.\n\n``web`` selects cookie delivery for the token pair issued on verify, exactly like\n:class:`SignupIn` / :class:`LoginIn`.",
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "web": {
+            "default": false,
+            "title": "Web",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "VerifyEmailIn",
+        "type": "object"
+      },
+      "EmailLoginIn": {
+        "description": "Request body for email + password login. ``web`` selects cookie delivery.",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "web": {
+            "default": false,
+            "title": "Web",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "EmailLoginIn",
         "type": "object"
       },
       "RefreshIn": {

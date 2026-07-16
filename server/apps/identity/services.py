@@ -276,8 +276,9 @@ def withdraw_account(account: Account) -> None:
     """Withdraw (탈퇴) a fan account: anonymise, offboard, and end every session.
 
     Privacy decisions 2026-07-12 (D3 — 즉시 익명화). On withdrawal the account's PII
-    is cleared immediately: the display ``nickname`` and the phone-derived
-    ``auth_subject_hash`` are emptied and ``is_active`` is set False. The row itself
+    is cleared immediately: the display ``nickname``, the phone-derived
+    ``auth_subject_hash``, and the raw ``email`` (+ ``email_verified_at``) are emptied
+    and ``is_active`` is set False. The row itself
     is **kept, not deleted**, so orders/subscriptions/events that reference
     ``fan_id`` retain FK integrity under the now-anonymised id (legal-hold records
     stay linked to a pseudonymous token, not to a person). Every token family is
@@ -345,10 +346,23 @@ def withdraw_account(account: Account) -> None:
     clear_marketing_consent(account)
     account.nickname = ""
     account.auth_subject_hash = ""
+    # Email is raw PII (stored plaintext to deliver mail) and the login key for an
+    # email account, so it is cleared on withdrawal alongside the phone hash: the row
+    # is anonymised in place (D3) and the freed address (uniq_fan_email is partial on
+    # non-empty) can back a fresh signup, exactly as the emptied phone hash can.
+    account.email = ""
+    account.email_verified_at = None
     account.is_active = False
     account.withdrawn_at = now
     account.save(
-        update_fields=["nickname", "auth_subject_hash", "is_active", "withdrawn_at"]
+        update_fields=[
+            "nickname",
+            "auth_subject_hash",
+            "email",
+            "email_verified_at",
+            "is_active",
+            "withdrawn_at",
+        ]
     )
 
 
