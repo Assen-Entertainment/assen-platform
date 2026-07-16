@@ -507,6 +507,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orders/{order_id}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ship Order
+         * @description Mark one of the caller's orders SHIPPING (creator-owner or operator; from PAID).
+         *
+         *     Records the carrier + tracking number and stamps ``shipped_at``. The
+         *     PAID→SHIPPING transition is sealed by the conditional-UPDATE rowcount gate
+         *     (project pattern): shipping an order not in PAID (already shipping/completed/
+         *     cancelled) updates 0 rows → 422 ``OrderNotShippable``. A digital order may skip
+         *     this step and complete directly from PAID (see ``complete_order``).
+         */
+        post: operations["apps_commerce_api_ship_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Order
+         * @description Mark one of the caller's orders COMPLETED (creator-owner or operator).
+         *
+         *     A physical (goods) order completes only from SHIPPING (it must ship first). A
+         *     digital-only order (no goods line) completes directly from PAID — that is how a
+         *     digital/coupon/ticket entitlement is "delivered" without a shipping step (#11 §3).
+         *     The transition is sealed by the conditional-UPDATE rowcount gate: completing from
+         *     any other state updates 0 rows → 422 ``OrderNotCompletable``.
+         */
+        post: operations["apps_commerce_api_complete_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Orders
+         * @description List orders for the caller's creator's products, newest first, cursor-paginated.
+         *
+         *     Scoped to the caller's own creator (403 if they operate none) — an order is
+         *     included when any of its lines is a product this creator owns, so another
+         *     creator's orders never appear.
+         */
+        get: operations["apps_commerce_api_studio_list_orders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ops/refunds": {
         parameters: {
             query?: never;
@@ -3688,6 +3764,7 @@ export interface components {
             /** Creator Name */
             creator_name?: string | null;
             refund?: components["schemas"]["OrderRefundOut"] | null;
+            tracking?: components["schemas"]["OrderTrackingOut"] | null;
             shipping_address?: components["schemas"]["OrderShippingOut"] | null;
         };
         /**
@@ -3733,6 +3810,21 @@ export interface components {
             address1: string;
             /** Address2 */
             address2: string;
+        };
+        /**
+         * OrderTrackingOut
+         * @description Shipment tracking echoed once a physical order has been shipped (#11).
+         *
+         *     Populated by the creator/operator at ``/orders/{id}/ship``; ``None`` on an order
+         *     that has not shipped (still PAID, or a digital order completed without shipping).
+         *     Mirrors the web ``Order.tracking`` shape (``{carrier, number}``) — carrier name
+         *     and tracking number only, no PII.
+         */
+        OrderTrackingOut: {
+            /** Carrier */
+            carrier: string;
+            /** Number */
+            number: string;
         };
         /**
          * CreateOrderIn
@@ -3827,6 +3919,7 @@ export interface components {
             /** Creator Name */
             creator_name?: string | null;
             refund?: components["schemas"]["OrderRefundOut"] | null;
+            tracking?: components["schemas"]["OrderTrackingOut"] | null;
         };
         /**
          * OrderPage
@@ -3850,6 +3943,16 @@ export interface components {
              * @default
              */
             detail: string;
+        };
+        /**
+         * ShipIn
+         * @description Creator/operator payload to ship a PAID order (carrier + tracking number).
+         */
+        ShipIn: {
+            /** Carrier */
+            carrier: string;
+            /** Tracking Number */
+            tracking_number: string;
         };
         /**
          * OpsRefundOut
@@ -7319,6 +7422,122 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ship_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_complete_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_studio_list_orders: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1513,6 +1513,212 @@
         ]
       }
     },
+    "/api/orders/{order_id}/ship": {
+      "post": {
+        "operationId": "apps_commerce_api_ship_order",
+        "summary": "Ship Order",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark one of the caller's orders SHIPPING (creator-owner or operator; from PAID).\n\nRecords the carrier + tracking number and stamps ``shipped_at``. The\nPAID→SHIPPING transition is sealed by the conditional-UPDATE rowcount gate\n(project pattern): shipping an order not in PAID (already shipping/completed/\ncancelled) updates 0 rows → 422 ``OrderNotShippable``. A digital order may skip\nthis step and complete directly from PAID (see ``complete_order``).",
+        "tags": [
+          "commerce-orders"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShipIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/orders/{order_id}/complete": {
+      "post": {
+        "operationId": "apps_commerce_api_complete_order",
+        "summary": "Complete Order",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark one of the caller's orders COMPLETED (creator-owner or operator).\n\nA physical (goods) order completes only from SHIPPING (it must ship first). A\ndigital-only order (no goods line) completes directly from PAID — that is how a\ndigital/coupon/ticket entitlement is \"delivered\" without a shipping step (#11 §3).\nThe transition is sealed by the conditional-UPDATE rowcount gate: completing from\nany other state updates 0 rows → 422 ``OrderNotCompletable``.",
+        "tags": [
+          "commerce-orders"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
+    "/api/studio/orders": {
+      "get": {
+        "operationId": "apps_commerce_api_studio_list_orders",
+        "summary": "Studio List Orders",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommerceError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List orders for the caller's creator's products, newest first, cursor-paginated.\n\nScoped to the caller's own creator (403 if they operate none) — an order is\nincluded when any of its lines is a product this creator owns, so another\ncreator's orders never appear.",
+        "tags": [
+          "studio-commerce"
+        ],
+        "security": [
+          {
+            "FanBearerAuth": []
+          },
+          {
+            "FanCookieAuth": []
+          }
+        ]
+      }
+    },
     "/api/ops/refunds": {
       "get": {
         "operationId": "apps_commerce_api_ops_list_refunds",
@@ -9895,6 +10101,16 @@
               }
             ]
           },
+          "tracking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderTrackingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "shipping_address": {
             "anyOf": [
               {
@@ -10016,6 +10232,25 @@
           "address2"
         ],
         "title": "OrderShippingOut",
+        "type": "object"
+      },
+      "OrderTrackingOut": {
+        "description": "Shipment tracking echoed once a physical order has been shipped (#11).\n\nPopulated by the creator/operator at ``/orders/{id}/ship``; ``None`` on an order\nthat has not shipped (still PAID, or a digital order completed without shipping).\nMirrors the web ``Order.tracking`` shape (``{carrier, number}``) — carrier name\nand tracking number only, no PII.",
+        "properties": {
+          "carrier": {
+            "title": "Carrier",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "carrier",
+          "number"
+        ],
+        "title": "OrderTrackingOut",
         "type": "object"
       },
       "CreateOrderIn": {
@@ -10164,6 +10399,16 @@
                 "type": "null"
               }
             ]
+          },
+          "tracking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderTrackingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -10227,6 +10472,29 @@
           "reason"
         ],
         "title": "RefundIn",
+        "type": "object"
+      },
+      "ShipIn": {
+        "description": "Creator/operator payload to ship a PAID order (carrier + tracking number).",
+        "properties": {
+          "carrier": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Carrier",
+            "type": "string"
+          },
+          "tracking_number": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Tracking Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "carrier",
+          "tracking_number"
+        ],
+        "title": "ShipIn",
         "type": "object"
       },
       "OpsRefundOut": {

@@ -85,6 +85,14 @@ class ErrorCode(StrEnum):
     ORDER_NOT_CANCELLABLE = "OrderNotCancellable"
     ORDER_NOT_REFUNDABLE = "OrderNotRefundable"
     OPEN_REFUND_EXISTS = "OpenRefundExists"
+    # --- commerce (fulfillment FSM — creator/operator, #11) -----------------
+    # A ship (PAID→SHIPPING) was attempted on an order not in PAID — the same
+    # conditional-UPDATE rowcount gate the cancel path uses (0 rows won → 422).
+    ORDER_NOT_SHIPPABLE = "OrderNotShippable"
+    # A complete (→COMPLETED) was attempted from a state that does not permit it:
+    # a physical order must be SHIPPING first; a digital-only order may complete
+    # directly from PAID. 0 rows from the rowcount gate → 422.
+    ORDER_NOT_COMPLETABLE = "OrderNotCompletable"
     # --- commerce (operator refund review, R6-W1A) --------------------------
     # A refund request id was not found in the operator queue.
     REFUND_NOT_FOUND = "RefundNotFound"
