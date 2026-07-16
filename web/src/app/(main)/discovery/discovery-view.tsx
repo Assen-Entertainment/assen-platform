@@ -193,6 +193,7 @@ export function DiscoveryView({
               title={p.title}
               price={`₩${p.price.toLocaleString("ko-KR")}`}
               meta={p.meta}
+              mediaUrl={p.mediaUrl}
               onAction={() => router.push(`/store/${p.id}`)}
               className="w-56"
             />

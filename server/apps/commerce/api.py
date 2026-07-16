@@ -37,6 +37,7 @@ from apps.commerce.models import (
 from apps.creator.models import Creator
 from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
+from apps.membership.services import active_subscription
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
 from apps.payments.services import record_free_grant, record_mock_settlement
@@ -891,7 +892,10 @@ def create_order(
         return 422, CommerceError(
             detail="판매 중인 상품이 아니에요.", code=ErrorCode.PRODUCT_NOT_ORDERABLE.value
         )
-    if product.locked:
+    # A locked product is membership-gated: orderable only by an active subscriber of
+    # the product's creator (server-authoritative entitlement). A non-subscriber (or a
+    # creatorless locked product, which has no subscribable creator) is refused 422.
+    if product.locked and active_subscription(account, product.creator) is None:
         return 422, CommerceError(
             detail="멤버십 전용 상품이에요.", code=ErrorCode.MEMBERSHIP_ONLY_PRODUCT.value
         )

@@ -9,6 +9,7 @@ import {
   QuantityStepper,
   OptionSwatch,
   LockedOverlay,
+  MediaImage,
   RefundPolicyNotice,
   BottomCTA,
   Divider,
@@ -100,10 +101,12 @@ export function ProductDetailView({ product }: { product: Product }) {
       </nav>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* 미디어(placeholder 그라디언트) */}
-        <div
-          className="relative aspect-square w-full overflow-hidden rounded-lg"
-          style={{ backgroundImage: "var(--gradient-brand)" }}
+        {/* 미디어(실 이미지 있으면 렌더, 없으면 placeholder 그라디언트) */}
+        <MediaImage
+          src={p.mediaUrl}
+          alt={p.title}
+          gradientStyle={{ backgroundImage: "var(--gradient-brand)" }}
+          className="aspect-square w-full rounded-lg"
         >
           {soldOut ? (
             <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-caption font-medium text-white">
@@ -130,7 +133,7 @@ export function ProductDetailView({ product }: { product: Product }) {
               }
             />
           ) : null}
-        </div>
+        </MediaImage>
 
         {/* 정보 */}
         <div className="flex flex-col gap-4">

@@ -10381,6 +10381,11 @@
             "title": "Is Adult",
             "type": "boolean"
           },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
