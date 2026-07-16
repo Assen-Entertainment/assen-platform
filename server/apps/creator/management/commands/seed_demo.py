@@ -177,7 +177,11 @@ class Command(BaseCommand):
             if creator.owner is None:
                 owner, _ = Account.objects.get_or_create(
                     username=f"owner_{handle}",
-                    defaults={"role": Role.FAN.value, "nickname": name},
+                    defaults={
+                        "role": Role.FAN.value,
+                        "nickname": name,
+                        "kyc_status": "verified",
+                    },
                 )
                 creator.owner = owner
                 creator.save(update_fields=["owner"])
@@ -245,6 +249,8 @@ class Command(BaseCommand):
                 "role": Role.FAN.value,
                 "nickname": _DEMO_CREATOR_NICKNAME,
                 "auth_method": "phone",
+                # 크리에이터는 본인인증 전제(스튜디오 개설이 게이트됨).
+                "kyc_status": "verified",
             },
         )
         stellar_creator = creators["stellar"]
@@ -259,10 +265,11 @@ class Command(BaseCommand):
                 "role": Role.FAN.value,
                 "nickname": _DEMO_FAN_NICKNAME,
                 "auth_method": "phone",
-                # R3: the demo fan starts un-verified (fail-closed) — the 19+ gate
-                # hides adult items until they run the (mock) 본인인증 flow.
+                # 본인인증(KYC) 완료 — 상호작용/구매 게이트를 통과해 데모/E2E가 팔로우·구독·
+                # 주문·좋아요를 할 수 있다. adult_verified는 19+ 별도 게이트라 False 유지
+                # (성인 항목은 여전히 mock 본인인증에서 성인 확인 후 노출).
                 "adult_verified": False,
-                "kyc_status": "unverified",
+                "kyc_status": "verified",
             },
         )
         for handle in ("stellar", "rabbit"):
