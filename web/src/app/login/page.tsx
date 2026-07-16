@@ -2,18 +2,17 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { TextField, Button, Divider, OTPInput } from "@/components/ui";
+import { TextField, Button, Divider } from "@/components/ui";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { SocialButtons } from "@/components/auth/social-buttons";
 import { useToast } from "@/components/ui/use-toast";
-import { config } from "@/lib/config";
 import { ApiError, ERROR_CODES } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { sanitizeNext } from "@/lib/auth-return";
 
 /**
- * Login — 라이브 백엔드면 전화번호 OTP 2단계 재인증, 아니면 mock 즉시 로그인(오프라인·데모).
- * ※본인인증/실 크리덴셜은 게이트. OTP는 dev에서 문자 대신 고정 인증번호를 사용한다.
+ * Login — 라이브 백엔드면 이메일/비밀번호 + 소셜 로그인(B1: 폰 OTP 제거), 아니면 mock 즉시
+ * 로그인(오프라인·데모). ※본인인증은 별도 게이트(상호작용/구매만 요구, 열람은 자유).
  */
 export default function LoginPage() {
   // useSearchParams(?next= 복귀)는 Suspense 경계가 필요 → 콘텐츠를 감싼다.
@@ -29,136 +28,92 @@ function LoginContent() {
   const searchParams = useSearchParams();
   // 오픈 리다이렉트 방어 — 상대경로만 허용(그 외 기본값). 로그인/가입 성공 시 이 경로로 복귀.
   const next = sanitizeNext(searchParams.get("next"));
-  return useApi ? <OtpLogin next={next} /> : <MockLogin next={next} />;
+  return useApi ? <EmailLogin next={next} /> : <MockLogin next={next} />;
 }
 
-/** OTP 로그인(라이브). 전화번호 → 인증번호 받기 → 인증번호 입력 → 로그인. */
-function OtpLogin({ next }: { next: string }) {
+/** 이메일 로그인(라이브). 이메일 + 비밀번호 → 로그인, 또는 소셜 계속하기. */
+function EmailLogin({ next }: { next: string }) {
   const router = useRouter();
   const { toast } = useToast();
-  const { requestOtp, loginWithOtp, startSocial } = useSession();
-  const [phone, setPhone] = React.useState("");
-  const [otp, setOtp] = React.useState("");
-  const [step, setStep] = React.useState<"phone" | "otp">("phone");
+  const { loginWithEmail, startSocial } = useSession();
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
 
-  const sendOtp = async () => {
-    if (!phone.trim() || busy) return;
-    setBusy(true);
-    setNotice(null);
-    try {
-      await requestOtp(phone.trim());
-      setStep("otp");
-      toast({ title: "인증번호를 보냈어요", description: "문자로 받은 인증번호를 입력해 주세요." });
-    } catch {
-      toast({ title: "인증번호 발송에 실패했어요", description: "전화번호를 확인하고 다시 시도해 주세요." });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
 
   const submit = async () => {
-    if (otp.length < 6 || busy) return;
+    if (!canSubmit) return;
     setBusy(true);
     setNotice(null);
     try {
-      await loginWithOtp(phone.trim(), otp);
+      await loginWithEmail(email.trim(), password);
       router.push(next);
     } catch (e) {
-      // 422는 미가입·인증번호 오류가 섞여 온다 — 서버 error code로 구분한다(문자열 부분일치 제거).
-      //  · code=AccountNotRegistered → 회원가입 유도(미가입 번호).
-      //  · code=OtpInvalid → 인증번호 오류 안내.
-      //  · 그 외 422는 서버 detail(표시용)로 폴백.
-      if (e instanceof ApiError && e.status === 422) {
-        if (e.code === ERROR_CODES.AccountNotRegistered) {
-          setNotice("가입되지 않은 번호예요. 아래에서 회원가입을 진행해 주세요.");
-        } else if (e.code === ERROR_CODES.OtpInvalid) {
-          setNotice("인증번호가 올바르지 않아요. 다시 확인해 주세요.");
-        } else {
-          setNotice(e.detail ?? "인증번호가 올바르지 않아요. 다시 확인해 주세요.");
-        }
+      // 계약(안정 code)으로 분기 — 문자열 매칭 없음.
+      //  · 422 InvalidCredentials → 이메일·비밀번호 오류(비구분 안내).
+      //  · 403 EmailNotVerified → 인증 메일 링크로 인증 유도.
+      //  · 그 외는 토스트 폴백.
+      if (e instanceof ApiError && e.status === 422 && e.code === ERROR_CODES.InvalidCredentials) {
+        setNotice("이메일 또는 비밀번호가 올바르지 않아요.");
+      } else if (e instanceof ApiError && e.status === 403 && e.code === ERROR_CODES.EmailNotVerified) {
+        setNotice("이메일 인증이 필요해요. 받은 메일의 링크로 인증을 완료해 주세요.");
       } else {
-        toast({ title: "로그인에 실패했어요", description: "인증번호를 확인하고 다시 시도해 주세요." });
+        toast({ title: "로그인에 실패했어요", description: "잠시 후 다시 시도해 주세요." });
       }
       setBusy(false);
     }
   };
 
-  // 회원가입 링크 — 입력한 전화번호와 복귀 경로(next)를 함께 전달(가입 후에도 원경로 복귀).
-  const signupParams = new URLSearchParams();
-  if (phone.trim()) signupParams.set("phone", phone.trim());
-  if (next !== "/discovery") signupParams.set("next", next);
-  const signupHref = signupParams.toString() ? `/signup?${signupParams}` : "/signup";
+  // 회원가입 링크 — 복귀 경로(next)를 함께 전달(가입 후에도 원경로 복귀).
+  const signupHref = next !== "/discovery" ? `/signup?next=${encodeURIComponent(next)}` : "/signup";
 
   return (
     <AuthShell>
-        {step === "phone" ? (
-          <>
-            <TextField
-              label="휴대폰 번호"
-              type="tel"
-              inputMode="numeric"
-              placeholder="01012345678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-            <Button size="lg" className="w-full" disabled={!phone.trim() || busy} onClick={sendOtp}>
-              인증번호 받기
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="text-center text-body-s text-on-surface-variant">
-              <span className="text-on-surface">{phone}</span> 로 보낸 인증번호를 입력하세요
-            </p>
-            <div className="flex justify-center">
-              <OTPInput value={otp} onChange={setOtp} />
-            </div>
-            {config.env !== "production" ? (
-              <p className="text-center text-caption text-on-surface-variant">
-                개발 환경에서는 문자 대신 고정 인증번호가 사용됩니다.
-              </p>
-            ) : null}
-            {notice ? (
-              <p className="text-center text-caption text-error">{notice}</p>
-            ) : null}
-            <Button size="lg" className="w-full" disabled={otp.length < 6 || busy} onClick={submit}>
-              로그인
-            </Button>
-            <button
-              type="button"
-              className="text-center text-caption text-primary underline underline-offset-2 hover:opacity-80"
-              onClick={() => {
-                setStep("phone");
-                setOtp("");
-                setNotice(null);
-              }}
-            >
-              전화번호 다시 입력
-            </button>
-          </>
-        )}
+      <TextField
+        label="이메일"
+        type="email"
+        autoComplete="email"
+        placeholder="you@assen.kr"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <TextField
+        label="비밀번호"
+        type="password"
+        autoComplete="current-password"
+        placeholder="••••••••"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void submit();
+        }}
+      />
+      {notice ? <p className="text-center text-caption text-error">{notice}</p> : null}
+      <Button size="lg" className="w-full" disabled={!canSubmit} onClick={submit}>
+        로그인
+      </Button>
 
-        <div className="flex items-center gap-2">
-          <Divider className="flex-1" />
-          <span className="shrink-0 text-caption text-on-surface-variant">또는</span>
-          <Divider className="flex-1" />
-        </div>
-        <Link
-          href={signupHref}
-          className="text-center text-caption text-primary underline underline-offset-2 hover:opacity-80"
-        >
-          처음이신가요? 회원가입
-        </Link>
-        <SocialButtons onProvider={(provider) => void startSocial(provider, next)} disabled={busy} />
-        <p className="text-center text-caption text-on-surface-variant">
-          소셜 계정으로 계속하면{" "}
-          <Link href="/policy/terms" className="text-primary underline underline-offset-2">이용약관</Link>
-          {" 및 "}
-          <Link href="/policy/privacy" className="text-primary underline underline-offset-2">개인정보처리방침</Link>
-          에 동의하고 만 14세 이상임을 확인합니다.
-        </p>
+      <div className="flex items-center gap-2">
+        <Divider className="flex-1" />
+        <span className="shrink-0 text-caption text-on-surface-variant">또는</span>
+        <Divider className="flex-1" />
+      </div>
+      <SocialButtons onProvider={(provider) => void startSocial(provider, next)} disabled={busy} />
+      <Link
+        href={signupHref}
+        className="text-center text-caption text-primary underline underline-offset-2 hover:opacity-80"
+      >
+        처음이신가요? 회원가입
+      </Link>
+      <p className="text-center text-caption text-on-surface-variant">
+        계속하면{" "}
+        <Link href="/policy/terms" className="text-primary underline underline-offset-2">이용약관</Link>
+        {" 및 "}
+        <Link href="/policy/privacy" className="text-primary underline underline-offset-2">개인정보처리방침</Link>
+        에 동의하고 만 14세 이상임을 확인합니다.
+      </p>
     </AuthShell>
   );
 }

@@ -1,17 +1,16 @@
-import { test, expect, type Page } from "@playwright/test";
-import { otpFor } from "./helpers/otp";
+import { test, expect } from "@playwright/test";
+import { DEMO_FAN_EMAIL, DEMO_PASSWORD, loginViaEmail } from "./helpers/auth";
 
 /**
  * 정본 통합 저니 — 웹(Next, live 모드) + 서버(Django, seed_demo) 결합.
  * 기존 scripts/integration-smoke.mjs의 14스텝을 Playwright Test로 이관(단언·auto-wait·trace·재시도).
  *
- * 전제: Django 127.0.0.1:8000(dev·mock OTP·seed_demo), Next(NEXT_PUBLIC_API_URL=/api·rewrites)가
+ * 전제: Django 127.0.0.1:8000(dev·seed_demo), Next(NEXT_PUBLIC_API_URL=/api·rewrites)가
  *       playwright.config baseURL로 접근 가능. 서버 기동 절차는 playwright.config 주석 참조.
- * 저니: OTP 로그인 → 세션 → 팔로우 → 좋아요·댓글 → 신고 → 상품상세·주문(배송지) →
+ * 저니: 이메일 로그인 → 세션 → 팔로우 → 좋아요·댓글 → 신고 → 상품상세·주문(배송지) →
  *       주문목록 → 알림 → 계정수정 → 결제수단 → KYC → 로그아웃
  */
 
-const PHONE = "01000000001"; // seed_demo 데모팬(010-0000-0001) — OTP 로그인 결정적.
 const NEWNICK = "스모크수정";
 
 /**
@@ -42,29 +41,9 @@ test("팬 저니 — 로그인부터 로그아웃까지(14스텝)", async ({ pag
   });
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
 
-  // 1. OTP 로그인 -----------------------------------------------------------
-  await test.step("OTP 로그인", async () => {
-    await page.goto("/login", { waitUntil: "networkidle" });
-    const phoneField = page.getByLabel("휴대폰 번호");
-    await expect(phoneField, "OTP 로그인 폼(live 모드) 렌더").toBeVisible();
-    await phoneField.fill(PHONE);
-    await page.getByRole("button", { name: "인증번호 받기" }).click();
-    await page.getByRole("group", { name: "인증 코드" }).waitFor({ timeout: 10_000 });
-
-    const code = otpFor(PHONE);
-    // 자동 포커스 이동과 fill()의 경합(상태 어긋남) 회피 — 사람처럼 순차 타이핑.
-    await typeOtp(page, code);
-    const loginBtn = page.getByRole("button", { name: "로그인" });
-    try {
-      await loginBtn.click({ timeout: 5_000 });
-    } catch {
-      // 버튼이 비활성(상태 미완성)이면 지우고 1회 재입력.
-      await page.getByLabel("자리 1").click();
-      for (let i = 0; i < 6; i++) await page.keyboard.press("Backspace");
-      await typeOtp(page, code, 120);
-      await loginBtn.click({ timeout: 5_000 });
-    }
-    await page.waitForURL("**/discovery", { timeout: 25_000 });
+  // 1. 이메일 로그인 --------------------------------------------------------
+  await test.step("이메일 로그인", async () => {
+    await loginViaEmail(page, DEMO_FAN_EMAIL, DEMO_PASSWORD);
   });
 
   // 2. 세션 반영 (mypage 시드 닉네임) — 재실행 내성: 데모팬 또는 편집된 닉네임 허용.
@@ -229,12 +208,6 @@ test("팬 저니 — 로그인부터 로그아웃까지(14스텝)", async ({ pag
   const relevant = consoleErrors.filter(isRelevantConsoleError);
   expect.soft(relevant, `콘솔 에러 없음: ${relevant.slice(0, 5).join(" | ")}`).toEqual([]);
 });
-
-/** OTP 6자리를 첫 자리부터 순차 타이핑(자동 포커스 이동 활용). */
-async function typeOtp(page: Page, code: string, delay = 80): Promise<void> {
-  await page.getByLabel("자리 1").click();
-  await page.keyboard.type(code, { delay });
-}
 
 /** 클라 쿼리 settle 리렌더로 텍스트가 흔들리는 버튼의 안정화된 텍스트를 반환. */
 async function stabilizeText(locator: import("@playwright/test").Locator): Promise<string> {

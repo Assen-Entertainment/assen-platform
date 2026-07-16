@@ -6,8 +6,8 @@
  *   (검색은 길이만, 신고는 유형 코드만). 각 payload를 좁은 타입으로 고정해 자유 문자열 필드를 최소화한다.
  */
 
-/** 인증 방식 — 실 OTP("otp") / 소셜 OAuth("social") / 오프라인·데모 mock("mock"). PII 아님. */
-export type AuthMethod = "otp" | "mock" | "social";
+/** 인증 방식 — 이메일/PW("email") / 실 OTP("otp") / 소셜 OAuth("social") / 오프라인·데모 mock("mock"). PII 아님. */
+export type AuthMethod = "email" | "otp" | "mock" | "social";
 
 /**
  * 이벤트명 → payload 타입 매핑(단일 정본). 새 이벤트는 여기 한 곳에만 추가한다.

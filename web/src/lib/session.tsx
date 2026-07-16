@@ -9,6 +9,7 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "@/lib/api/client";
+import { apiSignupEmail, apiLoginEmail, apiVerifyEmail } from "@/lib/api";
 import { track } from "@/lib/analytics";
 
 const USE_API = Boolean(config.apiUrl);
@@ -52,6 +53,19 @@ export interface SignupInput {
   marketingConsent?: boolean;
 }
 
+/** 이메일 가입 입력(B1: 폰 OTP 대체). 서버 EmailSignupIn 미러(모든 동의 bool 명시). */
+export interface EmailSignupInput {
+  email: string;
+  password: string;
+  nickname: string;
+  consentTerms: boolean;
+  consentPrivacy: boolean;
+  /** 만 14세 이상 확인(D5). 서버는 미전송을 fail-closed로 거부(EmailSignupIn 기본 false). */
+  ageOver14: boolean;
+  /** 마케팅 수신(선택). */
+  marketingConsent: boolean;
+}
+
 interface SessionContextValue {
   user: SessionUser | null;
   mounted: boolean;
@@ -68,6 +82,15 @@ interface SessionContextValue {
   loginWithOtp: (phone: string, otp: string) => Promise<void>;
   /** OTP 가입(신규 계정). */
   signupWithOtp: (input: SignupInput) => Promise<void>;
+  /**
+   * 이메일 가입(B1) — 토큰/세션 미발급. 인증 메일 발송 후 verificationToken을 반환한다
+   * (dev/test에서만 비어있지 않음 — verify-email 개발용 링크에 사용). 실 로그인은 verifyEmail에서.
+   */
+  signupWithEmail: (input: EmailSignupInput) => Promise<{ verificationToken: string }>;
+  /** 이메일 로그인(기존 계정). 실패 시 ApiError — 422 InvalidCredentials·403 EmailNotVerified(login/page.tsx). */
+  loginWithEmail: (email: string, password: string) => Promise<void>;
+  /** 이메일 인증 확인(verify-email 링크) — 성공 시 세션 발급(로그인 상태). 400 EmailVerificationInvalid. */
+  verifyEmail: (token: string) => Promise<void>;
   /** 셀프 "크리에이터 되기" — POST /studio/profile 후 세션 갱신. 실패 시 ApiError 전파. */
   becomeCreator: (input: { handle: string; name: string }) => Promise<void>;
   /**
@@ -164,6 +187,27 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
     async (input: SignupInput) => persist({ ...DEFAULT_USER, name: input.nickname }),
     [persist],
   );
+
+  // mock: 이메일 계약도 합성. 가입은 세션을 세우지 않고(실 경로처럼 인증 메일 단계 모사) 빈
+  // 토큰을 반환하며, 로그인·인증 확인은 즉시 DEFAULT_USER를 persist(오프라인·CI).
+  const signupWithEmail = React.useCallback(async () => {
+    track("signup_completed", { method: "email" });
+    return { verificationToken: "" };
+  }, []);
+  const loginWithEmail = React.useCallback(
+    async () => {
+      persist(DEFAULT_USER);
+      track("login_completed", { method: "email" });
+    },
+    [persist],
+  );
+  const verifyEmail = React.useCallback(
+    async () => {
+      persist(DEFAULT_USER);
+      track("signup_completed", { method: "email" });
+    },
+    [persist],
+  );
   // mock: 크리에이터 전환을 로컬 세션에 반영(handle + isCreator).
   const becomeCreator = React.useCallback(
     async ({ handle, name }: { handle: string; name: string }) =>
@@ -186,8 +230,8 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
   const completeSocial = React.useCallback(async () => persist(DEFAULT_USER), [persist]);
 
   const value = React.useMemo<SessionContextValue>(
-    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified, startSocial, completeSocial }),
-    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified, startSocial, completeSocial],
+    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial }),
+    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -276,6 +320,31 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
     [qc],
   );
 
+  // 이메일 가입(B1) — 토큰/세션 미발급(인증 메일 발송까지). verificationToken은 dev/test에서만
+  // 비어있지 않다(verify-email 개발용 링크). ['auth','me'] 무효화 없음(아직 로그인 아님).
+  const signupWithEmail = React.useCallback(async (input: EmailSignupInput) => {
+    return apiSignupEmail(input);
+  }, []);
+
+  const loginWithEmail = React.useCallback(
+    async (email: string, password: string) => {
+      await apiLoginEmail({ email, password });
+      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      track("login_completed", { method: "email" });
+    },
+    [qc],
+  );
+
+  const verifyEmail = React.useCallback(
+    async (token: string) => {
+      await apiVerifyEmail(token);
+      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      // verify-email은 가입의 종단(첫 인증)이자 로그인 — 가입 완료로 계측한다.
+      track("signup_completed", { method: "email" });
+    },
+    [qc],
+  );
+
   const logout = React.useCallback(() => {
     void (async () => {
       try {
@@ -359,12 +428,15 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
       requestOtp,
       loginWithOtp,
       signupWithOtp,
+      signupWithEmail,
+      loginWithEmail,
+      verifyEmail,
       becomeCreator,
       markAdultVerified,
       startSocial,
       completeSocial,
     }),
-    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, becomeCreator, markAdultVerified, startSocial, completeSocial],
+    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -393,6 +465,9 @@ export function useSession(): SessionContextValue {
       requestOtp: async () => {},
       loginWithOtp: async () => {},
       signupWithOtp: async () => {},
+      signupWithEmail: async () => ({ verificationToken: "" }),
+      loginWithEmail: async () => {},
+      verifyEmail: async () => {},
       becomeCreator: async () => {},
       markAdultVerified: () => {},
       startSocial: async () => {},
