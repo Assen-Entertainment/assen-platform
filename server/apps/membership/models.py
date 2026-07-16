@@ -13,11 +13,17 @@ Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from django.db import models
 
 from config.payment import PaymentProvenance, PricingKind
+
+# Mock billing cycle length — the cadence of the display anchor AND the mock
+# renewal worker (apps.membership.tasks). There is no real recurring billing (B7
+# gated); this only advances mock periods/settlements.
+BILLING_CYCLE = timedelta(days=30)
 
 
 class MembershipTier(models.Model):
@@ -62,26 +68,53 @@ class MembershipTier(models.Model):
 
 
 class SubscriptionStatus(models.TextChoices):
-    """Subscription states surfaced to the fan."""
+    """Subscription states surfaced to the fan (billing state machine, Codex #5).
+
+    ``active`` = entitled (a non-cancelled active sub auto-renews at period end; a
+    cancelled one — ``cancelled_at`` set — stays active/entitled until its
+    ``current_period_end``, then the billing worker expires it). ``expired`` = a
+    period ended without renewal (the terminal state the worker writes for a
+    cancelled/non-renewing sub). ``cancelled`` = an immediately-terminated sub (no
+    end-of-period grace); kept for completeness and legacy rows. Only ``active`` is
+    ever entitled (see :func:`apps.membership.services.active_subscription`).
+    """
 
     ACTIVE = "active", "active"
     CANCELLED = "cancelled", "cancelled"
+    EXPIRED = "expired", "expired"
 
 
 class Subscription(models.Model):
     """A fan's mock membership subscription. MOCK: no money moves (B7 gated).
 
+    **Immutable agreed terms (#16):** ``agreed_price``/``agreed_period``/
+    ``agreed_tier_name`` snapshot the tier's terms at subscribe (and re-snapshot at
+    tier change), so a creator later editing the (mutable) tier price/period can
+    never silently re-term an existing member — the subscription is billed and
+    displayed on its own agreed terms, not the tier's live ones.
+
+    **Billing state machine (#5):** ``current_period_end`` is the entitlement cutoff.
     End-of-period cancellation ("해지 예정"): :meth:`cancel <apps.membership.api>`
-    records ``cancelled_at`` but keeps ``status = active`` so the membership stays
-    usable until the period ends; a real billing job (post-mock) would flip it to
-    ``cancelled`` at ``next_billing_date``. The API exposes a derived
-    ``cancel_scheduled`` flag so the web renders "해지 예정".
+    records ``cancelled_at`` but keeps ``status = active`` (still entitled) until
+    ``current_period_end``; the mock billing worker (apps.membership.tasks) then
+    expires it. A non-cancelled active sub is instead RENEWED by the worker (mock
+    settlement + advanced period). The API exposes a derived ``cancel_scheduled``
+    flag so the web renders "해지 예정".
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     fan = models.ForeignKey(
         "identity.Account", on_delete=models.CASCADE, related_name="subscriptions"
     )
+    # Kept CASCADE by design: a subscription with real settlement history is still
+    # protected from tier deletion, because its PaymentAttempt rows are PROTECT
+    # (apps.payments.models) — deleting the tier would cascade to the subscription,
+    # which the protected attempt then blocks (ProtectedError). ``studio_delete_tier``
+    # catches that and soft-archives the tier instead (#16). Only a bare subscription
+    # with no financial history (never produced by the API — every subscribe path
+    # ledgers an attempt) can still be cascade-removed with its tier. The subscription
+    # additionally carries its own agreed-terms snapshot, so it never depends on the
+    # tier row surviving to render its price/period.
     tier = models.ForeignKey(
         "membership.MembershipTier",
         on_delete=models.CASCADE,
@@ -103,10 +136,24 @@ class Subscription(models.Model):
         max_length=16, choices=SubscriptionStatus.choices, default=SubscriptionStatus.ACTIVE
     )
     started_at = models.DateTimeField(auto_now_add=True)
+    # Immutable agreed-terms snapshot (#16), captured at subscribe and re-captured at
+    # tier change. These — NOT the tier's live, mutable price/period — are what the
+    # member is billed and shown, so editing the tier never re-terms existing members.
+    # NULL/blank only on legacy rows predating this snapshot; those fall back to the
+    # live tier at read time (best available value, never a guess — mirrors
+    # PaymentProvenance.LEGACY_UNKNOWN).
+    agreed_price = models.PositiveIntegerField(null=True, blank=True)
+    agreed_period = models.CharField(max_length=8, blank=True, default="")
+    agreed_tier_name = models.CharField(max_length=40, blank=True, default="")
     # Mock billing anchor (display only; no PG/settlement — B7 gated). NULL for a
     # free membership (ASS-297): a free grant has no next charge, so a fabricated
     # date is never stored or shown.
     next_billing_date = models.DateField(null=True, blank=True)
+    # Entitlement cutoff for the billing state machine (#5): the moment the current
+    # paid period ends. The worker RENEWS (advances this + mock settlement) an active
+    # non-cancelled sub past this instant, and EXPIRES a cancelled/non-renewing one.
+    # NULL for a free/legacy membership (no billing period — the worker skips it).
+    current_period_end = models.DateTimeField(null=True, blank=True)
     # Set when the fan schedules end-of-period cancellation; status stays active.
     cancelled_at = models.DateTimeField(null=True, blank=True)
     # How this ACTIVE membership was settled (ASS-298). Set explicitly on every

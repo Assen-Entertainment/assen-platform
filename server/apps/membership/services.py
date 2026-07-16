@@ -12,6 +12,9 @@ product is never orderable without an active subscription (see
 
 from __future__ import annotations
 
+from django.db.models import Q
+from django.utils import timezone
+
 from apps.content.models import Post, PostVisibility
 from apps.creator.models import Creator
 from apps.identity.models import Account
@@ -21,18 +24,34 @@ from apps.membership.models import Subscription, SubscriptionStatus
 def active_subscription(
     fan: Account | None, creator: Creator | None
 ) -> Subscription | None:
-    """Return ``fan``'s ACTIVE subscription to ``creator`` (or ``None``).
+    """Return ``fan``'s truly-active subscription to ``creator`` (or ``None``).
 
     Mirrors the ``uniq_active_subscription_per_creator`` constraint: at most one
     ACTIVE subscription per (fan, creator), so ``first()`` is unambiguous. A missing
     fan or creator (e.g. a creatorless/global product) never has an entitlement, so
     it returns ``None`` rather than matching NULL creators.
+
+    Billing state machine (#5): an ``expired`` (or ``cancelled``) status is excluded
+    by the status filter. A *cancelled-but-still-active* sub (``cancelled_at`` set,
+    "해지 예정") is entitled only until its ``current_period_end`` — this closes the
+    window immediately at period end even if the billing worker has not yet run to
+    flip the status. A renewing (non-cancelled) sub is always entitled; a free/legacy
+    sub (no ``current_period_end``) is entitled while active.
     """
     if fan is None or creator is None:
         return None
-    return Subscription.objects.filter(
-        fan=fan, creator=creator, status=SubscriptionStatus.ACTIVE.value
-    ).first()
+    now = timezone.now()
+    return (
+        Subscription.objects.filter(
+            fan=fan, creator=creator, status=SubscriptionStatus.ACTIVE.value
+        )
+        .filter(
+            Q(cancelled_at__isnull=True)
+            | Q(current_period_end__isnull=True)
+            | Q(current_period_end__gt=now)
+        )
+        .first()
+    )
 
 
 def can_view_post(account: Account | None, post: Post) -> bool:

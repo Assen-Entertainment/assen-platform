@@ -9,10 +9,10 @@ end-of-period cancellation. Filter the catalog to a creator via ``?creator_id=``
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, ProtectedError, Q
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
@@ -21,7 +21,12 @@ from pydantic import Field, field_validator
 from apps.creator.models import Creator
 from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
-from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
+from apps.membership.models import (
+    BILLING_CYCLE,
+    MembershipTier,
+    Subscription,
+    SubscriptionStatus,
+)
 from apps.payments.services import record_free_grant, record_mock_settlement
 from apps.social.models import blocked_creator_ids
 from config.api import api
@@ -33,9 +38,6 @@ from config.payment import (
     require_payment_available,
 )
 from config.throttle import user_write_throttle
-
-# Mock billing cycle length; there is no real recurring billing (B7 gated).
-_BILLING_CYCLE = timedelta(days=30)
 
 tiers_router = Router(tags=["membership"])
 subscriptions_router = Router(auth=fan_auth, tags=["membership-subscriptions"])
@@ -371,11 +373,13 @@ def studio_delete_tier(
 ) -> tuple[int, StudioTierAck | SubscriptionError]:
     """Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).
 
-    Deleting a tier CASCADEs its subscriptions (``Subscription.tier`` is CASCADE) —
-    unlike a product delete, which SET_NULLs order lines to preserve history. To keep
-    that asymmetry from silently destroying a live membership, a tier with any active
-    subscription can't be deleted (422); the owner should set ``active=False`` (soft
-    archive) to stop new signups while keeping existing subscriptions intact.
+    A tier with any ACTIVE subscription can't be deleted (422); the owner soft-archives
+    (``active=False``) instead. With no active subscription, a hard delete is attempted:
+    if the tier still has non-active subscriptions carrying settlement history, their
+    PROTECTed :class:`~apps.payments.models.PaymentAttempt` rows block the cascade
+    (financial history is never erased — #16), so the tier is soft-archived and the ack
+    reports ``archived``. Only a tier whose subscriptions (if any) have no financial
+    history is hard-deleted (``deleted``).
     """
     account = authed(request)
     creator = _owner_creator(account)
@@ -395,7 +399,14 @@ def studio_delete_tier(
             detail="활성 구독이 있는 등급은 삭제할 수 없어요. 먼저 비활성화(active=False)하세요.",
             code=ErrorCode.TIER_IN_USE.value,
         )
-    tier.delete()
+    try:
+        tier.delete()
+    except ProtectedError:
+        # A non-active subscription with settlement history (PROTECTed attempts) blocks
+        # the cascade — soft-archive rather than erase the financial record (#16).
+        tier.active = False
+        tier.save(update_fields=["active"])
+        return 200, StudioTierAck(status="archived")
     return 200, StudioTierAck(status="deleted")
 
 
@@ -443,7 +454,13 @@ class ChangeTierIn(Schema):
 
 
 def _subscription_out(sub: Subscription) -> SubscriptionOut:
-    """Build the subscription response from a subscription with tier/creator loaded."""
+    """Build the subscription response from a subscription with tier/creator loaded.
+
+    Serializes the AGREED (snapshotted) terms, never the tier's live/mutable ones
+    (#16): a creator later editing the tier price/period must not re-term an existing
+    member. Legacy rows predating the snapshot (``agreed_price is None``) fall back to
+    the live tier — the best value available, never a guess.
+    """
     tier = sub.tier
     creator = tier.creator
     return SubscriptionOut(
@@ -452,9 +469,9 @@ def _subscription_out(sub: Subscription) -> SubscriptionOut:
         creator_name=creator.name if creator is not None else "",
         creator_handle=creator.handle if creator is not None else "",
         tier_id=tier.id,
-        tier_name=tier.name,
-        price=tier.price,
-        period=tier.period,
+        tier_name=sub.agreed_tier_name or tier.name,
+        price=sub.agreed_price if sub.agreed_price is not None else tier.price,
+        period=sub.agreed_period or tier.period,
         status=sub.status,
         next_billing_date=sub.next_billing_date,
         cancel_scheduled=(
@@ -517,7 +534,14 @@ def subscribe(
                 fan=account,
                 tier=tier,
                 status=SubscriptionStatus.ACTIVE,
-                next_billing_date=timezone.localdate() + _BILLING_CYCLE,
+                next_billing_date=timezone.localdate() + BILLING_CYCLE,
+                # Entitlement cutoff / first renewal instant (#5).
+                current_period_end=timezone.now() + BILLING_CYCLE,
+                # Immutable agreed terms captured now (#16) — the member is billed and
+                # shown these, not the tier's later-editable price/period.
+                agreed_price=tier.price,
+                agreed_period=tier.period,
+                agreed_tier_name=tier.name,
                 # Settled by the deterministic mock (the only path past the
                 # payment gate today); never guessed (ASS-298).
                 payment_provenance=PaymentProvenance.MOCK,
@@ -581,8 +605,13 @@ def subscribe_free(
                 tier=tier,
                 status=SubscriptionStatus.ACTIVE,
                 # No next charge for a free membership (ASS-297) — never a fabricated
-                # date — and it never auto-converts to paid.
+                # date — and it never auto-converts to paid. No billing period either,
+                # so the renewal/expiry worker skips it (current_period_end NULL).
                 next_billing_date=None,
+                current_period_end=None,
+                agreed_price=tier.price,
+                agreed_period=tier.period,
+                agreed_tier_name=tier.name,
                 payment_provenance=PaymentProvenance.FREE,
             )
             record_free_grant(subscription=sub)
@@ -712,8 +741,25 @@ def change_subscription_tier(
     # A tier change is a fresh mock settlement — refresh provenance and ledger it
     # in one transaction so the record and its attempt never diverge (ASS-298).
     sub.payment_provenance = PaymentProvenance.MOCK
+    # Re-snapshot the agreed terms to the new tier (#16) and restart the billing
+    # period from now — the change is billed on the new tier's terms as agreed today.
+    sub.agreed_price = new_tier.price
+    sub.agreed_period = new_tier.period
+    sub.agreed_tier_name = new_tier.name
+    sub.current_period_end = timezone.now() + BILLING_CYCLE
+    sub.next_billing_date = timezone.localdate() + BILLING_CYCLE
     with transaction.atomic():
-        sub.save(update_fields=["tier", "payment_provenance"])
+        sub.save(
+            update_fields=[
+                "tier",
+                "payment_provenance",
+                "agreed_price",
+                "agreed_period",
+                "agreed_tier_name",
+                "current_period_end",
+                "next_billing_date",
+            ]
+        )
         record_mock_settlement(subscription=sub, amount=new_tier.price)
     return 200, _subscription_out(sub)
 

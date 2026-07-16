@@ -438,6 +438,13 @@ CELERY_BEAT_SCHEDULE: dict[str, object] = {
         "task": "apps.visit.tasks.purge_expired_checkin_tokens",
         "schedule": crontab(minute=0),
     },
+    # Mock subscription billing (Codex #5): expire ended cancelled subs and renew
+    # active ones (mock settlement + advanced period). Idempotent per period, so the
+    # daily cadence only ever settles a period once. No real gateway is called.
+    "run-subscription-billing-cycle": {
+        "task": "apps.membership.tasks.run_subscription_billing_cycle",
+        "schedule": crontab(hour=3, minute=0),
+    },
 }
 
 # Structured logging (R4-W2, ASS-242). One dictConfig shared by every

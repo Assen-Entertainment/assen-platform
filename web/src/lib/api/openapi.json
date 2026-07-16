@@ -5267,7 +5267,7 @@
             }
           }
         },
-        "description": "Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).\n\nDeleting a tier CASCADEs its subscriptions (``Subscription.tier`` is CASCADE) —\nunlike a product delete, which SET_NULLs order lines to preserve history. To keep\nthat asymmetry from silently destroying a live membership, a tier with any active\nsubscription can't be deleted (422); the owner should set ``active=False`` (soft\narchive) to stop new signups while keeping existing subscriptions intact.",
+        "description": "Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).\n\nA tier with any ACTIVE subscription can't be deleted (422); the owner soft-archives\n(``active=False``) instead. With no active subscription, a hard delete is attempted:\nif the tier still has non-active subscriptions carrying settlement history, their\nPROTECTed :class:`~apps.payments.models.PaymentAttempt` rows block the cascade\n(financial history is never erased — #16), so the tier is soft-archived and the ack\nreports ``archived``. Only a tier whose subscriptions (if any) have no financial\nhistory is hard-deleted (``deleted``).",
         "tags": [
           "studio-membership"
         ],

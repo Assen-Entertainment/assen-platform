@@ -93,11 +93,16 @@ class PaymentAttempt(models.Model):
         on_delete=models.CASCADE,
         related_name="payment_attempts",
     )
+    # PROTECT (not CASCADE): a settlement ledger is financial history and must never
+    # be erased by deleting its subscription (#16). Combined with the XOR constraint
+    # (a null subscription would break it, so SET_NULL is not an option), PROTECT is
+    # the correct guard — deleting a subscription (or, transitively, its tier) that
+    # has attempts raises ProtectedError; ``studio_delete_tier`` soft-archives instead.
     subscription = models.ForeignKey(
         "membership.Subscription",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="payment_attempts",
     )
     # A sale that settled on a hosted commerce SaaS (apps.commerce_bridge). Assen does
