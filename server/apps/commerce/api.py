@@ -41,15 +41,27 @@ from apps.identity.models import Account, Role
 from apps.membership.services import active_subscription
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
-from apps.payments.services import record_free_grant, record_mock_settlement
+from apps.payments.models import (
+    PaymentAttempt,
+    PaymentAttemptStatus,
+    PaymentProvider,
+    PaymentReversalStatus,
+)
+from apps.payments.services import (
+    record_free_grant,
+    record_mock_reversal,
+    record_mock_settlement,
+)
 from apps.social.models import blocked_creator_ids
 from config.api import api
 from config.errors import ApiError, ErrorCode
 from config.pagination import paginate
 from config.patch import apply_optional
 from config.payment import (
+    ChargeStatus,
     PaymentCharge,
     PaymentProvenance,
+    PaymentRefund,
     PricingKind,
     payment_gateway,
     require_payment_available,
@@ -846,6 +858,85 @@ def _restock_order_lines(order: Order) -> None:
                 Product.objects.filter(id=product.id).update(stock=F("stock") + line.qty)
 
 
+def _reverse_settled_order(order: Order, *, reason: str) -> None:
+    """Durably record a reversal (void/refund) of an order's original capture (#3).
+
+    The BLOCKER-seam: a fan cancel / operator refund-accept cancels + restocks the
+    order while money never actually moves (mock). This routes that reversal through
+    the gateway's (mock) void/refund op and writes an append-only
+    :class:`~apps.payments.models.PaymentReversal` tied to the settlement it reverses,
+    so when a real PG capture is later added the reversal has a durable record to
+    reconcile — the API no longer tells a fan "refunded" while the capture stays
+    settled with nothing recorded.
+
+    Winner-only + idempotent: call this exactly once, inside the caller's transaction,
+    after its conditional status UPDATE won the cancel/refund race. It only reverses a
+    real capture — a succeeded MOCK settlement attempt for the order (a free grant or
+    an unsettled order has nothing to reverse and is skipped) — and no-ops if that
+    attempt already carries a succeeded reversal, so a second cancel/refund-accept can
+    never double-record. The gateway outcome drives the persisted status (succeeded on
+    approve, failed on decline); a gateway error fails the reversal closed (recorded
+    failed) without unwinding the committed cancel/restock.
+    """
+    attempt = (
+        PaymentAttempt.objects.filter(
+            order=order,
+            provider=PaymentProvider.MOCK.value,
+            status=PaymentAttemptStatus.SUCCEEDED.value,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if attempt is None:
+        # No real capture to reverse (free grant / unsettled order): nothing to record.
+        return
+    if attempt.reversals.filter(status=PaymentReversalStatus.SUCCEEDED.value).exists():
+        # Idempotency guard on the attempt: the capture was already reversed (a racing
+        # cancel/refund-accept won first), so a second call must not double-record.
+        return
+    gateway = payment_gateway()
+    if gateway is None:
+        # A mock settlement exists but no gateway is wired now (mock disabled since):
+        # still record the owed reversal as PENDING so it is not silently lost.
+        refund = PaymentRefund(
+            status=ChargeStatus.PENDING,
+            reversal_ref="",
+            provenance=PaymentProvenance.MOCK,
+        )
+    else:
+        try:
+            refund = gateway.refund(
+                order_id=str(order.id),
+                amount=order.total,
+                currency="KRW",
+                original_ref=order.payment_ref,
+                idempotency_key=order.idempotency_key or None,
+            )
+        except Exception:  # noqa: BLE001 — a gateway error fails the reversal closed
+            logger.warning(
+                "commerce.reversal.gateway_error",
+                extra={"order_id": order.id},
+                exc_info=True,
+            )
+            refund = PaymentRefund(
+                status=ChargeStatus.FAILED,
+                reversal_ref="",
+                provenance=PaymentProvenance.MOCK,
+            )
+    reversal = record_mock_reversal(
+        original_attempt=attempt, refund=refund, amount=order.total, reason=reason
+    )
+    logger.info(
+        "commerce.reversal.recorded",
+        extra={
+            "order_id": order.id,
+            "attempt_id": str(attempt.id),
+            "reversal_id": str(reversal.id),
+            "status": reversal.status,
+        },
+    )
+
+
 @orders_router.post(
     "", response={200: OrderDetailOut, 201: OrderDetailOut, 404: CommerceError, 422: CommerceError},
     throttle=user_write_throttle("20/min"),
@@ -1394,6 +1485,9 @@ def cancel_order(
             )
         # Winner-only restock (the rowcount gate above proved this request won).
         _restock_order_lines(order)
+        # Durably record the reversal of the original capture (#3 seam). Winner-only +
+        # idempotent, so a losing/second cancel (0 rows above) never reaches here.
+        _reverse_settled_order(order, reason="order_cancelled")
     # Reflect the committed transition on the in-memory instance for the response.
     order.status = OrderStatus.CANCELLED.value
     logger.info(
@@ -1829,6 +1923,10 @@ def ops_accept_refund(
         )
         if order_cancelled:
             _restock_order_lines(order)
+            # Reverse the original capture only when THIS accept won the order-cancel
+            # (a fan cancel that raced in first already recorded it) — mirrors the
+            # winner-only restock, so the reversal is never double-recorded (#3 seam).
+            _reverse_settled_order(order, reason="refund_accepted")
             order.status = OrderStatus.CANCELLED.value
         else:
             # The order already left the refundable window (e.g. a fan cancel raced in

@@ -191,6 +191,30 @@ class PaymentCharge:
         return self.status == ChargeStatus.APPROVED
 
 
+@dataclass(frozen=True)
+class PaymentRefund:
+    """The non-sensitive result of reversing a settled charge through a gateway.
+
+    Mirrors :class:`PaymentCharge` for the money-*out* direction: ``reversal_ref``
+    is the gateway's own reference for the void/refund transaction (a mock id today,
+    a real PG's refund/cancel id when wired) — never a card PAN. ``provenance``
+    records which rail processed it (mock today) so the reversal ledger and the
+    original settlement agree. A refund is a *new* gateway transaction pointing back
+    at the capture it reverses; recording it never mutates the capture. Reuses
+    :class:`ChargeStatus` — ``approved`` means the reversal settled (money returned),
+    ``pending`` means an out-of-band step is still owed, ``failed`` a decline.
+    """
+
+    status: ChargeStatus
+    reversal_ref: str
+    provenance: PaymentProvenance
+
+    @property
+    def approved(self) -> bool:
+        """Whether the gateway reversed the charge (money was actually returned)."""
+        return self.status == ChargeStatus.APPROVED
+
+
 class PaymentGateway(ABC):
     """Boundary for authorizing + capturing a charge against a fan's order.
 
@@ -224,6 +248,32 @@ class PaymentGateway(ABC):
         """
         raise NotImplementedError
 
+    def refund(
+        self,
+        *,
+        order_id: str,
+        amount: int,
+        currency: str,
+        original_ref: str,
+        idempotency_key: str | None = None,
+    ) -> PaymentRefund:
+        """Reverse (void/refund) a previously captured charge for ``order_id``.
+
+        Called when a fan cancellation or an operator-accepted refund reverses a
+        settled order: ``original_ref`` is the gateway reference of the capture being
+        reversed (the order's ``payment_ref``), and ``amount`` (whole KRW) is the sum
+        to return. ``idempotency_key`` (the order's client key, may be ``None``) lets
+        a real PG dedup a retried reversal so a network retry can never double-refund.
+        Returns the outcome. Must never persist or return a card PAN.
+
+        Unlike :meth:`charge`, this is a concrete default (not ``@abstractmethod``) so
+        that pre-existing charge-only gateways remain valid — a gateway that never
+        reverses need not implement it. **A production adapter MUST override it** to
+        drive the PG's void/refund; the default fails loud rather than silently
+        pretending a reversal happened.
+        """
+        raise NotImplementedError
+
 
 class MockPaymentGateway(PaymentGateway):
     """Deterministic local gateway for dev/tests — approves inline, moves no money.
@@ -249,6 +299,25 @@ class MockPaymentGateway(PaymentGateway):
         return PaymentCharge(
             status=ChargeStatus.APPROVED,
             provider_ref=f"mock_{order_id}",
+            provenance=PaymentProvenance.MOCK,
+        )
+
+    def refund(
+        self,
+        *,
+        order_id: str,
+        amount: int,
+        currency: str,
+        original_ref: str,
+        idempotency_key: str | None = None,
+    ) -> PaymentRefund:
+        """Return a deterministic approved reversal (no money moves)."""
+        # amount/currency/original_ref/idempotency_key are snapshotted on the reversal
+        # ledger; the mock does not consult them (nothing to authorize or dedup).
+        del amount, currency, original_ref, idempotency_key
+        return PaymentRefund(
+            status=ChargeStatus.APPROVED,
+            reversal_ref=f"mock_reversal_{order_id}",
             provenance=PaymentProvenance.MOCK,
         )
 

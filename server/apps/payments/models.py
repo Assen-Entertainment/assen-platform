@@ -12,8 +12,18 @@ Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from django.db import models
+
+
+class AppendOnlyViolation(Exception):
+    """Raised when code attempts to mutate a persisted reversal ledger row.
+
+    Surfaces the append-only invariant as a hard failure rather than letting a
+    silent update corrupt financial history (mirrors
+    :class:`apps.event_log.models.AppendOnlyViolation`).
+    """
 
 
 class SavedPaymentMethod(models.Model):
@@ -182,3 +192,93 @@ class PaymentAttempt(models.Model):
     def __str__(self) -> str:
         """Identify the attempt by provider + status."""
         return f"attempt:{self.provider}:{self.status}"
+
+
+class PaymentReversalStatus(models.TextChoices):
+    """Lifecycle of a single reversal (void/refund) attempt (#3 BLOCKER-seam).
+
+    ``pending`` = the gateway needs an out-of-band step before the reversal settles;
+    ``succeeded`` = the charge was reversed (money returned); ``failed`` = the
+    reversal was declined. The mock only ever returns ``succeeded``; the other states
+    exist so the enum is stable when a real async PG is wired.
+    """
+
+    PENDING = "pending", "pending"
+    SUCCEEDED = "succeeded", "succeeded"
+    FAILED = "failed", "failed"
+
+
+class PaymentReversal(models.Model):
+    """Append-only reversal (void/refund) ledger for a settled charge (#3 seam).
+
+    When a fan cancellation or an operator-accepted refund reverses a PAID order,
+    the gateway's void/refund op is recorded here — durably and immutably linked to
+    the settlement it reverses (``original_attempt``, PROTECT). Designed *before* a
+    real PG so a cancelled/refunded order can always answer "was the original capture
+    reversed, and did it settle" ahead of one existing: today the code cancels +
+    restocks while money never moves, so this ledger is what a real PG later
+    reconciles against. Only ``mock`` reversals are written today; by construction it
+    holds NO card data — only an opaque reversal ref, amount, currency, status, and a
+    reason. **Immutable**: a row is written once and never updated (``save`` refuses a
+    second write); a corrective reversal is a *new* row, never a mutation.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # PROTECT (not CASCADE): the reversal points at the capture it reverses; that
+    # settlement is financial history and must never be erased out from under an
+    # existing reversal (mirrors PaymentAttempt.subscription's PROTECT from #16).
+    original_attempt = models.ForeignKey(
+        "payments.PaymentAttempt",
+        on_delete=models.PROTECT,
+        related_name="reversals",
+    )
+    provider = models.CharField(max_length=16, choices=PaymentProvider.choices)
+    # Opaque PG/mock reversal transaction id — NEVER a PAN. Blank until assigned.
+    reversal_ref = models.CharField(max_length=128, blank=True, default="")
+    # Reversed amount snapshot in whole KRW. NOT a settlement figure (mock today).
+    amount = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=3, default="KRW")
+    status = models.CharField(
+        max_length=16,
+        choices=PaymentReversalStatus.choices,
+        default=PaymentReversalStatus.PENDING,
+    )
+    # Why the charge was reversed (e.g. "order_cancelled", "refund_accepted").
+    reason = models.CharField(max_length=120, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["original_attempt", "-created_at"]),
+            models.Index(fields=["provider", "status"]),
+        ]
+        constraints = [
+            # At most one SUCCEEDED reversal per original settlement — a second
+            # cancel/refund-accept of the same order must never durably double-reverse
+            # the same capture. A declined/pending reversal may be retried, so only
+            # the succeeded state is constrained. Materialised by the app's migration.
+            models.UniqueConstraint(
+                fields=["original_attempt"],
+                condition=models.Q(status="succeeded"),
+                name="uniq_succeeded_reversal_per_attempt",
+            ),
+        ]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Allow the first insert; reject any re-save of an existing row.
+
+        ``self._state.adding`` is True only for the initial insert. A second
+        ``save`` (an update) means someone is mutating the reversal ledger, which the
+        append-only contract forbids.
+        """
+        if not self._state.adding:
+            raise AppendOnlyViolation(
+                f"PaymentReversal {self.pk} is append-only and cannot be modified. "
+                "Record a new reversal instead."
+            )
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        """Identify the reversal by provider + status."""
+        return f"reversal:{self.provider}:{self.status}"
