@@ -1119,6 +1119,9 @@ export interface paths {
         /**
          * Get Creator
          * @description Fetch a single creator by handle; 404 if unknown (no existence leak).
+         *
+         *     An unpublished profile (``published=False`` — e.g. the owner withdrew) 404s just
+         *     like an unknown handle, so an offboarded creator's page is no longer viewable.
          */
         get: operations["apps_creator_api_get_creator"];
         put?: never;
@@ -1769,11 +1772,18 @@ export interface paths {
          * @description Withdraw (탈퇴) the authenticated fan's account and end the session.
          *
          *     Privacy decisions 2026-07-12 (D3): anonymises the account in place (clears
-         *     nickname + phone hash, sets is_active False, stamps withdrawn_at) and revokes
-         *     every token family, then clears the web auth cookies so the browser is logged
-         *     out. The scope is always the authenticated account (never the body), so a fan can
-         *     only withdraw their own account. Idempotent at the service layer. Legal-hold
-         *     transaction/dispute records stay linked to the now-pseudonymous fan_id.
+         *     nickname + phone hash, sets is_active False, stamps withdrawn_at), offboards the
+         *     fan (cancels active subscriptions, unpublishes any creator storefront, pseudonymises
+         *     comment author snapshots — Codex #13) and revokes every token family, then clears
+         *     the web auth cookies so the browser is logged out. The scope is always the
+         *     authenticated account (never the body), so a fan can only withdraw their own
+         *     account. Idempotent at the service layer. Legal-hold transaction/dispute records
+         *     stay linked to the now-pseudonymous fan_id.
+         *
+         *     Staff guard (Codex #13): a staff account (operator/manager/admin/system) is refused
+         *     here (403 ``StaffWithdrawalForbidden``) — staff offboarding is a separate ops flow,
+         *     so the last-admin invariant can never be broken through fan self-service. Regular
+         *     fans (including creators, who are fans operating a creator page) proceed.
          */
         post: operations["apps_identity_api_withdraw"];
         delete?: never;
