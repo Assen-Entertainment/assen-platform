@@ -1,18 +1,15 @@
 """Fan signup, re-auth, session, and digital membership card API (ASS-98 / ASS-237).
 
-Phone-OTP signup + login (mock sender in dev) and the fan session surface. Tokens
-are delivered per ADR-0002 by surface: the native app receives them in the JSON
-body (and stores them in platform secure storage); the web flow asks for cookies
-and receives hardened httpOnly cookies instead, with no secret in the body. The
-authenticated endpoints accept either surface — bearer header or the access
-cookie — via :data:`fan_auth` (defined in :mod:`apps.identity.auth`).
+Email + social signup/login and the fan session surface. Tokens are delivered per
+ADR-0002 by surface: the native app receives them in the JSON body (and stores them
+in platform secure storage); the web flow asks for cookies and receives hardened
+httpOnly cookies instead, with no secret in the body. The authenticated endpoints
+accept either surface — bearer header or the access cookie — via :data:`fan_auth`
+(defined in :mod:`apps.identity.auth`).
 
 Endpoints (``/api/fan``):
-- ``POST /signup/otp``  — send a (mock) signup OTP.
-- ``POST /signup``      — create/attach a fan and issue a token pair.
 - ``POST /signup/email`` — create an (unverified) email+password fan; send mock verify mail.
 - ``POST /verify-email`` — confirm the email link, mark verified, and issue tokens.
-- ``POST /login``       — re-authenticate an existing fan (phone + OTP).
 - ``POST /login/email`` — re-authenticate an existing fan (email + password).
 - ``POST /logout``      — revoke the current token family and clear cookies.
 - ``POST /refresh``     — rotate the refresh token (reserved refresh-cookie path).
@@ -61,7 +58,7 @@ from apps.identity.email_services import (
     register_fan_email,
     verify_email,
 )
-from apps.identity.models import Account, KycStatus, Role
+from apps.identity.models import Account, KycStatus
 from apps.identity.services import (
     IssuedTokenPair,
     TokenError,
@@ -71,14 +68,7 @@ from apps.identity.services import (
     rotate_refresh_token,
     withdraw_account,
 )
-from apps.identity.signup_services import (
-    SignupError,
-    hash_phone,
-    membership_card,
-    migrate_legacy_subject_hash,
-    normalize_phone,
-    register_fan,
-)
+from apps.identity.signup_services import SignupError, membership_card
 from apps.identity.social_services import (
     make_social_state,
     register_or_login_social,
@@ -88,7 +78,6 @@ from config.api import api
 from config.email import email_sender
 from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
-from config.otp import MockOtpSender, OtpSender
 from config.social_auth import (
     SUPPORTED_SOCIAL_PROVIDERS,
     SocialAuthError,
@@ -124,76 +113,14 @@ _REFRESH_COOKIE_PATH = "/api/fan"
 SOCIAL_STATE_COOKIE = "assen_social_state"
 
 
-def _otp_sender() -> OtpSender | None:
-    """Return the configured OTP sender, or ``None`` when none is wired.
-
-    The deterministic mock is gated behind ``ENABLE_MOCK_FAN_OTP`` (off in
-    production) so its reproducible codes can never back a real signup/login. With
-    no SMS adapter yet, production returns ``None`` and the surface fails closed
-    with 503 rather than trust an unverifiable code (Fan_Signup_Privacy_Policy).
-
-    Runtime caveat (F3): a **new** :class:`MockOtpSender` is built on every call, so
-    it carries no armed-code state between the ``/signup/otp`` send and the later
-    ``/signup``·``/login`` verify — the verify takes the mock's stateless
-    deterministic fallback, which does NOT enforce expiry / single-use / lockout
-    (those are proven by unit tests against one shared instance, and are the real
-    SMS adapter + shared-store's job, not the mock's). This is not a production
-    exposure: prod runs ``ENABLE_MOCK_FAN_OTP=False`` → ``None`` → 503 fail-closed,
-    so the un-enforced mock path never executes outside dev/test.
-    """
-    if settings.ENABLE_MOCK_FAN_OTP:
-        return MockOtpSender()
-    return None
-
-
 router = Router(tags=["fan-signup"])
 
 
-class OtpRequestIn(Schema):
-    """Request body for sending a signup OTP."""
-
-    phone: str
-
-
-class SignupIn(Schema):
-    """Request body for completing fan signup.
-
-    ``web`` lets the web flow ask for cookie delivery (ADR-0002): when true the
-    tokens are set as hardened httpOnly cookies and omitted from the body.
-    """
-
-    phone: str
-    otp_code: str
-    nickname: str = Field(min_length=1, max_length=40)
-    consent_terms: bool
-    consent_privacy: bool
-    # 만 14세 이상 확인(D5, 2026-07-12 privacy decisions). Fail-closed default: an
-    # omitted field is treated as "not confirmed" → the service rejects with
-    # UNDERAGE. The web sends the explicit checkbox value.
-    age_over_14: bool = False
-    # 마케팅 수신(선택). 가입 시 도달 가능한 유일한 마케팅 채널은 전화 → SMS이므로
-    # true면 SMS 옵트인만 기록한다(push/email은 /settings/notifications에서 별도 설정).
-    # Fail-open 아님 — 미전송/false면 어떤 마케팅 옵트인도 기록하지 않는다.
-    marketing_consent: bool = False
-    web: bool = False
-
-
-class LoginIn(Schema):
-    """Request body for re-authenticating an existing fan (phone + OTP).
-
-    ``web`` selects cookie delivery exactly like :class:`SignupIn`.
-    """
-
-    phone: str
-    otp_code: str
-    web: bool = False
-
-
 class EmailSignupIn(Schema):
-    """Request body for email + password fan signup (additive to phone OTP).
+    """Request body for email + password fan signup.
 
     ``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만
-    14세) is mandatory, mirroring phone signup. No token is issued here — the fan
+    14세) is mandatory, mirroring social signup. No token is issued here — the fan
     verifies the emailed link first — so there is no ``web`` surface flag.
     """
 
@@ -221,7 +148,7 @@ class VerifyEmailIn(Schema):
     """Request body for confirming an email-verification link.
 
     ``web`` selects cookie delivery for the token pair issued on verify, exactly like
-    :class:`SignupIn` / :class:`LoginIn`.
+    :class:`EmailLoginIn`.
     """
 
     token: str
@@ -252,8 +179,8 @@ class SignupOut(Schema):
     ``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``
     (web): both are empty here and delivered as httpOnly cookies instead, so no
     secret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned
-    either way so the client knows when to refresh. Shared by signup, login, and
-    refresh.
+    either way so the client knows when to refresh. Shared by verify-email, email
+    login, social callback, and refresh.
     """
 
     token_delivery: str
@@ -403,59 +330,6 @@ def _deliver_token_pair(
     )
 
 
-@router.post("/signup/otp", throttle=anon_throttle("5/min"))
-def request_otp(request: HttpRequest, data: OtpRequestIn) -> dict[str, str]:
-    """Send (mock) an OTP for the phone. Returns a bare ack — never the code."""
-    del request
-    sender = _otp_sender()
-    if sender is None:
-        raise ApiError(
-            503,
-            "Signup is temporarily unavailable.",
-            code=ErrorCode.OTP_UNAVAILABLE,
-        )
-    try:
-        # Canonicalise before send so the code is derived from the same form the
-        # signup step verifies against (otherwise a formatted number mismatches).
-        phone = normalize_phone(data.phone)
-    except SignupError as exc:
-        raise ApiError(422, str(exc), code=exc.code) from exc
-    sender.send(phone=phone)
-    return {"status": "sent"}
-
-
-@router.post("/signup", response=SignupOut, throttle=anon_throttle("10/min"))
-def signup(request: HttpRequest, data: SignupIn, response: HttpResponse) -> SignupOut:
-    """Create/attach a fan from a verified OTP + consent; issue a token pair.
-
-    Delivery follows the requested surface (ADR-0002): the web flow gets hardened
-    httpOnly cookies (no token in the body); the app gets the tokens in the body.
-    """
-    del request
-    sender = _otp_sender()
-    if sender is None:
-        raise ApiError(
-            503,
-            "Signup is temporarily unavailable.",
-            code=ErrorCode.OTP_UNAVAILABLE,
-        )
-    try:
-        pair = register_fan(
-            phone=data.phone,
-            nickname=data.nickname,
-            consent_terms=data.consent_terms,
-            consent_privacy=data.consent_privacy,
-            age_over_14=data.age_over_14,
-            marketing_consent=data.marketing_consent,
-            otp_code=data.otp_code,
-            otp_sender=sender,
-        )
-    except SignupError as exc:
-        raise ApiError(422, str(exc), code=exc.code) from exc
-
-    return _deliver_token_pair(pair, response, web=data.web)
-
-
 class SocialStartOut(Schema):
     """Where to send the client to begin social login (+ the state to echo back)."""
 
@@ -468,7 +342,7 @@ class SocialCallbackIn(Schema):
 
     ``consent_*`` / ``age_over_14`` are enforced only when the social identity is new
     (first login = signup); a returning identity ignores them. ``web`` asks for cookie
-    delivery (ADR-0002), matching the phone signup/login surface.
+    delivery (ADR-0002), matching the email login surface.
     """
 
     code: str
@@ -612,60 +486,12 @@ def social_callback(
     return result
 
 
-@router.post("/login", response=SignupOut, throttle=anon_throttle("10/min"))
-def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> SignupOut:
-    """Re-authenticate an existing fan (phone + OTP) and issue a fresh token pair.
-
-    Disclosure minimisation: the OTP is verified *first*, so "가입이 필요해요" (no
-    account) is only ever revealed to a caller who already proved control of the
-    phone via a valid code — a wrong code and an unregistered number both look the
-    same (422) to anyone else. Delivery follows the requested surface (ADR-0002).
-    """
-    del request
-    sender = _otp_sender()
-    if sender is None:
-        raise ApiError(
-            503, "Login is temporarily unavailable.", code=ErrorCode.OTP_UNAVAILABLE
-        )
-    try:
-        phone = normalize_phone(data.phone)
-    except SignupError as exc:
-        raise ApiError(422, str(exc), code=exc.code) from exc
-
-    if not sender.verify(phone=phone, code=data.otp_code):
-        logger.warning("identity.login.otp_invalid", extra={"code": ErrorCode.OTP_INVALID.value})
-        raise ApiError(
-            422, "인증번호가 올바르지 않아요.", code=ErrorCode.OTP_INVALID
-        )
-
-    # Migrate a pre-A-2 (bare SHA-256) row to the v1 HMAC hash so the lookup below
-    # finds it (ASS-287 A-2 dual-read). No-op for accounts already on the v1 hash.
-    migrate_legacy_subject_hash(phone)
-    account = Account.objects.filter(
-        auth_subject_hash=hash_phone(phone),
-        role=Role.FAN.value,
-        is_active=True,
-    ).first()
-    if account is None:
-        # The number holds no active fan account: guide to signup without exposing
-        # more than the caller (who controls the phone) already knows.
-        logger.info(
-            "identity.login.unregistered",
-            extra={"code": ErrorCode.ACCOUNT_NOT_REGISTERED.value},
-        )
-        raise ApiError(
-            422, "가입이 필요해요.", code=ErrorCode.ACCOUNT_NOT_REGISTERED
-        )
-
-    return _deliver_token_pair(issue_token_pair(account), response, web=data.web)
-
-
 @router.post("/signup/email", response=EmailSignupOut, throttle=anon_throttle("10/min"))
 def signup_email(request: HttpRequest, data: EmailSignupIn) -> EmailSignupOut:
     """Create an (unverified) email + password fan and send a mock verification mail.
 
     Fails closed (503) when no email sender is wired (the mock is gated by
-    ``ENABLE_MOCK_EMAIL``, off in production), mirroring the OTP surface. No token is
+    ``ENABLE_MOCK_EMAIL``, off in production), mirroring the social surface. No token is
     issued — the fan is logged in on ``/verify-email``. A duplicate verified email is
     409; consent/age/password-length failures are 422. The verification token is
     echoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else "").
@@ -935,8 +761,8 @@ def verify_start(request: HttpRequest) -> dict[str, str]:
     """Begin (mock) 본인인증/성인 인증 for the authenticated fan.
 
     Fail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)
-    this returns 503 rather than pretend a challenge started — mirroring the signup
-    OTP surface. On success the mock records a ``pending`` transition and returns a
+    this returns 503 rather than pretend a challenge started — mirroring the email
+    signup surface. On success the mock records a ``pending`` transition and returns a
     bare ack (no PII is sent to or received from the mock).
     """
     account = authed(request)

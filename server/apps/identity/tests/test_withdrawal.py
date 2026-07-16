@@ -1,8 +1,10 @@
 """Tests for fan account withdrawal (D3, privacy decisions 2026-07-12).
 
-Withdrawal anonymises the account in place (clears nickname + phone hash, sets
-is_active False, stamps withdrawn_at) and revokes every session, while keeping the
-row so legal-hold records stay linked to a pseudonymous fan_id.
+Withdrawal anonymises the account in place (clears nickname + phone hash + email, sets
+is_active False, stamps withdrawn_at) and revokes every session, while keeping the row
+so legal-hold records stay linked to a pseudonymous fan_id. Phone-OTP signup/login was
+retired (auth redesign), so accounts are created directly and the login/re-signup
+behaviour is exercised through the retained email endpoints.
 """
 
 from __future__ import annotations
@@ -11,29 +13,29 @@ import json
 from typing import Any
 
 import pytest
+from django.contrib.auth.hashers import make_password
 from django.test import Client
+from django.utils import timezone
 
-from apps.identity.models import Account, TokenFamily
+from apps.identity.models import Account, Role, TokenFamily
 from apps.identity.services import issue_token_pair, withdraw_account
-from apps.identity.signup_services import hash_phone, register_fan
-from config.otp import MockOtpSender
 
 pytestmark = pytest.mark.django_db
 
-_SENDER = MockOtpSender()
-_PHONE = "+821012345678"
+_EMAIL = "fan@example.com"
+_PASSWORD = "correct horse 8"
 
 
-def _register(phone: str = _PHONE, nickname: str = "미오팬") -> Account:
-    register_fan(
-        phone=phone,
+def _register(nickname: str = "미오팬") -> Account:
+    """Create a verified email fan directly (phone signup was retired)."""
+    return Account.objects.create(
+        role=Role.FAN.value,
+        email=_EMAIL,
+        password_hash=make_password(_PASSWORD),
+        email_verified_at=timezone.now(),
         nickname=nickname,
-        consent_terms=True,
-        consent_privacy=True,
-        otp_code=_SENDER.code_for(phone),
-        otp_sender=_SENDER,
+        auth_method="email",
     )
-    return Account.objects.get(auth_subject_hash=hash_phone(phone))
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -74,9 +76,10 @@ def test_withdraw_is_idempotent() -> None:
 def test_withdrawn_account_cannot_login(client: Client) -> None:
     account = _register()
     withdraw_account(account)
-    # Login filters is_active=True, so a withdrawn account looks unregistered.
+    # login_email filters is_active=True (and withdrawal clears the email), so a
+    # withdrawn account is indistinguishable from an unknown one (422).
     resp = _post(
-        client, "/api/fan/login", {"phone": _PHONE, "otp_code": _SENDER.code_for(_PHONE)}
+        client, "/api/fan/login/email", {"email": _EMAIL, "password": _PASSWORD}
     )
     assert resp.status_code == 422
 
@@ -86,28 +89,34 @@ def test_resignup_after_withdrawal_creates_a_fresh_account(client: Client) -> No
     old_fan_id = account.fan_id
     withdraw_account(account)
 
-    resp = _post(
+    # The freed email backs a brand-new signup (uniq_fan_email is partial on non-empty,
+    # and withdrawal emptied it), which verifies into a fresh active account.
+    signup = _post(
         client,
-        "/api/fan/signup",
+        "/api/fan/signup/email",
         {
-            "phone": _PHONE,
-            "otp_code": _SENDER.code_for(_PHONE),
+            "email": _EMAIL,
+            "password": _PASSWORD,
             "nickname": "새미오",
             "consent_terms": True,
             "consent_privacy": True,
             "age_over_14": True,
         },
     )
-    assert resp.status_code == 200
+    assert signup.status_code == 200
+    verify = _post(
+        client, "/api/fan/verify-email", {"token": signup.json()["verification_token"]}
+    )
+    assert verify.status_code == 200
 
-    # A brand-new active account holds the phone; the withdrawn one stays anonymised.
-    fresh = Account.objects.get(auth_subject_hash=hash_phone(_PHONE))
+    # A brand-new active account holds the email; the withdrawn one stays anonymised.
+    fresh = Account.objects.get(email=_EMAIL, is_active=True)
     assert fresh.fan_id != old_fan_id
     assert fresh.is_active is True
     assert fresh.nickname == "새미오"
     old = Account.objects.get(fan_id=old_fan_id)
     assert old.is_active is False
-    assert old.auth_subject_hash == ""
+    assert old.email == ""
 
 
 def test_withdraw_endpoint_requires_auth(client: Client) -> None:

@@ -1,7 +1,7 @@
 "use client";
 // 세션 — 이중 경로.
 //  • USE_API(config.apiUrl 설정): 실 인증. React Query ['auth','me']로 /fan/me를 소비하고
-//    OTP 로그인/가입/로그아웃을 실 엔드포인트로 수행한다. 쿠키(httpOnly assen_access)는
+//    이메일/소셜 로그인·가입·로그아웃을 실 엔드포인트로 수행한다. 쿠키(httpOnly assen_access)는
 //    브라우저가 credentials:"include"로 송신하므로 토큰을 저장하지 않는다.
 //  • USE_API=false(빌드/CI/오프라인·테스트): 기존 localStorage mock 유저(실 인증 아님).
 //    실 크리덴셜/토큰은 어느 경로에서도 저장하지 않는다.
@@ -40,19 +40,6 @@ export interface SessionUser {
   kycStatus: KycStatus;
 }
 
-/** OTP 가입 입력. */
-export interface SignupInput {
-  phone: string;
-  otp: string;
-  nickname: string;
-  consentTerms: boolean;
-  consentPrivacy: boolean;
-  /** 만 14세 이상 확인(D5). 서버는 미전송을 fail-closed로 거부(SignupIn 기본 false). */
-  ageOver14: boolean;
-  /** 마케팅 수신(선택). true면 서버가 SMS 옵트인만 기록(가입 시 도달 채널=전화). */
-  marketingConsent?: boolean;
-}
-
 /** 이메일 가입 입력(B1: 폰 OTP 대체). 서버 EmailSignupIn 미러(모든 동의 bool 명시). */
 export interface EmailSignupInput {
   email: string;
@@ -69,19 +56,13 @@ export interface EmailSignupInput {
 interface SessionContextValue {
   user: SessionUser | null;
   mounted: boolean;
-  /** 실 인증 경로 여부 — login/signup 페이지가 OTP UX 분기에 사용. */
+  /** 실 인증 경로 여부 — login/signup 페이지가 이메일/소셜 UX 분기에 사용. */
   useApi: boolean;
   /** mock 즉시 로그인(USE_API=false — 테스트·오프라인 데모). */
   login: (user?: Partial<SessionUser>) => void;
   /** mock 즉시 가입. */
   signup: (user?: Partial<SessionUser>) => void;
   logout: () => void;
-  /** OTP 발송(signup/otp) — 로그인·가입 공통 1단계. */
-  requestOtp: (phone: string) => Promise<void>;
-  /** OTP 로그인(기존 계정 재인증). 실패 시 ApiError — 422는 미가입·인증번호 오류가 섞여 오며 detail로 구분(login/page.tsx). */
-  loginWithOtp: (phone: string, otp: string) => Promise<void>;
-  /** OTP 가입(신규 계정). */
-  signupWithOtp: (input: SignupInput) => Promise<void>;
   /**
    * 이메일 가입(B1) — 토큰/세션 미발급. 인증 메일 발송 후 verificationToken을 반환한다
    * (dev/test에서만 비어있지 않음 — verify-email 개발용 링크에 사용). 실 로그인은 verifyEmail에서.
@@ -180,14 +161,6 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
   );
   const logout = React.useCallback(() => persist(null), [persist]);
 
-  // mock 모드에서도 OTP 계약 시그니처를 만족(즉시 로그인으로 합성 — 실 발송/검증 없음).
-  const requestOtp = React.useCallback(async () => {}, []);
-  const loginWithOtp = React.useCallback(async () => persist(DEFAULT_USER), [persist]);
-  const signupWithOtp = React.useCallback(
-    async (input: SignupInput) => persist({ ...DEFAULT_USER, name: input.nickname }),
-    [persist],
-  );
-
   // mock: 이메일 계약도 합성. 가입은 세션을 세우지 않고(실 경로처럼 인증 메일 단계 모사) 빈
   // 토큰을 반환하며, 로그인·인증 확인은 즉시 DEFAULT_USER를 persist(오프라인·CI).
   const signupWithEmail = React.useCallback(async () => {
@@ -230,8 +203,8 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
   const completeSocial = React.useCallback(async () => persist(DEFAULT_USER), [persist]);
 
   const value = React.useMemo<SessionContextValue>(
-    () => ({ user, mounted, useApi: false, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial }),
-    [user, mounted, login, signup, logout, requestOtp, loginWithOtp, signupWithOtp, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial],
+    () => ({ user, mounted, useApi: false, login, signup, logout, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial }),
+    [user, mounted, login, signup, logout, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -282,43 +255,6 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
     staleTime: 60_000,
     retry: false,
   });
-
-  const requestOtp = React.useCallback(async (phone: string) => {
-    await apiFetch("/fan/signup/otp", { method: "POST", body: JSON.stringify({ phone }) });
-  }, []);
-
-  const loginWithOtp = React.useCallback(
-    async (phone: string, otp: string) => {
-      await apiFetch("/fan/login", {
-        method: "POST",
-        body: JSON.stringify({ phone, otp_code: otp, web: true }),
-      });
-      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
-      track("login_completed", { method: "otp" });
-    },
-    [qc],
-  );
-
-  const signupWithOtp = React.useCallback(
-    async (input: SignupInput) => {
-      await apiFetch("/fan/signup", {
-        method: "POST",
-        body: JSON.stringify({
-          phone: input.phone,
-          otp_code: input.otp,
-          nickname: input.nickname,
-          consent_terms: input.consentTerms,
-          consent_privacy: input.consentPrivacy,
-          age_over_14: input.ageOver14,
-          marketing_consent: input.marketingConsent ?? false,
-          web: true,
-        }),
-      });
-      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
-      track("signup_completed", { method: "otp" });
-    },
-    [qc],
-  );
 
   // 이메일 가입(B1) — 토큰/세션 미발급(인증 메일 발송까지). verificationToken은 dev/test에서만
   // 비어있지 않다(verify-email 개발용 링크). ['auth','me'] 무효화 없음(아직 로그인 아님).
@@ -421,13 +357,10 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
       user: meQuery.data ?? null,
       mounted: !meQuery.isLoading,
       useApi: true,
-      // 실 인증 모드에선 mock 즉시 로그인/가입은 사용하지 않음(페이지가 OTP 경로로 분기).
+      // 실 인증 모드에선 mock 즉시 로그인/가입은 사용하지 않음(페이지가 이메일/소셜 경로로 분기).
       login: () => {},
       signup: () => {},
       logout,
-      requestOtp,
-      loginWithOtp,
-      signupWithOtp,
       signupWithEmail,
       loginWithEmail,
       verifyEmail,
@@ -436,7 +369,7 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
       startSocial,
       completeSocial,
     }),
-    [meQuery.data, meQuery.isLoading, logout, requestOtp, loginWithOtp, signupWithOtp, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial],
+    [meQuery.data, meQuery.isLoading, logout, signupWithEmail, loginWithEmail, verifyEmail, becomeCreator, markAdultVerified, startSocial, completeSocial],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -462,9 +395,6 @@ export function useSession(): SessionContextValue {
       login: () => {},
       signup: () => {},
       logout: () => {},
-      requestOtp: async () => {},
-      loginWithOtp: async () => {},
-      signupWithOtp: async () => {},
       signupWithEmail: async () => ({ verificationToken: "" }),
       loginWithEmail: async () => {},
       verifyEmail: async () => {},
