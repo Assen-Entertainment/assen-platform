@@ -31,7 +31,9 @@ def _auth(account: Account) -> dict[str, str]:
 
 
 def _fan() -> Account:
-    return Account.objects.create(role=Role.FAN.value)
+    return Account.objects.create(
+        role=Role.FAN.value, kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _verified_fan() -> Account:

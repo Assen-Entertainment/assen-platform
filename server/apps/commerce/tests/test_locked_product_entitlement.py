@@ -16,7 +16,7 @@ from django.test import Client
 
 from apps.commerce.models import Order, Product
 from apps.creator.models import Creator
-from apps.identity.models import Account, Role
+from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
 from apps.membership.models import MembershipTier, Subscription, SubscriptionStatus
 
@@ -31,7 +31,9 @@ def _auth(account: Account) -> dict[str, str]:
 
 
 def _fan() -> Account:
-    return Account.objects.create(role=Role.FAN.value)
+    return Account.objects.create(
+        role=Role.FAN.value, kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _locked_product(creator: Creator) -> Product:

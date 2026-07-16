@@ -57,6 +57,12 @@ class ErrorCode(StrEnum):
     REFRESH_TOKEN_REQUIRED = "RefreshTokenRequired"
     REFRESH_TOKEN_INVALID = "RefreshTokenInvalid"
     KYC_UNAVAILABLE = "KycUnavailable"
+    # A fan who has not completed 본인인증 (Account.kyc_status != VERIFIED) attempted an
+    # interaction/purchase (follow/like/comment/subscribe/order/become-creator). Browsing
+    # and reading stay open; only side-effecting interactions require verification (대표
+    # 07-16). The verify flow itself (/verify/*) is never gated, so a fan can always reach
+    # VERIFIED. Raised as a 403 by ``apps.identity.auth.require_kyc_verified``.
+    IDENTITY_VERIFICATION_REQUIRED = "IdentityVerificationRequired"
     # Social login (OAuth): fails closed (503 → SOCIAL_UNAVAILABLE) when no provider is
     # wired (the mock is gated by ENABLE_MOCK_SOCIAL_AUTH, dev/test/demo only); an
     # unknown provider path segment is 422 → SOCIAL_PROVIDER_UNSUPPORTED. Mirrors

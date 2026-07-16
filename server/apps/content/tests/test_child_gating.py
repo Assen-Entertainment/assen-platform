@@ -43,7 +43,9 @@ def _verified_fan() -> Account:
 
 
 def _plain_fan() -> Account:
-    return Account.objects.create(role=Role.FAN.value)
+    return Account.objects.create(
+        role=Role.FAN.value, kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _comment(client: Client, post_id: object, account: Account) -> Any:

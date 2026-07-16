@@ -37,7 +37,12 @@ from pydantic import Field
 from apps.commerce.models import OrderItem, OrderStatus, Product, ProductStatus
 from apps.content.models import Post
 from apps.creator.models import Creator
-from apps.identity.auth import authed, fan_auth, resolve_optional_account
+from apps.identity.auth import (
+    authed,
+    fan_auth,
+    require_kyc_verified,
+    resolve_optional_account,
+)
 from apps.identity.models import Account
 from apps.membership.models import Subscription, SubscriptionStatus
 from apps.social.models import CreatorBlock, Follow, blocked_creator_ids
@@ -516,6 +521,11 @@ def studio_create_profile(
     requests both pass the pre-checks.
     """
     account = authed(request)
+    # 본인인증 gate before any side effect: becoming a creator is an interaction that
+    # requires a verified fan (대표 07-16). Because this is the only fan-facing path to
+    # a Creator, an existing creator is already verified — so the fan-authoring/studio
+    # writes downstream inherit that guarantee without needing their own gate.
+    require_kyc_verified(account)
     handle = payload.handle.strip().lower()
     name = payload.name.strip()
     if not 2 <= len(handle) <= 32 or re.fullmatch(r"[a-z0-9_]+", handle) is None:

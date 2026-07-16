@@ -23,7 +23,7 @@ from django.http import HttpRequest
 from ninja import Router, Schema
 
 from apps.creator.models import Creator
-from apps.identity.auth import authed, fan_auth
+from apps.identity.auth import authed, fan_auth, require_kyc_verified
 from apps.notification.services import notify
 from apps.social.models import CreatorBlock, Follow
 from config.api import api
@@ -62,6 +62,10 @@ def follow_creator(
 ) -> tuple[int, FollowOut | ErrorOut]:
     """Follow a creator; idempotent (a second follow is a no-op, still 200)."""
     account = authed(request)
+    # 본인인증 gate: following is a new interaction, so require a verified fan before any
+    # follow edge is created (대표 07-16). The retract direction (unfollow) is cleanup of
+    # the fan's own edge and stays ungated.
+    require_kyc_verified(account)
     creator = Creator.objects.filter(handle=handle).first()
     if creator is None:
         return 404, ErrorOut(detail="creator not found")

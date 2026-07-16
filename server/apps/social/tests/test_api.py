@@ -14,7 +14,7 @@ from django.test import Client
 
 from apps.creator.models import Creator
 from apps.identity.cookies import ACCESS_COOKIE_NAME
-from apps.identity.models import Account, Role
+from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
 from apps.social.models import Follow
 
@@ -26,7 +26,9 @@ def _creator(handle: str = "stellar") -> Creator:
 
 
 def _fan(nickname: str = "미오팬") -> Account:
-    return Account.objects.create(role=Role.FAN.value, nickname=nickname)
+    return Account.objects.create(
+        role=Role.FAN.value, nickname=nickname, kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _bearer(account: Account) -> dict[str, str]:

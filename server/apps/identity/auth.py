@@ -23,8 +23,9 @@ from django.http import HttpRequest
 from ninja.security import APIKeyCookie, HttpBearer
 
 from apps.identity.cookies import ACCESS_COOKIE_NAME
-from apps.identity.models import Account
+from apps.identity.models import Account, KycStatus
 from apps.identity.services import TokenError, verify_access_token
+from config.errors import ApiError, ErrorCode
 
 
 class AuthedHttpRequest(Protocol):
@@ -53,6 +54,26 @@ def authed(request: HttpRequest) -> Account:
     Ninja guarantees ``request.auth`` is the :class:`Account` there.
     """
     return cast(AuthedHttpRequest, request).auth
+
+
+def require_kyc_verified(account: Account) -> None:
+    """Raise 403 unless ``account`` has completed 본인인증 (kyc_status == VERIFIED).
+
+    The interaction gate (대표 07-16): browsing/reading stays open, but any
+    side-effecting interaction/purchase (follow/like/comment/subscribe/order/
+    become-creator) requires the fan to have finished 본인인증. Call it right after
+    the handler resolves the account (:func:`authed`) and BEFORE any side effect, so
+    an unverified fan is refused before a follow row / subscription / order / comment /
+    creator profile is created. The verify flow itself (``/verify/*``) is never gated,
+    so a fan can always reach VERIFIED and then retry. Verification stays MOCK for now
+    (``/verify/confirm`` sets kyc_status=VERIFIED); this helper only enforces the gate.
+    """
+    if account.kyc_status != KycStatus.VERIFIED.value:
+        raise ApiError(
+            403,
+            "본인인증이 필요해요.",
+            code=ErrorCode.IDENTITY_VERIFICATION_REQUIRED,
+        )
 
 
 def _authenticate(request: HttpRequest, token: str) -> Account | None:
