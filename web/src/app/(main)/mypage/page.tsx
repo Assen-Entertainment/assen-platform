@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Avatar, ListItem, Divider, Button } from "@/components/ui";
+import { Avatar, ListItem, Divider, Button, IdentityVerifyBanner } from "@/components/ui";
 import { useSession } from "@/lib/session";
 import { useSubscriptions } from "@/lib/api/queries";
 
@@ -35,6 +35,17 @@ export default function MyPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      {/* 미인증 팬 프로액티브 안내 — 게이트 상호작용(팔로우·구독·구매) 전에 본인인증을 유도. */}
+      {user && user.kycStatus !== "verified" ? (
+        <IdentityVerifyBanner
+          verified={false}
+          action={
+            <Button size="sm" asChild>
+              <Link href="/verify?next=/mypage">본인인증하기</Link>
+            </Button>
+          }
+        />
+      ) : null}
       <section className="flex items-center gap-4">
         <Avatar fallback={initial} size="xl" />
         <div className="flex min-w-0 flex-col gap-1">

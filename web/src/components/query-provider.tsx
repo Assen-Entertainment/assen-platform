@@ -2,7 +2,9 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
+import { ERROR_CODES } from "@/lib/api";
 import { emitUnauthorized } from "@/lib/api/session-events";
+import { emitVerifyRequired } from "@/lib/verify-gate";
 
 /**
  * 쿼리 재시도 정책 — 4xx(클라이언트 오류: 401/403/404 등)는 재요청해도 결과가 같으므로 즉시 포기.
@@ -30,9 +32,19 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
           },
         },
         // 뮤테이션 401은 세션 만료 → 전역 가드(SessionGuard)로 통지(토스트·로그인 유도).
+        // 미인증 팬의 게이트 상호작용(팔로우·구독·구매 등) 403(IdentityVerificationRequired)은
+        // 전역 본인인증 다이얼로그(VerifyGate)로 유도한다. 그 외 오류(per-hook onError 롤백 등)는
+        // 이 전역 핸들러가 건드리지 않고 그대로 통과시킨다.
         mutationCache: new MutationCache({
           onError: (error) => {
             if (error instanceof ApiError && error.status === 401) emitUnauthorized();
+            if (
+              error instanceof ApiError &&
+              error.status === 403 &&
+              error.code === ERROR_CODES.IdentityVerificationRequired
+            ) {
+              emitVerifyRequired();
+            }
           },
         }),
       }),
