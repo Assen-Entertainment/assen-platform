@@ -53,6 +53,11 @@ ENABLE_SHIPPING_CHECKOUT = True
 # Distinct insecure key for the phone-identifier HMAC in tests (ASS-287 A-2).
 PHONE_IDENTIFIER_HMAC_KEY = "test-insecure-phone-identifier-hmac-key-0123456789abcdef"
 
+# Retention sweep master switch ON for tests so the command/task exercise the real
+# purge path (base/prod default False = dry-run only). The fail-closed OFF behaviour is
+# asserted explicitly with override_settings in test_retention_sweep.py.
+RETENTION_PURGE_ENABLED = True
+
 # Disable per-user write throttling: the suite fires many writes for one fixture
 # account, and the shared LocMem throttle cache would otherwise leak state across
 # tests and trip 429s. Throttle behaviour itself is exercised in dev/prod config.

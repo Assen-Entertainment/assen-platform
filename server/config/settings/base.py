@@ -98,6 +98,28 @@ ENABLE_MOCK_PUSH: bool = False
 # disposable e2e settings turn it on to exercise the flow.
 ENABLE_SHIPPING_CHECKOUT: bool = False
 
+# Data-retention sweep master switch (Codex #19, 법무 게이트). FAIL-CLOSED: default
+# False so the nightly sweep (apps.identity.tasks.run_retention_sweep) only COUNTS the
+# rows past each retention window and logs them — it deletes/blanks NOTHING — until a
+# deployment deliberately turns it on. Env-overridable so a vetted environment can
+# enable the safe hygiene purges without a code change; base/prod stay False until
+# legal signs off on the real windows.
+RETENTION_PURGE_ENABLED: bool = env.bool("RETENTION_PURGE_ENABLED", default=False)
+
+# Per-class retention windows in DAYS. CONSERVATIVE PLACEHOLDERS ONLY — 법무 will set
+# the real statutory windows (전자상거래법 거래·분쟁 기록 5년/3년, 탈퇴계정 보존기간 등);
+# do NOT treat these as approved retention periods.
+# - RETENTION_WITHDRAWN_ACCOUNT_DAYS: age of an already-anonymised withdrawn Account
+#   (Account.withdrawn_at) before its DEFERRED final purge. The sweep only COUNTS these
+#   — the row deletion stays unimplemented until legal (apps.identity.retention).
+# - RETENTION_TOKEN_DAYS: age of a fully expired/revoked TokenFamily before hygiene
+#   deletion (no PII, pure auth-state cleanup; actually deleted when the flag is on).
+# - RETENTION_SHIPPING_SNAPSHOT_DAYS: age of a COMPLETED/CANCELLED Order before its
+#   recipient_*/address delivery snapshot is BLANKED (the order row itself is kept).
+RETENTION_WITHDRAWN_ACCOUNT_DAYS: int = env.int("RETENTION_WITHDRAWN_ACCOUNT_DAYS", default=30)
+RETENTION_TOKEN_DAYS: int = env.int("RETENTION_TOKEN_DAYS", default=90)
+RETENTION_SHIPPING_SNAPSHOT_DAYS: int = env.int("RETENTION_SHIPPING_SNAPSHOT_DAYS", default=180)
+
 # Hosted-commerce bridge (apps.commerce_bridge) — the integration seam for a hosted
 # commerce SaaS (Cafe24/아임웹) if the platform adopts the "hosted commerce + custom
 # fan platform" hybrid. OFF by default and hardcoded here (never env in base) so the
@@ -444,6 +466,15 @@ CELERY_BEAT_SCHEDULE: dict[str, object] = {
     "run-subscription-billing-cycle": {
         "task": "apps.membership.tasks.run_subscription_billing_cycle",
         "schedule": crontab(hour=3, minute=0),
+    },
+    # Nightly data-retention sweep (Codex #19), after the billing cycle. FAIL-CLOSED:
+    # with RETENTION_PURGE_ENABLED off (default) it only counts + logs matched rows; on,
+    # it runs the implemented per-class purges (token hygiene, shipping-snapshot
+    # blanking) and still DEFERS the withdrawn-account final purge (법무 게이트).
+    # Idempotent, so the daily cadence is safe to re-run.
+    "run-retention-sweep": {
+        "task": "apps.identity.tasks.run_retention_sweep",
+        "schedule": crontab(hour=4, minute=0),
     },
 }
 

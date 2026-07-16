@@ -4878,6 +4878,29 @@
         ]
       }
     },
+    "/api/fan/consent/versions": {
+      "get": {
+        "operationId": "apps_identity_api_get_consent_versions",
+        "summary": "Get Consent Versions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentVersionsOut"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the current presented version of each consent document (anonymous).\n\nAnonymous by design: the signup page runs before auth and reads this to present +\necho the exact terms/privacy/age document versions recorded onto each\nConsentRecord at signup. Values come from the single source of truth\n(apps.consent.versions — 법무-게이트: placeholders until legal versions the copy).",
+        "tags": [
+          "fan-signup"
+        ]
+      }
+    },
     "/api/fan/verify/start": {
       "post": {
         "operationId": "apps_identity_api_verify_start",
@@ -12411,6 +12434,30 @@
           "email"
         ],
         "title": "MarketingConsentIn",
+        "type": "object"
+      },
+      "ConsentVersionsOut": {
+        "description": "Current server-issued version string per presented consent document.\n\nThe (anonymous) signup page reads this before the fan authenticates so it can\npresent + echo the exact document versions that get stamped onto each\nConsentRecord at signup. 법무-게이트: values are placeholders until legal versions\nthe copy (single source of truth: apps.consent.versions).",
+        "properties": {
+          "terms": {
+            "title": "Terms",
+            "type": "string"
+          },
+          "privacy": {
+            "title": "Privacy",
+            "type": "string"
+          },
+          "age": {
+            "title": "Age",
+            "type": "string"
+          }
+        },
+        "required": [
+          "terms",
+          "privacy",
+          "age"
+        ],
+        "title": "ConsentVersionsOut",
         "type": "object"
       },
       "VerifyConfirmOut": {
