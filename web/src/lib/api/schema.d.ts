@@ -3946,6 +3946,11 @@ export interface components {
              */
             is_adult: boolean;
             /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
              * Created At
              * Format: date-time
              */

@@ -28,6 +28,7 @@ from apps.content.models import Comment, Like, Post
 from apps.creator.models import Creator
 from apps.identity.auth import authed, fan_auth, resolve_optional_account
 from apps.identity.models import Account
+from apps.membership.services import can_view_post
 from apps.notification.services import notify
 from apps.social.models import blocked_creator_ids
 from config.api import api
@@ -91,6 +92,9 @@ class PostOut(Schema):
     comment_count: int
     liked: bool = False
     is_adult: bool = False
+    # Membership entitlement: True when the viewer lacks access to a ``members``
+    # post, in which case ``body``/``media_url`` are redacted to "" (teaser only).
+    locked: bool = False
     created_at: datetime
 
 
@@ -206,20 +210,30 @@ def _post_qs(account: Account | None = None) -> QuerySet[Post]:
     return queryset
 
 
-def _post_out(post: Post) -> PostOut:
-    """Build the post response from an annotated row."""
+def _post_out(post: Post, account: Account | None = None) -> PostOut:
+    """Build the post response, redacting a gated ``members`` post's body/media.
+
+    Membership entitlement is server-authoritative: when ``account`` may not view a
+    ``members`` post (:func:`~apps.membership.services.can_view_post`), ``body`` and
+    ``media_url`` are serialized as ``""`` (title/metadata stay as a teaser) and
+    ``locked`` is True. A public post — or an entitled viewer — gets full content
+    and ``locked`` False. Independent of the 19+ gate, which is applied upstream in
+    :func:`_post_qs`.
+    """
+    visible = can_view_post(account, post)
     return PostOut(
         id=post.id,
         creator_id=post.creator_id,
         creator_name=post.creator.name,
         creator_handle=post.creator.handle,
         verified=post.creator.verified,
-        body=post.body,
-        media_url=post.media_url,
+        body=post.body if visible else "",
+        media_url=post.media_url if visible else "",
         like_count=getattr(post, "like_count", 0),
         comment_count=getattr(post, "comment_count", 0),
         liked=bool(getattr(post, "is_liked", False)),
         is_adult=post.adult_only,
+        locked=not visible,
         created_at=post.created_at,
     )
 
@@ -264,7 +278,9 @@ def list_posts(
     else:
         queryset = queryset.exclude(creator_id__in=blocked_creator_ids(account))
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
-    return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
+    return PostPage(
+        items=[_post_out(p, account) for p in items], next_cursor=next_cursor
+    )
 
 
 @posts_router.get("/{post_id}", response={200: PostOut, 404: ErrorOut})
@@ -272,10 +288,11 @@ def get_post(
     request: HttpRequest, post_id: uuid.UUID
 ) -> tuple[int, PostOut | ErrorOut]:
     """Fetch a single post; 404 if unknown."""
-    post = _post_qs(resolve_optional_account(request)).filter(id=post_id).first()
+    account = resolve_optional_account(request)
+    post = _post_qs(account).filter(id=post_id).first()
     if post is None:
         return 404, ErrorOut(detail="post not found")
-    return 200, _post_out(post)
+    return 200, _post_out(post, account)
 
 
 @posts_router.post(
@@ -304,7 +321,7 @@ def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | Erro
     # A fresh post carries no count annotations; _post_out defaults them to 0 and
     # liked to False, which is correct for a just-created post. ``post.creator`` is
     # already the in-memory creator (passed to create), so no extra query.
-    return 201, _post_out(post)
+    return 201, _post_out(post, account)
 
 
 def _owned_post(account: Account, post_id: uuid.UUID) -> Post | None:
@@ -366,7 +383,9 @@ def studio_list_posts(
         .order_by("-created_at", "id")
     )
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
-    return 200, PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
+    return 200, PostPage(
+        items=[_post_out(p, account) for p in items], next_cursor=next_cursor
+    )
 
 
 @posts_router.patch(
@@ -396,7 +415,7 @@ def update_post(
     if data.is_adult is not None:
         post.adult_only = data.is_adult
     post.save()
-    return 200, _post_out(_annotated_post(post.id, account))
+    return 200, _post_out(_annotated_post(post.id, account), account)
 
 
 @posts_router.delete(
@@ -570,7 +589,9 @@ def feed(
         .order_by("-created_at", "id")
     )
     items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
-    return PostPage(items=[_post_out(p) for p in items], next_cursor=next_cursor)
+    return PostPage(
+        items=[_post_out(p, account) for p in items], next_cursor=next_cursor
+    )
 
 
 api.add_router("/posts", posts_router)
