@@ -37,6 +37,24 @@ ALLOWED_HOSTS: list[str] = env("DJANGO_ALLOWED_HOSTS")
 # behind a later infra/PII gate.
 ENABLE_MOCK_FAN_OTP: bool = False
 
+# Email + password fan auth (additive to phone OTP). The mock email sender
+# (config.email) logs the verification mail instead of delivering it — anyone could
+# read the log and complete a verification — so it is dev/test/demo only. Hardcoded
+# False here (NOT env-driven), exactly like ENABLE_MOCK_FAN_OTP, so a stray production
+# env var cannot enable it; with no real email adapter wired yet, production stays
+# False and the email-auth surface fails closed (503) rather than pretend a mail was
+# sent. A real SES/SMTP adapter replaces the mock behind this same flag.
+ENABLE_MOCK_EMAIL: bool = False
+
+# Email-verification token lifetime (seconds). The signed confirm token
+# (config.email.make_verification_token) is valid for this window; 24h default.
+EMAIL_VERIFY_TTL_SECONDS: int = env.int("EMAIL_VERIFY_TTL_SECONDS", default=86400)
+
+# Dev/QA affordance: when on, the /fan/signup/email response echoes the signed
+# verification token so e2e/QA can complete the confirm step without a real inbox.
+# Hardcoded False here (never leak the token in prod/demo); only dev/test opt in.
+EMAIL_VERIFY_RETURN_TOKEN: bool = False
+
 # Gated feature flags for the R3 round (KYC / 19+ / payment methods). Each mirrors
 # the ENABLE_MOCK_FAN_OTP contract: hardcoded False here (NOT env-driven) so no
 # stray production env var can flip them on; only the dev/test settings modules

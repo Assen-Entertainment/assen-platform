@@ -28,6 +28,11 @@ SERVE_LOCAL_MEDIA = True
 # Fan signup uses the deterministic mock OTP locally (no SMS provider wired).
 ENABLE_MOCK_FAN_OTP = True
 ENABLE_MOCK_SOCIAL_AUTH = True
+# Email + password auth uses the mock (log-only) email sender locally, and echoes the
+# verification token in the signup response so the confirm flow is completable without
+# a real inbox (no SMTP wired; see base.py).
+ENABLE_MOCK_EMAIL = True
+EMAIL_VERIFY_RETURN_TOKEN = True
 
 # R3 gated features opt in locally: the mock KYC verifier + mock payment tokenizer
 # are wired, and 19+ read exposure is on so the age-gate/blur flows can be exercised

@@ -29,6 +29,11 @@ ENABLE_MOCK_PAYMENT = True
 ENABLE_ADULT_CONTENT = True
 ENABLE_MOCK_PUSH = True
 ENABLE_MOCK_SOCIAL_AUTH = True
+# DEMO ONLY: mock (log-only) email sender so the email+password flow is walkable. The
+# verification token is NOT echoed in the response here (EMAIL_VERIFY_RETURN_TOKEN
+# stays False, inherited from base) — a demo operator reads it from the logs, keeping
+# the token off the wire in this prod-hardened profile.
+ENABLE_MOCK_EMAIL = True
 
 # DEMO ONLY: serve uploaded media off the local filesystem (config.urls) and enable
 # the upload endpoint. prod (DEBUG off) keeps this False — real prod serves media

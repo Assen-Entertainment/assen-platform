@@ -1664,6 +1664,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fan/signup/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signup Email
+         * @description Create an (unverified) email + password fan and send a mock verification mail.
+         *
+         *     Fails closed (503) when no email sender is wired (the mock is gated by
+         *     ``ENABLE_MOCK_EMAIL``, off in production), mirroring the OTP surface. No token is
+         *     issued — the fan is logged in on ``/verify-email``. A duplicate verified email is
+         *     409; consent/age/password-length failures are 422. The verification token is
+         *     echoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else "").
+         */
+        post: operations["apps_identity_api_signup_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Email Endpoint
+         * @description Confirm an email-verification token, mark the account verified, and log in.
+         *
+         *     On the first valid confirm the account is marked verified and a token pair is
+         *     issued + delivered by surface (ADR-0002); a forged/expired/mismatched token is 400.
+         */
+        post: operations["apps_identity_api_verify_email_endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/login/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Email Endpoint
+         * @description Authenticate an email + password fan and issue a fresh token pair.
+         *
+         *     Disclosure-safe: a wrong email and a wrong password are indistinguishable (422
+         *     ``InvalidCredentials``). A correct password on an unverified account is 403
+         *     ``EMAIL_NOT_VERIFIED`` (verification is required before login). Delivery follows
+         *     the requested surface (ADR-0002).
+         */
+        post: operations["apps_identity_api_login_email_endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fan/logout": {
         parameters: {
             query?: never;
@@ -4953,6 +5027,83 @@ export interface components {
             phone: string;
             /** Otp Code */
             otp_code: string;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
+        };
+        /**
+         * EmailSignupOut
+         * @description Email-signup ack. Never carries auth tokens (login happens on verify).
+         *
+         *     ``verification_token`` is populated only when ``EMAIL_VERIFY_RETURN_TOKEN`` is on
+         *     (dev/test) so e2e can confirm without a real inbox; it is "" on any real surface.
+         */
+        EmailSignupOut: {
+            /** Status */
+            status: string;
+            /**
+             * Verification Token
+             * @default
+             */
+            verification_token: string;
+        };
+        /**
+         * EmailSignupIn
+         * @description Request body for email + password fan signup (additive to phone OTP).
+         *
+         *     ``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만
+         *     14세) is mandatory, mirroring phone signup. No token is issued here — the fan
+         *     verifies the emailed link first — so there is no ``web`` surface flag.
+         */
+        EmailSignupIn: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Nickname */
+            nickname: string;
+            /** Consent Terms */
+            consent_terms: boolean;
+            /** Consent Privacy */
+            consent_privacy: boolean;
+            /**
+             * Age Over 14
+             * @default false
+             */
+            age_over_14: boolean;
+            /**
+             * Marketing Consent
+             * @default false
+             */
+            marketing_consent: boolean;
+        };
+        /**
+         * VerifyEmailIn
+         * @description Request body for confirming an email-verification link.
+         *
+         *     ``web`` selects cookie delivery for the token pair issued on verify, exactly like
+         *     :class:`SignupIn` / :class:`LoginIn`.
+         */
+        VerifyEmailIn: {
+            /** Token */
+            token: string;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
+        };
+        /**
+         * EmailLoginIn
+         * @description Request body for email + password login. ``web`` selects cookie delivery.
+         */
+        EmailLoginIn: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
             /**
              * Web
              * @default false
@@ -9357,6 +9508,78 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LoginIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_signup_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSignupIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_verify_email_endpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_login_email_endpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLoginIn"];
             };
         };
         responses: {

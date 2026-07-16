@@ -67,6 +67,24 @@ class ErrorCode(StrEnum):
     # the fan withdrawal endpoint (403). Staff offboarding is a separate ops flow, so
     # refusing here keeps the last-admin invariant unbreakable via self-service.
     STAFF_WITHDRAWAL_FORBIDDEN = "StaffWithdrawalForbidden"
+    # --- identity / email + password auth (additive to phone OTP) -----------
+    # Signup was attempted with an email that already backs a VERIFIED account (409).
+    # An unverified duplicate is reused (password/nickname updated, verification
+    # re-sent), so this fires only when the address is already fully registered.
+    EMAIL_ALREADY_REGISTERED = "EmailAlreadyRegistered"
+    # Email/password login before the verification link was confirmed (403). The fan
+    # proved the password, so this is a deliberate, non-minimised state (unlike the
+    # generic InvalidCredentials below) — the client prompts to re-verify.
+    EMAIL_NOT_VERIFIED = "EmailNotVerified"
+    # Disclosure-safe login failure (422): a wrong email and a wrong password are
+    # indistinguishable, mirroring the OTP login's existence minimisation.
+    INVALID_CREDENTIALS = "InvalidCredentials"
+    # The email-auth surface fails closed (503) when no email sender is wired (the
+    # mock is gated by ENABLE_MOCK_EMAIL, dev/test/demo only). Mirrors OTP_UNAVAILABLE.
+    EMAIL_UNAVAILABLE = "EmailUnavailable"
+    # A verify-email token was forged, malformed, or expired (400). The confirm
+    # endpoint returns this rather than distinguishing the failure reason.
+    EMAIL_VERIFICATION_INVALID = "EmailVerificationInvalid"
 
     # --- commerce (catalog / studio) ----------------------------------------
     OWNER_REQUIRED = "OwnerRequired"

@@ -97,6 +97,17 @@ class Account(models.Model):
     nickname = models.CharField(max_length=40, blank=True, default="")
     auth_method = models.CharField(max_length=16, blank=True, default="")
     auth_subject_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    # Email + password fan auth (additive to phone OTP / social). Unlike phone —
+    # which is hashed into auth_subject_hash and never stored raw — email MUST be
+    # stored in plaintext to actually deliver the verification mail, so the raw
+    # address already sits in the row and an extra e1: HMAC in auth_subject_hash
+    # would add no privacy while creating a second unique key to keep in agreement.
+    # So an email account keys its identity on this field (uniq_fan_email below) and
+    # leaves auth_subject_hash "" (like staff rows); the fan password reuses the
+    # existing password_hash. email_verified_at is None until the fan confirms the
+    # (mock) verification link — login is refused until it is set.
+    email = models.EmailField(blank=True, default="", db_index=True)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     # KYC / 성인(19+) 인증 결과 — 파생/최소 데이터만. birth_date 원본·주민번호·CI/DI는
     # 저장하지 않는다(법무 경계 §2): 실 인증기관은 성인 여부(bool)만 돌려주고, 여기엔
@@ -140,6 +151,17 @@ class Account(models.Model):
                 fields=["username"],
                 condition=~models.Q(username=""),
                 name="uniq_staff_username",
+            ),
+            # One fan per email: the email-signup path keys identity on this field, so
+            # a partial DB unique (only on non-empty emails — phone/social/staff rows
+            # keep the default "" and stay unconstrained) closes the concurrent-signup
+            # race the same way uniq_fan_auth_subject does for phone. Withdrawal clears
+            # email (identity.services.withdraw_account), so a withdrawn address frees
+            # for a fresh signup — mirroring how clearing auth_subject_hash frees a phone.
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=~models.Q(email=""),
+                name="uniq_fan_email",
             ),
         ]
 

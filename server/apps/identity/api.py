@@ -10,7 +10,10 @@ cookie — via :data:`fan_auth` (defined in :mod:`apps.identity.auth`).
 Endpoints (``/api/fan``):
 - ``POST /signup/otp``  — send a (mock) signup OTP.
 - ``POST /signup``      — create/attach a fan and issue a token pair.
+- ``POST /signup/email`` — create an (unverified) email+password fan; send mock verify mail.
+- ``POST /verify-email`` — confirm the email link, mark verified, and issue tokens.
 - ``POST /login``       — re-authenticate an existing fan (phone + OTP).
+- ``POST /login/email`` — re-authenticate an existing fan (email + password).
 - ``POST /logout``      — revoke the current token family and clear cookies.
 - ``POST /refresh``     — rotate the refresh token (reserved refresh-cookie path).
 - ``GET  /me``          — the authenticated fan's identity summary.
@@ -52,6 +55,12 @@ from apps.identity.cookies import (
     clear_auth_cookie,
     set_auth_cookie,
 )
+from apps.identity.email_services import (
+    EmailVerificationError,
+    login_email,
+    register_fan_email,
+    verify_email,
+)
 from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import (
     IssuedTokenPair,
@@ -76,6 +85,7 @@ from apps.identity.social_services import (
     verify_social_state,
 )
 from config.api import api
+from config.email import email_sender
 from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
 from config.otp import MockOtpSender, OtpSender
@@ -176,6 +186,53 @@ class LoginIn(Schema):
 
     phone: str
     otp_code: str
+    web: bool = False
+
+
+class EmailSignupIn(Schema):
+    """Request body for email + password fan signup (additive to phone OTP).
+
+    ``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만
+    14세) is mandatory, mirroring phone signup. No token is issued here — the fan
+    verifies the emailed link first — so there is no ``web`` surface flag.
+    """
+
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+    nickname: str = Field(min_length=1, max_length=40)
+    consent_terms: bool
+    consent_privacy: bool
+    age_over_14: bool = False
+    marketing_consent: bool = False
+
+
+class EmailSignupOut(Schema):
+    """Email-signup ack. Never carries auth tokens (login happens on verify).
+
+    ``verification_token`` is populated only when ``EMAIL_VERIFY_RETURN_TOKEN`` is on
+    (dev/test) so e2e can confirm without a real inbox; it is "" on any real surface.
+    """
+
+    status: str
+    verification_token: str = ""
+
+
+class VerifyEmailIn(Schema):
+    """Request body for confirming an email-verification link.
+
+    ``web`` selects cookie delivery for the token pair issued on verify, exactly like
+    :class:`SignupIn` / :class:`LoginIn`.
+    """
+
+    token: str
+    web: bool = False
+
+
+class EmailLoginIn(Schema):
+    """Request body for email + password login. ``web`` selects cookie delivery."""
+
+    email: str
+    password: str
     web: bool = False
 
 
@@ -600,6 +657,84 @@ def login(request: HttpRequest, data: LoginIn, response: HttpResponse) -> Signup
             422, "가입이 필요해요.", code=ErrorCode.ACCOUNT_NOT_REGISTERED
         )
 
+    return _deliver_token_pair(issue_token_pair(account), response, web=data.web)
+
+
+@router.post("/signup/email", response=EmailSignupOut, throttle=anon_throttle("10/min"))
+def signup_email(request: HttpRequest, data: EmailSignupIn) -> EmailSignupOut:
+    """Create an (unverified) email + password fan and send a mock verification mail.
+
+    Fails closed (503) when no email sender is wired (the mock is gated by
+    ``ENABLE_MOCK_EMAIL``, off in production), mirroring the OTP surface. No token is
+    issued — the fan is logged in on ``/verify-email``. A duplicate verified email is
+    409; consent/age/password-length failures are 422. The verification token is
+    echoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else "").
+    """
+    del request
+    sender = email_sender()
+    if sender is None:
+        raise ApiError(
+            503,
+            "이메일 가입을 사용할 수 없어요.",
+            code=ErrorCode.EMAIL_UNAVAILABLE,
+        )
+    try:
+        _account, token = register_fan_email(
+            email=data.email,
+            password=data.password,
+            nickname=data.nickname,
+            consent_terms=data.consent_terms,
+            consent_privacy=data.consent_privacy,
+            age_over_14=data.age_over_14,
+            marketing_consent=data.marketing_consent,
+            email_sender=sender,
+        )
+    except SignupError as exc:
+        status = 409 if exc.code == ErrorCode.EMAIL_ALREADY_REGISTERED else 422
+        raise ApiError(status, str(exc), code=exc.code) from exc
+    return EmailSignupOut(
+        status="verification_sent",
+        verification_token=token if settings.EMAIL_VERIFY_RETURN_TOKEN else "",
+    )
+
+
+@router.post("/verify-email", response=SignupOut, throttle=anon_throttle("10/min"))
+def verify_email_endpoint(
+    request: HttpRequest, data: VerifyEmailIn, response: HttpResponse
+) -> SignupOut:
+    """Confirm an email-verification token, mark the account verified, and log in.
+
+    On the first valid confirm the account is marked verified and a token pair is
+    issued + delivered by surface (ADR-0002); a forged/expired/mismatched token is 400.
+    """
+    del request
+    try:
+        pair = verify_email(token=data.token)
+    except EmailVerificationError as exc:
+        raise ApiError(
+            400, "인증 링크가 유효하지 않거나 만료됐어요.",
+            code=ErrorCode.EMAIL_VERIFICATION_INVALID,
+        ) from exc
+    return _deliver_token_pair(pair, response, web=data.web)
+
+
+@router.post("/login/email", response=SignupOut, throttle=anon_throttle("10/min"))
+def login_email_endpoint(
+    request: HttpRequest, data: EmailLoginIn, response: HttpResponse
+) -> SignupOut:
+    """Authenticate an email + password fan and issue a fresh token pair.
+
+    Disclosure-safe: a wrong email and a wrong password are indistinguishable (422
+    ``InvalidCredentials``). A correct password on an unverified account is 403
+    ``EMAIL_NOT_VERIFIED`` (verification is required before login). Delivery follows
+    the requested surface (ADR-0002).
+    """
+    del request
+    try:
+        account = login_email(email=data.email, password=data.password)
+    except SignupError as exc:
+        status = 403 if exc.code == ErrorCode.EMAIL_NOT_VERIFIED else 422
+        raise ApiError(status, str(exc), code=exc.code) from exc
     return _deliver_token_pair(issue_token_pair(account), response, web=data.web)
 
 

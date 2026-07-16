@@ -36,6 +36,11 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # Fan signup tests + live API E2E use the deterministic mock OTP sender.
 ENABLE_MOCK_FAN_OTP = True
 ENABLE_MOCK_SOCIAL_AUTH = True
+# Email + password auth tests use the mock (log-only) email sender and read the
+# verification token straight off the signup response (the fail-closed 503 when
+# ENABLE_MOCK_EMAIL is off is asserted explicitly with override_settings).
+ENABLE_MOCK_EMAIL = True
+EMAIL_VERIFY_RETURN_TOKEN = True
 
 # R3 gated features on for tests: the mock KYC verifier + mock payment tokenizer are
 # wired, and 19+ read exposure is on so the gating tests can assert both the
