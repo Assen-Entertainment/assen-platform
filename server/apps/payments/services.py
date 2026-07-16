@@ -17,7 +17,10 @@ from apps.payments.models import (
     PaymentAttempt,
     PaymentAttemptStatus,
     PaymentProvider,
+    PaymentReversal,
+    PaymentReversalStatus,
 )
+from config.payment import ChargeStatus, PaymentRefund
 
 
 def record_mock_settlement(
@@ -94,4 +97,41 @@ def record_external_settlement(
         authorized_amount=external_order.amount,
         currency=external_order.currency,
         status=PaymentAttemptStatus.SUCCEEDED,
+    )
+
+
+def _reversal_status(refund: PaymentRefund) -> PaymentReversalStatus:
+    """Map a gateway :class:`PaymentRefund` outcome to the persisted ledger status."""
+    if refund.status == ChargeStatus.APPROVED:
+        return PaymentReversalStatus.SUCCEEDED
+    if refund.status == ChargeStatus.PENDING:
+        return PaymentReversalStatus.PENDING
+    return PaymentReversalStatus.FAILED
+
+
+def record_mock_reversal(
+    *,
+    original_attempt: PaymentAttempt,
+    refund: PaymentRefund,
+    amount: int,
+    reason: str = "",
+) -> PaymentReversal:
+    """Record an append-only reversal (void/refund) against a settled attempt (#3).
+
+    Mirrors :func:`record_mock_settlement` for the money-*out* direction: it writes
+    one immutable :class:`PaymentReversal` linked to ``original_attempt`` (the capture
+    being reversed). The persisted ``status`` follows the gateway's outcome —
+    ``succeeded`` on an approved reversal, ``failed`` on a decline, ``pending`` when a
+    real async PG still owes an out-of-band step. Must be called INSIDE the parent
+    cancel/refund-accept transaction so a rolled-back reversal leaves no dangling row.
+    Carries no card data: only the reversal ref, amount, currency, status, and reason.
+    """
+    return PaymentReversal.objects.create(
+        original_attempt=original_attempt,
+        provider=original_attempt.provider,
+        reversal_ref=refund.reversal_ref,
+        amount=amount,
+        currency=original_attempt.currency,
+        status=_reversal_status(refund),
+        reason=reason,
     )
