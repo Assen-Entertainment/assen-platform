@@ -1,1 +1,1 @@
-0003_membershiptier_pricing_kind_and_more
+0004_subscription_agreed_period_subscription_agreed_price_and_more

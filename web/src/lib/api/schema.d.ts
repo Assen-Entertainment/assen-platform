@@ -1964,11 +1964,13 @@ export interface paths {
          * Studio Delete Tier
          * @description Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).
          *
-         *     Deleting a tier CASCADEs its subscriptions (``Subscription.tier`` is CASCADE) —
-         *     unlike a product delete, which SET_NULLs order lines to preserve history. To keep
-         *     that asymmetry from silently destroying a live membership, a tier with any active
-         *     subscription can't be deleted (422); the owner should set ``active=False`` (soft
-         *     archive) to stop new signups while keeping existing subscriptions intact.
+         *     A tier with any ACTIVE subscription can't be deleted (422); the owner soft-archives
+         *     (``active=False``) instead. With no active subscription, a hard delete is attempted:
+         *     if the tier still has non-active subscriptions carrying settlement history, their
+         *     PROTECTed :class:`~apps.payments.models.PaymentAttempt` rows block the cascade
+         *     (financial history is never erased — #16), so the tier is soft-archived and the ack
+         *     reports ``archived``. Only a tier whose subscriptions (if any) have no financial
+         *     history is hard-deleted (``deleted``).
          */
         delete: operations["apps_membership_api_studio_delete_tier"];
         options?: never;
