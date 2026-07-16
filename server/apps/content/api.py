@@ -26,7 +26,12 @@ from pydantic import Field, field_validator
 
 from apps.content.models import Comment, Like, Post
 from apps.creator.models import Creator
-from apps.identity.auth import authed, fan_auth, resolve_optional_account
+from apps.identity.auth import (
+    authed,
+    fan_auth,
+    require_kyc_verified,
+    resolve_optional_account,
+)
 from apps.identity.models import Account
 from apps.membership.services import can_view_post
 from apps.notification.services import notify
@@ -452,6 +457,9 @@ def like_post(
 ) -> tuple[int, LikeOut | ErrorOut | InteractionBlockedError]:
     """Like a post; idempotent (a second like is a no-op, still 200)."""
     account = authed(request)
+    # 본인인증 gate: liking is a new interaction, so require a verified fan before any
+    # like edge is created (대표 07-16). The retract direction (unlike) stays ungated.
+    require_kyc_verified(account)
     # 19+ gate (same funnel as reads): an adult post the caller may not see 404s here
     # too, so the like endpoint can't be used to touch or probe a gated post.
     post = _post_qs(account).filter(id=post_id).first()
@@ -543,6 +551,9 @@ def create_comment(
     the internal fan_id).
     """
     account = authed(request)
+    # 본인인증 gate before any side effect: commenting is an interaction that requires a
+    # verified fan (대표 07-16).
+    require_kyc_verified(account)
     # 19+ gate (same funnel as reads): a gated adult post 404s so a non-permitted
     # viewer can neither read nor comment on it.
     post = _post_qs(account).select_related("creator__owner").filter(id=post_id).first()

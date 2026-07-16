@@ -36,7 +36,12 @@ from apps.commerce.models import (
     RefundStatus,
 )
 from apps.creator.models import Creator
-from apps.identity.auth import authed, fan_auth, resolve_optional_account
+from apps.identity.auth import (
+    authed,
+    fan_auth,
+    require_kyc_verified,
+    resolve_optional_account,
+)
 from apps.identity.models import Account, Role
 from apps.membership.services import active_subscription
 from apps.notification.models import NotificationKind
@@ -979,6 +984,9 @@ def create_order(
     PENDING→PAID, so a PENDING/FAILED order never emits a stray "order received" notice.
     """
     account = authed(request)
+    # 본인인증 gate before ANY side effect (including the idempotency replay below): an
+    # unverified fan cannot place an order (대표 07-16).
+    require_kyc_verified(account)
     # Fail closed before ANY side effect — including the idempotency replay below:
     # with no real PG and the mock off, an order must never become PAID (ASS-286).
     require_payment_available()
@@ -1262,6 +1270,9 @@ def create_free_order(
     ``PaymentAttempt`` is ledgered exactly like a paid settlement.
     """
     account = authed(request)
+    # 본인인증 gate before ANY side effect: acquiring even a free product is an
+    # interaction that requires a verified fan (대표 07-16).
+    require_kyc_verified(account)
     # No require_payment_available() — a free grant settles nothing. Idempotency
     # still applies so a retried grant returns the original instead of duplicating.
     if payload.idempotency_key:

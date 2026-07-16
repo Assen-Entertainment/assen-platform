@@ -21,7 +21,7 @@ from django.test import Client
 from apps.commerce.models import Product
 from apps.content.models import Post
 from apps.creator.models import Creator
-from apps.identity.models import Account, Role
+from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
 from apps.membership.models import MembershipTier
 from apps.social.models import CreatorBlock, Follow
@@ -36,7 +36,9 @@ def _creator(handle: str = "stellar", name: str = "별빛") -> Creator:
 
 
 def _fan(nickname: str = "팬") -> Account:
-    return Account.objects.create(role=Role.FAN.value, nickname=nickname)
+    return Account.objects.create(
+        role=Role.FAN.value, nickname=nickname, kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _bearer(account: Account) -> dict[str, str]:

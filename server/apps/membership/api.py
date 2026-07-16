@@ -19,7 +19,12 @@ from ninja import Router, Schema
 from pydantic import Field, field_validator
 
 from apps.creator.models import Creator
-from apps.identity.auth import authed, fan_auth, resolve_optional_account
+from apps.identity.auth import (
+    authed,
+    fan_auth,
+    require_kyc_verified,
+    resolve_optional_account,
+)
 from apps.identity.models import Account
 from apps.membership.models import (
     BILLING_CYCLE,
@@ -494,6 +499,8 @@ def subscribe(
     creator (one active membership per creator).
     """
     account = authed(request)
+    # 본인인증 gate before any side effect: an unverified fan cannot subscribe (대표 07-16).
+    require_kyc_verified(account)
     # No new ACTIVE subscription without a settleable payment path (ASS-286);
     # explicit free tiers are a separate grant (ASS-297), never a bypass here.
     require_payment_available()
@@ -572,6 +579,9 @@ def subscribe_free(
     the one-active-membership-per-creator rule still applies.
     """
     account = authed(request)
+    # 본인인증 gate before any side effect: joining even a free tier is an interaction
+    # that requires a verified fan (대표 07-16).
+    require_kyc_verified(account)
     # No require_payment_available() — a free grant settles nothing.
     tier = (
         MembershipTier.objects.select_related("creator")
@@ -688,6 +698,9 @@ def change_subscription_tier(
     Idempotent: switching to the tier already held is a 200 no-op.
     """
     account = authed(request)
+    # 본인인증 gate before any side effect: changing tier is an interaction that
+    # requires a verified fan (대표 07-16).
+    require_kyc_verified(account)
     # A tier change activates a (paid) tier with no payment today, so it is gated
     # with creation (ASS-286); free-tier moves are deferred to the free-grant work.
     require_payment_available()

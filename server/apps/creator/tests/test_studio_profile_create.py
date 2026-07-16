@@ -14,7 +14,7 @@ import pytest
 from django.test import Client
 
 from apps.creator.models import Creator
-from apps.identity.models import Account, Role
+from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
 
 pytestmark = pytest.mark.django_db
@@ -24,7 +24,9 @@ URL = "/api/studio/profile"
 
 def _fan() -> Account:
     """Create a plain fan account."""
-    return Account.objects.create(role=Role.FAN.value, nickname="지망생")
+    return Account.objects.create(
+        role=Role.FAN.value, nickname="지망생", kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _bearer(account: Account) -> dict[str, str]:

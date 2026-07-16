@@ -21,7 +21,7 @@ from django.test import Client, override_settings
 
 from apps.commerce.models import Order, OrderItem, OrderStatus, Product
 from apps.creator.models import Creator
-from apps.identity.models import Account, Role
+from apps.identity.models import Account, KycStatus, Role
 from apps.identity.services import issue_token_pair
 from apps.notification.models import Notification
 from apps.payments.models import (
@@ -46,7 +46,9 @@ GATEWAY_ATTR = "apps.commerce.api.payment_gateway"
 
 def _fan() -> Account:
     """Create a fan account."""
-    return Account.objects.create(role=Role.FAN.value)
+    return Account.objects.create(
+        role=Role.FAN.value, kyc_status=KycStatus.VERIFIED.value
+    )
 
 
 def _auth(account: Account) -> dict[str, str]:
