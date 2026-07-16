@@ -25,7 +25,9 @@ import uuid
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.commerce.models import Product
 from apps.content.models import Comment, Post
@@ -105,6 +107,15 @@ _DEMO_FAN_PHONE = "010-0000-0001"
 _DEMO_FAN_NICKNAME = "데모팬"
 _DEMO_CREATOR_PHONE = "010-0000-0002"
 _DEMO_CREATOR_NICKNAME = "데모크리에이터"
+
+# Email + password login (B1: phone OTP is being retired). Seeded onto the SAME
+# demo accounts (keyed on the phone-hash) as a verified email credential so E2E can
+# log in via POST /fan/login/email. Phone-hash + email co-exist on one row (both
+# auth surfaces resolve the account). Dev/test only — these guarded seeds never run
+# on a prod-like profile (_guard_demo_seed).
+_DEMO_FAN_EMAIL = "demo-fan@assen.test"
+_DEMO_CREATOR_EMAIL = "demo-creator@assen.test"
+_DEMO_PASSWORD = "assen-demo-pass"  # ≥8 chars; E2E login credential (dev/test only)
 
 # 시드 엔티티 id는 **재시드 간 결정적**(uuid5)이어야 한다 — 웹 시각 회귀(e2e/visual.spec)의
 # seed 그라디언트가 엔티티 id에서 파생되므로(web/src/lib/placeholder gradientStyle), id가
@@ -251,6 +262,11 @@ class Command(BaseCommand):
                 "auth_method": "phone",
                 # 크리에이터는 본인인증 전제(스튜디오 개설이 게이트됨).
                 "kyc_status": "verified",
+                # B1: verified email credential (login via /fan/login/email). Co-exists
+                # with the phone-hash — both auth surfaces resolve this one account.
+                "email": _DEMO_CREATOR_EMAIL,
+                "password_hash": make_password(_DEMO_PASSWORD),
+                "email_verified_at": timezone.now(),
             },
         )
         stellar_creator = creators["stellar"]
@@ -270,6 +286,11 @@ class Command(BaseCommand):
                 # (성인 항목은 여전히 mock 본인인증에서 성인 확인 후 노출).
                 "adult_verified": False,
                 "kyc_status": "verified",
+                # B1: verified email credential (login via /fan/login/email). Co-exists
+                # with the phone-hash — both auth surfaces resolve this one account.
+                "email": _DEMO_FAN_EMAIL,
+                "password_hash": make_password(_DEMO_PASSWORD),
+                "email_verified_at": timezone.now(),
             },
         )
         for handle in ("stellar", "rabbit"):

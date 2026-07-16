@@ -7,6 +7,12 @@ import { ApiError } from "./client";
 export const ERROR_CODES = {
   AccountNotRegistered: "AccountNotRegistered",
   OtpInvalid: "OtpInvalid",
+  // 이메일/비밀번호 인증(B1: 폰 OTP 대체) — 서버 config.errors.ErrorCode 미러.
+  EmailAlreadyRegistered: "EmailAlreadyRegistered",
+  EmailNotVerified: "EmailNotVerified",
+  InvalidCredentials: "InvalidCredentials",
+  EmailUnavailable: "EmailUnavailable",
+  EmailVerificationInvalid: "EmailVerificationInvalid",
   OwnerRequired: "OwnerRequired",
   ProductNotOrderable: "ProductNotOrderable",
   OutOfStock: "OutOfStock",
@@ -49,6 +55,12 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   // 인증(identity)
   AccountNotRegistered: "가입되지 않은 번호예요. 회원가입을 먼저 진행해 주세요.",
   OtpInvalid: "인증번호가 올바르지 않아요. 다시 확인해 주세요.",
+  // 이메일/비밀번호 인증(B1)
+  EmailAlreadyRegistered: "이미 가입된 이메일이에요. 로그인해 주세요.",
+  EmailNotVerified: "이메일 인증이 필요해요. 받은 메일의 링크로 인증을 완료해 주세요.",
+  InvalidCredentials: "이메일 또는 비밀번호가 올바르지 않아요.",
+  EmailUnavailable: "이메일 인증이 아직 준비 중이에요. 잠시 후 다시 시도해 주세요.",
+  EmailVerificationInvalid: "인증 링크가 유효하지 않거나 만료됐어요.",
   OwnerRequired: "크리에이터 계정에서만 할 수 있어요.",
   // 커머스(주문/상품)
   ProductNotOrderable: "지금은 주문할 수 없는 상품이에요.",

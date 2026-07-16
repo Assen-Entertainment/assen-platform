@@ -1,17 +1,15 @@
-import { test, expect, type Page } from "@playwright/test";
-import { otpFor } from "./helpers/otp";
+import { test, expect } from "@playwright/test";
+import { DEMO_CREATOR_EMAIL, DEMO_PASSWORD, loginViaEmail } from "./helpers/auth";
 
 /**
  * 스튜디오 포스트 작성 with 이미지 업로드(R12) — 웹(Next, live 모드) + 서버(Django, seed_demo) 결합.
- * 데모 크리에이터(010-0000-0002, stellar 오너)로 로그인 → 작은 PNG를 POST /api/uploads로 업로드 →
+ * 데모 크리에이터(stellar 오너)로 로그인 → 작은 PNG를 POST /api/uploads로 업로드 →
  * 반환 media_url을 실은 포스트를 발행 → 스튜디오 포스트 목록 노출 + media_url이 /media/uploads/… 확인.
  *
- * 전제(journey.spec.ts와 동일): Django 127.0.0.1:8000(dev·mock OTP·seed_demo·SERVE_LOCAL_MEDIA on),
+ * 전제(journey.spec.ts와 동일): Django 127.0.0.1:8000(dev·seed_demo·SERVE_LOCAL_MEDIA on),
  *   Next(NEXT_PUBLIC_API_URL=/api·rewrites)가 playwright.config baseURL로 접근 가능.
- * ※발행은 오너(크리에이터)만 가능하므로 데모팬(0001)이 아닌 데모 크리에이터(0002)로 로그인한다.
+ * ※발행은 오너(크리에이터)만 가능하므로 데모팬이 아닌 데모 크리에이터로 로그인한다.
  */
-
-const CREATOR_PHONE = "01000000002"; // seed_demo 데모 크리에이터(010-0000-0002) — stellar 오너.
 
 // 1x1 PNG — Pillow가 생성한 **실제로 디코딩되는** 최소 이미지. 서버의 content-type/매직바이트
 // 게이트(415/422)와 ASS-271 Pillow decode-verify(청크 CRC·구조 검사)를 모두 통과한다.
@@ -25,27 +23,9 @@ const TINY_PNG = Buffer.from(
 test("스튜디오 포스트 작성 — 이미지 업로드 → 발행 → 스튜디오 노출", async ({ page }) => {
   const body = `업로드 저니 ${Date.now()}`;
 
-  // 1. 데모 크리에이터 OTP 로그인.
-  await test.step("OTP 로그인(크리에이터)", async () => {
-    await page.goto("/login", { waitUntil: "networkidle" });
-    const phoneField = page.getByLabel("휴대폰 번호");
-    await expect(phoneField, "OTP 로그인 폼(live 모드) 렌더").toBeVisible();
-    await phoneField.fill(CREATOR_PHONE);
-    await page.getByRole("button", { name: "인증번호 받기" }).click();
-    await page.getByRole("group", { name: "인증 코드" }).waitFor({ timeout: 10_000 });
-
-    const code = otpFor(CREATOR_PHONE);
-    await typeOtp(page, code);
-    const loginBtn = page.getByRole("button", { name: "로그인" });
-    try {
-      await loginBtn.click({ timeout: 5_000 });
-    } catch {
-      await page.getByLabel("자리 1").click();
-      for (let i = 0; i < 6; i++) await page.keyboard.press("Backspace");
-      await typeOtp(page, code, 120);
-      await loginBtn.click({ timeout: 5_000 });
-    }
-    await page.waitForURL("**/discovery", { timeout: 25_000 });
+  // 1. 데모 크리에이터 이메일 로그인.
+  await test.step("이메일 로그인(크리에이터)", async () => {
+    await loginViaEmail(page, DEMO_CREATOR_EMAIL, DEMO_PASSWORD);
   });
 
   // 2. 포스트 작성 화면 — 본문 입력 + 이미지 업로드(POST /api/uploads) → 프리뷰 확인 → 발행.
@@ -86,9 +66,3 @@ test("스튜디오 포스트 작성 — 이미지 업로드 → 발행 → 스�
     expect(mine?.media_url, "업로드 media_url이 포스트에 반영").toMatch(/\/media\/uploads\//);
   });
 });
-
-/** OTP 6자리를 첫 자리부터 순차 타이핑(자동 포커스 이동 활용) — journey.spec.ts와 동일 로직. */
-async function typeOtp(page: Page, code: string, delay = 80): Promise<void> {
-  await page.getByLabel("자리 1").click();
-  await page.keyboard.type(code, { delay });
-}

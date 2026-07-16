@@ -975,6 +975,56 @@ export async function apiConfirmVerify(): Promise<{ adultVerified: boolean; kycS
   return { adultVerified: raw.adult_verified, kycStatus: raw.kyc_status };
 }
 
+// --- 이메일/비밀번호 인증(B1: 폰 OTP 대체) -----------------------------------
+/**
+ * 이메일 가입 — POST /fan/signup/email. 토큰/쿠키 미발급(가입은 인증 메일 발송까지 —
+ * 로그인은 verify-email에서 이뤄진다). 반환 verification_token은 dev/test(EMAIL_VERIFY_RETURN_TOKEN)
+ * 에서만 비어있지 않다("" on prod). 실패: 503 EmailUnavailable·409 EmailAlreadyRegistered·422(동의/나이/비밀번호 길이).
+ */
+export async function apiSignupEmail(input: {
+  email: string;
+  password: string;
+  nickname: string;
+  consentTerms: boolean;
+  consentPrivacy: boolean;
+  ageOver14: boolean;
+  marketingConsent: boolean;
+}): Promise<{ status: string; verificationToken: string }> {
+  const raw = await apiFetch<{ status: string; verification_token: string }>("/fan/signup/email", {
+    method: "POST",
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      nickname: input.nickname,
+      consent_terms: input.consentTerms,
+      consent_privacy: input.consentPrivacy,
+      age_over_14: input.ageOver14,
+      marketing_consent: input.marketingConsent,
+    }),
+  });
+  return { status: raw.status, verificationToken: raw.verification_token };
+}
+/**
+ * 이메일 로그인 — POST /fan/login/email {web:true}(httpOnly assen_access 쿠키 세션). 실패:
+ * 422 InvalidCredentials(이메일·비밀번호 오류 비구분)·403 EmailNotVerified(인증 미완료).
+ */
+export async function apiLoginEmail(input: { email: string; password: string }): Promise<void> {
+  await apiFetch<void>("/fan/login/email", {
+    method: "POST",
+    body: JSON.stringify({ email: input.email, password: input.password, web: true }),
+  });
+}
+/**
+ * 이메일 인증 확인 — POST /fan/verify-email {web:true}. 성공 시 쿠키 세션이 발급되어 로그인 상태가 된다.
+ * 실패: 400 EmailVerificationInvalid(위조·만료·불일치 토큰).
+ */
+export async function apiVerifyEmail(token: string): Promise<void> {
+  await apiFetch<void>("/fan/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token, web: true }),
+  });
+}
+
 // --- 게이트 기능(R3): 계정 수정 ----------------------------------------------
 /** 내 프로필 수정 — nickname만(이메일/전화는 재인증 게이트). 세션 무효화는 호출측(useUpdateMe). */
 export async function apiUpdateMe(nickname: string): Promise<void> {

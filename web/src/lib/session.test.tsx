@@ -45,6 +45,53 @@ describe("SessionProvider (mock)", () => {
   });
 });
 
+describe("SessionProvider (mock) — 이메일 인증 훅(B1)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("loginWithEmail persists a mock user; signupWithEmail returns an empty token", async () => {
+    const user = userEvent.setup();
+    let signupToken: string | undefined;
+    function EmailProbe() {
+      const { user: u, loginWithEmail, signupWithEmail } = useSession();
+      return (
+        <div>
+          <span data-testid="euser">{u ? u.name : "none"}</span>
+          <button onClick={() => void loginWithEmail("demo-fan@assen.test", "assen-demo-pass")}>login-email</button>
+          <button
+            onClick={() =>
+              void signupWithEmail({
+                email: "x@y.z",
+                password: "12345678",
+                nickname: "n",
+                consentTerms: true,
+                consentPrivacy: true,
+                ageOver14: true,
+                marketingConsent: false,
+              }).then((r) => {
+                signupToken = r.verificationToken;
+              })
+            }
+          >
+            signup-email
+          </button>
+        </div>
+      );
+    }
+    render(
+      <SessionProvider>
+        <EmailProbe />
+      </SessionProvider>,
+    );
+    expect(screen.getByTestId("euser").textContent).toBe("none");
+    await user.click(screen.getByText("login-email"));
+    // mock loginWithEmail은 DEFAULT_USER를 즉시 persist(오프라인·CI 경로).
+    expect(screen.getByTestId("euser").textContent).toBe("데모 유저");
+    // mock signupWithEmail은 세션을 세우지 않고 빈 verificationToken을 반환(실 경로처럼 메일 단계 모사).
+    await user.click(screen.getByText("signup-email"));
+    await waitFor(() => expect(signupToken).toBe(""));
+  });
+});
+
 describe("mapMe (KYC 매핑, fail-closed)", () => {
   it("adult_verified/kyc_status를 camelCase로 매핑한다", () => {
     const u = mapMe({ id: "u1", nickname: "테스트", role: "fan", adult_verified: true, kyc_status: "verified" });

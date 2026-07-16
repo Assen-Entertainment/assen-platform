@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
-import { otpFor } from "./helpers/otp";
+import { DEMO_CREATOR_EMAIL, DEMO_PASSWORD, loginViaEmail } from "./helpers/auth";
 
 /**
  * 시각 회귀 — 핵심 화면 × 라이트/다크 픽셀 diff(toHaveScreenshot).
@@ -11,8 +11,6 @@ import { otpFor } from "./helpers/otp";
  * 베이스라인 생성/갱신: `npx playwright test --project=visual --update-snapshots`
  * (신선한 시드에서 실행 — 커밋에 포함).
  */
-
-const CREATOR_PHONE = "010-0000-0002"; // seed_demo 데모크리에이터 = stellar 오너 → /studio 렌더.
 
 const THEMES = ["light", "dark"] as const;
 
@@ -42,14 +40,8 @@ function dynamicMasks(page: Page): Locator[] {
 }
 
 async function loginAsCreator(page: Page): Promise<void> {
-  await page.goto("/login", { waitUntil: "networkidle" });
-  await page.getByLabel("휴대폰 번호").fill(CREATOR_PHONE.replace(/\D/g, ""));
-  await page.getByRole("button", { name: "인증번호 받기" }).click();
-  await page.getByRole("group", { name: "인증 코드" }).waitFor({ timeout: 10_000 });
-  await page.getByLabel("자리 1").click();
-  await page.keyboard.type(otpFor(CREATOR_PHONE), { delay: 80 });
-  await page.getByRole("button", { name: "로그인" }).click({ timeout: 5_000 });
-  await page.waitForURL("**/discovery", { timeout: 25_000 });
+  // seed_demo 데모크리에이터(stellar 오너) 이메일 로그인 → /studio 렌더.
+  await loginViaEmail(page, DEMO_CREATOR_EMAIL, DEMO_PASSWORD);
 }
 
 for (const theme of THEMES) {
