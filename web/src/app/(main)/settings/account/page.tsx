@@ -56,9 +56,13 @@ export default function AccountSettingsPage() {
   };
 
   const onWithdraw = () => {
-    // 소프트 게이트 — 세션만 정리 후 이동(하드 삭제/PII 파기는 운영 게이트).
+    // 소프트 게이트 — 세션만 정리 후 이동(하드 삭제/PII 파기는 운영 게이트). 카피는 이 실제 동작을
+    // 과장 없이 반영한다(#13: "탈퇴 처리·삭제" 단정 대신 "신청 접수·로그아웃"으로 정정).
     logout();
-    toast({ title: "탈퇴 처리되었어요", description: "그동안 이용해 주셔서 감사합니다. (계정 삭제는 운영 게이트)" });
+    toast({
+      title: "탈퇴 신청이 접수되었어요",
+      description: "로그아웃되었습니다. 계정·데이터의 영구 삭제는 운영 검토를 거쳐 처리돼요.",
+    });
     router.push("/discovery");
   };
 
@@ -92,7 +96,8 @@ export default function AccountSettingsPage() {
       <section className="flex flex-col gap-3" aria-label="위험 구역">
         <h2 className="text-title-l text-error">계정 탈퇴</h2>
         <p className="text-body-s text-on-surface-variant">
-          탈퇴하면 프로필·구독·주문 내역이 삭제되며 되돌릴 수 없어요.
+          탈퇴를 신청하면 로그아웃되며, 계정·구독·주문 데이터의 영구 삭제는 운영 검토를 거쳐 처리돼요.
+          (즉시 삭제되지 않아요)
         </p>
         <Dialog>
           <DialogTrigger asChild>
@@ -103,7 +108,7 @@ export default function AccountSettingsPage() {
           <DialogContent>
             <DialogTitle>정말 탈퇴할까요?</DialogTitle>
             <DialogDescription>
-              이 작업은 되돌릴 수 없어요. 계속하려면 아래에 <b className="text-on-surface">탈퇴</b>를 입력하세요.
+              탈퇴를 신청하려면 아래에 <b className="text-on-surface">탈퇴</b>를 입력하세요.
             </DialogDescription>
             <DisclaimerNotice title="안내">계정 하드 삭제·개인정보 파기는 운영 게이트로 처리돼요. 여기서는 세션만 정리됩니다.</DisclaimerNotice>
             <TextField

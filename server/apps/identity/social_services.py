@@ -18,7 +18,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import secrets
 
+from django.conf import settings
+from django.core import signing
 from django.db import transaction
 from django.utils import timezone
 
@@ -47,6 +50,37 @@ def hash_social(provider: str, subject: str) -> str:
     msg = f"social:{provider}:{subject}".encode()
     mac = hmac.new(_phone_hmac_key(), msg, hashlib.sha256).digest()
     return "s1:" + base64.urlsafe_b64encode(mac).rstrip(b"=").decode("ascii")
+
+
+_SOCIAL_STATE_SALT = "assen.social.state"
+
+
+def make_social_state(*, provider: str, redirect_uri: str) -> tuple[str, str]:
+    """Return (echoed_state, signed_cookie). echoed_state goes to the provider in the
+    authorize URL; signed_cookie is stored httpOnly and re-verified on callback so the
+    callback is bound to the browser+provider+redirect_uri that started the flow."""
+    state = secrets.token_urlsafe(24)
+    signed = signing.dumps({"s": state, "p": provider, "r": redirect_uri}, salt=_SOCIAL_STATE_SALT)
+    return state, signed
+
+
+def verify_social_state(
+    *, cookie_value: str | None, provider: str, redirect_uri: str, echoed_state: str
+) -> bool:
+    if not cookie_value:
+        return False
+    try:
+        payload = signing.loads(
+            cookie_value, salt=_SOCIAL_STATE_SALT, max_age=settings.SOCIAL_STATE_TTL_SECONDS
+        )
+    except signing.BadSignature:
+        return False
+    return (
+        isinstance(payload, dict)
+        and payload.get("s") == echoed_state
+        and payload.get("p") == provider
+        and payload.get("r") == redirect_uri
+    )
 
 
 @transaction.atomic

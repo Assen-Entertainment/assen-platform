@@ -108,12 +108,19 @@ def test_start_endpoint_rejects_unknown_provider(client: Client) -> None:
 
 @pytest.mark.django_db
 def test_callback_signs_up_and_sets_cookie(client: Client) -> None:
+    # Begin the flow so the signed state cookie is set on this client (it persists
+    # across the client's requests) and echo the returned state back on the callback.
+    start = client.get(
+        "/api/fan/social/kakao/start", {"redirect_uri": "http://web/cb"}
+    )
+    assert start.status_code == 200
+    state = start.json()["state"]
     resp = client.post(
         "/api/fan/social/kakao/callback",
         data=json.dumps(
             {
                 "code": "mock-kakao",
-                "state": "st",
+                "state": state,
                 "redirect_uri": "http://web/cb",
                 "consent_terms": True,
                 "consent_privacy": True,
@@ -130,10 +137,20 @@ def test_callback_signs_up_and_sets_cookie(client: Client) -> None:
 
 @pytest.mark.django_db
 def test_callback_new_without_consent_is_422(client: Client) -> None:
+    start = client.get(
+        "/api/fan/social/google/start", {"redirect_uri": "http://web/cb"}
+    )
+    assert start.status_code == 200
+    state = start.json()["state"]
     resp = client.post(
         "/api/fan/social/google/callback",
         data=json.dumps(
-            {"code": "mock-google", "redirect_uri": "http://web/cb", "web": True}
+            {
+                "code": "mock-google",
+                "state": state,
+                "redirect_uri": "http://web/cb",
+                "web": True,
+            }
         ),
         content_type="application/json",
     )
