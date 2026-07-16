@@ -11900,6 +11900,11 @@
             "title": "Age Over 14",
             "type": "boolean"
           },
+          "marketing_consent": {
+            "default": false,
+            "title": "Marketing Consent",
+            "type": "boolean"
+          },
           "web": {
             "default": false,
             "title": "Web",

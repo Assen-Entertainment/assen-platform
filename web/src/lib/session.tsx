@@ -48,6 +48,8 @@ export interface SignupInput {
   consentPrivacy: boolean;
   /** 만 14세 이상 확인(D5). 서버는 미전송을 fail-closed로 거부(SignupIn 기본 false). */
   ageOver14: boolean;
+  /** 마케팅 수신(선택). true면 서버가 SMS 옵트인만 기록(가입 시 도달 채널=전화). */
+  marketingConsent?: boolean;
 }
 
 interface SessionContextValue {
@@ -264,6 +266,7 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
           consent_terms: input.consentTerms,
           consent_privacy: input.consentPrivacy,
           age_over_14: input.ageOver14,
+          marketing_consent: input.marketingConsent ?? false,
           web: true,
         }),
       });
