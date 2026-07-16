@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { MediaImage } from "@/components/ui/media-image";
 import { VerifiedMark } from "@/components/ui/verified-mark";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { GiftIcon } from "@/lib/icons";
@@ -16,6 +17,10 @@ export interface CreatorHomeHeaderProps {
   name: string;
   handle: string;
   initial: string;
+  /** 아바타 실 이미지 URL — 없으면 initial 폴백(Avatar 기존 동작). */
+  avatarUrl?: string;
+  /** 커버 실 이미지 URL — 없으면 기존 그라디언트(accent/brand) 폴백. */
+  coverUrl?: string;
   followers: number;
   posts?: number;
   verified?: boolean;
@@ -42,6 +47,8 @@ export function CreatorHomeHeader({
   name,
   handle,
   initial,
+  avatarUrl,
+  coverUrl,
   followers,
   posts,
   verified,
@@ -60,26 +67,30 @@ export function CreatorHomeHeader({
   );
   return (
     <header className="flex flex-col">
-      <div
-        className="relative h-44 w-full overflow-hidden rounded-xl ring-1 ring-inset ring-white/10 sm:h-56"
-        style={
+      <MediaImage
+        src={coverUrl}
+        alt={`${name}의 커버 이미지`}
+        gradientStyle={
           accent
             ? { backgroundImage: "linear-gradient(135deg, var(--creator-accent), var(--creator-accent-container))" }
             : { backgroundImage: "var(--gradient-brand)" }
         }
+        className="h-44 w-full rounded-xl ring-1 ring-inset ring-white/10 sm:h-56"
       >
         {/* 커버 광원·깊이 모티프(다층) — 크리에이터 색이 살아 있는 히어로.
-            상단 화이트 블룸(광원) + 하단 다크 블룸(부피) + 대각 시트 하이라이트 + 하단 스크림. */}
+            상단 화이트 블룸(광원) + 하단 다크 블룸(부피) + 대각 시트 하이라이트 + 하단 스크림.
+            실 커버 사진 위에서도 은은한 비네트/가독 스크림으로 기능해 그대로 유지. */}
         <div aria-hidden className="pointer-events-none absolute -right-12 -top-16 size-56 rounded-full bg-white/15 blur-2xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-16 -left-20 size-64 rounded-full bg-black/10 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent" />
         <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/25 to-transparent" />
-      </div>
+      </MediaImage>
 
       {/* 커버 아래 헤더(#5) — 아바타는 커버에 프로미넌트하게 오버랩하되, 이름·액션 버튼은
           커버에서 충분히 내려와 숨 쉬게 한다(커버와 밀착 방지·오버랩 리듬 정돈). */}
       <div className="px-2">
         <Avatar
+          src={avatarUrl}
           fallback={initial}
           size="xl"
           tone={handle}

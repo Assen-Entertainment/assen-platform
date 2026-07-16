@@ -166,6 +166,8 @@ export function CreatorProfileView({
         name={c.name}
         handle={c.handle}
         initial={initial}
+        avatarUrl={c.avatarUrl}
+        coverUrl={c.coverUrl}
         followers={c.followers}
         posts={c.posts}
         verified={c.verified}
@@ -284,6 +286,7 @@ export function CreatorProfileView({
                     title={p.title}
                     price={`₩${p.price.toLocaleString("ko-KR")}`}
                     meta={soldOut ? "품절" : p.meta}
+                    mediaUrl={p.mediaUrl}
                     actionDisabled={soldOut || goodsGated}
                     ctaLabel={soldOut ? "품절" : goodsGated ? "준비 중" : undefined}
                     onAction={() => router.push(`/store/${p.id}`)}

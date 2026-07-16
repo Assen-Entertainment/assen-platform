@@ -364,7 +364,7 @@ export function SearchView({
               <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-4" amount={0.08}>
                 {pl.map((p) => (
                   <StaggerItem key={p.id} lift>
-                    <MonetizableItem type={p.type} title={p.title} price={`₩${p.price.toLocaleString("ko-KR")}`} meta={p.meta} onAction={() => router.push(`/store/${p.id}`)} />
+                    <MonetizableItem type={p.type} title={p.title} price={`₩${p.price.toLocaleString("ko-KR")}`} meta={p.meta} mediaUrl={p.mediaUrl} onAction={() => router.push(`/store/${p.id}`)} />
                   </StaggerItem>
                 ))}
               </Stagger>

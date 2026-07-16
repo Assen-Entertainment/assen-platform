@@ -63,6 +63,7 @@ export function StoreView({ products }: { products: Page<Product> }) {
                 title={it.title}
                 price={`₩${it.price.toLocaleString("ko-KR")}`}
                 meta={soldOut ? "품절" : it.meta}
+                mediaUrl={it.mediaUrl}
                 actionDisabled={soldOut || goodsGated}
                 ctaLabel={soldOut ? "품절" : goodsGated ? "준비 중" : undefined}
                 // 크리에이터명 표기 + 프로필 링크(핸들 있을 때). 전역 상품(크리에이터 없음)은 생략.

@@ -9,6 +9,7 @@ import {
   ErrorState,
   ReportSheet,
   LockedOverlay,
+  MediaImage,
   Sheet,
   SheetContent,
   SheetTitle,
@@ -99,7 +100,12 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
                 mounted && p.isAdult && !adultVerified ? (
                   // 19+ 성인 콘텐츠 방어 게이트 — 서버가 이미 미인증 뷰어에게 숨기지만 UI도 블러 처리.
                   // 링크 대신 성인 인증 CTA(/age-gate)로 유도(포스트로 새지 않도록 비링크).
-                  <div className="relative aspect-video w-full" style={gradientStyle(p.id)}>
+                  <MediaImage
+                    src={p.mediaUrl}
+                    alt={`${p.creatorName}의 포스트 미디어`}
+                    gradientStyle={gradientStyle(p.id)}
+                    className="aspect-video w-full"
+                  >
                     <LockedOverlay
                       title="성인(19+) 콘텐츠"
                       description="본인인증 후 볼 수 있어요."
@@ -109,7 +115,7 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
                         </Button>
                       }
                     />
-                  </div>
+                  </MediaImage>
                 ) : p.locked ? (
                   // 잠긴 콘텐츠 — 프로필과 동일하게 seed 그라디언트 + 블러 LockedOverlay.
                   // 링크는 기존대로 /post/[id] 유지(중첩 인터랙티브 방지 위해 CTA 없이 전체 링크).
@@ -118,9 +124,14 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
                     aria-label={`${p.creatorName}의 멤버십 전용 포스트`}
                     className="block"
                   >
-                    <div className="relative aspect-video w-full" style={gradientStyle(p.id)}>
+                    <MediaImage
+                      src={p.mediaUrl}
+                      alt={`${p.creatorName}의 포스트 미디어`}
+                      gradientStyle={gradientStyle(p.id)}
+                      className="aspect-video w-full"
+                    >
                       <LockedOverlay title="멤버십 전용" description="멤버십에 가입하면 볼 수 있어요." />
-                    </div>
+                    </MediaImage>
                   </Link>
                 ) : (
                   <Link
@@ -128,9 +139,11 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
                     aria-label={`${p.creatorName}의 포스트 상세 보기`}
                     className="block"
                   >
-                    <div
+                    <MediaImage
+                      src={p.mediaUrl}
+                      alt={`${p.creatorName}의 포스트 미디어`}
+                      gradientStyle={gradientStyle(p.id)}
                       className="aspect-video w-full transition-opacity hover:opacity-90"
-                      style={gradientStyle(p.id)}
                     />
                   </Link>
                 )

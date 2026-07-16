@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { MediaImage } from "@/components/ui/media-image";
 import { gradientStyle } from "@/lib/placeholder";
 
 /**
@@ -31,8 +32,10 @@ export interface MonetizableItemProps extends React.HTMLAttributes<HTMLDivElemen
   title: string;
   price: string;
   meta?: string;
-  /** 썸네일/이미지 노드. 없으면 surface-container-high placeholder. */
+  /** 썸네일/이미지 노드. 없으면 surface-container-high placeholder(mediaUrl 있으면 그걸 우선 사용). */
   media?: React.ReactNode;
+  /** 실 미디어 URL(Codex #18) — media 노드가 없을 때 이 URL로 MediaImage를 렌더(없거나 로드 실패면 seed 그라디언트). */
+  mediaUrl?: string;
   /** 크리에이터 표기 슬롯(이름/프로필 링크 등) — 있을 때만 제목 아래 노출. 전역 상품은 생략. */
   creator?: React.ReactNode;
   /** 기본 CTA 라벨은 type 파생; 필요 시 오버라이드. */
@@ -43,8 +46,10 @@ export interface MonetizableItemProps extends React.HTMLAttributes<HTMLDivElemen
 }
 
 export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemProps>(
-  ({ type, title, price, meta, media, creator, ctaLabel, actionDisabled, onAction, className, ...props }, ref) => {
+  ({ type, title, price, meta, media, mediaUrl, creator, ctaLabel, actionDisabled, onAction, className, ...props }, ref) => {
     const t = TYPE_META[type];
+    const resolvedMedia =
+      media ?? (mediaUrl ? <MediaImage src={mediaUrl} alt={title} gradientStyle={gradientStyle(title)} className="h-full w-full" /> : undefined);
     return (
       <div
         ref={ref}
@@ -56,9 +61,9 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
       >
         <div
           className="relative aspect-[5/3] w-full overflow-hidden bg-surface-container-high"
-          style={media ? undefined : gradientStyle(title)}
+          style={resolvedMedia ? undefined : gradientStyle(title)}
         >
-          {media}
+          {resolvedMedia}
           {/* 타입 태그 — 미디어 위 프로스티드 칩(임의 커버색 위에서도 가독). */}
           <span className="absolute left-2.5 top-2.5 rounded-full bg-surface/85 px-2.5 py-1 text-caption font-medium text-on-surface shadow-1 backdrop-blur-sm">
             {t.tag}
