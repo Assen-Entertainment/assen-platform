@@ -1507,7 +1507,10 @@ export interface paths {
          * @description Begin social login: return the provider consent URL + an opaque state.
          *
          *     Fails closed (503) when no provider is wired (the mock is gated by
-         *     ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces.
+         *     ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces. The state is echoed to
+         *     the provider AND signed into a path-scoped httpOnly cookie, so the callback can be
+         *     bound to the browser + provider + redirect_uri that started the flow (anti
+         *     login-CSRF); the signed cookie needs no server-side store (cross-worker safe).
          */
         get: operations["apps_identity_api_social_start"];
         put?: never;
@@ -1534,6 +1537,11 @@ export interface paths {
          *     Delivery follows the requested surface (ADR-0002) — the web flow gets hardened
          *     httpOnly cookies. A first-time social identity requires terms/privacy + 만 14세
          *     consent (422 CONSENT_REQUIRED/UNDERAGE if missing); a returning one does not.
+         *
+         *     Anti login-CSRF (Codex #7): the signed state cookie set at ``/start`` is re-verified
+         *     against the echoed ``state`` + provider + redirect_uri BEFORE the code exchange, so a
+         *     callback forged by an attacker (no matching cookie, mismatched state, or a swapped
+         *     redirect_uri) is rejected (400) and can never mint tokens into the victim's browser.
          */
         post: operations["apps_identity_api_social_callback"];
         delete?: never;
