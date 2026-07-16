@@ -174,6 +174,15 @@ class Order(models.Model):
         choices=PaymentProvenance.choices,
         default=PaymentProvenance.LEGACY_UNKNOWN,
     )
+    # Fulfillment snapshot (mock/manual shipping — no real carrier integration; the
+    # creator/operator marks the order SHIPPING with a carrier + tracking number and
+    # then COMPLETED). ``tracking_*`` are blank until a physical order ships; a
+    # digital order is completed directly from PAID and carries no tracking. The
+    # timestamps stamp when each transition happened (NULL until it does).
+    tracking_carrier = models.CharField(max_length=60, blank=True, default="")
+    tracking_number = models.CharField(max_length=120, blank=True, default="")
+    shipped_at = models.DateTimeField(null=True, blank=True, default=None)
+    completed_at = models.DateTimeField(null=True, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

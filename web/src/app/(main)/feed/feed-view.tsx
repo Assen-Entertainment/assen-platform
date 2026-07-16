@@ -93,7 +93,7 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
               verified={p.verified}
               avatarFallback={p.creatorName.slice(0, 1)}
               avatarTone={p.creatorId}
-              body={p.body}
+              body={p.locked ? "멤버십 전용 콘텐츠예요" : p.body}
               media={
                 // 세션 복원 전(mounted=false)엔 게이트 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지
                 // (서버가 이미 미인증 뷰어에게 adult를 미반환하므로 실누출 0, 순수 시각 개선).
@@ -117,22 +117,25 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
                     />
                   </MediaImage>
                 ) : p.locked ? (
-                  // 잠긴 콘텐츠 — 프로필과 동일하게 seed 그라디언트 + 블러 LockedOverlay.
-                  // 링크는 기존대로 /post/[id] 유지(중첩 인터랙티브 방지 위해 CTA 없이 전체 링크).
-                  <Link
-                    href={`/post/${p.id}`}
-                    aria-label={`${p.creatorName}의 멤버십 전용 포스트`}
-                    className="block"
+                  // 잠긴 콘텐츠(서버가 body/mediaUrl을 빈 문자열로 redact) — 프로필/PDP와 동일하게
+                  // seed 그라디언트 + 블러 LockedOverlay + 구독 CTA. 중첩 인터랙티브 방지 위해 전체
+                  // 링크 대신 CTA만 클릭 가능(상세 이동은 PostCard 댓글 버튼으로 여전히 가능).
+                  <MediaImage
+                    src={p.mediaUrl}
+                    alt={`${p.creatorName}의 포스트 미디어`}
+                    gradientStyle={gradientStyle(p.id)}
+                    className="aspect-video w-full"
                   >
-                    <MediaImage
-                      src={p.mediaUrl}
-                      alt={`${p.creatorName}의 포스트 미디어`}
-                      gradientStyle={gradientStyle(p.id)}
-                      className="aspect-video w-full"
-                    >
-                      <LockedOverlay title="멤버십 전용" description="멤버십에 가입하면 볼 수 있어요." />
-                    </MediaImage>
-                  </Link>
+                    <LockedOverlay
+                      title="멤버십 전용"
+                      description="멤버십에 가입하면 볼 수 있어요."
+                      cta={
+                        <Button size="sm" asChild>
+                          <Link href="/membership">멤버십 구독하고 보기</Link>
+                        </Button>
+                      }
+                    />
+                  </MediaImage>
                 ) : (
                   <Link
                     href={`/post/${p.id}`}

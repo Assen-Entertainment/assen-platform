@@ -18,10 +18,11 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpRequest
+from django.utils import timezone
 from ninja import Router, Schema
 from pydantic import Field, field_validator
 
-from apps.admin_rbac.permissions import operator_required
+from apps.admin_rbac.permissions import has_min_role, operator_required
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.commerce.models import (
@@ -36,7 +37,7 @@ from apps.commerce.models import (
 )
 from apps.creator.models import Creator
 from apps.identity.auth import authed, fan_auth, resolve_optional_account
-from apps.identity.models import Account
+from apps.identity.models import Account, Role
 from apps.membership.services import active_subscription
 from apps.notification.models import NotificationKind
 from apps.notification.services import notify
@@ -617,6 +618,19 @@ class OrderShippingOut(Schema):
     address2: str
 
 
+class OrderTrackingOut(Schema):
+    """Shipment tracking echoed once a physical order has been shipped (#11).
+
+    Populated by the creator/operator at ``/orders/{id}/ship``; ``None`` on an order
+    that has not shipped (still PAID, or a digital order completed without shipping).
+    Mirrors the web ``Order.tracking`` shape (``{carrier, number}``) — carrier name
+    and tracking number only, no PII.
+    """
+
+    carrier: str
+    number: str
+
+
 class OrderOut(Schema):
     """A fan's order row (maps to the frontend ``Order`` type).
 
@@ -642,6 +656,9 @@ class OrderOut(Schema):
     total: int
     creator_name: str | None = None
     refund: OrderRefundOut | None = None
+    # Shipment tracking once the order has shipped (#11); ``None`` until then. Carrier
+    # + number only (no PII), so it is safe on the list as well as the detail.
+    tracking: OrderTrackingOut | None = None
 
 
 class OrderDetailOut(OrderOut):
@@ -731,6 +748,11 @@ def _order_common_fields(order: Order) -> dict[str, Any]:
         if refunds
         else None
     )
+    tracking = (
+        OrderTrackingOut(carrier=order.tracking_carrier, number=order.tracking_number)
+        if order.tracking_carrier or order.tracking_number
+        else None
+    )
     return {
         "id": order.id,
         "status": order.status,
@@ -752,6 +774,7 @@ def _order_common_fields(order: Order) -> dict[str, Any]:
         "total": order.total,
         "creator_name": creator_name,
         "refund": refund,
+        "tracking": tracking,
     }
 
 
@@ -1364,7 +1387,191 @@ def request_refund(
     return 200, _order_detail_out(refreshed)
 
 
+# --------------------------------------------------------------------------- #
+# Fulfillment FSM (#11 — creator/operator drives PAID → SHIPPING → COMPLETED).
+#
+# MOCK/manual shipping: no real carrier integration — the product's creator-owner
+# (or an operator) marks a PAID order SHIPPING with a carrier + tracking number,
+# then COMPLETED. A digital-only order (no goods line) is "delivered" by completing
+# it directly from PAID, skipping the shipping step (digital entitlement delivery).
+#
+# Authorization mirrors the studio owner guard + the operator RBAC ladder: only the
+# creator that owns the order's product, or an operator+, may transition it. A
+# non-owner (including the buyer) can't even load the order (leak-free 404), so a fan
+# can never self-transition their own order. Each transition is sealed by the same
+# conditional-UPDATE rowcount gate ``cancel_order`` uses: only the request whose
+# ``filter(status=<from>).update(<to>)`` touches a row proceeds, so a concurrent
+# double-ship / double-complete updates 0 rows and 422s without re-stamping.
+# --------------------------------------------------------------------------- #
+class ShipIn(Schema):
+    """Creator/operator payload to ship a PAID order (carrier + tracking number)."""
+
+    carrier: str = Field(min_length=1, max_length=60)
+    tracking_number: str = Field(min_length=1, max_length=120)
+
+
+def _load_fulfillable_order(order_id: str, account: Account) -> Order | None:
+    """Load an order ``account`` may fulfill (prefetched), or ``None`` (→ 404, no leak).
+
+    An operator+ may fulfill any order; anyone else may fulfill only an order whose
+    product is owned by a creator they operate. A buyer or unrelated caller matches
+    nothing → ``None`` (404), so order existence never leaks to a non-fulfiller and a
+    fan can never self-transition their own order.
+    """
+    base = Order.objects.filter(id=order_id).prefetch_related(
+        "items", "items__product", "items__product__creator", "refund_requests"
+    )
+    if has_min_role(account, minimum=Role.OPERATOR.value):
+        return base.first()
+    return base.filter(items__product__creator__owner=account).first()
+
+
+@orders_router.post(
+    "/{order_id}/ship",
+    response={200: OrderDetailOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("30/min"),
+)
+def ship_order(
+    request: HttpRequest, order_id: str, payload: ShipIn
+) -> tuple[int, OrderDetailOut | CommerceError]:
+    """Mark one of the caller's orders SHIPPING (creator-owner or operator; from PAID).
+
+    Records the carrier + tracking number and stamps ``shipped_at``. The
+    PAID→SHIPPING transition is sealed by the conditional-UPDATE rowcount gate
+    (project pattern): shipping an order not in PAID (already shipping/completed/
+    cancelled) updates 0 rows → 422 ``OrderNotShippable``. A digital order may skip
+    this step and complete directly from PAID (see ``complete_order``).
+    """
+    account = authed(request)
+    order = _load_fulfillable_order(order_id, account)
+    if order is None:
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
+    carrier = payload.carrier.strip()
+    number = payload.tracking_number.strip()
+    now = timezone.now()
+    with transaction.atomic():
+        transitioned = Order.objects.filter(
+            id=order.id, status=OrderStatus.PAID.value
+        ).update(
+            status=OrderStatus.SHIPPING.value,
+            tracking_carrier=carrier,
+            tracking_number=number,
+            shipped_at=now,
+        )
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="배송 처리할 수 없는 주문 상태예요.",
+                code=ErrorCode.ORDER_NOT_SHIPPABLE.value,
+            )
+    # Reflect the committed transition on the prefetched instance for the response.
+    order.status = OrderStatus.SHIPPING.value
+    order.tracking_carrier = carrier
+    order.tracking_number = number
+    order.shipped_at = now
+    logger.info(
+        "commerce.order.shipped",
+        extra={"order_id": order.id, "actor_id": str(account.fan_id)},
+    )
+    return 200, _order_detail_out(order)
+
+
+@orders_router.post(
+    "/{order_id}/complete",
+    response={200: OrderDetailOut, 404: CommerceError, 422: CommerceError},
+    throttle=user_write_throttle("30/min"),
+)
+def complete_order(
+    request: HttpRequest, order_id: str
+) -> tuple[int, OrderDetailOut | CommerceError]:
+    """Mark one of the caller's orders COMPLETED (creator-owner or operator).
+
+    A physical (goods) order completes only from SHIPPING (it must ship first). A
+    digital-only order (no goods line) completes directly from PAID — that is how a
+    digital/coupon/ticket entitlement is "delivered" without a shipping step (#11 §3).
+    The transition is sealed by the conditional-UPDATE rowcount gate: completing from
+    any other state updates 0 rows → 422 ``OrderNotCompletable``.
+    """
+    account = authed(request)
+    order = _load_fulfillable_order(order_id, account)
+    if order is None:
+        return 404, CommerceError(
+            detail="주문을 찾을 수 없어요.", code=ErrorCode.ORDER_NOT_FOUND.value
+        )
+    # A goods line requires a prior shipping step; a digital-only order (no goods)
+    # may be completed straight from PAID (digital delivery), so widen the allowed
+    # from-states for it.
+    has_goods = any(
+        line.item_type == ProductType.GOODS.value for line in order.items.all()
+    )
+    from_states = [OrderStatus.SHIPPING.value]
+    if not has_goods:
+        from_states.append(OrderStatus.PAID.value)
+    now = timezone.now()
+    with transaction.atomic():
+        transitioned = Order.objects.filter(
+            id=order.id, status__in=from_states
+        ).update(status=OrderStatus.COMPLETED.value, completed_at=now)
+        if transitioned == 0:
+            return 422, CommerceError(
+                detail="완료 처리할 수 없는 주문 상태예요.",
+                code=ErrorCode.ORDER_NOT_COMPLETABLE.value,
+            )
+    order.status = OrderStatus.COMPLETED.value
+    order.completed_at = now
+    logger.info(
+        "commerce.order.completed",
+        extra={"order_id": order.id, "actor_id": str(account.fan_id)},
+    )
+    return 200, _order_detail_out(order)
+
+
 api.add_router("/orders", orders_router)
+
+
+# --------------------------------------------------------------------------- #
+# Studio order queue (#11 — the creator's own orders for fulfillment).
+# Owner guard mirrors ``studio_list_products``: the caller must operate a creator,
+# and the scope is always that creator's products (never taken from the request), so
+# one creator can never see another's orders. Address-free rows (``OrderOut``) reuse
+# the fan list schema — the delivery address is exposed only on the seller-scoped
+# ship/complete responses (one order at a time), never enumerated across the list.
+# --------------------------------------------------------------------------- #
+studio_orders_router = Router(auth=fan_auth, tags=["studio-commerce"])
+
+
+@studio_orders_router.get("", response={200: OrderPage, 403: CommerceError})
+def studio_list_orders(
+    request: HttpRequest, cursor: str | None = None, limit: int | None = None
+) -> tuple[int, OrderPage | CommerceError]:
+    """List orders for the caller's creator's products, newest first, cursor-paginated.
+
+    Scoped to the caller's own creator (403 if they operate none) — an order is
+    included when any of its lines is a product this creator owns, so another
+    creator's orders never appear.
+    """
+    account = authed(request)
+    creator = _owner_creator(account)
+    if creator is None:
+        return 403, CommerceError(
+            detail="크리에이터만 주문을 관리할 수 있어요.", code=ErrorCode.OWNER_REQUIRED.value
+        )
+    queryset = (
+        Order.objects.filter(items__product__creator=creator)
+        .distinct()
+        .prefetch_related(
+            "items", "items__product", "items__product__creator", "refund_requests"
+        )
+        .order_by("-created_at", "id")
+    )
+    items, next_cursor = paginate(queryset, cursor=cursor, limit=limit)
+    return 200, OrderPage(
+        items=[_order_out(o) for o in items], next_cursor=next_cursor
+    )
+
+
+api.add_router("/studio/orders", studio_orders_router)
 
 
 # --------------------------------------------------------------------------- #
