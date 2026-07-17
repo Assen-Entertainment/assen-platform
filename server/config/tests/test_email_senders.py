@@ -39,6 +39,7 @@ _EMAIL = "fan@example.com"
 # exercised against separators that must survive query encoding.
 _TOKEN = "eyJhY2NvdW50X2lkIjoxfQ:1uXyZa:signature-part_0123"
 _FROM = "no-reply@assen.example"
+_REPLY_TO = "contact@assen.example"
 _WEB = "https://assen.example"
 _LOCMEM = "django.core.mail.backends.locmem.EmailBackend"
 
@@ -250,6 +251,57 @@ def test_ses_send_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
         ).send_verification(email=_EMAIL, token=_TOKEN)
     # Chained, so the original SES error stays diagnosable in the traceback/Sentry.
     assert excinfo.value.__cause__ is boto_error
+
+
+# --- optional Reply-To --------------------------------------------------------
+
+
+@override_settings(**_SMTP, EMAIL_BACKEND=_LOCMEM, EMAIL_REPLY_TO_ADDRESS=_REPLY_TO)
+def test_smtp_sets_reply_to_when_configured() -> None:
+    # A configured Reply-To rides on the message so a fan who replies reaches a real
+    # inbox — without disturbing the From: address.
+    SmtpEmailSender(from_email=_FROM, web_base_url=_WEB).send_verification(
+        email=_EMAIL, token=_TOKEN
+    )
+    message = mail.outbox[0]
+    assert message.reply_to == [_REPLY_TO]
+    assert message.from_email == _FROM
+
+
+@override_settings(**_SMTP, EMAIL_BACKEND=_LOCMEM, EMAIL_REPLY_TO_ADDRESS="")
+def test_smtp_omits_reply_to_when_unset() -> None:
+    # Empty setting = unchanged behavior: Django's default empty reply_to, never [""].
+    SmtpEmailSender(from_email=_FROM, web_base_url=_WEB).send_verification(
+        email=_EMAIL, token=_TOKEN
+    )
+    assert mail.outbox[0].reply_to == []
+
+
+@override_settings(**_SES, EMAIL_REPLY_TO_ADDRESS=_REPLY_TO)
+def test_ses_sets_reply_to_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = _StubSesClient()
+    _stub_ses(monkeypatch, stub)
+
+    SesEmailSender(
+        region="ap-northeast-2", from_email=_FROM, web_base_url=_WEB
+    ).send_verification(email=_EMAIL, token=_TOKEN)
+
+    call = stub.calls[0]
+    assert call["ReplyToAddresses"] == [_REPLY_TO]
+    assert call["FromEmailAddress"] == _FROM
+
+
+@override_settings(**_SES, EMAIL_REPLY_TO_ADDRESS="")
+def test_ses_omits_reply_to_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Unset must leave the key off the send_email call entirely — not an empty list.
+    stub = _StubSesClient()
+    _stub_ses(monkeypatch, stub)
+
+    SesEmailSender(
+        region="ap-northeast-2", from_email=_FROM, web_base_url=_WEB
+    ).send_verification(email=_EMAIL, token=_TOKEN)
+
+    assert "ReplyToAddresses" not in stub.calls[0]
 
 
 # --- PII safety ---------------------------------------------------------------

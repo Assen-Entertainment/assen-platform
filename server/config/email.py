@@ -131,6 +131,20 @@ def render_verification(*, web_base_url: str, token: str) -> tuple[str, str]:
     return VERIFY_SUBJECT, body
 
 
+def _reply_to_addresses() -> list[str]:
+    """Return the verification mail's Reply-To list, or ``[]`` when it is unset.
+
+    Optional by design: ``EMAIL_REPLY_TO_ADDRESS`` empty (the default) yields no
+    Reply-To header — unchanged behavior — while a set value (normalized with
+    ``.strip()`` exactly like ``from_email`` in :func:`email_sender`) routes replies to a
+    real inbox instead of the no-reply From: box. Shared by both real senders so SES and
+    SMTP add the same header, or omit it identically — an empty setting must never become
+    a stray ``[""]``.
+    """
+    reply_to = settings.EMAIL_REPLY_TO_ADDRESS.strip()
+    return [reply_to] if reply_to else []
+
+
 def _log_verification_sent(event: str, email: str) -> None:
     """Log a delivery event carrying NO PII and NO token.
 
@@ -163,8 +177,14 @@ class SmtpEmailSender(EmailSender):
         subject, body = render_verification(
             web_base_url=self._web_base_url, token=token
         )
+        # reply_to only when configured: _reply_to_addresses() is [] when unset, which
+        # Django treats as "no Reply-To" (identical to omitting it) — never a stray [""].
         message = EmailMessage(
-            subject=subject, body=body, from_email=self._from_email, to=[email]
+            subject=subject,
+            body=body,
+            from_email=self._from_email,
+            to=[email],
+            reply_to=_reply_to_addresses(),
         )
         try:
             # fail_silently=False is Django's default; it is explicit here because a
@@ -214,17 +234,23 @@ class SesEmailSender(EmailSender):
         subject, body = render_verification(
             web_base_url=self._web_base_url, token=token
         )
+        send_kwargs: dict[str, Any] = {
+            "FromEmailAddress": self._from_email,
+            "Destination": {"ToAddresses": [email]},
+            "Content": {
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
+                }
+            },
+        }
+        # ReplyToAddresses is a top-level SESv2 send_email argument; include it only when
+        # configured so an unset Reply-To leaves the key off entirely (no empty list).
+        reply_to = _reply_to_addresses()
+        if reply_to:
+            send_kwargs["ReplyToAddresses"] = reply_to
         try:
-            self._ses_client().send_email(
-                FromEmailAddress=self._from_email,
-                Destination={"ToAddresses": [email]},
-                Content={
-                    "Simple": {
-                        "Subject": {"Data": subject, "Charset": "UTF-8"},
-                        "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
-                    }
-                },
-            )
+            self._ses_client().send_email(**send_kwargs)
         except Exception as exc:
             # Broad by intent: botocore raises ClientError/BotoCoreError (and their many
             # subclasses) plus credential-resolution errors. Every one of them means the

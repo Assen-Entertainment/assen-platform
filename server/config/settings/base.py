@@ -60,12 +60,18 @@ ENABLE_MOCK_EMAIL: bool = False
 # - EMAIL_SENDER_BACKEND: "ses" | "smtp" | "" (none). Anything else = none.
 # - EMAIL_FROM_ADDRESS: the From: address of the verification mail (both backends).
 #   Must be an SES-verified identity when the backend is "ses".
+# - EMAIL_REPLY_TO_ADDRESS: OPTIONAL Reply-To: of the verification mail (both backends).
+#   Empty (the default) → no Reply-To header, i.e. unchanged behavior. NOT part of the
+#   fully-configured gate — a sender is valid with or without it, so its absence never
+#   triggers the 503 fail-closed path. Set it (e.g. contact@assenent.com) so a fan who
+#   replies reaches a real inbox instead of the no-reply From: box.
 # - WEB_BASE_URL: origin of the WEB app the verify link points at
 #   ({WEB_BASE_URL}/verify-email?token=…) — the fan lands on a page, which then calls
 #   the confirm endpoint. Required by both backends: without it the mail could carry no
 #   usable link, so its absence fails closed too.
 EMAIL_SENDER_BACKEND: str = env("EMAIL_SENDER_BACKEND", default="")
 EMAIL_FROM_ADDRESS: str = env("EMAIL_FROM_ADDRESS", default="")
+EMAIL_REPLY_TO_ADDRESS: str = env("EMAIL_REPLY_TO_ADDRESS", default="")
 WEB_BASE_URL: str = env("WEB_BASE_URL", default="")
 
 # AWS SES (EMAIL_SENDER_BACKEND=ses). Only the region is configured: boto3 signs with
