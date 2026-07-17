@@ -20,13 +20,27 @@ const nextConfig = {
       // { protocol: "https", hostname: "**.assen.example", pathname: "/**" },
     ],
   },
-  // dev 동일 오리진 프록시 — 브라우저의 `/api/*` 요청을 백엔드로 포워딩한다.
+  // dev 동일 오리진 프록시 — 브라우저의 `/api/*`·`/media/*` 요청을 백엔드로 포워딩한다.
   // 목적: 웹과 API가 같은 오리진처럼 보이게 해 쿠키(SameSite=Lax)가 자연 송신되고
   // CORS가 불필요해진다(SDLC 11 옵션 B 정합). SSR fetch는 프록시를 거치지 않고
   // 서버 전용 API_INTERNAL_URL로 직접 호출한다(client.ts).
+  //
+  // `/media/*`는 **프로덕션에는 필요 없고 로컬/CI에만 필요하다** — 위상이 다르기 때문이다:
+  //   prod  : 브라우저 → 단일 ALB 오리진 → 리스너 규칙이 /media/*를 Django로
+  //           (infra/terraform/web.tf) → Next는 이 요청을 아예 보지 않는다.
+  //   로컬/CI: 브라우저 → Next(:3000) 직접 → ALB가 없으므로 이 rewrite가 그 hop을 대신한다.
+  // 미디어는 이제 모든 백엔드에서 Django의 게이트된 뷰가 서빙하고(apps/uploads/media.py),
+  // Upload.url은 사이트 상대 `/media/uploads/<uuid>.<ext>`로 저장돼 <img src>에 그대로 실린다
+  // (components/ui/media-image.tsx). 이 rewrite가 없으면 로컬/CI에서 업로드 이미지가 전부 404다.
+  // ⚠️ 그 404가 눈에 안 띄는 이유: MediaImage의 onError 폴백이 조용히 그라디언트
+  //    플레이스홀더로 되돌린다 — 깨진 이미지가 "디자인"처럼 보인다. 그래서 실 GET을 하는
+  //    e2e 단언이 필요하다(e2e/studio-upload.spec.ts).
   async rewrites() {
     const target = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000";
-    return [{ source: "/api/:path*", destination: `${target}/api/:path*` }];
+    return [
+      { source: "/api/:path*", destination: `${target}/api/:path*` },
+      { source: "/media/:path*", destination: `${target}/media/:path*` },
+    ];
   },
   // 기본 보안 헤더(SDLC 11 §4). CSP는 인라인/서드파티 감사 후 별도 도입.
   async headers() {

@@ -7054,7 +7054,7 @@
             }
           }
         },
-        "description": "Advance a report's handling status (operator+).",
+        "description": "Advance a report's handling status (operator+).\n\nThis is also the media-takedown control: moving a report that targets an upload to\n``actioned`` stops that image being served (report-driven human moderation). The\nupload row survives — takedown is a status change, never a delete.",
         "tags": [
           "safety"
         ],
@@ -14088,6 +14088,18 @@
               }
             ],
             "title": "Visit Id"
+          },
+          "upload_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Id"
           }
         },
         "required": [
@@ -14125,7 +14137,7 @@
         "type": "object"
       },
       "FanReportCreateIn": {
-        "description": "Fan self-report intake (ASS-110): a report type plus free-text narrative.\n\nOnly the report type and narrative are accepted. The server fixes everything\nan attacker should not control — the reporter is the authenticated fan,\n``reporter_type`` is ``fan``, and severity is derived from the type (a fan\ncannot self-assign critical, nor downgrade a threat). A structured ``cast_id``\nis intentionally NOT accepted on the fan surface: it would be untrusted free\ntext riding into the append-only event log (a PII channel that bypasses the\nnarrative-only restricted store). The fan names the cast in the narrative; an\noperator links the structured cast id during triage.\n\n``report_type`` is length-bounded so an oversized value is rejected by schema\nvalidation (never echoed); the unknown-type error is generic, so a fan cannot\nsmuggle PII into ``report_type`` and have it reflected back in a 422.",
+        "description": "Fan self-report intake (ASS-110): a report type plus free-text narrative.\n\nOnly the report type and narrative are accepted. The server fixes everything\nan attacker should not control — the reporter is the authenticated fan,\n``reporter_type`` is ``fan``, and severity is derived from the type (a fan\ncannot self-assign critical, nor downgrade a threat). A structured ``cast_id``\nis intentionally NOT accepted on the fan surface: it would be untrusted free\ntext riding into the append-only event log (a PII channel that bypasses the\nnarrative-only restricted store). The fan names the cast in the narrative; an\noperator links the structured cast id during triage.\n\n``report_type`` is length-bounded so an oversized value is rejected by schema\nvalidation (never echoed); the unknown-type error is generic, so a fan cannot\nsmuggle PII into ``report_type`` and have it reflected back in a 422.\n\n``upload_id`` is the one structured target a fan MAY supply, and it does not\nreopen the free-text hole cast_id would: it is a server-minted UUID this platform\nhanded the fan from its own upload endpoint, resolved to a real row before use.\nIt is what makes an uploaded image reportable — the entry point for report-driven\nmedia moderation.",
         "properties": {
           "report_type": {
             "maxLength": 64,
@@ -14137,6 +14149,18 @@
             "maxLength": 2000,
             "title": "Narrative",
             "type": "string"
+          },
+          "upload_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Id"
           }
         },
         "required": [

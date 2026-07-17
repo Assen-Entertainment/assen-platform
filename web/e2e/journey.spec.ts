@@ -3,7 +3,7 @@ import { DEMO_FAN_EMAIL, DEMO_PASSWORD, loginViaEmail } from "./helpers/auth";
 
 /**
  * 정본 통합 저니 — 웹(Next, live 모드) + 서버(Django, seed_demo) 결합.
- * 기존 scripts/integration-smoke.mjs의 14스텝을 Playwright Test로 이관(단언·auto-wait·trace·재시도).
+ * 14스텝 저니의 유일한 정본(단언·auto-wait·trace·재시도).
  *
  * 전제: Django 127.0.0.1:8000(dev·seed_demo), Next(NEXT_PUBLIC_API_URL=/api·rewrites)가
  *       playwright.config baseURL로 접근 가능. 서버 기동 절차는 playwright.config 주석 참조.

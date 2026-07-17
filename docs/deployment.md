@@ -138,20 +138,31 @@ alone (gunicorn) and the static composed shell.
 
 ## Production Image Build
 
-Build the backend container image without deploying:
+Build the release container images (**both** the api and the web image — the web app
+is part of the release, not a manual step) without deploying:
 
 ```sh
-ASSEN_IMAGE_REPOSITORY=assen-platform-api scripts/build-prod-image.sh
+ASSEN_IMAGE_REPOSITORY=assen-platform-api \
+ASSEN_WEB_IMAGE_REPOSITORY=assen-platform-web \
+ASSEN_PROD_SITE_URL=https://<production-host> \
+scripts/build-prod-image.sh
 ```
 
 For ECR:
 
 ```sh
 ASSEN_ECR_REPOSITORY_URI=<aws-account>.dkr.ecr.ap-northeast-2.amazonaws.com/assen-platform-api \
+ASSEN_WEB_ECR_REPOSITORY_URI=<aws-account>.dkr.ecr.ap-northeast-2.amazonaws.com/assen-platform-web \
+ASSEN_PROD_SITE_URL=https://<production-host> \
 scripts/build-prod-image.sh
 ```
 
-The image is tagged with both:
+`ASSEN_PROD_SITE_URL` is mandatory: Next.js inlines `NEXT_PUBLIC_*` at build time, so
+the public origin cannot be fixed later with runtime env. The script fails closed
+rather than bake the `http://localhost:3000` Dockerfile default into a prod image.
+(`deploy-prod-ecs.sh` passes it, defaulted to the same-origin `ASSEN_PROD_API_URL`.)
+
+Each image is tagged with both:
 
 - `${COMMIT_SHA}`
 - `${ASSEN_PROD_IMAGE_TAG:-prod-candidate}`
@@ -162,6 +173,9 @@ Production deployment is human-gated. The script refuses to run unless:
 
 - `ASSEN_PROD_DEPLOY_APPROVED=1` is set after human approval.
 - The current branch is `main`, unless `ASSEN_ALLOW_NON_MAIN_PROD_DEPLOY=1`.
+  ⚠️ That variable is a **bypass**, not a switch: `1` *disables* the main check. The
+  `deploy.yml` workflow therefore always sets it to `""` — a dispatch from a non-main
+  ref must fail loudly. Never wire it to a branch condition.
 - The tracked worktree is clean.
 - The latest GitHub CI run for the commit is `completed success`, unless
   `ASSEN_SKIP_GITHUB_CI_CHECK=1`.
@@ -172,11 +186,15 @@ Required environment:
 AWS_REGION=ap-northeast-2
 ASSEN_PROD_DEPLOY_APPROVED=1
 ASSEN_ECR_REPOSITORY_URI=<aws-account>.dkr.ecr.ap-northeast-2.amazonaws.com/assen-platform-api
+ASSEN_WEB_ECR_REPOSITORY_URI=<aws-account>.dkr.ecr.ap-northeast-2.amazonaws.com/assen-platform-web
 ASSEN_ECS_CLUSTER=<ecs-cluster-name>
 ASSEN_ECS_API_SERVICE=<api-service-name>
 ASSEN_ECS_WORKER_SERVICE=<celery-worker-service-name>
 ASSEN_ECS_BEAT_SERVICE=<celery-beat-service-name>
+ASSEN_ECS_WEB_SERVICE=<web-service-name>
 ASSEN_PROD_API_URL=https://<production-api-host>
+# optional — defaults to ASSEN_PROD_API_URL (web + api are same-origin behind one ALB)
+ASSEN_PROD_SITE_URL=https://<production-host>
 ```
 
 Run:
