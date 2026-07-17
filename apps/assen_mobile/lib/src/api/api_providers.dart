@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:api_client/api_client.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
+import 'package:assen_mobile/src/verify/verify_gate.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,8 +62,9 @@ Duration? noRetry(int retryCount, Object error) => null;
 /// The configured [Dio] HTTP client.
 ///
 /// Points at [apiClientConfigProvider]'s base URL and installs the
-/// [AuthInterceptor] so authorized requests carry the bearer token — the
-/// hand-written glue behind which the generated `api_client` (P6) will sit.
+/// [AuthInterceptor] (bearer token + 401 rotation) and the [KycGateInterceptor]
+/// (the global 본인인증 gate) — the hand-written glue behind which the generated
+/// `api_client` (P6) will sit.
 final dioProvider = Provider<Dio>((ref) {
   final config = ref.watch(apiClientConfigProvider);
   final dio = Dio(
@@ -75,9 +77,40 @@ final dioProvider = Provider<Dio>((ref) {
   // The interceptor replays a rotated request through this same [dio]; it is
   // handed the instance directly (never `ref.read(dioProvider)`, which would be
   // a self-dependency).
-  dio.interceptors.add(AuthInterceptor(ref, dio));
+  dio.interceptors.addAll([AuthInterceptor(ref, dio), KycGateInterceptor(ref)]);
   return dio;
 });
+
+/// Raises the global 본인인증 gate when the server refuses a gated interaction.
+///
+/// The mobile counterpart of the web's single global gate: any 403 carrying
+/// [kycGateErrorCode] — from a follow, subscribe, order, comment, or like —
+/// flips [kycGateProvider], and the router redirects to the verify screen. The
+/// error still propagates untouched so the originating call site keeps its own
+/// failure handling; this interceptor only observes.
+///
+/// Installed after [AuthInterceptor] so a 401 that rotates and replays is
+/// judged on the replay's outcome: the replay re-enters the full chain, so a
+/// 403 gate on it is still seen. Reads only the stable `code` — never the body,
+/// which could carry PII.
+class KycGateInterceptor extends Interceptor {
+  /// Creates an interceptor raising the gate on [_ref].
+  KycGateInterceptor(this._ref);
+
+  final Ref _ref;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (err.response?.statusCode == 403) {
+      final data = err.response?.data;
+      final code = data is Map ? data['code'] : null;
+      if (code == kycGateErrorCode) {
+        _ref.read(kycGateProvider.notifier).raise();
+      }
+    }
+    handler.next(err);
+  }
+}
 
 /// Attaches the opaque access token to requests and rotates it on a 401.
 ///
@@ -187,9 +220,15 @@ class AuthInterceptor extends Interceptor {
 
   /// Whether [path] is an auth endpoint that must not trigger a rotation-retry
   /// (avoids recursing into `/refresh` and re-driving login/signup/logout).
+  ///
+  /// Matches the email surface too (`/fan/login/email`, `/fan/signup/email`,
+  /// `/fan/verify-email`) — but deliberately NOT the 본인인증 endpoints
+  /// (`/fan/verify/start`, `/fan/verify/confirm`), which are authorized calls
+  /// that must rotate on a 401 like any other.
   bool _isAuthEndpoint(String path) =>
       path.contains('/fan/refresh') ||
       path.contains('/fan/login') ||
       path.contains('/fan/signup') ||
+      path.contains('/fan/verify-email') ||
       path.contains('/fan/logout');
 }

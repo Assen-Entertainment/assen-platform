@@ -1,9 +1,9 @@
-"""Email + password fan auth (the email counterpart of ``register_fan``).
+"""Email + password fan auth (the credential counterpart of ``register_or_login_social``).
 
-Additive to phone OTP / social login (ASS-98): turns an email + password + mandatory
-consent into a fan :class:`~apps.identity.models.Account`, sends a (mock) verification
-mail, and — only after the fan confirms the link — issues a token pair via the
-**unchanged** token core. Email verification is required before login.
+Alongside social login (ASS-98): turns an email + password + mandatory consent into a
+fan :class:`~apps.identity.models.Account`, sends a (mock) verification mail, and —
+only after the fan confirms the link — issues a token pair via the **unchanged** token
+core. Email verification is required before login.
 
 Identity model: an email account keys on ``Account.email`` (plaintext EmailField +
 the ``uniq_fan_email`` partial unique), NOT on a hashed ``auth_subject_hash`` — email
@@ -13,7 +13,7 @@ hasher via :func:`make_password`), the same field staff logins use.
 
 Privacy: email is raw PII kept only to send mail; it is cleared on withdrawal
 (:func:`apps.identity.services.withdraw_account`). Consent (terms/privacy + 만 14세)
-is mandatory on first signup, exactly as phone/social.
+is mandatory on first signup, exactly as social.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def register_fan_email(
     """Create (or reuse an unverified) email account, record consent, send verify mail.
 
     Rejects missing terms/privacy consent, an unconfirmed 만 14세 floor, and a too-short
-    password (the same mandatory gates as phone signup). A duplicate **verified** email
+    password (the same mandatory gates as social signup). A duplicate **verified** email
     is refused (``EMAIL_ALREADY_REGISTERED``); a duplicate **unverified** one is reused
     — password/nickname updated and a fresh verification re-sent — so a fan who never
     confirmed can retry without being permanently blocked by their own abandoned row.
@@ -131,7 +131,8 @@ def register_fan_email(
     )
     if marketing_consent:
         # The reachable marketing channel at email signup is email (the fan gave one);
-        # false/missing records no opt-in (fail-closed), mirroring register_fan's SMS.
+        # push/sms stay default-off until /settings/notifications. False/missing records
+        # no opt-in (fail-closed) — MarketingConsent treats an absent row as not opted in.
         set_marketing_consent(account=account, channel="email", enabled=True)
 
     token = make_verification_token(account_id=account.pk, email=account.email)

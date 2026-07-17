@@ -1,10 +1,11 @@
-// Unit tests for the auth controller: OTP request delegation, login/signup
-// starting a persisted session, an unregistered login surfacing a typed error,
-// single-flight refresh rotation, a failed rotation clearing the session, and
-// sign-out clearing stored tokens. R14 race hardening: a sign-out beats an
-// in-flight refresh, and a non-Dio rotation failure (store throw / malformed
-// refresh) still fails closed. Backed by an in-memory token store and a fake
-// auth API — no network, no platform channel.
+// Unit tests for the auth controller: email login starting a persisted session,
+// a bad password surfacing a typed error, signup issuing no session until the
+// emailed link is verified, verify-email starting the session, single-flight
+// refresh rotation, a failed rotation clearing the session, and sign-out
+// clearing stored tokens. R14 race hardening: a sign-out beats an in-flight
+// refresh, and a non-Dio rotation failure (store throw / malformed refresh)
+// still fails closed. Backed by an in-memory token store and a fake auth API —
+// no network, no platform channel.
 
 import 'dart:async';
 
@@ -65,7 +66,7 @@ class _FakeAuthApi implements AuthApi {
   final Completer<void>? refreshGate;
   final bool malformedRefresh;
 
-  final List<String> otpRequests = [];
+  int signupCount = 0;
   int refreshCount = 0;
   int logoutCount = 0;
 
@@ -74,13 +75,13 @@ class _FakeAuthApi implements AuthApi {
     refreshToken: 'refresh-1',
   );
 
-  @override
-  Future<void> requestOtp(String phone) async => otpRequests.add(phone);
+  /// The token a dev/test server echoes back from signup.
+  static const String devVerificationToken = 'verify-token-1';
 
   @override
-  Future<AuthTokens> login({
-    required String phone,
-    required String otp,
+  Future<AuthTokens> loginEmail({
+    required String email,
+    required String password,
   }) async {
     final error = loginError;
     if (error != null) throw error;
@@ -88,13 +89,21 @@ class _FakeAuthApi implements AuthApi {
   }
 
   @override
-  Future<AuthTokens> signup({
-    required String phone,
-    required String otp,
+  Future<String> signupEmail({
+    required String email,
+    required String password,
     required String nickname,
     required bool consentTerms,
     required bool consentPrivacy,
-  }) async => _issued;
+    required bool ageOver14,
+    bool marketingConsent = false,
+  }) async {
+    signupCount++;
+    return devVerificationToken;
+  }
+
+  @override
+  Future<AuthTokens> verifyEmail(String token) async => _issued;
 
   @override
   Future<AuthTokens> refresh(String refreshToken) async {
@@ -139,25 +148,14 @@ ProviderContainer _container(_FakeAuthApi api, _InMemoryTokenStore store) {
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
 void main() {
-  test('requestOtp forwards the phone to the API', () async {
-    final api = _FakeAuthApi();
-    final container = _container(api, _InMemoryTokenStore());
-
-    await container
-        .read(authControllerProvider.notifier)
-        .requestOtp('010-1234-5678');
-
-    expect(api.otpRequests, ['010-1234-5678']);
-  });
-
-  test('login persists the token pair and authenticates', () async {
+  test('email login persists the token pair and authenticates', () async {
     final api = _FakeAuthApi();
     final store = _InMemoryTokenStore();
     final container = _container(api, store);
 
     await container
         .read(authControllerProvider.notifier)
-        .login(phone: '01012345678', otp: '123456');
+        .loginEmail(email: 'fan@assen.test', password: 'hunter2hunter2');
 
     final state = container.read(authControllerProvider);
     expect(state.isAuthenticated, isTrue);
@@ -165,11 +163,11 @@ void main() {
     expect(store.tokens?.refreshToken, 'refresh-1');
   });
 
-  test('unregistered login throws and stays signed out', () async {
+  test('a bad credential login throws and stays signed out', () async {
     final api = _FakeAuthApi(
       loginError: const AuthException(
-        AuthFailureReason.accountNotRegistered,
-        '가입이 필요해요.',
+        AuthFailureReason.invalidCredentials,
+        '이메일 또는 비밀번호가 올바르지 않아요.',
       ),
     );
     final store = _InMemoryTokenStore();
@@ -178,12 +176,12 @@ void main() {
     await expectLater(
       container
           .read(authControllerProvider.notifier)
-          .login(phone: '01012345678', otp: '000000'),
+          .loginEmail(email: 'fan@assen.test', password: 'wrong-password'),
       throwsA(
         isA<AuthException>().having(
           (e) => e.reason,
           'reason',
-          AuthFailureReason.accountNotRegistered,
+          AuthFailureReason.invalidCredentials,
         ),
       ),
     );
@@ -191,19 +189,61 @@ void main() {
     expect(store.tokens, isNull);
   });
 
-  test('signup persists the pair and authenticates', () async {
+  test('an unverified login throws emailNotVerified', () async {
+    final api = _FakeAuthApi(
+      loginError: const AuthException(
+        AuthFailureReason.emailNotVerified,
+        '이메일 인증이 필요해요.',
+      ),
+    );
+    final container = _container(api, _InMemoryTokenStore());
+
+    await expectLater(
+      container
+          .read(authControllerProvider.notifier)
+          .loginEmail(email: 'fan@assen.test', password: 'hunter2hunter2'),
+      throwsA(
+        isA<AuthException>().having(
+          (e) => e.reason,
+          'reason',
+          AuthFailureReason.emailNotVerified,
+        ),
+      ),
+    );
+    expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+  });
+
+  test('signup issues no session and returns the verification token', () async {
+    final api = _FakeAuthApi();
+    final store = _InMemoryTokenStore();
+    final container = _container(api, store);
+
+    final token = await container
+        .read(authControllerProvider.notifier)
+        .signupEmail(
+          email: 'fan@assen.test',
+          password: 'hunter2hunter2',
+          nickname: '민지',
+          consentTerms: true,
+          consentPrivacy: true,
+          ageOver14: true,
+        );
+
+    expect(token, _FakeAuthApi.devVerificationToken);
+    expect(api.signupCount, 1);
+    // The server issues no tokens until the emailed link is confirmed, so the
+    // session must stay signed out and nothing may be persisted.
+    expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+    expect(store.tokens, isNull);
+  });
+
+  test('verifyEmail persists the pair and authenticates', () async {
     final store = _InMemoryTokenStore();
     final container = _container(_FakeAuthApi(), store);
 
     await container
         .read(authControllerProvider.notifier)
-        .signup(
-          phone: '01012345678',
-          otp: '123456',
-          nickname: '민지',
-          consentTerms: true,
-          consentPrivacy: true,
-        );
+        .verifyEmail(_FakeAuthApi.devVerificationToken);
 
     expect(container.read(authControllerProvider).isAuthenticated, isTrue);
     expect(store.tokens?.accessToken, 'access-1');
@@ -263,7 +303,10 @@ void main() {
     final container = _container(api, store);
     final controller = container.read(authControllerProvider.notifier);
 
-    await controller.login(phone: '01012345678', otp: '123456');
+    await controller.loginEmail(
+      email: 'fan@assen.test',
+      password: 'hunter2hunter2',
+    );
     controller.signOut();
     // Let the best-effort revoke + storage clear run.
     await Future<void>.delayed(const Duration(milliseconds: 10));

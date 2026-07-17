@@ -1,15 +1,28 @@
-"""Image upload endpoint (R11 — mock local storage, magic-byte + Pillow validated).
+"""Image upload endpoint (magic-byte + Pillow validated, report-moderated).
 
 ``POST /api/uploads`` (``fan_auth`` — unauthenticated → 401): accepts a single
 multipart image and returns ``{"url": "/media/uploads/<uuid>.<ext>"}``. That URL
 is a drop-in ``media_url`` for a Post/Product/avatar (it passes the same
 ``_validated_media_url`` those endpoints apply).
 
-Fail-closed availability: no real object-storage backend is wired yet, so the
-endpoint only accepts writes where the stored bytes are also served locally
-(``settings.SERVE_LOCAL_MEDIA`` — dev/test/demo). With that off (prod) it returns
-503 rather than write to a local disk nothing can serve (un-renderable objects +
-disk-exhaustion risk).
+Fail-closed availability (:func:`uploads_enabled`): the endpoint accepts writes only
+when ``settings.ALLOW_UPLOADS`` is on AND the storage backend is usable
+(``config.storage.media_storage_ready``). Otherwise 503.
+
+The returned URL is **stable and backend-independent** — ``{MEDIA_URL}uploads/<uuid>.
+<ext>``, minted from the storage key by ``apps.uploads.services.media_url_for_key``,
+identical on the local filesystem and on S3. It is deliberately NOT
+``default_storage.url()``: on S3 with ``querystring_auth`` that returns a *signed URL
+that expires in an hour*, and this value is persisted on the row and copied verbatim
+into a Post/Product ``media_url`` — so minting one would break every production image
+about an hour after upload. Django serves the bytes back at that URL on every backend
+(apps.uploads.media), which is also what makes a takedown immediate.
+
+Moderation posture (대표 approved 07-18): report-driven human moderation. Bytes are
+accepted once they pass the hard image validation below, are reportable via
+``apps.safety`` (report intake takes an ``upload_id``), and an operator taking such a
+report to ``actioned`` takes the image down — after which the media route stops
+serving it. Automated provider scanning is 후행 (see ``_moderation_accepts``).
 
 Security boundary (see also :mod:`apps.uploads.images`):
 - content-type whitelist (415) — declared type must be an allowed raster family;
@@ -30,9 +43,7 @@ Security boundary (see also :mod:`apps.uploads.images`):
   non-executable ``uploads/`` prefix — path traversal and PII are impossible;
 - the stored content-type/extension come from the sniff, never the client.
 
-Real object moderation (nudity/abuse scanning) and a real S3 backend are 후행 (see
-the moderation hook below and ``config.settings.base`` STORAGES plugin point,
-which lists the required gates before a real serving path).
+``config.settings.base`` STORAGES documents the full gate list and which are met.
 """
 
 from __future__ import annotations
@@ -57,8 +68,10 @@ from apps.uploads.images import (
     verify_image_decodes,
 )
 from apps.uploads.models import Upload
+from apps.uploads.services import media_url_for_key
 from config.api import api
 from config.errors import ApiError, ErrorCode
+from config.storage import media_storage_ready
 from config.throttle import user_write_throttle
 
 uploads_router = Router(auth=fan_auth, tags=["uploads"])
@@ -79,15 +92,43 @@ class UploadOut(Schema):
     url: str
 
 
-def _moderation_accepts(data: bytes) -> bool:
-    """Mock content-moderation hook — accepts every (already image-validated) file.
+def uploads_enabled() -> bool:
+    """Whether this environment may accept an upload at all.
 
-    Real moderation (nudity/abuse/CSAM scanning via a provider or Rekognition) is a
-    separate 대표·법무 gate — HUMAN-REVIEW-REQUIRED, and one of the required gates
-    before a real (non-demo) media-serving path (see ``config.settings.base``
-    STORAGES). When wired it replaces this stub, returning False (→ 422) for a
-    rejected object. The stub accepts so the upload flow can be exercised end to end;
-    it never inspects PII.
+    Two independent conditions, both required:
+
+    - ``ALLOW_UPLOADS`` — the deliberate decision to take untrusted bytes here
+      (env-driven, fail-closed by default).
+    - the storage backend can actually hold the object
+      (:func:`~config.storage.media_storage_ready`).
+
+    The second condition is the original bug preserved as an invariant: accepting an
+    upload that cannot come back leaves un-renderable objects behind and turns the
+    endpoint into a disk-exhaustion vector. It used to also ask "can anything serve
+    this?", which is no longer a question — Django serves media itself on every backend
+    (apps.uploads.media), so only the store's own usability is still in doubt.
+    """
+    if not settings.ALLOW_UPLOADS:
+        return False
+    return media_storage_ready()
+
+
+def _moderation_accepts(data: bytes) -> bool:
+    """Automated content-scan seam — currently accepts every image-validated file.
+
+    **This is no longer the moderation gate.** The platform's moderation posture is
+    report-driven human moderation (대표 approved 07-18): an accepted image is
+    reportable through the safety domain (``apps.safety`` — the fan/operator report
+    intake takes an ``upload_id``), and an operator taking that report to ``actioned``
+    takes the image down so it stops being served
+    (``apps.uploads.services.take_down_upload``). That is what makes accepting uploads
+    defensible today.
+
+    This hook remains the plug-in point for *automated* pre-publication scanning
+    (nudity/CSAM via a provider — Rekognition et al.), which is still 후행 and still a
+    대표·법무 gate. When wired it returns False (→ 422) for a rejected object, adding a
+    machine filter in front of the human one rather than replacing it. It never
+    inspects PII.
     """
     del data
     return True
@@ -111,10 +152,10 @@ def create_upload(
     dimension bomb guard (422). On success writes the bytes under a UUID name via
     the storage backend and records an :class:`Upload` row.
     """
-    # 0) Fail closed unless this environment also serves the stored bytes (there is
-    # no real object-storage backend yet). Off (prod) → refuse rather than write to a
-    # local disk nothing can serve (un-renderable objects + disk-exhaustion risk).
-    if not settings.SERVE_LOCAL_MEDIA:
+    # 0) Fail closed unless this environment both allows uploads and has some way to
+    # serve them back (see uploads_enabled). Refusing here beats writing bytes nothing
+    # can render (un-renderable objects + disk-exhaustion risk).
+    if not uploads_enabled():
         raise ApiError(
             503,
             "업로드가 아직 준비되지 않았어요.",
@@ -217,8 +258,24 @@ def create_upload(
     # (steps 2/4) can reject it — a true early *ingress* byte cap is a reverse-proxy /
     # deployment concern (nginx client_max_body_size / ALB), not fixable in-app here.
     object_name = f"uploads/{uuid.uuid4().hex}.{kind.extension}"
-    stored_name = default_storage.save(object_name, ContentFile(data))
-    url = default_storage.url(stored_name)
+    content = ContentFile(data)
+    # Pin the stored object's Content-Type to the SNIFFED type (never the client's
+    # declared one). django-storages' S3 backend reads ``content.content_type`` when
+    # writing (S3Storage._get_write_parameters) — it cannot come from the settings'
+    # object_parameters, which are applied verbatim to every object and so cannot vary
+    # per image family (see config.settings.base). Without this the backend would fall
+    # back to guessing from the key's extension, which is sniff-derived and therefore
+    # correct, but relies on the runtime mimetypes registry knowing every family
+    # (webp is absent on some platforms) — pinning it removes that dependency.
+    # FileSystemStorage ignores the attribute, so dev/test behaviour is unchanged.
+    content.content_type = kind.content_type  # type: ignore[attr-defined]
+    stored_name = default_storage.save(object_name, content)
+    # 9) Mint the URL from the KEY the backend actually stored under (save() may rename
+    # on collision), never from default_storage.url(): that is signed and expiring on
+    # S3, and this string is persisted + copied into Post/Product media_url, so it must
+    # not have a lifetime. media_url_for_key is the exact inverse of the served_object_key
+    # a takedown moves — one scheme, both backends (apps.uploads.services).
+    url = media_url_for_key(stored_name)
 
     Upload.objects.create(owner=account, url=url, content_type=kind.content_type)
     return 201, UploadOut(url=url)

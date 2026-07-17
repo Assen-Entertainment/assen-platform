@@ -4,9 +4,10 @@
 // request does not loop; and a failed rotation clears the session and surfaces
 // the 401. R14 race hardening: a late 401 that carries a pre-rotation token
 // replays with the current token without a second rotation; and a non-Dio
-// rotation failure still surfaces the original 401 (never hangs). Driven
-// through the real dio/AuthController with a fake HTTP adapter and a fake auth
-// API — no network, no platform channel.
+// rotation failure still surfaces the original 401 (never hangs). Also covers
+// the global 본인인증 gate: a 403 IdentityVerificationRequired raises it (and any
+// other 403 does not). Driven through the real dio/AuthController with a fake
+// HTTP adapter and a fake auth API — no network, no platform channel.
 
 import 'dart:async';
 import 'dart:convert';
@@ -16,6 +17,7 @@ import 'package:assen_mobile/src/api/api_providers.dart';
 import 'package:assen_mobile/src/auth/auth_api.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
 import 'package:assen_mobile/src/auth/token_store.dart';
+import 'package:assen_mobile/src/verify/verify_gate.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,25 +70,53 @@ class _FakeAuthApi implements AuthApi {
   }
 
   @override
-  Future<void> requestOtp(String phone) async {}
-
-  @override
-  Future<AuthTokens> login({
-    required String phone,
-    required String otp,
+  Future<AuthTokens> loginEmail({
+    required String email,
+    required String password,
   }) async => throw UnimplementedError();
 
   @override
-  Future<AuthTokens> signup({
-    required String phone,
-    required String otp,
+  Future<String> signupEmail({
+    required String email,
+    required String password,
     required String nickname,
     required bool consentTerms,
     required bool consentPrivacy,
+    required bool ageOver14,
+    bool marketingConsent = false,
   }) async => throw UnimplementedError();
 
   @override
+  Future<AuthTokens> verifyEmail(String token) async =>
+      throw UnimplementedError();
+
+  @override
   Future<void> logout(String? accessToken) async {}
+}
+
+/// An adapter answering every call with [status] and a coded error body, to
+/// drive the KYC-gate interceptor's 403 detection.
+class _CodedErrorAdapter implements HttpClientAdapter {
+  _CodedErrorAdapter({required this.status, required this.code});
+
+  final int status;
+  final String code;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    jsonEncode({'detail': '본인인증이 필요해요.', 'code': code}),
+    status,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
 }
 
 /// A canned HTTP adapter: `Bearer fresh` → 200 fan payload, else → 401.
@@ -292,5 +322,46 @@ void main() {
       throwsA(isA<DioException>()),
     );
     expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+  });
+
+  test('a 403 IdentityVerificationRequired raises the KYC gate', () async {
+    // A gated interaction (follow) from an unverified fan: the interceptor must
+    // raise the global gate so the router can route to 본인인증 — and still let
+    // the error surface to the call site.
+    final adapter = _CodedErrorAdapter(
+      status: 403,
+      code: kycGateErrorCode,
+    );
+    final (container, dio, api) = await _wire(adapter);
+    expect(container.read(kycGateProvider), isFalse);
+
+    await expectLater(
+      dio.post<Map<String, dynamic>>('/api/fan/creators/hoshino/follow'),
+      throwsA(
+        isA<DioException>().having(
+          (e) => e.response?.statusCode,
+          'status',
+          403,
+        ),
+      ),
+    );
+
+    expect(container.read(kycGateProvider), isTrue);
+    // A 403 is not a session problem: it must never trigger a rotation.
+    expect(api.refreshCount, 0);
+  });
+
+  test('an unrelated 403 leaves the KYC gate down', () async {
+    // Only the IdentityVerificationRequired code opens the gate; another 403
+    // (e.g. an owner-scoped refusal) must not send the fan to 본인인증.
+    final adapter = _CodedErrorAdapter(status: 403, code: 'OwnerRequired');
+    final (container, dio, _) = await _wire(adapter);
+
+    await expectLater(
+      dio.post<Map<String, dynamic>>('/api/fan/studio/posts'),
+      throwsA(isA<DioException>()),
+    );
+
+    expect(container.read(kycGateProvider), isFalse);
   });
 }

@@ -1,15 +1,15 @@
-"""Social login → fan account (the OAuth counterpart of ``register_fan``).
+"""Social login → fan account (the OAuth counterpart of ``register_fan_email``).
 
 Turns a verified :class:`~config.social_auth.SocialProfile` (provider + opaque
 subject) into a fan :class:`~apps.identity.models.Account` and a token pair via the
 **unchanged** token core. The account is keyed on a namespaced HMAC of
 ``provider:subject`` (:func:`hash_social`), reusing ``Account.auth_subject_hash`` so
-no new model / migration is needed; account *linking* across auth methods (phone ↔
+no new model / migration is needed; account *linking* across auth methods (email ↔
 social) is a later feature — a first social login mints its own fan account.
 
 Privacy: only the derived ``s1:`` hash + the display nickname persist; the raw
 provider subject/token is never stored. On first login the terms/privacy consent and
-the 만 14세 이상 floor are mandatory (same as phone signup, Fan_Signup_Privacy_Policy
+the 만 14세 이상 floor are mandatory (same as email signup, Fan_Signup_Privacy_Policy
 §5); a returning social login skips consent and just re-issues tokens.
 """
 

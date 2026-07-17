@@ -15,9 +15,10 @@ from config.settings.base import *  # noqa: F403
 # repo tree (and each machine/run gets an isolated, disposable location).
 MEDIA_ROOT = tempfile.mkdtemp(prefix="assen-test-media-")
 
-# Enable local media serving so the upload endpoint is active in the suite (the
-# fail-closed 503 path is asserted explicitly via override_settings).
-SERVE_LOCAL_MEDIA = True
+# Accept uploads so the endpoint is active in the suite (the fail-closed 503 paths are
+# asserted explicitly via override_settings — see apps/uploads/test_gating.py for the
+# full gate matrix). Media is served by Django here exactly as in every environment.
+ALLOW_UPLOADS = True
 
 DATABASES = {
     "default": {

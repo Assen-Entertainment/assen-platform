@@ -15,7 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag to roll the ECS services to (defaults to the commit SHA build)."
+        description: >-
+          Tag to STAMP ON THE NEW BUILD of this ref's code (default: the commit SHA).
+          NOT a rollback: this always rebuilds the current checkout and republishes
+          :prod — passing an old SHA just mislabels a new image with that SHA. To roll
+          back, retag the ECR :prod tag to the previous digest and force-new-deployment.
         required: false
         default: ""
 
@@ -46,14 +50,22 @@ jobs:
       - name: Deploy
         env:
           ASSEN_PROD_DEPLOY_APPROVED: "1" # the Environment approval IS the human gate
-          ASSEN_ALLOW_NON_MAIN_PROD_DEPLOY: ${{ github.ref_name == 'main' && '' || '1' }}
+          # NEVER set this to "1". deploy-prod-ecs.sh:21 reads it as a BYPASS: "1" makes
+          # the script SKIP its `branch == main` check. Always-empty = the check always
+          # runs, so a dispatch from any non-main ref (e.g. dev) fails loudly — which is
+          # the intended behaviour (AGENTS.md: `main` is the production desired state).
+          # An earlier `ref_name == 'main' && '' || '1'` had this exactly backwards: it
+          # injected the bypass precisely when the ref was NOT main.
+          ASSEN_ALLOW_NON_MAIN_PROD_DEPLOY: ""
           ASSEN_SKIP_GITHUB_CI_CHECK: "1" # CI is already green to reach main; skip the gh re-check
           AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
           ASSEN_ECR_REPOSITORY_URI: ${{ vars.ASSEN_ECR_REPOSITORY_URI }}
+          ASSEN_WEB_ECR_REPOSITORY_URI: ${{ vars.ASSEN_WEB_ECR_REPOSITORY_URI }}
           ASSEN_ECS_CLUSTER: ${{ vars.ASSEN_ECS_CLUSTER }}
           ASSEN_ECS_API_SERVICE: ${{ vars.ASSEN_ECS_API_SERVICE }}
           ASSEN_ECS_WORKER_SERVICE: ${{ vars.ASSEN_ECS_WORKER_SERVICE }}
           ASSEN_ECS_BEAT_SERVICE: ${{ vars.ASSEN_ECS_BEAT_SERVICE }}
+          ASSEN_ECS_WEB_SERVICE: ${{ vars.ASSEN_ECS_WEB_SERVICE }}
           ASSEN_ECS_MIGRATE_TASKDEF: ${{ vars.ASSEN_ECS_MIGRATE_TASKDEF }}
           ASSEN_ECS_MIGRATE_NETWORK: ${{ vars.ASSEN_ECS_MIGRATE_NETWORK }}
           ASSEN_PROD_API_URL: ${{ vars.ASSEN_PROD_API_URL }}

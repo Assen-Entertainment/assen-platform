@@ -201,11 +201,13 @@ class ErrorCode(StrEnum):
     UPLOAD_TYPE_UNSUPPORTED = "UploadTypeUnsupported"
     UPLOAD_INVALID = "UploadInvalid"
     UPLOAD_TOO_LARGE = "UploadTooLarge"
-    # The upload surface is fail-closed off (503): no real object-storage backend is
-    # wired yet, so the endpoint only accepts writes in an environment that also
-    # serves the stored bytes locally (settings.SERVE_LOCAL_MEDIA). With that off
-    # (prod) an accepted upload would write to a local disk nothing can serve — so it
-    # refuses instead, guarding against un-renderable objects and disk exhaustion.
+    # The upload surface is fail-closed off (503) — either uploads are not enabled here
+    # (settings.ALLOW_UPLOADS, default off) or the storage backend cannot hold the bytes
+    # (config.storage.media_storage_ready — e.g. an S3 backend naming no bucket).
+    # Accepting an upload that cannot come back would leave un-renderable objects and a
+    # disk-exhaustion vector, so the endpoint refuses instead. One code for both: to a
+    # client the upload surface is simply unavailable, and which half is missing is a
+    # deployment detail.
     UPLOAD_STORAGE_UNAVAILABLE = "UploadStorageUnavailable"
 
 

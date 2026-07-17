@@ -132,8 +132,8 @@ def identity_verifier() -> IdentityVerifier | None:
     The deterministic mock is gated behind ``ENABLE_MOCK_KYC`` (off in production) so
     its unconditional pass can never back a real 성인/본인 인증. With no real provider
     wired yet, production returns ``None`` and the verify surface fails closed (503)
-    rather than trust an unverifiable result — mirroring ``_otp_sender`` in
-    :mod:`apps.identity.api`.
+    rather than trust an unverifiable result — mirroring ``email_sender`` in
+    :mod:`config.email`.
     """
     if settings.ENABLE_MOCK_KYC:
         return MockIdentityVerifier()

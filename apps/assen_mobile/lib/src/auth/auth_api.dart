@@ -7,23 +7,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 ///
 /// Mirrors the server `ErrorCode` values the fan surface returns (see
 /// `config/errors.py`). The UI branches on the reason — never on the localized
-/// `detail` copy — so, e.g., a login can route an unregistered number to the
-/// signup step while a wrong code re-prompts the OTP field.
+/// `detail` copy — so, e.g., an unverified account can be told to open its
+/// verification mail while a wrong password re-prompts the credentials.
 enum AuthFailureReason {
-  /// The phone verified but holds no active fan account → guide to signup
-  /// (`AccountNotRegistered`).
-  accountNotRegistered,
+  /// The email already backs a verified account (`EmailAlreadyRegistered`,
+  /// 409) → guide to login.
+  emailAlreadyRegistered,
 
-  /// The OTP code was wrong/expired (`OtpInvalid`).
-  invalidOtp,
+  /// The password was right but the address was never confirmed
+  /// (`EmailNotVerified`, 403) → guide back to the verification mail.
+  emailNotVerified,
 
-  /// The phone number was malformed (`PhoneInvalid`).
-  invalidPhone,
+  /// Login was refused (`InvalidCredentials`, 422). Disclosure-safe: a wrong
+  /// email and a wrong password are deliberately indistinguishable. Also
+  /// raised by signup when the password is under the 8-character floor.
+  invalidCredentials,
+
+  /// The verification token was forged, malformed, or expired
+  /// (`EmailVerificationInvalid`, 400).
+  emailVerificationInvalid,
 
   /// A required consent was not granted (`ConsentRequired`).
   consentRequired,
 
-  /// OTP send/verify is not wired on the server (`OtpUnavailable`, 503).
+  /// Signup was attempted without confirming the 만 14세 이상 floor
+  /// (`Underage`).
+  underage,
+
+  /// The email surface is not wired on the server (`EmailUnavailable`, 503).
   unavailable,
 
   /// A network/transport failure, or any unclassified server error.
@@ -33,8 +44,9 @@ enum AuthFailureReason {
 /// A typed auth failure the login/signup UI can branch on.
 ///
 /// Carries only a [reason] and a user-safe [message]; never any token material
-/// or request/response body (which could hold a phone number). Deliberately not
-/// an `Error` — it is an expected control-flow outcome (wrong code, new user).
+/// or request/response body (which could hold an email address or password).
+/// Deliberately not an `Error` — it is an expected control-flow outcome (wrong
+/// password, unverified account).
 class AuthException implements Exception {
   /// Creates an auth failure of [reason] with a display [message].
   const AuthException(this.reason, this.message);
@@ -51,47 +63,35 @@ class AuthException implements Exception {
 
 /// The fan authentication API over [Dio] (`/api/fan/*`, ADR-0002 body surface).
 ///
-/// Owns the OTP/login/signup/refresh/logout endpoints and maps the server's
-/// coded errors into a typed [AuthException]. The mobile surface always sends
-/// `web: false`, so tokens arrive in the JSON body (never cookies) and are
-/// handed to the [TokenStore] by the caller — this layer never persists or logs
-/// them. When the generated `api_client` (P6) lands, this delegates to it.
+/// Owns the email signup/verify/login/refresh/logout endpoints and maps the
+/// server's coded errors into a typed [AuthException]. The mobile surface
+/// always sends `web: false`, so tokens arrive in the JSON body (never cookies)
+/// and are handed to the [TokenStore] by the caller — this layer never persists
+/// or logs them. Social login (kakao/google/naver) needs OAuth deep links +
+/// provider redirect-URI registration and is a later wave. When the generated
+/// `api_client` (P6) lands, this delegates to it.
 class AuthApi {
   /// Creates an API bound to [_dio].
   const AuthApi(this._dio);
 
   final Dio _dio;
 
-  /// Sends a (mock) signup/login OTP to [phone] (`POST /fan/signup/otp`).
+  /// Authenticates an existing fan (`POST /fan/login/email`) and returns the
+  /// issued pair.
   ///
-  /// Returns on a bare ack; the code is never in the response. A malformed
-  /// number (422) or an unwired sender (503) surfaces as an [AuthException].
-  Future<void> requestOtp(String phone) async {
-    try {
-      await _dio.post<Map<String, dynamic>>(
-        '/api/fan/signup/otp',
-        data: <String, dynamic>{'phone': phone},
-      );
-    } on DioException catch (error) {
-      throw _mapError(error);
-    }
-  }
-
-  /// Re-authenticates an existing fan (`POST /fan/login`) and returns the pair.
-  ///
-  /// An unregistered number raises [AuthFailureReason.accountNotRegistered] so
-  /// the UI can offer signup; a wrong code raises
-  /// [AuthFailureReason.invalidOtp].
-  Future<AuthTokens> login({
-    required String phone,
-    required String otp,
+  /// A wrong address and a wrong password are indistinguishable by design
+  /// ([AuthFailureReason.invalidCredentials]); an account that never confirmed
+  /// its verification mail raises [AuthFailureReason.emailNotVerified].
+  Future<AuthTokens> loginEmail({
+    required String email,
+    required String password,
   }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
-        '/api/fan/login',
+        '/api/fan/login/email',
         data: <String, dynamic>{
-          'phone': phone,
-          'otp_code': otp,
+          'email': email,
+          'password': password,
           'web': false,
         },
       );
@@ -101,28 +101,57 @@ class AuthApi {
     }
   }
 
-  /// Registers a new fan (`POST /fan/signup`) and returns the issued pair.
+  /// Registers an (unverified) fan (`POST /fan/signup/email`) and returns the
+  /// verification token.
   ///
-  /// [consentTerms]/[consentPrivacy] are the required 약관 grants captured on the
-  /// signup step; the server records the consent fact + version, never PII.
-  Future<AuthTokens> signup({
-    required String phone,
-    required String otp,
+  /// No session is issued here — the fan confirms the emailed link first (see
+  /// [verifyEmail]), so this endpoint takes no `web` surface flag. The returned
+  /// token is non-empty ONLY under the server's dev/test
+  /// `EMAIL_VERIFY_RETURN_TOKEN` flag (so QA can complete without an inbox);
+  /// on any real surface it is `""`.
+  ///
+  /// [consentTerms]/[consentPrivacy]/[ageOver14] are the required grants
+  /// captured on the signup step; the server records the consent fact +
+  /// version, never PII.
+  Future<String> signupEmail({
+    required String email,
+    required String password,
     required String nickname,
     required bool consentTerms,
     required bool consentPrivacy,
+    required bool ageOver14,
+    bool marketingConsent = false,
   }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
-        '/api/fan/signup',
+        '/api/fan/signup/email',
         data: <String, dynamic>{
-          'phone': phone,
-          'otp_code': otp,
+          'email': email,
+          'password': password,
           'nickname': nickname,
           'consent_terms': consentTerms,
           'consent_privacy': consentPrivacy,
-          'web': false,
+          'age_over_14': ageOver14,
+          'marketing_consent': marketingConsent,
         },
+      );
+      final token = response.data?['verification_token'];
+      return token is String ? token : '';
+    } on DioException catch (error) {
+      throw _mapError(error);
+    }
+  }
+
+  /// Confirms an email-verification [token] (`POST /fan/verify-email`) and
+  /// returns the issued pair.
+  ///
+  /// The first valid confirm marks the account verified and logs it in; a
+  /// forged/expired token raises [AuthFailureReason.emailVerificationInvalid].
+  Future<AuthTokens> verifyEmail(String token) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/fan/verify-email',
+        data: <String, dynamic>{'token': token, 'web': false},
       );
       return _tokensFrom(response.data);
     } on DioException catch (error) {
@@ -178,36 +207,46 @@ class AuthApi {
 
   /// Maps a [DioException] to a typed [AuthException] by the server error code.
   ///
-  /// Only the stable `code` is read (never the number-bearing request body), so
+  /// Only the stable `code` is read (never the email-bearing request body), so
   /// no PII is captured into the failure.
   AuthException _mapError(DioException error) {
     final data = error.response?.data;
     final code = data is Map ? data['code'] as String? : null;
     switch (code) {
-      case 'AccountNotRegistered':
+      case 'EmailAlreadyRegistered':
         return const AuthException(
-          AuthFailureReason.accountNotRegistered,
-          '가입이 필요해요. 계속해서 회원가입을 진행해 주세요.',
+          AuthFailureReason.emailAlreadyRegistered,
+          '이미 가입된 이메일이에요. 로그인해 주세요.',
         );
-      case 'OtpInvalid':
+      case 'EmailNotVerified':
         return const AuthException(
-          AuthFailureReason.invalidOtp,
-          '인증번호가 올바르지 않아요.',
+          AuthFailureReason.emailNotVerified,
+          '이메일 인증이 필요해요. 받은 메일의 링크로 인증을 완료해 주세요.',
         );
-      case 'PhoneInvalid':
+      case 'InvalidCredentials':
         return const AuthException(
-          AuthFailureReason.invalidPhone,
-          '올바른 휴대폰 번호를 입력해 주세요.',
+          AuthFailureReason.invalidCredentials,
+          '이메일 또는 비밀번호가 올바르지 않아요.',
+        );
+      case 'EmailVerificationInvalid':
+        return const AuthException(
+          AuthFailureReason.emailVerificationInvalid,
+          '인증 링크가 유효하지 않거나 만료됐어요. 다시 시도해 주세요.',
         );
       case 'ConsentRequired':
         return const AuthException(
           AuthFailureReason.consentRequired,
           '필수 약관에 동의해 주세요.',
         );
-      case 'OtpUnavailable':
+      case 'Underage':
+        return const AuthException(
+          AuthFailureReason.underage,
+          '만 14세 이상만 가입할 수 있어요.',
+        );
+      case 'EmailUnavailable':
         return const AuthException(
           AuthFailureReason.unavailable,
-          '인증 서비스를 잠시 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
+          '이메일 서비스를 잠시 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
         );
       default:
         return const AuthException(

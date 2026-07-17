@@ -21,9 +21,11 @@ from config.settings.base import *  # noqa: E402, F403
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 
-# Serve uploaded media off the local filesystem (config.urls) and enable the upload
-# endpoint — dev has no S3 backend, so local serving is the whole media path here.
-SERVE_LOCAL_MEDIA = True
+# Accept uploads locally (base.py fails this closed for unconfigured environments).
+# Nothing else is needed: dev has no S3 backend, so default_storage is the local
+# filesystem — usable by definition — and Django serves it back (config.urls), exactly
+# as it does in production.
+ALLOW_UPLOADS = True
 
 # Fan signup uses the deterministic mock OTP locally (no SMS provider wired).
 ENABLE_MOCK_FAN_OTP = True

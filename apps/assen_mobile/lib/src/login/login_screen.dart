@@ -1,38 +1,39 @@
 import 'package:assen_mobile/src/app/router.dart';
 import 'package:assen_mobile/src/auth/auth_api.dart';
 import 'package:assen_mobile/src/auth/auth_controller.dart';
-import 'package:assen_mobile/src/auth/dev_otp.dart';
 import 'package:core_tokens/core_tokens.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-/// The steps of the phone-OTP sign-in flow.
+/// The steps of the email sign-in flow.
 enum _LoginStep {
-  /// Enter the phone number and request an OTP.
-  phone,
+  /// Enter an email + password to sign in.
+  login,
 
-  /// Enter the received OTP to log in.
-  otp,
-
-  /// New number: capture a nickname + required consent to register.
+  /// Register: email + password + nickname + required consent.
   signup,
+
+  /// Signup accepted — tell the fan to open the verification mail.
+  verificationSent,
 }
+
+/// The minimum password length the server enforces (`EmailSignupIn`, min 8).
+const int _minPasswordLength = 8;
 
 /// The login wall shown when a guest hits an auth-gated route (the 마이 tab).
 ///
-/// Phone-OTP sign-in (mock OTP in dev/demo, ADR-0002 body-token surface): the
-/// viewer requests a code, enters it to log in, and an unregistered number
-/// falls through to a signup step (nickname + required 약관 동의). On success the
-/// tokens are persisted in secure storage by [AuthController] and the viewer
-/// lands on the 마이 tab. A "게스트로 둘러보기" escape keeps the guard from trapping a
-/// viewer.
+/// Email + password sign-in (ADR-0002 body-token surface): the viewer signs in,
+/// or registers and confirms the emailed verification link — the server issues
+/// no session until that link is confirmed. On success the tokens are persisted
+/// in secure storage by [AuthController] and the viewer lands on the 마이 tab. A
+/// "게스트로 둘러보기" escape keeps the guard from trapping a viewer.
 ///
-/// No real social login and no real payment (E6 subscription/purchase CTAs are
-/// a later wave). The phone number is only sent to the OTP endpoints — it is
-/// never stored on device.
+/// Social login (kakao/google/naver) needs OAuth deep links + provider
+/// redirect-URI registration and is a later wave. The email/password are only
+/// sent to the auth endpoints — never stored on device, logged, or held in an
+/// exception.
 class LoginScreen extends ConsumerStatefulWidget {
   /// Creates the login wall.
   const LoginScreen({super.key});
@@ -42,34 +43,38 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _nicknameController = TextEditingController();
 
-  _LoginStep _step = _LoginStep.phone;
-  String _otp = '';
-  AssenOtpStatus _otpStatus = AssenOtpStatus.entering;
+  _LoginStep _step = _LoginStep.login;
   bool _consentTerms = false;
   bool _consentPrivacy = false;
+  bool _ageOver14 = false;
+  bool _marketingConsent = false;
   bool _busy = false;
   String? _errorText;
 
+  /// The verification token echoed by a dev/test server
+  /// (`EMAIL_VERIFY_RETURN_TOKEN`), enabling the "인증 완료(개발용)" affordance.
+  /// Empty on any real surface, where the fan must open the mailed link.
+  String _verificationToken = '';
+
   @override
   void dispose() {
-    _phoneController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     _nicknameController.dispose();
     super.dispose();
   }
 
-  String get _phone => _phoneController.text.trim();
+  String get _email => _emailController.text.trim();
+  String get _password => _passwordController.text;
 
-  /// The deterministic mock OTP, shown as a hint in DEV builds only so a demo
-  /// tester can complete the mock login. Never derived in a release build.
-  String? get _devOtpHint => kReleaseMode ? null : devMockOtpCode(_phone);
-
-  /// Requests an OTP for the entered phone and advances to the code step.
-  Future<void> _sendOtp() async {
-    if (_phone.isEmpty) {
-      setState(() => _errorText = '휴대폰 번호를 입력해 주세요.');
+  /// Signs in with the entered email + password.
+  Future<void> _login() async {
+    if (_email.isEmpty || _password.isEmpty) {
+      setState(() => _errorText = '이메일과 비밀번호를 입력해 주세요.');
       return;
     }
     setState(() {
@@ -77,13 +82,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _errorText = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).requestOtp(_phone);
-      if (!mounted) return;
-      setState(() {
-        _step = _LoginStep.otp;
-        _otp = '';
-        _otpStatus = AssenOtpStatus.entering;
-      });
+      await ref
+          .read(authControllerProvider.notifier)
+          .loginEmail(email: _email, password: _password);
+      _goHome();
     } on AuthException catch (error) {
       _fail(error.message);
     } finally {
@@ -91,33 +93,65 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  /// Logs in with the entered OTP; an unregistered number falls to signup.
-  Future<void> _login() async {
+  /// Registers a new fan; on success the flow waits on the verification mail.
+  Future<void> _signup() async {
+    final nickname = _nicknameController.text.trim();
+    if (_email.isEmpty) {
+      setState(() => _errorText = '이메일을 입력해 주세요.');
+      return;
+    }
+    if (_password.length < _minPasswordLength) {
+      setState(() => _errorText = '비밀번호는 8자 이상으로 입력해 주세요.');
+      return;
+    }
+    if (nickname.isEmpty || nickname.runes.length > 40) {
+      setState(() => _errorText = '닉네임은 1~40자로 입력해 주세요.');
+      return;
+    }
+    if (!_consentTerms || !_consentPrivacy || !_ageOver14) {
+      setState(() => _errorText = '필수 약관에 모두 동의해 주세요.');
+      return;
+    }
     setState(() {
       _busy = true;
       _errorText = null;
-      _otpStatus = AssenOtpStatus.entering;
     });
     try {
-      await ref
+      final token = await ref
           .read(authControllerProvider.notifier)
-          .login(phone: _phone, otp: _otp);
-      _goHome();
+          .signupEmail(
+            email: _email,
+            password: _password,
+            nickname: nickname,
+            consentTerms: _consentTerms,
+            consentPrivacy: _consentPrivacy,
+            ageOver14: _ageOver14,
+            marketingConsent: _marketingConsent,
+          );
+      if (!mounted) return;
+      setState(() {
+        _verificationToken = token;
+        _step = _LoginStep.verificationSent;
+        _errorText = null;
+      });
     } on AuthException catch (error) {
       if (!mounted) return;
       switch (error.reason) {
-        case AuthFailureReason.accountNotRegistered:
+        case AuthFailureReason.emailAlreadyRegistered:
+          // The address is already registered: drop back to the sign-in step
+          // with the address kept, so the fan can just enter their password.
           setState(() {
-            _step = _LoginStep.signup;
-            _errorText = null;
-          });
-        case AuthFailureReason.invalidOtp:
-          setState(() {
-            _otpStatus = AssenOtpStatus.error;
+            _step = _LoginStep.login;
             _errorText = error.message;
           });
-        case AuthFailureReason.invalidPhone:
+        case AuthFailureReason.invalidCredentials:
+          // On signup this code only ever means the password floor (the length
+          // is pre-checked above, so this is the server's belt-and-braces).
+          setState(() => _errorText = '비밀번호는 8자 이상으로 입력해 주세요.');
+        case AuthFailureReason.emailNotVerified:
+        case AuthFailureReason.emailVerificationInvalid:
         case AuthFailureReason.consentRequired:
+        case AuthFailureReason.underage:
         case AuthFailureReason.unavailable:
         case AuthFailureReason.unknown:
           setState(() => _errorText = error.message);
@@ -127,17 +161,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  /// Registers a new fan with the captured nickname + consent.
-  Future<void> _signup() async {
-    final nickname = _nicknameController.text.trim();
-    if (nickname.isEmpty || nickname.runes.length > 40) {
-      setState(() => _errorText = '닉네임은 1~40자로 입력해 주세요.');
-      return;
-    }
-    if (!_consentTerms || !_consentPrivacy) {
-      setState(() => _errorText = '필수 약관에 모두 동의해 주세요.');
-      return;
-    }
+  /// DEV/QA ONLY — completes verification with the server-echoed token.
+  ///
+  /// A dev/test server returns the token from signup so the flow can be closed
+  /// without an inbox (mirroring the web's "인증 링크 열기(개발용)"). The button is
+  /// only rendered when the token is non-empty, which never happens on a real
+  /// surface — there the fan opens the mailed link instead.
+  Future<void> _confirmVerification() async {
     setState(() {
       _busy = true;
       _errorText = null;
@@ -145,13 +175,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       await ref
           .read(authControllerProvider.notifier)
-          .signup(
-            phone: _phone,
-            otp: _otp,
-            nickname: nickname,
-            consentTerms: _consentTerms,
-            consentPrivacy: _consentPrivacy,
-          );
+          .verifyEmail(_verificationToken);
       _goHome();
     } on AuthException catch (error) {
       _fail(error.message);
@@ -173,16 +197,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// Steps back one screen (or leaves the wall from the first step).
   void _back() {
     switch (_step) {
-      case _LoginStep.phone:
+      case _LoginStep.login:
         context.go(RoutePaths.discovery);
-      case _LoginStep.otp:
-        setState(() {
-          _step = _LoginStep.phone;
-          _errorText = null;
-        });
       case _LoginStep.signup:
+      case _LoginStep.verificationSent:
         setState(() {
-          _step = _LoginStep.otp;
+          _step = _LoginStep.login;
           _errorText = null;
         });
     }
@@ -192,39 +212,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AssenAppBar(
-        title: _step == _LoginStep.signup ? '회원가입' : '로그인',
+        title: _step == _LoginStep.login ? '로그인' : '회원가입',
         onBack: _back,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(SpacingTokens.s4),
           child: switch (_step) {
-            _LoginStep.phone => _PhoneStep(
-              controller: _phoneController,
+            _LoginStep.login => _LoginStepView(
+              emailController: _emailController,
+              passwordController: _passwordController,
               busy: _busy,
               errorText: _errorText,
-              onSubmit: _sendOtp,
+              onSubmit: _login,
+              onSignup: () => setState(() {
+                _step = _LoginStep.signup;
+                _errorText = null;
+              }),
               onGuest: () => context.go(RoutePaths.discovery),
             ),
-            _LoginStep.otp => _OtpStep(
-              phone: _phone,
-              status: _otpStatus,
-              errorText: _errorText,
-              devOtpHint: _devOtpHint,
-              busy: _busy,
-              onChanged: (value) => _otp = value,
-              onSubmit: _login,
-              onResend: _sendOtp,
-            ),
-            _LoginStep.signup => _SignupStep(
-              controller: _nicknameController,
+            _LoginStep.signup => _SignupStepView(
+              emailController: _emailController,
+              passwordController: _passwordController,
+              nicknameController: _nicknameController,
               consentTerms: _consentTerms,
               consentPrivacy: _consentPrivacy,
+              ageOver14: _ageOver14,
+              marketingConsent: _marketingConsent,
               busy: _busy,
               errorText: _errorText,
               onTermsChanged: (v) => setState(() => _consentTerms = v),
               onPrivacyChanged: (v) => setState(() => _consentPrivacy = v),
+              onAgeChanged: (v) => setState(() => _ageOver14 = v),
+              onMarketingChanged: (v) => setState(() => _marketingConsent = v),
               onSubmit: _signup,
+            ),
+            _LoginStep.verificationSent => _VerificationSentView(
+              devToken: _verificationToken,
+              busy: _busy,
+              errorText: _errorText,
+              onConfirm: _confirmVerification,
+              onBackToLogin: _back,
             ),
           },
         ),
@@ -233,20 +261,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-/// Step 1 — the phone-number entry and OTP request.
-class _PhoneStep extends StatelessWidget {
-  const _PhoneStep({
-    required this.controller,
+/// Step 1 — email + password sign-in.
+class _LoginStepView extends StatelessWidget {
+  const _LoginStepView({
+    required this.emailController,
+    required this.passwordController,
     required this.busy,
     required this.errorText,
     required this.onSubmit,
+    required this.onSignup,
     required this.onGuest,
   });
 
-  final TextEditingController controller;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
   final bool busy;
   final String? errorText;
   final VoidCallback onSubmit;
+  final VoidCallback onSignup;
   final VoidCallback onGuest;
 
   @override
@@ -263,7 +295,7 @@ class _PhoneStep extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '휴대폰 번호로 시작하기',
+                '이메일로 시작하기',
                 style: TextStyle(
                   fontSize: TypographyTokens.headlineSize,
                   fontWeight: FontWeight.w800,
@@ -272,7 +304,7 @@ class _PhoneStep extends StatelessWidget {
               ),
               const SizedBox(height: SpacingTokens.s2),
               Text(
-                '인증번호를 보내드릴게요. 소셜 로그인은 준비 중이에요.',
+                '가입한 이메일과 비밀번호를 입력해 주세요. 소셜 로그인은 준비 중이에요.',
                 style: TextStyle(
                   fontSize: TypographyTokens.bodyMSize,
                   color: colors.ink600,
@@ -280,18 +312,32 @@ class _PhoneStep extends StatelessWidget {
               ),
               const SizedBox(height: SpacingTokens.s6),
               AssenTextField(
-                label: '휴대폰 번호',
-                controller: controller,
-                hintText: '010-1234-5678',
-                keyboardType: TextInputType.phone,
+                label: '이메일',
+                controller: emailController,
+                hintText: 'fan@assen.kr',
+                keyboardType: TextInputType.emailAddress,
+                prefixIcon: Icons.mail_outline,
+              ),
+              const SizedBox(height: SpacingTokens.s4),
+              AssenTextField(
+                label: '비밀번호',
+                controller: passwordController,
+                obscureText: true,
                 errorText: errorText,
-                prefixIcon: Icons.phone_outlined,
+                prefixIcon: Icons.lock_outline,
               ),
               const SizedBox(height: SpacingTokens.s6),
               AssenButton(
-                label: '인증번호 받기',
+                label: '로그인',
                 expand: true,
                 onPressed: busy ? null : onSubmit,
+              ),
+              const SizedBox(height: SpacingTokens.s2),
+              AssenButton(
+                label: '회원가입',
+                style: AssenButtonStyle.ghost,
+                expand: true,
+                onPressed: busy ? null : onSignup,
               ),
               const SizedBox(height: SpacingTokens.s2),
               AssenButton(
@@ -312,8 +358,8 @@ class _PhoneStep extends StatelessWidget {
 ///
 /// A gradient brand panel carrying the white [AssenLogo] lockup and a short
 /// tagline, shown on the first sign-in step. The gradient is the sanctioned
-/// tokens.md 2026-07-09 exception (login surface); it adds no logic to the
-/// OTP/mock flow. The panel uses [AssenGradients.brandScrimmed] (not the plain
+/// tokens.md 2026-07-09 exception (login surface); it adds no logic to the auth
+/// flow. The panel uses [AssenGradients.brandScrimmed] (not the plain
 /// [AssenGradients.brand]) because it carries the tagline text, not just the
 /// lockup graphic — the scrimmed variant keeps white body text ≥AA at every
 /// point on the gradient (2026-07-10 a11y fix).
@@ -365,27 +411,39 @@ class _BrandFrontDoor extends StatelessWidget {
   }
 }
 
-/// Step 2 — enter the received OTP and log in.
-class _OtpStep extends StatelessWidget {
-  const _OtpStep({
-    required this.phone,
-    required this.status,
-    required this.errorText,
-    required this.devOtpHint,
+/// Step 2 — register: email + password + nickname + required consent.
+class _SignupStepView extends StatelessWidget {
+  const _SignupStepView({
+    required this.emailController,
+    required this.passwordController,
+    required this.nicknameController,
+    required this.consentTerms,
+    required this.consentPrivacy,
+    required this.ageOver14,
+    required this.marketingConsent,
     required this.busy,
-    required this.onChanged,
+    required this.errorText,
+    required this.onTermsChanged,
+    required this.onPrivacyChanged,
+    required this.onAgeChanged,
+    required this.onMarketingChanged,
     required this.onSubmit,
-    required this.onResend,
   });
 
-  final String phone;
-  final AssenOtpStatus status;
-  final String? errorText;
-  final String? devOtpHint;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+  final TextEditingController nicknameController;
+  final bool consentTerms;
+  final bool consentPrivacy;
+  final bool ageOver14;
+  final bool marketingConsent;
   final bool busy;
-  final ValueChanged<String> onChanged;
+  final String? errorText;
+  final ValueChanged<bool> onTermsChanged;
+  final ValueChanged<bool> onPrivacyChanged;
+  final ValueChanged<bool> onAgeChanged;
+  final ValueChanged<bool> onMarketingChanged;
   final VoidCallback onSubmit;
-  final VoidCallback onResend;
 
   @override
   Widget build(BuildContext context) {
@@ -394,7 +452,7 @@ class _OtpStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '인증번호 입력',
+          '이메일로 가입하기',
           style: TextStyle(
             fontSize: TypographyTokens.headlineSize,
             fontWeight: FontWeight.w800,
@@ -403,82 +461,32 @@ class _OtpStep extends StatelessWidget {
         ),
         const SizedBox(height: SpacingTokens.s2),
         Text(
-          '$phone(으)로 보낸 6자리 인증번호를 입력해 주세요.',
+          '가입 후 보내드리는 확인 메일의 링크로 인증을 마치면 로그인돼요.',
           style: TextStyle(
             fontSize: TypographyTokens.bodyMSize,
             color: colors.ink600,
           ),
         ),
-        if (devOtpHint != null) ...[
-          const SizedBox(height: SpacingTokens.s3),
-          // DEV/MOCK ONLY: derived locally to demo the mock login; never shown
-          // in a release build (guarded by kReleaseMode in the screen).
-          AssenNoticeBar(message: '개발용 인증번호: $devOtpHint'),
-        ],
-        const SizedBox(height: SpacingTokens.s6),
-        AssenOtpField(
-          onChanged: onChanged,
-          status: status,
-          errorText: errorText,
-        ),
-        const SizedBox(height: SpacingTokens.s6),
-        AssenButton(
-          label: '로그인',
-          expand: true,
-          onPressed: busy ? null : onSubmit,
-        ),
-        const SizedBox(height: SpacingTokens.s2),
-        AssenButton(
-          label: '인증번호 다시 받기',
-          style: AssenButtonStyle.ghost,
-          expand: true,
-          onPressed: busy ? null : onResend,
-        ),
-      ],
-    );
-  }
-}
-
-/// Step 3 — a new number: capture nickname + required consent to register.
-class _SignupStep extends StatelessWidget {
-  const _SignupStep({
-    required this.controller,
-    required this.consentTerms,
-    required this.consentPrivacy,
-    required this.busy,
-    required this.errorText,
-    required this.onTermsChanged,
-    required this.onPrivacyChanged,
-    required this.onSubmit,
-  });
-
-  final TextEditingController controller;
-  final bool consentTerms;
-  final bool consentPrivacy;
-  final bool busy;
-  final String? errorText;
-  final ValueChanged<bool> onTermsChanged;
-  final ValueChanged<bool> onPrivacyChanged;
-  final VoidCallback onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AssenColors>()!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          '처음 오셨네요! 가입을 마저 진행할게요',
-          style: TextStyle(
-            fontSize: TypographyTokens.headlineSize,
-            fontWeight: FontWeight.w800,
-            color: colors.ink900,
-          ),
-        ),
         const SizedBox(height: SpacingTokens.s6),
         AssenTextField(
+          label: '이메일',
+          controller: emailController,
+          hintText: 'fan@assen.kr',
+          keyboardType: TextInputType.emailAddress,
+          prefixIcon: Icons.mail_outline,
+        ),
+        const SizedBox(height: SpacingTokens.s4),
+        AssenTextField(
+          label: '비밀번호',
+          controller: passwordController,
+          obscureText: true,
+          helperText: '8자 이상',
+          prefixIcon: Icons.lock_outline,
+        ),
+        const SizedBox(height: SpacingTokens.s4),
+        AssenTextField(
           label: '닉네임',
-          controller: controller,
+          controller: nicknameController,
           hintText: '사용할 닉네임',
           helperText: '1~40자',
         ),
@@ -490,9 +498,19 @@ class _SignupStep extends StatelessWidget {
           onChanged: onTermsChanged,
         ),
         AssenAgreementCell(
-          label: '개인정보 수집·이용 동의',
+          label: '개인정보 처리방침 동의',
           value: consentPrivacy,
           onChanged: onPrivacyChanged,
+        ),
+        AssenAgreementCell(
+          label: '만 14세 이상입니다',
+          value: ageOver14,
+          onChanged: onAgeChanged,
+        ),
+        AssenAgreementCell(
+          label: '마케팅 정보 수신 동의 (선택)',
+          value: marketingConsent,
+          onChanged: onMarketingChanged,
         ),
         if (errorText != null) ...[
           const SizedBox(height: SpacingTokens.s3),
@@ -509,6 +527,82 @@ class _SignupStep extends StatelessWidget {
           label: '가입하고 시작하기',
           expand: true,
           onPressed: busy ? null : onSubmit,
+        ),
+      ],
+    );
+  }
+}
+
+/// Step 3 — signup accepted: wait on the emailed verification link.
+///
+/// The real path ends here: the fan opens the link from their inbox on the web,
+/// then returns and signs in. [devToken] is non-empty only against a dev/test
+/// server, which echoes the token back so QA can close the loop in-app.
+class _VerificationSentView extends StatelessWidget {
+  const _VerificationSentView({
+    required this.devToken,
+    required this.busy,
+    required this.errorText,
+    required this.onConfirm,
+    required this.onBackToLogin,
+  });
+
+  final String devToken;
+  final bool busy;
+  final String? errorText;
+  final VoidCallback onConfirm;
+  final VoidCallback onBackToLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '확인 메일을 보냈어요',
+          style: TextStyle(
+            fontSize: TypographyTokens.headlineSize,
+            fontWeight: FontWeight.w800,
+            color: colors.ink900,
+          ),
+        ),
+        const SizedBox(height: SpacingTokens.s2),
+        Text(
+          '받은 메일의 링크를 열어 인증을 완료해 주세요. 인증이 끝나면 로그인할 수 있어요.',
+          style: TextStyle(
+            fontSize: TypographyTokens.bodyMSize,
+            color: colors.ink600,
+          ),
+        ),
+        if (devToken.isNotEmpty) ...[
+          const SizedBox(height: SpacingTokens.s4),
+          // DEV/QA ONLY: a real server never echoes the token, so this branch is
+          // unreachable outside dev/test (EMAIL_VERIFY_RETURN_TOKEN).
+          const AssenNoticeBar(message: '개발용: 메일 없이 인증을 완료할 수 있어요.'),
+          const SizedBox(height: SpacingTokens.s3),
+          AssenButton(
+            label: '인증 완료(개발용)',
+            expand: true,
+            onPressed: busy ? null : onConfirm,
+          ),
+        ],
+        if (errorText != null) ...[
+          const SizedBox(height: SpacingTokens.s3),
+          Text(
+            errorText!,
+            style: TextStyle(
+              fontSize: TypographyTokens.bodySSize,
+              color: colors.redMain,
+            ),
+          ),
+        ],
+        const SizedBox(height: SpacingTokens.s6),
+        AssenButton(
+          label: '로그인으로 돌아가기',
+          style: AssenButtonStyle.ghost,
+          expand: true,
+          onPressed: busy ? null : onBackToLogin,
         ),
       ],
     );

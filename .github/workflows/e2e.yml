@@ -6,7 +6,7 @@ name: e2e
 # (OTP·seed 데이터·상품·주문·KYC·결제)을 소비하므로 server/** 변경도 회귀를 유발할 수 있다.
 # web-ci.yml은 web/** 트리거를 유지하고, 이 잡만 web/**+server/** 양쪽을 트리거하는 게 정확하다.
 #
-# ★ 스텝 시퀀스는 R6-W1B의 로컬 실증 절차(playwright.config.ts 주석·scripts/integration-smoke.mjs)와
+# ★ 스텝 시퀀스는 R6-W1B의 로컬 실증 절차(playwright.config.ts 주석·e2e/journey.spec.ts)와
 #   1:1 대응한다. 리포 고유 함정 3건을 반영:
 #   ① output:"standalone" → `next start` 불가. .next/static(·public)을 standalone에 복사 후
 #      `node .next/standalone/server.js`로 기동해야 클라이언트 JS가 서빙되고 하이드레이트된다.

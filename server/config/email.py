@@ -1,12 +1,22 @@
-"""Email send adapter boundary + a local mock + the verification-token signing.
+"""Email send adapter boundary + a local mock + real adapters + verification-token signing.
 
 Mirrors ``config/otp.py`` / ``config/social_auth.py``: ships the abstract
-:class:`EmailSender` boundary and a deterministic :class:`MockEmailSender` (dev/QA,
-logs the message — NEVER a real send), so the email + password fan-auth flow can be
-built and tested without an SMTP account. Which one :func:`email_sender` returns is
-env-driven: the mock only when ``ENABLE_MOCK_EMAIL`` is on (dev/test/demo), else
-``None`` so the surface fails closed (503) rather than pretend a mail was delivered —
-the same fail-closed shape as ``_otp_sender`` / ``social_auth_provider``.
+:class:`EmailSender` boundary, a deterministic :class:`MockEmailSender` (dev/QA, logs
+the message — NEVER a real send), and the two REAL adapters —
+:class:`SesEmailSender` (AWS SES) and :class:`SmtpEmailSender` (generic SMTP). Which
+one :func:`email_sender` returns is env-driven:
+
+- ``ENABLE_MOCK_EMAIL`` on (dev/test/demo, hardcoded False in base/prod) → the mock,
+  always winning so those environments never reach a real provider.
+- ``EMAIL_SENDER_BACKEND=ses`` / ``=smtp``, FULLY configured → that real adapter.
+- anything else — unset, unknown, or a PARTIAL config → ``None``, so the surface fails
+  closed (503) rather than pretend a mail was delivered — the same fail-closed shape as
+  ``identity_verifier`` / ``social_auth_provider``.
+
+Seam pattern (as in ``config/payment.py``): the adapter code ships here, while the
+provider setup (SES domain/identity verification + sandbox exit, or an SMTP relay
+account) stays an external credential gate. Nothing changes until a deployment sets
+``EMAIL_SENDER_BACKEND`` and its settings.
 
 The verification token is a :func:`django.core.signing.dumps` payload
 (``{"account_id", "email"}``) under a dedicated salt with a TTL
@@ -24,9 +34,12 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core import signing
+from django.core.mail import EmailMessage
 
 # Structured, PII-aware: the mock only runs in dev/test/demo (ENABLE_MOCK_EMAIL), so
 # logging the address + token there is a deliberate QA affordance, not a prod leak —
@@ -36,6 +49,16 @@ logger = logging.getLogger(__name__)
 # Signing salt namespacing the email-verification token (distinct from the social
 # state salt) so a token minted for one purpose can never validate for another.
 EMAIL_VERIFY_SALT = "assen.email.verify"
+
+# Real transports selectable via EMAIL_SENDER_BACKEND. Anything else (including the
+# empty default) selects no sender at all — the surface fails closed. config.settings.prod
+# refuses to boot on a value outside this tuple, so a typo cannot silently 503 forever.
+SES_BACKEND = "ses"
+SMTP_BACKEND = "smtp"
+SUPPORTED_EMAIL_BACKENDS = (SES_BACKEND, SMTP_BACKEND)
+
+# Subject of the fan-facing verification mail (Korean — every fan-facing string is).
+VERIFY_SUBJECT = "[Assen] 이메일 인증을 완료해 주세요"
 
 
 class EmailSendError(Exception):
@@ -77,16 +100,186 @@ class MockEmailSender(EmailSender):
         )
 
 
-def email_sender() -> EmailSender | None:
-    """Return the configured email sender, or ``None`` when none is wired.
+def verification_url(*, web_base_url: str, token: str) -> str:
+    """Build the fan-facing verify link the mail body carries.
 
-    The deterministic mock is gated behind ``ENABLE_MOCK_EMAIL`` (off in production)
-    so its no-op "send" can never back a real verification. With no real email adapter
-    wired yet, production returns ``None`` and the email-auth surface fails closed
-    (503) — mirroring ``_otp_sender`` / ``identity_verifier`` / ``social_auth_provider``.
+    Points at the web app's ``/verify-email`` route (which reads ``?token=``), not the
+    API — the fan lands on a page, which then calls the confirm endpoint. The token is
+    query-encoded so its signing separators survive the round trip.
+    """
+    return f"{web_base_url.rstrip('/')}/verify-email?{urlencode({'token': token})}"
+
+
+def render_verification(*, web_base_url: str, token: str) -> tuple[str, str]:
+    """Return the ``(subject, plain-text body)`` of the Korean verification mail.
+
+    Shared by both real adapters so SES and SMTP deliver an identical message. Plain
+    text only: it renders everywhere, carries no tracking/remote content, and keeps the
+    link inspectable before a fan clicks it.
+    """
+    link = verification_url(web_base_url=web_base_url, token=token)
+    # The TTL is authoritative in EMAIL_VERIFY_TTL_SECONDS (load_verification_token
+    # enforces it); the copy derives from it so the two can never disagree.
+    hours = max(1, settings.EMAIL_VERIFY_TTL_SECONDS // 3600)
+    body = (
+        "안녕하세요, Assen입니다.\n\n"
+        "아래 링크를 눌러 이메일 인증을 완료해 주세요.\n\n"
+        f"{link}\n\n"
+        f"이 링크는 {hours}시간 동안만 유효해요.\n"
+        "본인이 요청하지 않았다면 이 메일을 무시해 주세요.\n"
+    )
+    return VERIFY_SUBJECT, body
+
+
+def _log_verification_sent(event: str, email: str) -> None:
+    """Log a delivery event carrying NO PII and NO token.
+
+    Unlike :class:`MockEmailSender` (dev/test/demo only, where logging the address +
+    token is a deliberate QA affordance), the real senders run in production: the token
+    is a bearer credential — anyone reading it could complete the verification — and the
+    address is raw PII. Only the domain is recorded, which is enough to spot a failing
+    provider without identifying the fan.
+    """
+    logger.info(event, extra={"email_domain": email.rpartition("@")[2]})
+
+
+class SmtpEmailSender(EmailSender):
+    """Real SMTP adapter — delivers the verification mail via Django's mail stack.
+
+    Goes through :mod:`django.core.mail` (the configured ``EMAIL_BACKEND``, Django's
+    SMTP backend by default) rather than hand-rolled :mod:`smtplib`, so host/port/TLS/
+    timeout/credentials all come from the standard ``EMAIL_*`` settings and the suite
+    can capture sends through the locmem backend. Selected by
+    ``EMAIL_SENDER_BACKEND=smtp``, and only when fully configured (:func:`email_sender`).
+    """
+
+    def __init__(self, *, from_email: str, web_base_url: str) -> None:
+        """Bind the From: address + the web origin the verify link points at."""
+        self._from_email = from_email
+        self._web_base_url = web_base_url
+
+    def send_verification(self, *, email: str, token: str) -> None:
+        """Send the Korean verification mail over SMTP; raise on delivery failure."""
+        subject, body = render_verification(
+            web_base_url=self._web_base_url, token=token
+        )
+        message = EmailMessage(
+            subject=subject, body=body, from_email=self._from_email, to=[email]
+        )
+        try:
+            # fail_silently=False is Django's default; it is explicit here because a
+            # swallowed failure would report a verification mail that never left.
+            message.send(fail_silently=False)
+        except OSError as exc:
+            # smtplib.SMTPException and ssl.SSLError are both OSError subclasses, so
+            # this covers refused/failed relays and socket/TLS errors alike.
+            raise EmailSendError(f"SMTP verification send failed: {exc}") from exc
+        _log_verification_sent("email.smtp.verification_sent", email)
+
+
+def _build_ses_client(region: str) -> Any:
+    """Construct the boto3 SESv2 client for ``region``.
+
+    Import-lazy so boto3 loads only when SES is actually selected, and isolated in a
+    module function so tests can stub the client without touching boto3 itself.
+    Credentials are NEVER passed: boto3 resolves them from the ambient AWS chain (the
+    ECS task role), so no static access key exists to leak or rotate.
+    """
+    import boto3
+
+    return boto3.client("sesv2", region_name=region)
+
+
+class SesEmailSender(EmailSender):
+    """Real AWS SES adapter — SESv2 ``send_email`` through boto3.
+
+    Transport choice (SES API over SES's SMTP interface): the API signs with the ambient
+    ECS task role, whereas SES-over-SMTP needs a dedicated long-lived IAM SMTP
+    credential pair in the environment — a static secret to ship, store, and rotate. The
+    API also surfaces per-send errors (MessageRejected, sandbox/verification failures)
+    as typed botocore exceptions instead of SMTP status codes. boto3 is already a
+    dependency (django-storages[s3]), so this adds nothing to the lockfile. Selected by
+    ``EMAIL_SENDER_BACKEND=ses``, and only when fully configured (:func:`email_sender`).
+    """
+
+    def __init__(self, *, region: str, from_email: str, web_base_url: str) -> None:
+        """Bind the SES region, the (SES-verified) From: address, and the web origin."""
+        self._region = region
+        self._from_email = from_email
+        self._web_base_url = web_base_url
+        self._client: Any | None = None
+
+    def send_verification(self, *, email: str, token: str) -> None:
+        """Send the Korean verification mail via SES; raise on any SES/transport error."""
+        subject, body = render_verification(
+            web_base_url=self._web_base_url, token=token
+        )
+        try:
+            self._ses_client().send_email(
+                FromEmailAddress=self._from_email,
+                Destination={"ToAddresses": [email]},
+                Content={
+                    "Simple": {
+                        "Subject": {"Data": subject, "Charset": "UTF-8"},
+                        "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
+                    }
+                },
+            )
+        except Exception as exc:
+            # Broad by intent: botocore raises ClientError/BotoCoreError (and their many
+            # subclasses) plus credential-resolution errors. Every one of them means the
+            # mail did NOT go out, so all of them must reach the caller — never a silent
+            # success. Chained (`from exc`) so the original SES error stays diagnosable.
+            raise EmailSendError(f"SES verification send failed: {exc}") from exc
+        _log_verification_sent("email.ses.verification_sent", email)
+
+    def _ses_client(self) -> Any:
+        """Return the SESv2 client, building it on first use (clients are reusable)."""
+        if self._client is None:
+            self._client = _build_ses_client(self._region)
+        return self._client
+
+
+def email_sender() -> EmailSender | None:
+    """Return the configured email sender, or ``None`` when none is fully wired.
+
+    Precedence — the mock always wins where it is enabled, so dev/test/demo can never
+    reach a real provider even with real settings present:
+
+    - ``ENABLE_MOCK_EMAIL`` (dev/test/demo; hardcoded False in base/prod) →
+      :class:`MockEmailSender`, whose no-op "send" can never back a real verification.
+    - ``EMAIL_SENDER_BACKEND=ses`` → :class:`SesEmailSender`, iff the SES region, the
+      From: address, and the web base URL are all set.
+    - ``EMAIL_SENDER_BACKEND=smtp`` → :class:`SmtpEmailSender`, iff ``EMAIL_HOST``, the
+      From: address, and the web base URL are all set.
+    - anything else — unset, unknown, or a PARTIALLY configured backend → ``None``.
+
+    Fail-closed by construction: a half-configured backend yields ``None`` (the surface
+    503s) rather than a sender that would raise on every signup, so "email is off" and
+    "email is broken" stay distinguishable — mirroring ``social_auth_provider`` /
+    ``identity_verifier``. The web base URL counts as required config because without it
+    no usable verify link can be built.
     """
     if settings.ENABLE_MOCK_EMAIL:
         return MockEmailSender()
+
+    backend: str = settings.EMAIL_SENDER_BACKEND.strip().lower()
+    from_email: str = settings.EMAIL_FROM_ADDRESS.strip()
+    web_base_url: str = settings.WEB_BASE_URL.strip()
+    if not backend or not from_email or not web_base_url:
+        return None
+
+    if backend == SES_BACKEND:
+        region: str = settings.EMAIL_SES_REGION.strip()
+        if not region:
+            return None
+        return SesEmailSender(
+            region=region, from_email=from_email, web_base_url=web_base_url
+        )
+    if backend == SMTP_BACKEND:
+        if not settings.EMAIL_HOST.strip():
+            return None
+        return SmtpEmailSender(from_email=from_email, web_base_url=web_base_url)
     return None
 
 

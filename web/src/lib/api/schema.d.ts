@@ -2634,6 +2634,10 @@ export interface paths {
         /**
          * Patch Report Status
          * @description Advance a report's handling status (operator+).
+         *
+         *     This is also the media-takedown control: moving a report that targets an upload to
+         *     ``actioned`` stops that image being served (report-driven human moderation). The
+         *     upload row survives — takedown is a status change, never a delete.
          */
         patch: operations["apps_safety_api_patch_report_status"];
         trace?: never;
@@ -5910,6 +5914,8 @@ export interface components {
             cast_id: string;
             /** Visit Id */
             visit_id?: string | null;
+            /** Upload Id */
+            upload_id?: string | null;
         };
         /**
          * FanReportOut
@@ -5945,6 +5951,12 @@ export interface components {
          *     ``report_type`` is length-bounded so an oversized value is rejected by schema
          *     validation (never echoed); the unknown-type error is generic, so a fan cannot
          *     smuggle PII into ``report_type`` and have it reflected back in a 422.
+         *
+         *     ``upload_id`` is the one structured target a fan MAY supply, and it does not
+         *     reopen the free-text hole cast_id would: it is a server-minted UUID this platform
+         *     handed the fan from its own upload endpoint, resolved to a real row before use.
+         *     It is what makes an uploaded image reportable — the entry point for report-driven
+         *     media moderation.
          */
         FanReportCreateIn: {
             /** Report Type */
@@ -5954,6 +5966,8 @@ export interface components {
              * @default
              */
             narrative: string;
+            /** Upload Id */
+            upload_id?: string | null;
         };
         /**
          * ReportHandlingStatsOut

@@ -143,6 +143,19 @@ class SafetyReport(models.Model):
         null=True,
         blank=True,
     )
+    # The uploaded image this report is about, when it is about one (most reports are
+    # not — hence nullable, exactly like ``visit``). This is what makes user-uploaded
+    # media reportable: taking such a report to ``actioned`` takes the upload down
+    # (apps.safety.services.change_report_status). PROTECT preserves the link between
+    # a takedown and the report that justified it. Carries no PII — an Upload row is
+    # a server-minted UUID + URL, never a filename.
+    upload = models.ForeignKey(
+        "uploads.Upload",
+        on_delete=models.PROTECT,
+        related_name="safety_reports",
+        null=True,
+        blank=True,
+    )
     created_by = models.ForeignKey(
         "identity.Account",
         on_delete=models.PROTECT,

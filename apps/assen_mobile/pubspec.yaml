@@ -28,10 +28,6 @@ dependencies:
   cached_network_image: ^3.4.1
   core_tokens:
     path: ../../packages/core_tokens
-  # Deterministic dev-only OTP hint (HMAC-SHA256, mirroring the server's
-  # MockOtpSender). Pure Dart, so it also runs under `flutter test`. Never
-  # invoked in a release build (guarded by kReleaseMode) — see dev_otp.dart.
-  crypto: ^3.0.3
   cupertino_icons: ^1.0.8
   # HTTP client with interceptors. The api_client generated layer is P6; the
   # home screen wires a real Dio call against ApiClientConfig for now.
