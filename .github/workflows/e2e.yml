@@ -89,7 +89,7 @@ jobs:
           done
 
       # --- 웹(Next, live) 부트스트랩 --------------------------------------------------
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
