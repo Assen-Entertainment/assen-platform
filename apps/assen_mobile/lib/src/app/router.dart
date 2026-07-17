@@ -25,6 +25,8 @@ import 'package:assen_mobile/src/studio/studio_posts_screen.dart';
 import 'package:assen_mobile/src/studio/studio_products_screen.dart';
 import 'package:assen_mobile/src/studio/studio_screen.dart';
 import 'package:assen_mobile/src/studio/studio_tiers_screen.dart';
+import 'package:assen_mobile/src/verify/verify_gate.dart';
+import 'package:assen_mobile/src/verify/verify_screen.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,6 +50,16 @@ abstract final class RoutePaths {
 
   /// The login wall shown to guests hitting a protected route.
   static const String login = '/login';
+
+  /// The 본인인증 screen an unverified fan is routed to by the global KYC gate.
+  static const String verify = '/verify';
+
+  /// Builds the 본인인증 location returning to [next] once verification is done.
+  ///
+  /// [next] is the location the fan was on when the server refused a gated
+  /// interaction, carried as a query parameter (mirroring the web's `?next=`).
+  static String verifyNext(String next) =>
+      '/verify?${Uri(queryParameters: {'next': next}).query}';
 
   /// The global feed of recent posts (reached from the discovery shortcut).
   static const String feed = '/feed';
@@ -125,6 +137,18 @@ abstract final class RoutePaths {
 // Root navigator key so pushed routes (creator, login) sit above the shell.
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Resolves the 본인인증 `?next=` return location, defaulting to 둘러보기.
+///
+/// Accepts only an in-app absolute path (`/...`), never a scheme-relative
+/// `//host` — mirroring the web's `sanitizeNext` open-redirect guard, so a
+/// crafted deep link can never bounce a fan off-app after verifying.
+String _sanitizeNext(String? next) {
+  if (next == null || !next.startsWith('/') || next.startsWith('//')) {
+    return RoutePaths.discovery;
+  }
+  return next;
+}
+
 /// The application [GoRouter].
 ///
 /// Wires the four-branch [StatefulShellRoute] (bottom-nav shell), the
@@ -136,6 +160,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);
   ref
     ..listen(authControllerProvider, (_, _) => refresh.value++)
+    // The KYC gate flips from an API 403 while the fan sits on some other
+    // screen, so the redirect must be re-run on that change too.
+    ..listen(kycGateProvider, (_, _) => refresh.value++)
     ..onDispose(refresh.dispose);
 
   return GoRouter(
@@ -153,6 +180,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Keep signed-in viewers out of the login wall.
       if (location == RoutePaths.login && isAuthenticated) {
         return RoutePaths.discovery;
+      }
+      // The global 본인인증 gate: the shared Dio interceptor raises this when the
+      // server refuses a gated interaction (403 IdentityVerificationRequired),
+      // and every location resolves here until the fan verifies or backs out
+      // (the verify screen clears the flag). One central redirect — no call
+      // site handles the gate itself. Guests can never trip it (they get a 401
+      // and the login wall instead), so it is scoped to a signed-in session.
+      if (isAuthenticated &&
+          ref.read(kycGateProvider) &&
+          location != RoutePaths.verify) {
+        return RoutePaths.verifyNext(location);
       }
       return null;
     },
@@ -311,6 +349,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.login,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.verify,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => VerifyScreen(
+          next: _sanitizeNext(state.uri.queryParameters['next']),
+        ),
       ),
     ],
   );

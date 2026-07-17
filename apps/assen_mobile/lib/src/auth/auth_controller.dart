@@ -33,10 +33,11 @@ class AuthState {
 /// Owns the session [AuthState] and the token lifecycle (E6 auth, #26).
 ///
 /// On construction it restores any token pair from secure storage (fail-closed
-/// on any read error). It exposes the OTP/login/signup/logout flows against the
-/// backend `/api/fan/*` surface and a single-flight [refreshSession] the API
-/// interceptor calls on a 401. Persisted material is the token pair only —
-/// never a phone number or other PII — and tokens are never logged.
+/// on any read error). It exposes the email signup/verify/login/logout flows
+/// against the backend `/api/fan/*` surface and a single-flight
+/// [refreshSession] the API interceptor calls on a 401. Persisted material is
+/// the token pair only — never an email address or other PII — and tokens are
+/// never logged.
 class AuthController extends Notifier<AuthState> {
   /// Dedupes concurrent refreshes: while a rotation is in flight every 401
   /// awaits the same future so only one `POST /fan/refresh` is ever sent.
@@ -82,45 +83,51 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  /// Sends a signup/login OTP to [phone] (`POST /fan/signup/otp`).
-  ///
-  /// DEFERRED (real-SMS hardening): the mock sender issues a deterministic code
-  /// that the same phone can reuse across a login attempt and a subsequent
-  /// signup. A single-use / step-bound OTP is gated behind the real SMS adapter
-  /// (mock disabled in production via `ENABLE_MOCK_FAN_OTP=False`), so this is
-  /// not exploitable on a shipped build.
-  Future<void> requestOtp(String phone) =>
-      ref.read(authApiProvider).requestOtp(phone);
-
-  /// Re-authenticates an existing fan and, on success, starts the session.
+  /// Authenticates an existing fan by email + password and, on success, starts
+  /// the session.
   ///
   /// Throws [AuthException] on failure (e.g.
-  /// [AuthFailureReason.accountNotRegistered] so the caller can offer signup).
-  Future<void> login({required String phone, required String otp}) async {
-    final tokens = await ref
-        .read(authApiProvider)
-        .login(phone: phone, otp: otp);
-    await _startSession(tokens);
-  }
-
-  /// Registers a new fan (phone + OTP + nickname + consent) and starts the
-  /// session on success.
-  Future<void> signup({
-    required String phone,
-    required String otp,
-    required String nickname,
-    required bool consentTerms,
-    required bool consentPrivacy,
+  /// [AuthFailureReason.emailNotVerified] so the caller can point the fan back
+  /// at the verification mail).
+  Future<void> loginEmail({
+    required String email,
+    required String password,
   }) async {
     final tokens = await ref
         .read(authApiProvider)
-        .signup(
-          phone: phone,
-          otp: otp,
-          nickname: nickname,
-          consentTerms: consentTerms,
-          consentPrivacy: consentPrivacy,
-        );
+        .loginEmail(email: email, password: password);
+    await _startSession(tokens);
+  }
+
+  /// Registers an (unverified) fan and returns the verification token.
+  ///
+  /// Deliberately does NOT start a session: the server issues no tokens until
+  /// the emailed link is confirmed via [verifyEmail]. The returned token is
+  /// non-empty only on a dev/test server (`EMAIL_VERIFY_RETURN_TOKEN`), where
+  /// it lets QA finish the flow without an inbox; `""` on any real surface.
+  Future<String> signupEmail({
+    required String email,
+    required String password,
+    required String nickname,
+    required bool consentTerms,
+    required bool consentPrivacy,
+    required bool ageOver14,
+    bool marketingConsent = false,
+  }) => ref
+      .read(authApiProvider)
+      .signupEmail(
+        email: email,
+        password: password,
+        nickname: nickname,
+        consentTerms: consentTerms,
+        consentPrivacy: consentPrivacy,
+        ageOver14: ageOver14,
+        marketingConsent: marketingConsent,
+      );
+
+  /// Confirms an email-verification [token] and starts the session on success.
+  Future<void> verifyEmail(String token) async {
+    final tokens = await ref.read(authApiProvider).verifyEmail(token);
     await _startSession(tokens);
   }
 
