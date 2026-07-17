@@ -14,9 +14,11 @@ These tests assert the composed result, because neither half is correct alone. T
 drive django-storages' real parameter builder with no bucket/network involved.
 
 The regression that motivates the ContentType pin specifically: ``mimetypes`` does not
-know ``.webp`` on every platform (it returns None on this one), so without the pin the
-backend's own extension-guess fallback would store every WEBP as
-application/octet-stream — downloading instead of rendering.
+know ``.webp`` on every platform — a stock Linux registry does, several Windows installs
+return ``(None, None)`` — so without the pin the backend's own extension-guess fallback
+would store every WEBP as application/octet-stream on those machines, downloading
+instead of rendering. The pin removes that dependency, and the test below blinds the
+registry rather than asserting whichever answer the current runner gives.
 """
 
 from __future__ import annotations
@@ -110,15 +112,28 @@ def test_no_acl_is_sent_so_the_bucket_stays_private() -> None:
     assert "ACL" not in params
 
 
-def test_content_type_pin_is_load_bearing_for_webp() -> None:
-    # Documents *why* the write site pins the type rather than trusting the backend's
-    # extension guess. If this ever starts passing (mimetypes learns webp), the pin is
-    # still correct — it just stops being the only thing standing between a WEBP
-    # upload and an application/octet-stream that browsers download instead of render.
-    assert mimetypes.guess_type("x.webp") == (None, None)
+def test_content_type_pin_is_load_bearing_for_webp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pin holds even when the extension registry cannot name the format.
 
+    ``mimetypes.guess_type`` is **platform-dependent**: a stock Linux registry knows
+    ``.webp``, several Windows installs return ``(None, None)``. So blind the registry
+    and assert the invariant that matters — the write site never depends on it —
+    instead of asserting whichever answer this runner happens to give. (Asserting the
+    local answer is what broke: it passed on Windows and failed on Linux CI.)
+
+    Blind, the backend's own fallback would store a WEBP as application/octet-stream,
+    which browsers download instead of render. The pin is what stands in the way.
+    """
+    monkeypatch.setattr(mimetypes, "guess_type", lambda *_a, **_k: (None, None))
+
+    # Without the pin: the fallback the registry leaves behind.
     unpinned = ContentFile(b"pixels")
-    params = _storage()._get_write_parameters("uploads/deadbeef.webp", unpinned)
-    assert params["ContentType"] == "application/octet-stream"
+    fallback = dict(_storage()._get_write_parameters("uploads/deadbeef.webp", unpinned))
+    assert fallback["ContentType"] == "application/octet-stream"
     # Whatever the fallback is, it must at minimum never be active content.
-    assert params["ContentType"] not in {"text/html", "application/javascript"}
+    assert fallback["ContentType"] not in {"text/html", "application/javascript"}
+
+    # With the pin (what apps.uploads.api does): correct type despite the blind registry.
+    assert _write_params(_sniffed("WEBP"))["ContentType"] == "image/webp"
