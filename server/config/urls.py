@@ -6,13 +6,12 @@ routers attach to that NinjaAPI from inside each app's api.py (CONSTRAINTS #38).
 
 from __future__ import annotations
 
-from django.conf import settings
 from django.contrib import admin
 from django.db import connection
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.urls import path, re_path
-from django.views.static import serve
 
+from apps.uploads.media import serve_upload
 from config.api import api
 from config.observability import git_sha
 
@@ -58,22 +57,20 @@ urlpatterns = [
     path("api/", api.urls),
     path("healthz", healthz),
     path("readyz", readyz),
+    # User-uploaded media, served by Django on EVERY backend and in EVERY environment
+    # (대표 approved 07-18) — local filesystem in dev/test/demo, S3 in production. The
+    # view reads through ``default_storage``, so the route does not vary with the
+    # backend and neither does the URL it serves.
+    #
+    # Unconditional, and NOT gated on DEBUG: proxying reads is what makes a media URL
+    # stable (a bucket-direct read needs a signed URL, which expires — and this one is
+    # persisted) and what makes a moderation takedown immediate (the view checks the
+    # Upload row; a bucket-direct read never reaches Django, so nothing could check).
+    # Django's ``static()`` helper is unusable for the same DEBUG reason it always was:
+    # it returns [] unless DEBUG, and demo/prod run with DEBUG off.
+    #
+    # Responses also pass through SecurityMiddleware / SecurityHeadersMiddleware, which
+    # stamp X-Content-Type-Options: nosniff globally, so the row-pinned content-type
+    # cannot be re-sniffed by the browser (the view sets it explicitly too).
+    re_path(r"^media/(?P<path>.*)$", serve_upload),
 ]
-
-# Serve user-uploaded media from the local filesystem so the feed/catalog can render
-# freshly uploaded images without a CDN. Gated on SERVE_LOCAL_MEDIA (dev/test/demo),
-# NOT on DEBUG: the demo profile runs with DEBUG off, and Django's ``static()``
-# helper returns [] unless DEBUG — so it would silently serve nothing there. The
-# explicit ``serve`` view works regardless of DEBUG. Responses pass through
-# SecurityMiddleware / SecurityHeadersMiddleware, which stamp X-Content-Type-Options:
-# nosniff globally, so a sniff-derived content-type can't be re-sniffed by the
-# browser. Real production serves MEDIA_URL from S3/CDN (never through Django), so
-# this route is absent there — SERVE_LOCAL_MEDIA stays False (base.py).
-if settings.SERVE_LOCAL_MEDIA:
-    urlpatterns += [
-        re_path(
-            r"^media/(?P<path>.*)$",
-            serve,
-            {"document_root": settings.MEDIA_ROOT},
-        ),
-    ]

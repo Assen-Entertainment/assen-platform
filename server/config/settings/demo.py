@@ -35,8 +35,9 @@ ENABLE_MOCK_SOCIAL_AUTH = True
 # the token off the wire in this prod-hardened profile.
 ENABLE_MOCK_EMAIL = True
 
-# DEMO ONLY: serve uploaded media off the local filesystem (config.urls) and enable
-# the upload endpoint. prod (DEBUG off) keeps this False — real prod serves media
-# from S3/CDN, never through Django. Demo-grade like every other mock gate above;
-# the deferred hardening gates in base.py STORAGES still apply before real serving.
-SERVE_LOCAL_MEDIA = True
+# Accept uploads in the demo. The only difference from production is the storage
+# backend underneath (local filesystem here, S3 there — DJANGO_MEDIA_S3_BUCKET): the
+# accept gate, the URL scheme, and the serving route are identical, so the demo walks
+# the same media path prod does. The deferred hardening gates in base.py STORAGES still
+# apply.
+ALLOW_UPLOADS = True

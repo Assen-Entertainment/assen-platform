@@ -48,7 +48,7 @@ _KEY_MAX = 100
 def _adapter() -> NotificationAdapter | None:
     """Return the push adapter, or ``None`` when no transport is wired.
 
-    Mirrors ``apps.identity.api._otp_sender`` / ``config.payment.payment_tokenizer``:
+    Mirrors ``config.email.email_sender`` / ``config.payment.payment_tokenizer``:
     the in-memory mock is gated behind ``ENABLE_MOCK_PUSH`` (dev/test/demo only) so it
     can never back a "delivered" claim in production. With no real FCM/APNs transport
     yet, production returns ``None`` and the dispatch surface fails closed (503) rather

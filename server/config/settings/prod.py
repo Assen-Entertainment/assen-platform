@@ -12,6 +12,7 @@ from __future__ import annotations
 import environ
 from django.core.exceptions import ImproperlyConfigured
 
+from config.email import SUPPORTED_EMAIL_BACKENDS
 from config.observability import init_sentry
 from config.settings.base import *  # noqa: F403
 from config.settings.base import build_logging, env
@@ -66,6 +67,20 @@ if env.int("TRUSTED_PROXY_HOPS", default=0) < 1:
     raise ImproperlyConfigured(
         "TRUSTED_PROXY_HOPS must be >= 1 behind the load balancer, else every user "
         "buckets onto the proxy IP (ASS-295)."
+    )
+
+# Email transport (config.email). DELIBERATELY NOT a boot requirement: a prod without
+# email credentials must still boot and serve reads + social login, so a MISSING or
+# incomplete email config keeps the 503 seam at the endpoint — the same shape as the
+# payment/KYC gates, and exactly what base.py's empty defaults produce. But an UNKNOWN
+# backend NAME is always a mistake: it can never select an adapter, so email signup
+# would 503 forever while the env looks configured. Fail closed LOUDLY on that one case
+# (a value that is impossible), while a valid-but-incomplete config still 503s quietly.
+_email_backend = env("EMAIL_SENDER_BACKEND", default="").strip().lower()
+if _email_backend and _email_backend not in SUPPORTED_EMAIL_BACKENDS:
+    raise ImproperlyConfigured(
+        f"EMAIL_SENDER_BACKEND must be one of {list(SUPPORTED_EMAIL_BACKENDS)} or "
+        f"unset; got '{_email_backend}'."
     )
 
 # TLS terminates at the ALB; trust its forwarded proto header so Django knows

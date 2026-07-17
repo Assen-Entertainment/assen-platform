@@ -1,4 +1,7 @@
-"""Object-storage signed-URL adapter interface and a local mock.
+"""Media-storage readiness predicate, signed-URL adapter interface, and a local mock.
+
+:func:`media_storage_ready` answers "can ``default_storage`` actually hold an object?"
+— half of the upload-accept gate (apps.uploads.api).
 
 P0 ships the boundary and a self-contained local mock; the real S3/GCS signer
 lands later. Cheki images and safety attachments (P5) need time-limited access
@@ -19,6 +22,51 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlencode, urlparse
+
+from django.conf import settings
+
+# Storage BACKEND paths that hand bytes to a real object store (as opposed to the
+# local filesystem). These are the only backends that can be configured into a state
+# that looks correct but can store nothing (a bucket-less S3), which is the sole thing
+# :func:`media_storage_ready` can decide from settings alone. Kept as a set of dotted
+# paths rather than an isinstance check so the predicate stays cheap and importable
+# without django-storages installed (dev/test do not install it).
+_OBJECT_STORAGE_BACKENDS: frozenset[str] = frozenset(
+    {
+        "storages.backends.s3.S3Storage",
+        "storages.backends.s3boto3.S3Boto3Storage",
+    }
+)
+
+
+def media_storage_ready() -> bool:
+    """Whether ``default_storage`` is pointed somewhere an upload can be stored.
+
+    Half of the upload gate (apps.uploads.api): uploads are accepted only when
+    ALLOW_UPLOADS is on AND this says the backend is usable. The failure it exists to
+    prevent is unchanged — never accept bytes that cannot come back — but the shape of
+    that question changed: Django now serves every media byte itself, on every backend,
+    through the gated view (apps.uploads.media). "Does a serving path exist" is
+    therefore no longer a variable (it is always Django), and all that is left to
+    establish is that the *store* has somewhere to put the object.
+
+    Exactly one misconfiguration is decidable from settings: an object-storage backend
+    naming no bucket. Its BACKEND reads as correct, so nothing else would catch it, yet
+    every ``save()`` against it fails — this is the misconfiguration most likely to
+    reach production, because an empty ``DJANGO_MEDIA_S3_BUCKET`` is silent.
+
+    Any other backend (the local filesystem in dev/test/demo, a test double) is treated
+    as usable. Whether the disk or the bucket is *actually* writable is a runtime fact
+    no settings predicate can honestly answer, and pretending otherwise here would only
+    move the failure, not detect it.
+    """
+    default = settings.STORAGES.get("default", {})
+    if default.get("BACKEND", "") not in _OBJECT_STORAGE_BACKENDS:
+        return True
+    options = default.get("OPTIONS", {})
+    if not isinstance(options, dict):
+        return False
+    return bool(options.get("bucket_name"))
 
 
 @dataclass(frozen=True)

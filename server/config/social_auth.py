@@ -278,7 +278,7 @@ def social_auth_provider() -> SocialAuthProvider | None:
 
     Real per-provider credentials win where present; the deterministic mock (gated by
     ``ENABLE_MOCK_SOCIAL_AUTH``, off in production) covers the rest. With neither, the
-    social surface fails closed (503) — mirroring ``identity_verifier`` / ``_otp_sender``.
+    social surface fails closed (503) — mirroring ``identity_verifier`` / ``email_sender``.
     """
     creds = _configured_credentials()
     fallback = MockSocialAuthProvider() if settings.ENABLE_MOCK_SOCIAL_AUTH else None

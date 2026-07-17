@@ -9,6 +9,12 @@ Two-tier access (admin_rbac):
 The narrative never appears in an operator response or any event; it is only
 returned by the manager-only detail endpoint, which writes a
 ``SAFETY_DETAIL_VIEWED`` audit entry on every read.
+
+**This is also the media-moderation queue.** A report may target an uploaded image
+(``upload_id`` on both intake surfaces), those reports land in the same
+``GET /api/safety/reports`` triage queue as every other report, and an operator
+moving one to ``actioned`` via ``PATCH /api/safety/reports/{id}/status`` takes the
+image down. No separate moderation queue exists for media, by design.
 """
 
 from __future__ import annotations
@@ -51,6 +57,7 @@ from apps.safety.services import (
     lift_block,
     resolve_report,
 )
+from apps.uploads.models import Upload
 from config.api import api
 from config.throttle import user_write_throttle
 
@@ -106,6 +113,9 @@ class ReportCreateIn(Schema):
     target_id: uuid.UUID | None = None
     cast_id: str = Field(default="", max_length=64)
     visit_id: uuid.UUID | None = None
+    # The uploaded image this report is about, when it is about one. Actioning such a
+    # report takes the image down (apps.uploads.services.take_down_upload).
+    upload_id: uuid.UUID | None = None
 
 
 class ReportStatusIn(Schema):
@@ -164,10 +174,17 @@ class FanReportCreateIn(Schema):
     ``report_type`` is length-bounded so an oversized value is rejected by schema
     validation (never echoed); the unknown-type error is generic, so a fan cannot
     smuggle PII into ``report_type`` and have it reflected back in a 422.
+
+    ``upload_id`` is the one structured target a fan MAY supply, and it does not
+    reopen the free-text hole cast_id would: it is a server-minted UUID this platform
+    handed the fan from its own upload endpoint, resolved to a real row before use.
+    It is what makes an uploaded image reportable — the entry point for report-driven
+    media moderation.
     """
 
     report_type: str = Field(max_length=64)
     narrative: str = Field(default="", max_length=_TEXT_MAX)
+    upload_id: uuid.UUID | None = None
 
 
 class FanReportOut(Schema):
@@ -250,6 +267,9 @@ def create_report(
         # existing cast so arbitrary free text (a name / phone) can never be
         # persisted into the immutable log (ASS-291 #7). Input is not echoed back.
         return 400, SafetyError(detail="Unknown or malformed cast_id.")
+    upload = _upload_or_none(payload.upload_id)
+    if payload.upload_id is not None and upload is None:
+        return 404, SafetyError(detail="Unknown upload_id.")
     reporter = _account_or_none(payload.reporter_id)
     target = _account_or_none(payload.target_id)
     actor = _actor(request)
@@ -264,6 +284,7 @@ def create_report(
         target=target,
         cast_id=payload.cast_id,
         visit_id=str(payload.visit_id) if payload.visit_id else "",
+        upload=upload,
     )
     return 201, redact_safety_report(_summary_dict(report), viewer=actor)
 
@@ -301,11 +322,17 @@ def create_fan_report(
     # operator traffic). Mirrors the QR check-in fan gate (apps/visit/checkin_api.py).
     if fan.role != Role.FAN.value:
         return 403, SafetyError(detail="Only fans can file a self-report.")
+    upload = _upload_or_none(payload.upload_id)
+    if payload.upload_id is not None and upload is None:
+        # Generic + non-echoing, like the unknown-type 422: an unresolvable id is a
+        # client bug, and reflecting it back adds nothing.
+        return 422, SafetyError(detail="upload_id does not refer to a known upload.")
     try:
         report = file_fan_report(
             reporter=fan,
             report_type=payload.report_type,
             narrative=payload.narrative,
+            upload=upload,
         )
     except SafetyReportError as exc:
         return 422, SafetyError(detail=str(exc))
@@ -375,7 +402,12 @@ def patch_report_status(
     report_id: uuid.UUID,
     payload: ReportStatusIn,
 ) -> tuple[int, dict[str, object] | SafetyError]:
-    """Advance a report's handling status (operator+)."""
+    """Advance a report's handling status (operator+).
+
+    This is also the media-takedown control: moving a report that targets an upload to
+    ``actioned`` stops that image being served (report-driven human moderation). The
+    upload row survives — takedown is a status change, never a delete.
+    """
     if payload.status not in ReportStatus.values:
         return 400, SafetyError(detail=f"Unknown status '{payload.status}'.")
     report = get_object_or_404(SafetyReport, id=report_id)
@@ -512,6 +544,19 @@ def _account_or_none(fan_id: uuid.UUID | None) -> Account | None:
     if fan_id is None:
         return None
     return Account.objects.filter(fan_id=fan_id).first()
+
+
+def _upload_or_none(upload_id: uuid.UUID | None) -> Upload | None:
+    """Resolve an optional upload_id to an Upload (None when absent/unknown).
+
+    Callers distinguish "not supplied" from "supplied but unknown" by comparing
+    against the input, so a bad id is refused rather than silently dropped — a report
+    filed with a target the operator believes is bound, but is not, would never
+    produce the takedown they expect.
+    """
+    if upload_id is None:
+        return None
+    return Upload.objects.filter(id=upload_id).first()
 
 
 def _cast_exists(cast_id: str) -> bool:

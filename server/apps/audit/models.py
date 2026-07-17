@@ -91,6 +91,16 @@ class AuditAction(models.TextChoices):
     REFUND_REVIEWED = "refund_reviewed", "refund_reviewed"
     REFUND_ACCEPTED = "refund_accepted", "refund_accepted"
     REFUND_REJECTED = "refund_rejected", "refund_rejected"
+    # Report-driven media moderation (대표 approved 07-18): an operator took a safety
+    # report about an uploaded image to ``actioned``, so the image stopped being
+    # served. A dedicated action (rather than only the report's status-change entry)
+    # so "when/why did this image stop resolving" is directly queryable.
+    UPLOAD_TAKEN_DOWN = "upload_taken_down", "upload_taken_down"
+    # The inverse: an operator moved an actioned report about an image back off
+    # ``actioned``, so the image was un-quarantined and serves again. Recorded
+    # separately from the takedown (never as its absence) because a mis-click that
+    # removed a creator's image and the reversal of it are both accountable acts.
+    UPLOAD_RESTORED = "upload_restored", "upload_restored"
 
 
 class AuditEntry(models.Model):

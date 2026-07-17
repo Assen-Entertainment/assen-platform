@@ -75,7 +75,7 @@ from apps.identity.social_services import (
     verify_social_state,
 )
 from config.api import api
-from config.email import email_sender
+from config.email import EmailSendError, email_sender
 from config.errors import ApiError, ErrorCode
 from config.identity_verify import identity_verifier
 from config.social_auth import (
@@ -518,6 +518,17 @@ def signup_email(request: HttpRequest, data: EmailSignupIn) -> EmailSignupOut:
     except SignupError as exc:
         status = 409 if exc.code == ErrorCode.EMAIL_ALREADY_REGISTERED else 422
         raise ApiError(status, str(exc), code=exc.code) from exc
+    except EmailSendError as exc:
+        # A wired-but-failing sender (refused SMTP relay, SES error) is the same
+        # condition to a caller as no sender at all — email is unavailable right now —
+        # so it gets the same coded 503 as the `sender is None` branch above rather
+        # than surfacing as an uncoded 500. The account may already exist unverified;
+        # 503 (transient) correctly invites a retry, which re-sends the mail.
+        raise ApiError(
+            503,
+            "이메일 가입을 사용할 수 없어요.",
+            code=ErrorCode.EMAIL_UNAVAILABLE,
+        ) from exc
     return EmailSignupOut(
         status="verification_sent",
         verification_token=token if settings.EMAIL_VERIFY_RETURN_TOKEN else "",

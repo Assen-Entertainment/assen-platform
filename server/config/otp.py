@@ -1,9 +1,16 @@
 """Phone OTP send/verify adapter boundary + a local mock (ASS-98 / ASS-257).
 
-Phone OTP is the approved signup provider (Company-OS
+⚠️ Retained for its own unit tests only: since the auth redesign removed the phone-OTP
+signup/login surface, **no endpoint or service imports this module** — its only importer
+is ``config/tests/test_otp.py``. It is kept as the reference :class:`OtpSender` boundary
+and the codified security contract below, so a future phone/SMS surface starts from a
+tested shape rather than a blank file. Fan auth today is email + password / social
+(:mod:`apps.identity.email_services`, :mod:`apps.identity.social_services`).
+
+Phone OTP was the originally approved signup provider (Company-OS
 ``20_Operations/Fan_Signup_Privacy_Policy.md``). Real SMS delivery sits behind a
 later infrastructure/PII gate, so we ship the :class:`OtpSender` boundary and a
-deterministic mock — the signup flow can be built and tested without an SMS
+deterministic mock — a phone signup flow can be built and tested without an SMS
 account or storing a real phone number.
 
 Security contract (ASS-257): the three controls a production adapter MUST enforce
@@ -12,17 +19,15 @@ before a real adapter exists — **code expiry** (short TTL), **single use** (a
 verified code is burned), and **attempt lockout** (bounded wrong guesses per
 number, then a temporary lock). See :class:`OtpSender` for the full contract.
 
-Runtime honesty — NOT enforced by the live mock flow (F3): the three controls are
-verified by unit tests against a *single* :class:`MockOtpSender` instance, but the
-live API builds a **fresh** sender per request (:func:`apps.identity.api._otp_sender`),
-so no armed-code state survives from ``send`` to a later ``verify`` — the verify
-falls back to the stateless deterministic comparison (:meth:`MockOtpSender.verify`),
-which has no expiry, no single-use burn, and no lockout. Real enforcement therefore
-belongs to the production SMS adapter backed by a **shared store** (Redis/DB) that
-holds the armed state across requests and workers — never to this mock. This is not a
-production exposure: prod runs with ``ENABLE_MOCK_FAN_OTP=False``, so the mock is never
-constructed and the signup/login surface fails closed (503) instead of trusting an
-unenforced code — security impact of the mock's un-enforced runtime path is zero.
+Runtime honesty — NOT enforced across requests (F3): the three controls are verified by
+unit tests against a *single* :class:`MockOtpSender` instance. A per-request sender
+keeps no armed-code state from ``send`` to a later ``verify``, so the verify falls back
+to the stateless deterministic comparison (:meth:`MockOtpSender.verify`), which has no
+expiry, no single-use burn, and no lockout. Real enforcement therefore belongs to a
+production SMS adapter backed by a **shared store** (Redis/DB) that holds the armed
+state across requests and workers — never to this mock. Any future re-wiring MUST land
+that adapter first. Production exposure today is zero regardless: no call site
+constructs the mock (see the retention note above).
 
 Privacy: the phone number is never persisted by this layer; callers store only a
 hash (개인정보 최소 수집). The mock derives a deterministic code from the number

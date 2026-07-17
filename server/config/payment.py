@@ -127,8 +127,8 @@ def payment_tokenizer() -> PaymentTokenizer | None:
     The deterministic mock is gated behind ``ENABLE_MOCK_PAYMENT`` (off in
     production) so it can never back a real charge. With no real PG wired yet,
     production returns ``None`` and the payment-method surface fails closed (503)
-    rather than pretend a card was tokenized — mirroring ``_otp_sender`` in
-    :mod:`apps.identity.api`.
+    rather than pretend a card was tokenized — mirroring ``email_sender`` in
+    :mod:`config.email`.
     """
     if settings.ENABLE_MOCK_PAYMENT:
         return MockPaymentTokenizer()

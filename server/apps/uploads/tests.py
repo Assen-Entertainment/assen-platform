@@ -180,10 +180,19 @@ def test_oversize_via_chunk_path_when_size_unknown_413(client: Client) -> None:
     assert Upload.objects.count() == 0
 
 
-@override_settings(SERVE_LOCAL_MEDIA=False)
+@override_settings(
+    STORAGES={
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": {"bucket_name": ""},
+        },
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+)
 def test_upload_disabled_when_storage_unavailable_503(client: Client) -> None:
-    # Fail closed: with no local serving (and no real object store wired) the endpoint
-    # refuses rather than write bytes nothing can serve. Valid PNG still gets a 503.
+    # Fail closed: the storage backend names no bucket, so it can hold nothing. The
+    # endpoint refuses rather than write bytes that cannot come back. Valid PNG still
+    # gets a 503. (The full gate matrix lives in test_gating.py.)
     fan = _fan()
     res = _upload(client, PNG, headers=_auth(fan))
     assert res.status_code == 503

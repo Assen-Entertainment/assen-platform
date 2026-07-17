@@ -10,6 +10,11 @@ reports/blocks are status-changed, never deleted (Data 제약).
 Access control is enforced at the API boundary (operator may file/list with
 detail redacted; manager+ may read detail / resolve / block); these services
 assume the caller is already authorised.
+
+This app is also the platform's media-moderation domain: a report may target an
+uploaded image (``SafetyReport.upload``), and moving such a report to ``actioned``
+takes that image down (:func:`change_report_status`). There is deliberately no
+separate moderation queue for media — the operator report queue IS the queue.
 """
 
 from __future__ import annotations
@@ -36,6 +41,8 @@ from apps.safety.models import (
     SafetyReportDetail,
     UserBlock,
 )
+from apps.uploads.models import Upload
+from apps.uploads.services import restore_upload, take_down_upload
 
 
 class SafetyReportError(Exception):
@@ -78,6 +85,18 @@ def _event_fan_id(report: SafetyReport) -> str:
     if report.reporter_type == ActorKind.FAN.value and report.reporter is not None:
         return str(report.reporter.fan_id)
     return ""
+
+
+def _report_ids(report: SafetyReport) -> dict[str, str]:
+    """Id map for the event envelope: the report, plus the upload when bound.
+
+    Server-minted ids only — an Upload id carries no filename or PII, so it is safe
+    for the append-only ledger and lets media takedowns be reconciled from events.
+    """
+    ids = {"safety_report_id": str(report.id)}
+    if report.upload_id is not None:
+        ids["upload_id"] = str(report.upload_id)
+    return ids
 
 
 # --- Fan self-reporting (ASS-110, F11) --------------------------------------
@@ -134,12 +153,16 @@ def file_report(
     target: Account | None = None,
     cast_id: str = "",
     visit_id: str = "",
+    upload: Upload | None = None,
 ) -> SafetyReport:
     """Create a safety report (summary) + its restricted detail, and emit event.
 
     The narrative is written only to :class:`SafetyReportDetail`; the
     ``safety_report_created`` event and the summary row carry classification and
     ids only.
+
+    ``upload`` binds the report to an uploaded image when it is about one; taking that
+    report to ``actioned`` then takes the image down (:func:`change_report_status`).
     """
     report = SafetyReport.objects.create(
         report_type=report_type,
@@ -151,6 +174,7 @@ def file_report(
         target=target,
         cast_id=cast_id,
         visit_id=visit_id or None,
+        upload=upload,
         created_by=actor,
     )
     SafetyReportDetail.objects.create(report=report, narrative=narrative)
@@ -174,7 +198,7 @@ def file_report(
         cast_id=cast_id,
         visit_id=str(visit_id) if visit_id else "",
         actor_is_operator=True,
-        ids={"safety_report_id": str(report.id)},
+        ids=_report_ids(report),
         # Classification + visibility + ids only — never the narrative.
         payload={
             "safety_report_id": str(report.id),
@@ -194,6 +218,7 @@ def file_fan_report(
     reporter: Account,
     report_type: str,
     narrative: str = "",
+    upload: Upload | None = None,
 ) -> SafetyReport:
     """File a safety report submitted directly by a fan (ASS-110, F11).
 
@@ -220,6 +245,12 @@ def file_fan_report(
     recording a duplicate on a client retry is strictly safer than dropping a
     report — operators de-duplicate during triage. Never lose a safety signal.
 
+    ``upload`` is the structured exception to the "no structured target from a fan"
+    rule above, and it is safe for the same reason cast_id is not: an Upload id is a
+    server-minted UUID the fan received from our own upload endpoint, not free text —
+    it can carry no PII into the ledger, and the API layer resolves it to a real row
+    before it reaches here. This is what makes an uploaded image reportable.
+
     Raises :class:`SafetyReportError` for a type a fan may not self-file.
     """
     if report_type not in FAN_REPORTABLE_TYPES:
@@ -234,6 +265,7 @@ def file_fan_report(
         reporter_type=ActorKind.FAN.value,
         target_type=ActorKind.UNKNOWN.value,
         reporter=reporter,
+        upload=upload,
         created_by=reporter,
     )
     SafetyReportDetail.objects.create(report=report, narrative=narrative)
@@ -245,7 +277,7 @@ def file_fan_report(
         actor_id=str(reporter.fan_id),
         fan_id=str(reporter.fan_id),
         actor_is_operator=False,
-        ids={"safety_report_id": str(report.id)},
+        ids=_report_ids(report),
         # Classification + visibility + ids only — never the narrative.
         payload={
             "safety_report_id": str(report.id),
@@ -259,12 +291,34 @@ def file_fan_report(
     return report
 
 
+def _other_actioned_report_exists(*, upload: Upload, excluding: SafetyReport) -> bool:
+    """Whether some report OTHER than ``excluding`` still holds ``upload`` down."""
+    return (
+        SafetyReport.objects.filter(upload=upload, status=ReportStatus.ACTIONED.value)
+        .exclude(id=excluding.id)
+        .exists()
+    )
+
+
 @transaction.atomic
 def change_report_status(*, report: SafetyReport, status: str, actor: Account) -> SafetyReport:
     """Advance the report's handling status with an audit entry.
 
     Closing is done via :func:`resolve_report` (which also emits the resolved
     event); this covers the received→reviewing→actioned transitions.
+
+    ``actioned`` is the operator's "this content is not allowed" decision, so when the
+    report is bound to an upload this is where that decision takes effect: the image
+    is taken down and stops being served (report-driven human moderation, 대표 approved
+    07-18). Same transaction as the status change — an ACTIONED report and a still-
+    served image must never be observable together.
+
+    Moving such a report *back off* ``actioned`` is the un-action, and it reverses the
+    takedown: the image is restored and serves again. That reversal is the whole reason
+    a takedown moves the bytes to quarantine instead of deleting them — an operator who
+    actioned the wrong report must be able to undo it. Note that closing the report
+    (:func:`resolve_report`) is not an un-action: an actioned-then-closed report is the
+    normal end state and the image stays down.
     """
     if status == ReportStatus.CLOSED.value:
         raise ValueError("Use resolve_report to close a report.")
@@ -281,6 +335,17 @@ def change_report_status(*, report: SafetyReport, status: str, actor: Account) -
         target=str(report.id),
         metadata={"before": before, "after": status},
     )
+    upload = report.upload
+    if upload is not None:
+        if status == ReportStatus.ACTIONED.value:
+            take_down_upload(upload=upload, actor=actor, report_id=str(report.id))
+        elif before == ReportStatus.ACTIONED.value and not _other_actioned_report_exists(
+            upload=upload, excluding=report
+        ):
+            # Un-action. Only the LAST actioned report holding an image down may
+            # restore it: one image can attract several reports, and reverting one
+            # operator's call must not silently undo another's.
+            restore_upload(upload=upload, actor=actor, report_id=str(report.id))
     return report
 
 
