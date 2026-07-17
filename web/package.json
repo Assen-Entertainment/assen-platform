@@ -58,7 +58,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.18.0",
-    "eslint-config-next": "^15.5.19",
+    "eslint-config-next": "^16.2.10",
     "jsdom": "^25.0.1",
     "openapi-typescript": "^7.13.0",
     "playwright": "^1.61.1",
