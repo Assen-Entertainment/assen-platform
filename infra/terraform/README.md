@@ -56,7 +56,12 @@ the exact shape `scripts/deploy-prod-ecs.sh` deploys to. It provisions into an
   `ses_identity_arn`. *Verifying* the identity, publishing DKIM records, and leaving the
   SES sandbox are account/DNS actions done out-of-band (see the prod deploy runbook).
   The grant is useless until they are done, and `validate` cannot detect that.
-- **CDN (CloudFront)** — media is served by signed S3 GET URLs directly; no CDN yet.
+- **CDN (CloudFront)** — none yet. Media is **not** served from S3 to the browser: the
+  app proxies it (`/media/*` → `apps.uploads.media`, streamed from `default_storage`
+  after a takedown-status check), which is what makes a moderation takedown effective
+  immediately. Putting a CDN in front of `/media/*` would cut the ALB/Fargate egress
+  this costs — but it makes **purge-on-takedown a hard requirement**, because a cached
+  object would outlive the takedown. Do not add one without solving that.
 
 ## Apply (once AWS is provisioned)
 ```sh
