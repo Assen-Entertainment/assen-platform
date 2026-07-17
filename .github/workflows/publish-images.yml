@@ -58,7 +58,7 @@ jobs:
             type=sha,format=long
             type=raw,value=${{ github.event.inputs.extra_tag || 'latest' }}
       - name: Build + push server image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: server
           push: true
@@ -97,7 +97,7 @@ jobs:
             type=sha,format=long
             type=raw,value=${{ github.event.inputs.extra_tag || 'latest' }}
       - name: Build + push web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: web
           push: true
