@@ -1,8 +1,9 @@
 # Optional Next.js web service — same-origin with the API behind the single ALB.
 # Gated by var.deploy_web so the API-only stack (prod → Amplify path) is unaffected:
 # when enabled, the listener default action forwards to the web target group (set in
-# alb.tf) and the rule below keeps the API paths on the API service. Same origin →
-# no CORS, no mixed-content. The web reaches the API for SSR via web_api_internal_url.
+# alb.tf) and the rule below keeps the Django-served paths — the API, the probes, and
+# the gated media route — on the API service. Same origin → no CORS, no mixed-content.
+# The web reaches the API for SSR via web_api_internal_url.
 
 resource "aws_cloudwatch_log_group" "web" {
   count             = var.deploy_web ? 1 : 0
@@ -22,7 +23,7 @@ resource "aws_ecs_task_definition" "web" {
 
   container_definitions = jsonencode([{
     name      = "web"
-    image     = "${var.web_image_repository_url}:${var.web_image_tag}"
+    image     = "${local.web_image_repository_url}:${var.web_image_tag}"
     essential = true
     environment = concat(
       [{ name = "API_INTERNAL_URL", value = var.web_api_internal_url }],
@@ -61,9 +62,32 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
-# API paths stay on the API service; the listener default action (alb.tf) sends
-# everything else to the web target group. Attaches to whichever listener is active
-# (HTTPS with a cert, else HTTP).
+# Django-served paths stay on the API service; the listener default action (alb.tf)
+# sends everything else to the web target group. Attaches to whichever listener is
+# active (HTTPS with a cert, else HTTP).
+#
+# `/media/*` is NOT an API path by name, and that is exactly why it was missed once:
+# it is the gated media view (config/urls.py → apps/uploads/media.py), which serves
+# EVERY media byte on EVERY backend — the app tier is the only reader of the bucket
+# (media.tf). Next has no /media route and next.config.mjs rewrites only /api/:path*,
+# so without this value the default action hands every uploaded image to the web
+# target and it 404s. Not a cosmetic break: Upload.url is persisted as
+# {MEDIA_URL}uploads/<uuid>.<ext> and copied verbatim into Post/Product media_url, so
+# a missing value here breaks every stored image at once, forever, not just new ones.
+# Whatever Django owns the URL for belongs in this list — add here, never assume the
+# default action is harmless.
+#
+# Within the ALB per-rule quotas, with the arithmetic stated so a future addition can
+# check it rather than discover the ceiling at apply time:
+#   - condition values per rule: 4 of 5 used (one spare — a 6th path needs a SECOND
+#     rule at another priority, not a second condition; the quota counts values across
+#     the whole rule, not per condition).
+#   - condition wildcards per rule: 2 of 5 (/api/*, /media/*).
+#   - match evaluations per rule: 2 of 5 (one per wildcard value).
+# priority 100 is unchanged and collision-free: this is the only rule on the listener
+# (count-gated by deploy_web), and priorities need only be unique per listener. Order
+# is not load-bearing among rules here — it only has to beat the default action, which
+# any rule does.
 resource "aws_lb_listener_rule" "api_paths" {
   count        = var.deploy_web ? 1 : 0
   listener_arn = coalesce(one(aws_lb_listener.https[*].arn), one(aws_lb_listener.http_forward[*].arn))
@@ -76,7 +100,7 @@ resource "aws_lb_listener_rule" "api_paths" {
 
   condition {
     path_pattern {
-      values = ["/api/*", "/healthz", "/readyz"]
+      values = ["/api/*", "/healthz", "/readyz", "/media/*"]
     }
   }
 }

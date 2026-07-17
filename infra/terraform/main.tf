@@ -11,6 +11,10 @@ locals {
   image_repository_url = var.create_ecr_repository ? aws_ecr_repository.api[0].repository_url : var.image_repository_url
   image                = "${local.image_repository_url}:${var.image_tag}"
 
+  # Same rule for the web image (web.tf): the repo created here when the web service
+  # is deployed, else the existing one supplied via web_image_repository_url.
+  web_image_repository_url = var.create_ecr_repository && var.deploy_web ? one(aws_ecr_repository.web[*].repository_url) : var.web_image_repository_url
+
   # ECS container "secrets" block: [{ name, valueFrom }] from the ARN map.
   container_secrets = [for k, v in var.container_secrets : { name = k, valueFrom = v }]
 

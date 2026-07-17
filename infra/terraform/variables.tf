@@ -133,7 +133,7 @@ variable "log_retention_days" {
 
 # --- Web (Next.js) service — optional same-origin frontend on the same ALB ------
 variable "deploy_web" {
-  description = "Deploy the Next.js web app as a second ECS service behind the same ALB (same-origin). Default action → web; /api/*, /healthz, /readyz stay on the API. false = API-only stack (unchanged)."
+  description = "Deploy the Next.js web app as a second ECS service behind the same ALB (same-origin). Default action → web; the API listener rule keeps the server-owned paths (see web.tf for the authoritative list — /api/*, /healthz, /readyz, /media/*). false = API-only stack, where the default action is the API target group and every path reaches Django."
   type        = bool
   default     = false
 }
@@ -188,6 +188,18 @@ variable "web_container_environment" {
 
 variable "media_s3_bucket" {
   description = "S3 bucket for user media (uploads). Empty (default) = local filesystem storage (dev/demo). When set, the app's task role gets scoped S3 access; also pass DJANGO_MEDIA_S3_BUCKET in container_environment so the backend actually routes to it."
+  type        = string
+  default     = ""
+}
+
+variable "create_media_bucket" {
+  description = "Create the media bucket named by media_s3_bucket here (media.tf), private + versioned + encrypted. false (default) = the bucket already exists in the account and is only REFERENCED (dev/staging run against an out-of-band bucket) — the task-role grant still applies, nothing is created. Same create-or-reference idiom as create_ecr_repository."
+  type        = bool
+  default     = false
+}
+
+variable "ses_identity_arn" {
+  description = "ARN of the SES verified identity the app sends verification mail from (arn:aws:ses:<region>:<acct>:identity/<domain-or-address>). Empty (default) = no SES policy is created. Set together with EMAIL_SENDER_BACKEND=ses / EMAIL_FROM_ADDRESS in container_environment; the address in EMAIL_FROM_ADDRESS must belong to this identity."
   type        = string
   default     = ""
 }
