@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { BASE, socialLogin, ensureCreator } from './_dev-e2e-helpers';
+import {
+  BASE,
+  USE_EMAIL_AUTH,
+  socialLogin,
+  bootstrapEmailCreator,
+  ensureCreator,
+} from './_dev-e2e-helpers';
 
 /**
  * Full CREATOR content-creation journey against dev over https: login → (KYC-gated)
@@ -7,21 +13,30 @@ import { BASE, socialLogin, ensureCreator } from './_dev-e2e-helpers';
  * each asserted by the durable result (the new row/card/navigation) rather than a toast
  * (toasts race the follow-up navigation and are flaky).
  *
- * Uses the mock GOOGLE account, which the seed already made the creator `e2ecreator`
- * (KYC-verified). ensureCreator is idempotent: an existing creator lands straight on
- * /studio. Writes are throttled (FAN_WRITE_THROTTLE, per-minute) — run once.
+ * Deployed dev → a fresh email-verified account promoted to a creator with a unique handle
+ * (bootstrapEmailCreator clears the KYC gate first). Local mock stack → the mock GOOGLE
+ * account, which the seed already made the creator `e2ecreator` (KYC-verified); ensureCreator
+ * is idempotent and lands straight on /studio. Writes are throttled (FAN_WRITE_THROTTLE,
+ * per-minute) — run once.
  *
  * NOTE: becoming a creator requires KYC server-side (403 IdentityVerificationRequired
- * otherwise) — the google account is already verified via the seed.
+ * otherwise); the mock verifier passes on demo.
  */
 const STAMP = String(Date.now()).slice(-6);
+// Deployed dev needs a unique handle (a fresh account cannot claim the seeded `e2ecreator`).
+const HANDLE = USE_EMAIL_AUTH ? `e2ecr${STAMP}` : 'e2ecreator';
+const CREATOR_NAME = 'E2E Seed Creator';
 
 test('dev creator · become-creator → create product, tier, post', async ({ page }) => {
   test.setTimeout(120_000);
 
-  await test.step('login (google) + reach studio as a creator', async () => {
-    await socialLogin(page, 'google');
-    await ensureCreator(page, 'e2ecreator', 'E2E Seed Creator');
+  await test.step('login + reach studio as a creator', async () => {
+    if (USE_EMAIL_AUTH) {
+      await bootstrapEmailCreator(page, HANDLE, CREATOR_NAME);
+    } else {
+      await socialLogin(page, 'google');
+      await ensureCreator(page, HANDLE, CREATOR_NAME);
+    }
     await page.goto(`${BASE}/studio`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: '크리에이터 스튜디오' })).toBeVisible({ timeout: 15_000 });
   });

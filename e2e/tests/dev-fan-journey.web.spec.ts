@@ -1,27 +1,34 @@
 import { test, expect } from '@playwright/test';
-import { BASE, socialLogin, ensureKyc } from './_dev-e2e-helpers';
+import { BASE, USE_EMAIL_AUTH, socialLogin, bootstrapEmailFan, ensureKyc } from './_dev-e2e-helpers';
 
 /**
  * Full FAN journey against dev over https: login → KYC → discover a creator → follow →
  * subscribe to a paid tier (mock payment) → buy a digital product (mock payment) → confirm
  * both in /mypage/subscriptions and /orders.
  *
- * Consumes content seeded on the deterministic google-creator `e2ecreator` (a selling
- * DIGITAL product + an active paid tier). Digital, not goods: demo has
+ * Consumes content seeded on the deterministic creator `e2ecreator` (a selling DIGITAL
+ * product + an active paid tier). Digital, not goods: demo has
  * shipping_checkout_available=false, so a goods checkout is blocked by design.
  *
- * The fan account = mock KAKAO (distinct from the google creator). Writes (follow /
- * subscribe / order) are throttled (FAN_WRITE_THROTTLE, per-minute) — run once.
+ * The fan account is a fresh, throwaway account distinct from the seeded creator: an
+ * email-verified fan against the deployed dev (bootstrapEmailFan), or a mock-naver fan on a
+ * local mock stack. Writes (follow / subscribe / order) are throttled (FAN_WRITE_THROTTLE,
+ * per-minute) — run once.
  */
 const CREATOR = 'e2ecreator';
 
 test('dev fan · follow → subscribe → buy, end to end', async ({ page }) => {
   test.setTimeout(120_000);
 
-  // naver = a clean fan (the kakao account is already dirtied by the API-level E2E). This
-  // also exercises the real KYC UI (naver starts unverified) rather than the skip path.
-  await test.step('login (naver) + KYC', async () => {
-    await socialLogin(page, 'naver');
+  // A clean fan that also exercises the real KYC UI (starts unverified) rather than the skip
+  // path. Deployed dev → email verification; local mock stack → mock naver (kakao is already
+  // dirtied by the API-level E2E).
+  await test.step('login + KYC', async () => {
+    if (USE_EMAIL_AUTH) {
+      await bootstrapEmailFan(page);
+    } else {
+      await socialLogin(page, 'naver');
+    }
     await ensureKyc(page);
   });
 
