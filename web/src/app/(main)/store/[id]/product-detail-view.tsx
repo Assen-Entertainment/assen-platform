@@ -141,7 +141,7 @@ export function ProductDetailView({ product }: { product: Product }) {
             <Badge variant="primary" className="self-start">
               {label}
             </Badge>
-            <h1 className="text-headline text-on-surface">{p.title}</h1>
+            <h1 className="text-balance text-headline text-on-surface">{p.title}</h1>
             {p.creatorName ? (
               p.creatorHandle ? (
                 <Link

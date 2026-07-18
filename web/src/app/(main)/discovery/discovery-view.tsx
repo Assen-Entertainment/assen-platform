@@ -128,7 +128,9 @@ export function DiscoveryView({
           style={{ backgroundImage: `url("${COVER_GRAIN_URI}")`, backgroundSize: "140px 140px" }}
         />
         <div className="relative flex max-w-2xl flex-col gap-5">
-          <span className="text-label font-semibold uppercase tracking-[0.22em] text-primary">크리에이터 커머스</span>
+          {/* 아이브로우 — 한글은 uppercase 무의미 + 넓은 트래킹은 음절을 벌려 어색("크 리 에 이 터").
+              아이브로우 감각은 weight + text-primary + 작은 크기로, 트래킹은 타이트하게. */}
+          <span className="text-label font-semibold tracking-[0.02em] text-primary">크리에이터 커머스</span>
           <h1 className="text-balance text-[2rem] font-bold leading-[1.08] tracking-[-0.02em] text-on-surface sm:text-[2.75rem] lg:text-[3.25rem]">
             취향으로 이어지는
             <br className="hidden sm:block" /> 크리에이터의 세계
@@ -217,7 +219,7 @@ export function DiscoveryView({
 
       {/* 전체 둘러보기 — 카테고리 필터 + 고밀도 그리드. */}
       <section className="flex flex-col gap-4">
-        <h2 className="text-title-l text-on-surface">전체 둘러보기</h2>
+        <h2 className="text-balance text-title-l text-on-surface">전체 둘러보기</h2>
         <SegmentedControl options={CATS} value={cat} onValueChange={setCat} />
         {/* 스태거드 진입 + hover 리프트(#8) — 그리드 카드가 순차로 떠오르고, 커서 오버 시 살짝 뜬다.
             카테고리 필터가 0건이면 빈 그리드 대신 안내(sparse 런치 blank body 방지). */}
