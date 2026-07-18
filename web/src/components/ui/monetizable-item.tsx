@@ -2,7 +2,6 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MediaImage } from "@/components/ui/media-image";
-import { gradientStyle } from "@/lib/placeholder";
 
 /**
  * MonetizableItem — Figma DS MonetizableItem 세트(260:28) 매핑.
@@ -48,8 +47,10 @@ export interface MonetizableItemProps extends React.HTMLAttributes<HTMLDivElemen
 export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemProps>(
   ({ type, title, price, meta, media, mediaUrl, creator, ctaLabel, actionDisabled, onAction, className, ...props }, ref) => {
     const t = TYPE_META[type];
-    const resolvedMedia =
-      media ?? (mediaUrl ? <MediaImage src={mediaUrl} alt={title} gradientStyle={gradientStyle(title)} className="h-full w-full" /> : undefined);
+    // 실 미디어 노드 우선 → 없으면 MediaImage(실 URL 있으면 이미지, 없으면 프리미엄 톤 커버 + 모노그램).
+    const resolvedMedia = media ?? (
+      <MediaImage src={mediaUrl} seed={title} alt={title} className="h-full w-full" />
+    );
     return (
       <div
         ref={ref}
@@ -59,10 +60,7 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
         )}
         {...props}
       >
-        <div
-          className="relative aspect-[5/3] w-full overflow-hidden bg-surface-container-high"
-          style={resolvedMedia ? undefined : gradientStyle(title)}
-        >
+        <div className="relative aspect-[5/3] w-full overflow-hidden bg-surface-container-high">
           {resolvedMedia}
           {/* 타입 태그 — 미디어 위 프로스티드 칩(임의 커버색 위에서도 가독). */}
           <span className="absolute left-2.5 top-2.5 rounded-full bg-surface/85 px-2.5 py-1 text-caption font-medium text-on-surface shadow-1 backdrop-blur-sm">

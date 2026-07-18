@@ -25,6 +25,7 @@ import {
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
+import { COVER_GRAIN_URI } from "@/lib/placeholder";
 import type { Creator, Page, Product } from "@/lib/api";
 
 const CATS = [
@@ -107,37 +108,33 @@ export function DiscoveryView({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
-      {/* 히어로 — 편집형 프론트도어(시그니처 gradient.brand 모먼트). 진입 시 살짝 떠오름(reduced-motion 가드). */}
-      <section
-        className="relative overflow-hidden rounded-xl px-6 py-10 [animation:fade-up_500ms_ease-out] sm:px-10 sm:py-12"
-        style={{ backgroundImage: "var(--gradient-brand)" }}
-      >
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-white/10 blur-2xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-10 size-56 rounded-full bg-white/10 blur-3xl" />
-        {/* 브랜드 시그니처 워터마크 — Logo(app/icon.svg)와 형태를 공유하는 상승 "A" 봉우리. 우측 저채도. */}
-        <svg
+      {/* 히어로 — 편집형 프론트도어(R14 미니멀 럭셔리). 채도 높은 풀 워시 대신 warm-paper surface 위에
+          타이포그래피로 리드하고 브랜드 액센트는 절제해 씀(우상단 옅은 글로우 + 프라이머리 아이브로우).
+          진입 시 살짝 떠오름(reduced-motion 은 globals 전역 가드로 축소). */}
+      <section className="relative overflow-hidden rounded-xl border border-outline bg-surface px-6 py-14 [animation:fade-up_500ms_ease-out] sm:px-12 sm:py-20">
+        {/* 절제된 브랜드 액센트 — 우상단 저채도 글로우(풀 워시 아님, color-mix 로 라이트/다크 추종). */}
+        <div
           aria-hidden
-          viewBox="0 0 32 32"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="pointer-events-none absolute -right-6 top-1/2 hidden h-[150%] -translate-y-1/2 text-white/[0.08] sm:block"
-        >
-          <path d="M10 23 L16 8.5 L22 23 M12.6 17.6 H19.4" />
-        </svg>
-        {/* 대각 시트 하이라이트 — 광택감(깊이). */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent" />
-        {/* 좌측 다크 스크림 — 브랜드 그라디언트를 유지하면서 텍스트 대비 AA 보장. */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/25 via-black/5 to-transparent" />
-        <div className="relative flex max-w-2xl flex-col gap-3 text-white">
-          <span className="text-label font-semibold uppercase tracking-[0.16em] text-white/90">크리에이터 커머스</span>
-          <h1 className="text-display-m font-bold leading-[1.15] tracking-tight text-white sm:text-display-xl">
-            취향에 맞는 크리에이터를 발견하세요
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(90% 130% at 100% 0%, color-mix(in oklab, var(--primary) 10%, transparent) 0%, transparent 55%)",
+          }}
+        />
+        {/* 초저강도 그레인 — "디자인된 종이" 질감(커버 폴백과 동일 텍스처로 시스템 일관성). */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.55] mix-blend-soft-light"
+          style={{ backgroundImage: `url("${COVER_GRAIN_URI}")`, backgroundSize: "140px 140px" }}
+        />
+        <div className="relative flex max-w-2xl flex-col gap-5">
+          <span className="text-label font-semibold uppercase tracking-[0.22em] text-primary">크리에이터 커머스</span>
+          <h1 className="text-balance text-[2rem] font-bold leading-[1.08] tracking-[-0.02em] text-on-surface sm:text-[2.75rem] lg:text-[3.25rem]">
+            취향으로 이어지는
+            <br className="hidden sm:block" /> 크리에이터의 세계
           </h1>
-          <p className="max-w-xl text-body-l text-white/90">
-            팔로우부터 멤버십·굿즈까지, 크리에이터의 세계를 한 곳에서 만나보세요.
+          <p className="max-w-lg text-pretty text-body-l text-on-surface-variant">
+            팔로우부터 멤버십·굿즈까지, 좋아하는 크리에이터를 한 곳에서 만나고 응원하세요.
           </p>
         </div>
       </section>

@@ -20,6 +20,7 @@ export { MonetizableItem, type MonetizableItemProps, type MonetizableItemType } 
 export { CreatorThumbCard, type CreatorThumbCardProps } from "./creator-thumb-card";
 export { SmartImage, isRemoteImage, type SmartImageProps } from "./smart-image";
 export { MediaImage } from "./media-image";
+export { CoverFallback } from "./cover-fallback";
 export { MembershipTierCard, type MembershipTierCardProps } from "./membership-tier-card";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { ErrorState, type ErrorStateProps } from "./error-state";
