@@ -45,6 +45,9 @@ export function CreatorProfileView({
   const shippingAvailable = useShippingCheckoutAvailable();
   const accent = c.accentColor;
   const initial = c.name.slice(0, 1);
+  // 본인 프로필 여부 — 세션 유저의 크리에이터 핸들이 이 프로필 핸들과 같으면 주인.
+  // 주인이면 팔로우·후원 컨트롤을 숨긴다(자기 팔로우/후원 방지).
+  const isOwner = Boolean(user?.handle && user.handle === c.handle);
 
   // 팔로우 클릭 — 비로그인이면 미완료 액션을 저장하고 로그인으로(성공 시 복귀+자동 재실행).
   const from = pathname || `/creator/${creator.handle}`;
@@ -177,6 +180,7 @@ export function CreatorProfileView({
         followPending={follow.isPending}
         onToggleFollow={onToggleFollow}
         onGift={() => setGiftOpen(true)}
+        isOwner={isOwner}
         followersHref={`/creator/${c.handle}/followers`}
         goal={{ label: "이번 달 팔로워 목표", value: c.followers, max: goalMax }}
         menu={
