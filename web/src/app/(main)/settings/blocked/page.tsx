@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Avatar, Button, Card, Divider, EmptyState, Spinner } from "@/components/ui";
+import { Avatar, Button, Card, Divider, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useBlocks, useUnblockCreator } from "@/lib/api/queries";
@@ -11,7 +11,7 @@ import { useBlocks, useUnblockCreator } from "@/lib/api/queries";
  */
 export default function BlockedSettingsPage() {
   const { toast } = useToast();
-  const { data, isLoading } = useBlocks();
+  const { data, isLoading, isError, refetch } = useBlocks();
   const unblock = useUnblockCreator();
   const blocks = data ?? [];
 
@@ -38,6 +38,15 @@ export default function BlockedSettingsPage() {
         <div className="flex justify-center py-16">
           <Spinner />
         </div>
+      ) : isError ? (
+        // 로드 실패(비401) — 빈 목록으로 오인 표시하지 않고 에러+재시도. 401은 전역 세션 가드가 처리.
+        <Card>
+          <ErrorState
+            title="목록을 불러오지 못했어요"
+            description="차단 목록을 불러오는 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요."
+            onRetry={() => refetch()}
+          />
+        </Card>
       ) : blocks.length === 0 ? (
         <Card>
           <EmptyState

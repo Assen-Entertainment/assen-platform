@@ -31,6 +31,9 @@ export const ERROR_CODES = {
   TierInUse: "TierInUse",
   PaymentCardInvalid: "PaymentCardInvalid",
   PaymentMethodNotFound: "PaymentMethodNotFound",
+  // 결제 캡처(2-phase checkout) — 게이트웨이 거절(402)·결제 서비스 미가용(503). 실 PG 연동 전 seam.
+  PaymentDeclined: "PaymentDeclined",
+  PaymentsUnavailable: "PaymentsUnavailable",
   // 무료 획득 게이트(ASS-297) — 유료/무료 경로 교차 사용·무료 가격 불변식 위반 시 서버가 422로 거부.
   PricingNotFree: "PricingNotFree",
   PricingIsFree: "PricingIsFree",
@@ -84,6 +87,8 @@ export const ERROR_CODE_MESSAGES: Record<string, string> = {
   // 결제수단
   PaymentCardInvalid: "카드 정보가 올바르지 않아요. 다시 확인해 주세요.",
   PaymentMethodNotFound: "결제수단을 찾을 수 없어요.",
+  PaymentDeclined: "결제가 거절되었어요. 카드사·한도·잔액을 확인한 뒤 다시 시도해 주세요.",
+  PaymentsUnavailable: "결제 서비스가 일시적으로 원활하지 않아요. 잠시 후 다시 시도해 주세요.",
   // 무료 획득 게이트(ASS-297)
   PricingNotFree: "무료로 받을 수 없는 상품이에요. 결제가 필요해요.",
   PricingIsFree: "무료로 제공되는 상품이에요. 무료 받기로 진행해 주세요.",
