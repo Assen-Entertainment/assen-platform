@@ -6,7 +6,7 @@ import {
   Button,
   Tabs, TabsList, TabsTrigger, TabsContent,
   PostCard, MonetizableItem, MembershipTierCard, ErrorState, EmptyState,
-  CreatorHomeHeader, GiftSheet, LockedOverlay, DisclaimerNotice, MediaImage,
+  CreatorHomeHeader, GiftSheet, LockedOverlay, DisclaimerNotice, MediaImage, ReportSheet,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription,
 } from "@/components/ui";
@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { MoreIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
 import { gradientStyle } from "@/lib/placeholder";
-import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator, useSubscriptions, useChangeSubscriptionTier, useShippingCheckoutAvailable } from "@/lib/api/queries";
+import { useCreator, useToggleFollow, usePosts, useToggleLike, useBlockCreator, useUnblockCreator, useSubscriptions, useChangeSubscriptionTier, useShippingCheckoutAvailable, useReport } from "@/lib/api/queries";
 import { ApiError, apiErrorMessage, type Creator, type Page, type Post, type Product, type MembershipTier } from "@/lib/api";
 import { won } from "@/lib/checkout";
 import { useSession } from "@/lib/session";
@@ -57,7 +57,14 @@ export function CreatorProfileView({
       router.push(`/login?next=${encodeURIComponent(from)}`);
       return;
     }
-    follow.mutate(!c.following);
+    follow.mutate(!c.following, {
+      // 실패 시 캐시는 useToggleFollow가 롤백하지만 사용자에겐 아무 안내가 없었음 → 토스트로 명시.
+      // 401은 전역 세션 가드가 처리 → 그 외만 안내(차단/해제 토스트 패턴과 동일).
+      onError: (e) => {
+        if (e instanceof ApiError && e.status === 401) return;
+        toast({ title: "팔로우하지 못했어요", description: apiErrorMessage(e) });
+      },
+    });
   };
 
   // 로그인 복귀 후 미완료 팔로우 자동 재실행(팔로우만 — 좋아요·구독은 후속).
@@ -84,6 +91,11 @@ export function CreatorProfileView({
   const block = useBlockCreator();
   const unblock = useUnblockCreator();
   const [confirmBlockOpen, setConfirmBlockOpen] = React.useState(false);
+
+  // 신고(안전) — 피드 더보기와 동일 배선(ReportSheet + useReport → POST /safety/fan-reports).
+  // 서술(narrative)은 서버로만 전달되고 analytics엔 담기지 않는다(useReport가 유형 코드만 계측).
+  const report = useReport();
+  const [reportOpen, setReportOpen] = React.useState(false);
 
   // 멤버십 탭 — 이 크리에이터에 내 활성 구독이 있으면 "구독 중" 배지+티어 전환(업/다운그레이드) 제공.
   const { data: subsData } = useSubscriptions();
@@ -196,6 +208,11 @@ export function CreatorProfileView({
                   차단하기
                 </DropdownMenuItem>
               )}
+              {!isOwner ? (
+                <DropdownMenuItem destructive onSelect={() => setReportOpen(true)}>
+                  신고하기
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         }
@@ -388,6 +405,28 @@ export function CreatorProfileView({
       </Dialog>
 
       <GiftSheet open={giftOpen} onOpenChange={setGiftOpen} creatorName={c.name} />
+
+      {/* 신고 시트 — 피드와 동일 배선. USE_API면 /safety/fan-reports 실 접수, 아니면 mock(sleep). */}
+      <ReportSheet
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        onSubmit={(payload) => {
+          report.mutate(
+            { reportType: payload.reason, narrative: payload.detail || undefined },
+            {
+              onSuccess: () =>
+                toast({ title: "신고가 접수되었어요", description: "운영팀이 검토 후 조치할게요." }),
+              onError: (e) => {
+                // 401은 전역 세션 가드가 처리 → 그 외 오류만 안내.
+                if (!(e instanceof ApiError && e.status === 401)) {
+                  toast({ title: "신고를 접수하지 못했어요", description: "잠시 후 다시 시도해 주세요." });
+                }
+              },
+            },
+          );
+          setReportOpen(false);
+        }}
+      />
 
       {/* 차단 확인 — 파괴적 UX(자동 언팔로우 안내). 기존 Dialog 패턴 재사용. */}
       <Dialog open={confirmBlockOpen} onOpenChange={setConfirmBlockOpen}>

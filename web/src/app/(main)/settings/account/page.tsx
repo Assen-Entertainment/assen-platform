@@ -78,7 +78,7 @@ export default function AccountSettingsPage() {
           placeholder="닉네임"
           maxLength={40}
         />
-        <TextField label="이메일" type="email" placeholder="you@assen.kr" defaultValue="demo@assen.kr" disabled helperText="이메일 변경은 본인인증이 필요해요(게이트)." />
+        <TextField label="이메일" type="email" placeholder="you@assen.kr" disabled helperText="이메일은 로그인 계정에 연결돼 있어요. 변경은 본인인증이 필요해요(게이트)." />
         <Button className="self-start" onClick={saveNickname} disabled={updateMe.isPending}>
           저장
         </Button>

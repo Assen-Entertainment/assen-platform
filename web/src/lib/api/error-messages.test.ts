@@ -56,6 +56,8 @@ describe("apiErrorMessage (code→한국어 매핑)", () => {
       "TierInUse",
       "PaymentCardInvalid",
       "PaymentMethodNotFound",
+      "PaymentDeclined",
+      "PaymentsUnavailable",
     ]) {
       expect(ERROR_CODE_MESSAGES[code]).toBeTruthy();
     }
