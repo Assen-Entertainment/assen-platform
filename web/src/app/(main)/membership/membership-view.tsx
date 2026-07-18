@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { Card, CardBody, Button, Divider, Avatar, StatusChip, EmptyState } from "@/components/ui";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { useSubscriptions } from "@/lib/api/queries";
 import { useSession } from "@/lib/session";
 import { won } from "@/lib/checkout";
@@ -19,20 +20,25 @@ export function MembershipView({ subscriptions }: { subscriptions: Subscription[
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-balance text-headline text-on-surface">내 멤버십</h1>
-        <p className="text-body-m text-on-surface-variant">
-          구독 중인 크리에이터를 관리하고, 새로운 크리에이터를 둘러보세요.
-        </p>
-      </div>
+      <Reveal>
+        <div className="flex flex-col gap-2">
+          <h1 className="text-balance text-headline text-on-surface">내 멤버십</h1>
+          <p className="text-body-m text-on-surface-variant">
+            구독 중인 크리에이터를 관리하고, 새로운 크리에이터를 둘러보세요.
+          </p>
+        </div>
+      </Reveal>
 
       {subs.length ? (
         <section className="flex flex-col gap-3" aria-label="내 멤버십 목록">
+          {/* 진입 스태거(P3) — 구독 카드가 순차로 떠오른다(디스커버리 카덴스, reduced-motion=페이드만). */}
+          <Stagger className="flex flex-col gap-3">
           {subs.map((sub) => {
             const scheduled = Boolean(sub.cancelScheduled);
             const free = Boolean(sub.isFree);
             return (
-              <Card key={sub.id}>
+              <StaggerItem key={sub.id}>
+              <Card>
                 <CardBody className="flex flex-col gap-3">
                   <div className="flex items-center gap-3">
                     <Avatar fallback={sub.creatorName.slice(0, 1)} tone={sub.creatorHandle} size="lg" />
@@ -80,8 +86,10 @@ export function MembershipView({ subscriptions }: { subscriptions: Subscription[
                   </div>
                 </CardBody>
               </Card>
+              </StaggerItem>
             );
           })}
+          </Stagger>
           <Button variant="outline" asChild className="self-start">
             <Link href="/discovery">크리에이터 둘러보기</Link>
           </Button>

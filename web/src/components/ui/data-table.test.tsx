@@ -39,7 +39,7 @@ describe("DataTable", () => {
     );
     // 로딩 중에는 실제 데이터를 렌더하지 않는다.
     expect(screen.queryByText("굿즈")).not.toBeInTheDocument();
-    // 스켈레톤 = aria-hidden pulse 블록.
-    expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+    // 스켈레톤 = aria-hidden 톤 샤인 블록(P3: animate-pulse → skeleton-shimmer).
+    expect(container.querySelectorAll(".skeleton-shimmer").length).toBeGreaterThan(0);
   });
 });

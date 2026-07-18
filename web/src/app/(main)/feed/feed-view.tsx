@@ -21,6 +21,7 @@ import {
   LoadMore,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { gradientStyle } from "@/lib/placeholder";
 import { useSession } from "@/lib/session";
 import { useFeed, useToggleLike, useReport, useBlockCreator } from "@/lib/api/queries";
@@ -77,17 +78,20 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
 
   return (
     <div className="mx-auto max-w-xl">
-      <h1 className="mb-4 text-headline text-on-surface">팔로잉</h1>
+      <Reveal>
+        <h1 className="mb-4 text-headline text-on-surface">팔로잉</h1>
+      </Reveal>
       {isError && !data ? (
         <ErrorState onRetry={() => refetch()} />
       ) : posts.length === 0 ? (
         <EmptyState title="아직 피드가 비어 있어요" description="관심 있는 크리에이터를 팔로우해 보세요." />
       ) : (
         <>
-        <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
+        {/* 진입 스태거(P3) — 디스커버리와 동일 카덴스. 포스트 행이 순차로 떠오른다(reduced-motion=페이드만). */}
+        <Stagger className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
           {posts.map((p) => (
+            <StaggerItem key={p.id}>
             <PostCard
-              key={p.id}
               creatorName={p.creatorName}
               creatorMeta={p.creatorMeta}
               verified={p.verified}
@@ -159,8 +163,9 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
               onShare={() => share(p.id)}
               onMore={() => setMenuPostId(p.id)}
             />
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
         {/* 무한 스크롤 sentinel + 폴백 버튼 — 자동 로드가 기본, 버튼은 reduced-motion·미지원 폴백. */}
         <LoadMore
           className="mt-4"

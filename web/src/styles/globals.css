@@ -17,12 +17,16 @@
   --canvas: #f8f6f1;
   /* 포커스 링(P2b) — 키보드 포커스 전용 브랜드 링. 라이트=브랜드 인디고. */
   --focus-ring: var(--primary);
+  /* 스켈레톤 샤인(P3) — surface-container-high 톤 베이스 위를 스윕하는 하이라이트. 라이트=옅은 화이트 리프트. */
+  --skeleton-shine: color-mix(in oklab, #ffffff 92%, var(--surface-container-high));
 }
 .dark {
   /* 다크 canvas = surface보다 한 단계 깊게 → 카드(surface)가 위로 떠 보임(편집형 깊이). */
   --canvas: #0f0f12;
   /* 다크 포커스 링 = 밝은 인디고(--primary-bright, #0f0f12 위 8:1) → 어두운 표면에서도 또렷. */
   --focus-ring: var(--primary-bright);
+  /* 다크 스켈레톤 샤인 = 베이스(#26262b)보다 한 톤 밝은 그레이 리프트(톤 시스템 유지). */
+  --skeleton-shine: color-mix(in oklab, #ffffff 20%, var(--surface-container-high));
   /* a11y(WCAG 2 AA): 브랜드 인디고 --primary(#5A4DF0)는 '버튼 배경'색 — 다크 표면에
      '텍스트/링크 전경'으로 얹으면 3.42:1(AA 미달). 다크 전경 전용으로 같은 인디고 계열
      밝은 톤(#0f0f12 위 8.0:1, AAA)을 두어 text-primary만 리프트. bg-primary(흰글자
@@ -170,6 +174,13 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* 로딩 스켈레톤 샤인 스윕(P3) — 톤 베이스 위로 부드러운 하이라이트가 좌→우로 지나간다("디자인된 로딩").
+   background-position 만 이동(레이아웃 무관·CLS 0). reduced-motion 은 전역 가드로 정지 → 정적 톤. */
+@keyframes skeleton-shimmer {
+  from { background-position: -150% 0; }
+  to { background-position: 150% 0; }
+}
+
 /* 오버레이 enter/exit 모션(R5-W3 #1) — Radix data-[state=open|closed] 기반. shadcn 표준을
    tailwindcss-animate 의존 없이 재현. enter 200ms ease-out(스냅·즉각 반응), exit 150ms ease-in.
    Radix Presence가 exit 애니메이션 종료(animationend)까지 언마운트를 지연한다.
@@ -200,6 +211,17 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
   &::-webkit-scrollbar { display: none; }
+}
+
+/* 스켈레톤 톤 샤인(P3) — surface-container-high 톤 베이스(배경색) 위에 옅은 하이라이트 그라디언트를
+   background-image 로 얹고 좌→우 스윕. 자체완결(외부 에셋 0)·토큰 기반(라이트/다크)·CLS 0(모양 불변).
+   rest 위치는 -150%(하이라이트 오프스크린) → reduced-motion 정지 시 정적 톤 베이스만 남는다. */
+@utility skeleton-shimmer {
+  background-image: linear-gradient(100deg, transparent 20%, var(--skeleton-shine) 50%, transparent 80%);
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  background-position: -150% 0;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
 @layer base {
