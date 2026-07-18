@@ -7,6 +7,7 @@ import {
   CreatorThumbCard,
   MonetizableItem,
   ErrorState,
+  EmptyState,
   CategoryIconRow,
   Shelf,
   LoadMore,
@@ -221,19 +222,27 @@ export function DiscoveryView({
       <section className="flex flex-col gap-4">
         <h2 className="text-title-l text-on-surface">전체 둘러보기</h2>
         <SegmentedControl options={CATS} value={cat} onValueChange={setCat} />
-        {/* 스태거드 진입 + hover 리프트(#8) — 그리드 카드가 순차로 떠오르고, 커서 오버 시 살짝 뜬다. */}
-        <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" amount={0.08}>
-          {shown.map((c) => (
-            <StaggerItem key={c.id} lift>
-              <CreatorThumbCard
-                name={c.name}
-                meta={creatorMeta(c)}
-                accentColor={c.accentColor}
-                href={`/creator/${c.handle}`}
-              />
-            </StaggerItem>
-          ))}
-        </Stagger>
+        {/* 스태거드 진입 + hover 리프트(#8) — 그리드 카드가 순차로 떠오르고, 커서 오버 시 살짝 뜬다.
+            카테고리 필터가 0건이면 빈 그리드 대신 안내(sparse 런치 blank body 방지). */}
+        {shown.length === 0 ? (
+          <EmptyState
+            title="해당하는 크리에이터가 없어요"
+            description="다른 카테고리를 선택해보세요."
+          />
+        ) : (
+          <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" amount={0.08}>
+            {shown.map((c) => (
+              <StaggerItem key={c.id} lift>
+                <CreatorThumbCard
+                  name={c.name}
+                  meta={creatorMeta(c)}
+                  accentColor={c.accentColor}
+                  href={`/creator/${c.handle}`}
+                />
+              </StaggerItem>
+            ))}
+          </Stagger>
+        )}
         {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
         <LoadMore
           hasNextPage={hasNextPage}

@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Spinner,
+  ErrorState,
   Switch,
   SegmentedControl,
   Dialog,
@@ -55,7 +56,7 @@ export default function StudioProductsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<StudioProduct | null>(null);
 
-  const { data, isLoading } = useStudioProducts();
+  const { data, isLoading, isError, refetch } = useStudioProducts();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -217,6 +218,10 @@ export default function StudioProductsPage() {
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Spinner />
+        </div>
+      ) : isError ? (
+        <div className="flex justify-center py-16">
+          <ErrorState onRetry={() => refetch()} />
         </div>
       ) : (
         <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} caption="상품 목록" />

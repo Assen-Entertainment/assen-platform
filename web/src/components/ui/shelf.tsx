@@ -15,22 +15,26 @@ export interface ShelfProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 export const Shelf = React.forwardRef<HTMLElement, ShelfProps>(
-  ({ title, description, action, as = "h2", className, children, ...props }, ref) => (
-    <section ref={ref} className={cn("flex flex-col gap-3", className)} {...props}>
-      <SectionHeader as={as} title={title} description={description} action={action} />
-      <div
-        className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-1"
-        role="list"
-      >
-        {React.Children.map(children, (child) =>
-          child == null ? null : (
-            <div role="listitem" className="shrink-0 snap-start">
-              {child}
-            </div>
-          ),
-        )}
-      </div>
-    </section>
-  ),
+  ({ title, description, action, as = "h2", className, children, ...props }, ref) => {
+    // 렌더 가능한 카드가 하나도 없으면 선반 전체를 숨긴다(제목만 남는 빈 트랙 방지, sparse 런치).
+    if (React.Children.toArray(children).length === 0) return null;
+    return (
+      <section ref={ref} className={cn("flex flex-col gap-3", className)} {...props}>
+        <SectionHeader as={as} title={title} description={description} action={action} />
+        <div
+          className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-1"
+          role="list"
+        >
+          {React.Children.map(children, (child) =>
+            child == null ? null : (
+              <div role="listitem" className="shrink-0 snap-start">
+                {child}
+              </div>
+            ),
+          )}
+        </div>
+      </section>
+    );
+  },
 );
 Shelf.displayName = "Shelf";
