@@ -184,6 +184,11 @@ class ErrorCode(StrEnum):
     # the actor has personally blocked is refused (422). Direct *reads* stay allowed
     # (a personal block is not existence hiding) — only new interactions are denied.
     INTERACTION_BLOCKED = "InteractionBlocked"
+    # A creator attempted to follow their OWN creator profile (422). Self-follow is
+    # meaningless (you can't be your own fan); the endpoint previously only suppressed
+    # the self-follow notification while still creating the edge, so the follow now
+    # rejects outright before any edge is created.
+    SELF_FOLLOW_FORBIDDEN = "SelfFollowForbidden"
 
     # --- gating (adult 19+) -------------------------------------------------
     # Reserved: the 19+ gate currently *hides* gated items (404 / filtered out) so

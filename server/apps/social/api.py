@@ -27,7 +27,7 @@ from apps.identity.auth import authed, fan_auth, require_kyc_verified
 from apps.notification.services import notify
 from apps.social.models import CreatorBlock, Follow
 from config.api import api
-from config.errors import ErrorCode
+from config.errors import ApiError, ErrorCode
 from config.throttle import user_write_throttle
 
 router = Router(tags=["social"])
@@ -69,6 +69,15 @@ def follow_creator(
     creator = Creator.objects.filter(handle=handle).first()
     if creator is None:
         return 404, ErrorOut(detail="creator not found")
+    # 자기 자신의 크리에이터 프로필은 팔로우할 수 없다 (자기 팔로우는 무의미하고,
+    # 예전엔 알림만 억제하고 엣지는 생성하던 버그가 있었다). 오너가 곧 요청자면
+    # 엣지를 만들기 전에 422로 거부한다.
+    if creator.owner is not None and creator.owner == account:
+        raise ApiError(
+            422,
+            "본인의 크리에이터 프로필은 팔로우할 수 없어요.",
+            code=ErrorCode.SELF_FOLLOW_FORBIDDEN,
+        )
     created = False
     try:
         # Idempotent under concurrency: the unique (follower, creator) constraint

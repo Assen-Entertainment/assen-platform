@@ -132,11 +132,16 @@ def test_follow_notifies_creator_owner(client: Client) -> None:
 
 
 def test_self_follow_does_not_notify(client: Client) -> None:
-    """A creator following their own page never notifies themselves."""
+    """A creator following their own page is rejected (422) and never self-notifies.
+
+    The self-follow guard now rejects the follow before any edge is created (see
+    tests/test_self_follow.py), so the self-notification path is unreachable — this
+    still asserts that a creator can never notify themselves via their own follow.
+    """
     from apps.notification.models import Notification
 
     owner = _fan("본인")
     creator = Creator.objects.create(handle="selfown", name="본인크리", owner=owner)
     resp = client.put(_url(creator.handle), headers=_bearer(owner))
-    assert resp.status_code == 200
+    assert resp.status_code == 422
     assert not Notification.objects.filter(recipient=owner, kind="follow").exists()
