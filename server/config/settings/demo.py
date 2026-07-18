@@ -30,9 +30,10 @@ ENABLE_ADULT_CONTENT = True
 ENABLE_MOCK_PUSH = True
 ENABLE_MOCK_SOCIAL_AUTH = True
 # DEMO ONLY: mock (log-only) email sender so the email+password flow is walkable. The
-# verification token is NOT echoed in the response here (EMAIL_VERIFY_RETURN_TOKEN
-# stays False, inherited from base) — a demo operator reads it from the logs, keeping
-# the token off the wire in this prod-hardened profile.
+# verification token is NOT echoed in the response by default (EMAIL_VERIFY_RETURN_TOKEN
+# defaults False, inherited from base) — a demo operator reads it from the logs, keeping
+# the token off the wire in this prod-hardened profile. A non-prod host on this profile
+# (e.g. dev) may set EMAIL_VERIFY_RETURN_TOKEN=1 in env to echo it for automated e2e.
 ENABLE_MOCK_EMAIL = True
 
 # Accept uploads in the demo. The only difference from production is the storage
