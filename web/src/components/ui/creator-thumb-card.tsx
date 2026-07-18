@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { creatorAccentVars } from "@/lib/creator-accent";
-import { gradientStyle, hexToHue } from "@/lib/placeholder";
+import { CoverFallback } from "@/components/ui/cover-fallback";
 
 /**
  * CreatorThumbCard — Figma DS(31:7). 디스커버리 크리에이터 카드.
@@ -33,14 +33,7 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
       className={cn("group flex flex-col gap-2", className)}
       {...props}
     >
-      <div
-        className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface-container-high shadow-1 ring-1 ring-inset ring-on-surface/10 transition-shadow duration-200 group-hover:shadow-3 motion-reduce:transition-none"
-        style={
-          cover
-            ? undefined
-            : gradientStyle(name, accentColor ? hexToHue(accentColor) : undefined)
-        }
-      >
+      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface-container-high shadow-1 ring-1 ring-inset ring-on-surface/10 transition-shadow duration-200 group-hover:shadow-3 motion-reduce:transition-none">
         {cover ? (
           <ImageComp
             src={cover}
@@ -49,7 +42,11 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
             sizes={sizes}
             className="size-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.05] motion-reduce:transition-none"
           />
-        ) : null}
+        ) : (
+          // 이미지 없음 → 프리미엄 톤 커버 + 크리에이터 이니셜 모노그램. accentColor 주입 시
+          // creatorAccentVars 스코프의 --creator-accent 로 조용히 틴트("크리에이터가 색이 된다").
+          <CoverFallback seed={name} tintVar={accentColor ? "var(--creator-accent)" : undefined} />
+        )}
         {/* 하단 스크림 — hover 시 깊이/가독성. gradient·이미지 커버 공통. */}
         <div
           aria-hidden
