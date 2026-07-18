@@ -31,6 +31,8 @@ export interface CreatorHomeHeaderProps {
   followPending?: boolean;
   onToggleFollow?: () => void;
   onGift?: () => void;
+  /** 뷰어가 이 프로필의 주인(본인)이면 팔로우·후원 컨트롤을 숨긴다(자기 팔로우/후원 방지). */
+  isOwner?: boolean;
   /** 팔로워 목록 링크 경로. */
   followersHref?: string;
   /** 목표 진행(ProgressBar 소비, 루브릭 #10) — placeholder 수치. */
@@ -58,6 +60,7 @@ export function CreatorHomeHeader({
   followPending,
   onToggleFollow,
   onGift,
+  isOwner,
   followersHref,
   goal,
   menu,
@@ -105,19 +108,22 @@ export function CreatorHomeHeader({
             <p className="mt-0.5 text-body-s text-on-surface-variant">@{handle}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            {onGift ? (
+            {/* 본인 프로필에서는 팔로우·후원을 숨긴다 — 자기 자신을 팔로우/후원할 수 없다. */}
+            {onGift && !isOwner ? (
               <Button variant="outline" onClick={onGift} className="gap-1.5">
                 <GiftIcon aria-hidden className="size-5" /> 후원
               </Button>
             ) : null}
-            <Button
-              variant={following ? "outline" : "accent"}
-              disabled={followPending}
-              aria-pressed={following}
-              onClick={onToggleFollow}
-            >
-              {following ? "팔로잉" : "팔로우"}
-            </Button>
+            {!isOwner ? (
+              <Button
+                variant={following ? "outline" : "accent"}
+                disabled={followPending}
+                aria-pressed={following}
+                onClick={onToggleFollow}
+              >
+                {following ? "팔로잉" : "팔로우"}
+              </Button>
+            ) : null}
             {menu}
           </div>
         </div>
