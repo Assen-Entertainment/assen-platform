@@ -952,7 +952,13 @@ export function useUploadImage() {
 export function usePublishPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { body: string; mediaUrl?: string; isAdult?: boolean }) => {
+    mutationFn: async (input: {
+      body: string;
+      mediaUrl?: string;
+      isAdult?: boolean;
+      visibility?: "public" | "members";
+      requiredTier?: string | null;
+    }) => {
       if (USE_API) return apiPublishPost(input);
       await sleep(300);
       return null;

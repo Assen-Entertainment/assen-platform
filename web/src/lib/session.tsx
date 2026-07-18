@@ -6,7 +6,7 @@
 //  • USE_API=false(빌드/CI/오프라인·테스트): 기존 localStorage mock 유저(실 인증 아님).
 //    실 크리덴셜/토큰은 어느 경로에서도 저장하지 않는다.
 import * as React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "@/lib/api/client";
 import { apiSignupEmail, apiLoginEmail, apiVerifyEmail } from "@/lib/api";
@@ -305,15 +305,21 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
   );
 
   // 실 경로: 셀프 크리에이터 등록 후 ['auth','me'] 재조회로 handle(=isCreator 신호)을 반영.
-  const becomeCreator = React.useCallback(
-    async ({ handle, name }: { handle: string; name: string }) => {
+  // useMutation으로 감싸 미인증 팬의 403(IdentityVerificationRequired)이 전역 MutationCache →
+  // VerifyGate로 흘러가게 한다(raw apiFetch였을 땐 전역 게이트가 신호를 못 받아 원시 서버 문구만 노출).
+  // 성공 동작(토스트+/studio 이동)은 호출측(become-creator/page)이 그대로 담당한다.
+  const { mutateAsync: becomeCreatorAsync } = useMutation({
+    mutationFn: async ({ handle, name }: { handle: string; name: string }) => {
       await apiFetch("/studio/profile", {
         method: "POST",
         body: JSON.stringify({ handle, name }),
       });
       await qc.invalidateQueries({ queryKey: ["auth", "me"] });
     },
-    [qc],
+  });
+  const becomeCreator = React.useCallback(
+    (input: { handle: string; name: string }) => becomeCreatorAsync(input),
+    [becomeCreatorAsync],
   );
 
   const startSocial = React.useCallback(async (provider: string, next = "/discovery") => {
