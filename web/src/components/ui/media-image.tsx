@@ -20,6 +20,7 @@ export function MediaImage({
   gradientStyle,
   seed,
   tintVar,
+  monogram = true,
   className,
   imgClassName,
   children,
@@ -32,6 +33,8 @@ export function MediaImage({
   seed?: string;
   /** 커버 폴백 틴트 색(기본 브랜드). 크리에이터 컨텍스트에서 "var(--creator-accent)". */
   tintVar?: string;
+  /** 커버 폴백 모노그램 표시. 와이드 배너(아바타 오버랩)에선 false 로 톤 표면만. 기본 true. */
+  monogram?: boolean;
   className?: string;
   imgClassName?: string;
   children?: React.ReactNode;
@@ -53,7 +56,7 @@ export function MediaImage({
           className={cn("h-full w-full object-cover", imgClassName)}
         />
       ) : seed ? (
-        <CoverFallback seed={seed} tintVar={tintVar} />
+        <CoverFallback seed={seed} tintVar={tintVar} monogram={monogram} />
       ) : null}
       {children}
     </div>

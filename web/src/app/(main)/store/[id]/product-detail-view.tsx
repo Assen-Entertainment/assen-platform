@@ -101,11 +101,11 @@ export function ProductDetailView({ product }: { product: Product }) {
       </nav>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* 미디어(실 이미지 있으면 렌더, 없으면 placeholder 그라디언트) */}
+        {/* 미디어 — 실 이미지 우선, 없으면 프리미엄 톤 커버(저채도 + 그레인 + 상품명 모노그램, 스토어 카드와 동일). */}
         <MediaImage
           src={p.mediaUrl}
           alt={p.title}
-          gradientStyle={{ backgroundImage: "var(--gradient-brand)" }}
+          seed={p.title}
           className="aspect-square w-full rounded-lg"
         >
           {soldOut ? (
