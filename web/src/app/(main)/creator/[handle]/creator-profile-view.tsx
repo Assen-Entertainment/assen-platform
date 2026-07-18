@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { MoreIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
 import { gradientStyle } from "@/lib/placeholder";
@@ -172,8 +173,11 @@ export function CreatorProfileView({
   return (
     <div
       style={accent ? creatorAccentVars(accent) : undefined}
-      className="mx-auto flex max-w-4xl flex-col gap-2 [animation:fade-up_500ms_ease-out]"
+      className="mx-auto flex max-w-4xl flex-col gap-2"
     >
+      {/* 진입 카덴스(P3) — 디스커버리와 동일하게 above-the-fold 헤더는 Reveal 1회, 탭 리스트는 Stagger.
+          (예전 루트 [animation:fade-up]를 제거해 이중 애니메이션 회피.) */}
+      <Reveal>
       <CreatorHomeHeader
         name={c.name}
         handle={c.handle}
@@ -217,6 +221,7 @@ export function CreatorProfileView({
           </DropdownMenu>
         }
       />
+      </Reveal>
 
       {c.blocked ? (
         // 차단됨 — 배너 + 콘텐츠 숨김(포스트/스토어/멤버십 자리에 안내 + 해제 버튼).
@@ -250,10 +255,10 @@ export function CreatorProfileView({
               description="이 크리에이터는 아직 포스트를 올리지 않았어요. 스토어·멤버십을 먼저 둘러보세요."
             />
           ) : (
-          <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
+          <Stagger className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
             {postList.map((p) => (
+              <StaggerItem key={p.id}>
               <PostCard
-                key={p.id}
                 creatorName={p.creatorName}
                 creatorMeta={p.creatorMeta}
                 verified={p.verified}
@@ -296,8 +301,9 @@ export function CreatorProfileView({
                 onComment={() => router.push(`/post/${p.id}`)}
                 onShare={() => share(p.id)}
               />
+              </StaggerItem>
             ))}
-          </div>
+          </Stagger>
           )}
         </TabsContent>
 
@@ -308,14 +314,14 @@ export function CreatorProfileView({
               description="이 크리에이터는 아직 상품을 등록하지 않았어요. 포스트·멤버십을 먼저 둘러보세요."
             />
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               {products.map((p) => {
                 // /store와 동일한 상태 규칙 — 품절 우선(비활성 "품절"), 굿즈 배송 게이트("준비 중").
                 const soldOut = Boolean(p.soldOut) || p.stock === 0;
                 const goodsGated = p.type === "goods" && !shippingAvailable;
                 return (
+                  <StaggerItem key={p.id}>
                   <MonetizableItem
-                    key={p.id}
                     type={p.type}
                     title={p.title}
                     price={`₩${p.price.toLocaleString("ko-KR")}`}
@@ -325,9 +331,10 @@ export function CreatorProfileView({
                     ctaLabel={soldOut ? "품절" : goodsGated ? "준비 중" : undefined}
                     onAction={() => router.push(`/store/${p.id}`)}
                   />
+                  </StaggerItem>
                 );
               })}
-            </div>
+            </Stagger>
           )}
         </TabsContent>
 
@@ -338,15 +345,15 @@ export function CreatorProfileView({
               description="이 크리에이터는 아직 멤버십을 열지 않았어요. 포스트·스토어를 먼저 둘러보세요."
             />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <Stagger className="grid gap-4 sm:grid-cols-3">
               {tiers.map((t, i) => {
                 // 내 활성 구독이 이 크리에이터에 있으면: 현재 티어는 "구독 중"(비활성), 그 외는 "이 티어로 변경".
                 const isCurrent = mySub?.tierId === t.id;
                 // 무료 멤버십(ASS-297) — 신규 가입 CTA를 "무료로 시작하기"로. 체크아웃이 무료 획득을 처리한다.
                 const free = t.pricingKind === "free";
                 return (
+                  <StaggerItem key={t.id}>
                   <MembershipTierCard
-                    key={t.id}
                     name={t.name}
                     price={t.price}
                     period={t.period}
@@ -366,9 +373,10 @@ export function CreatorProfileView({
                             )
                     }
                   />
+                  </StaggerItem>
                 );
               })}
-            </div>
+            </Stagger>
           )}
         </TabsContent>
       </Tabs>
