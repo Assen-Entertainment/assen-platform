@@ -109,13 +109,33 @@ export function CreatorHomeHeader({
               </Button>
             ) : null}
             {!isOwner ? (
+              /* 시그니처 모먼트(P2b) — 팔로우↔팔로잉 전환을 의도적으로: min-w 고정(토글 시 폭 점프/CLS 0),
+                 팔로잉 상태엔 체크가 success-pop 으로 등장(reduced-motion 은 globals 전역 가드로 축소),
+                 press 스케일·hover 색조는 Button 공통. accent(팔로우)↔outline(팔로잉) 색 전환이 상태 신호. */
               <Button
                 variant={following ? "outline" : "accent"}
                 disabled={followPending}
                 aria-pressed={following}
                 onClick={onToggleFollow}
+                className="min-w-[5.5rem]"
               >
-                {following ? "팔로잉" : "팔로우"}
+                {following ? (
+                  <>
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                      className="size-4 [animation:success-pop_260ms_ease-out]"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={3}
+                    >
+                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    팔로잉
+                  </>
+                ) : (
+                  "팔로우"
+                )}
               </Button>
             ) : null}
             {menu}

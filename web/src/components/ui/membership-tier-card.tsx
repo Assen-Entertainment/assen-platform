@@ -38,8 +38,9 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
     <div
       ref={ref}
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-lg border bg-surface-container transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-3 motion-reduce:transform-none motion-reduce:transition-none",
-        featured ? (accent ? "border-creator-accent shadow-2" : "border-primary shadow-2") : "border-outline",
+        // 카드 표면 규율(P2b) — 헤어라인 + hover 소프트 그림자 + 1px 리프트(MonetizableItem 과 동일 시스템).
+        "flex w-full flex-col overflow-hidden rounded-lg border bg-surface-container transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
+        featured ? (accent ? "border-creator-accent shadow-2" : "border-primary shadow-2") : "border-outline-variant hover:border-outline",
         className,
       )}
       {...props}

@@ -33,7 +33,8 @@ export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumb
       className={cn("group flex flex-col gap-2", className)}
       {...props}
     >
-      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface-container-high shadow-1 ring-1 ring-inset ring-on-surface/10 transition-shadow duration-200 group-hover:shadow-3 motion-reduce:transition-none">
+      {/* 미디어 타일 — 헤어라인(ring)은 이미지/톤 커버 위에서도 동작. hover 소프트 그림자(shadow-2)로 카드 시스템과 정렬. */}
+      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface-container-high shadow-1 ring-1 ring-inset ring-on-surface/10 transition-shadow duration-200 group-hover:shadow-2 motion-reduce:transition-none">
         {cover ? (
           <ImageComp
             src={cover}
