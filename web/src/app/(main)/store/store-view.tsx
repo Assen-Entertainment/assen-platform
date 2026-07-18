@@ -38,7 +38,7 @@ export function StoreView({ products }: { products: Page<Product> }) {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <Reveal className="flex flex-col gap-4">
-        <h1 className="text-headline text-on-surface">스토어</h1>
+        <h1 className="text-balance text-headline text-on-surface">스토어</h1>
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((x) => (
             <Chip key={x.value} selected={f === x.value} onClick={() => setF(x.value)}>

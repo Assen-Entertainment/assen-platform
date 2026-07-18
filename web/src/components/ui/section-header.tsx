@@ -17,7 +17,7 @@ export const SectionHeader = React.forwardRef<HTMLDivElement, SectionHeaderProps
   ({ title, description, action, as: Tag = "h2", className, ...props }, ref) => (
     <div ref={ref} className={cn("flex items-end justify-between gap-3", className)} {...props}>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <Tag className="text-title-l text-on-surface">{title}</Tag>
+        <Tag className="text-balance text-title-l text-on-surface">{title}</Tag>
         {description ? <p className="line-clamp-1 text-body-s text-on-surface-variant">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

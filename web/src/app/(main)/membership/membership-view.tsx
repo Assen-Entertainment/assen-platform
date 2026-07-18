@@ -20,7 +20,7 @@ export function MembershipView({ subscriptions }: { subscriptions: Subscription[
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-headline text-on-surface">내 멤버십</h1>
+        <h1 className="text-balance text-headline text-on-surface">내 멤버십</h1>
         <p className="text-body-m text-on-surface-variant">
           구독 중인 크리에이터를 관리하고, 새로운 크리에이터를 둘러보세요.
         </p>
