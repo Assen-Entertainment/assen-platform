@@ -1,21 +1,19 @@
-"""Authenticated fan-journey QA against a deployed stack (default: the dev ALB).
+"""Authenticated fan-journey QA against a deployed stack (default: dev.assenent.com).
 
-Why this exists: the deployed dev serves ``config.settings.demo`` (prod-hardened) over
-http, so every auth cookie (``assen_access``, ``assen_social_state``, ``csrftoken``) is
-``Secure`` and a browser/curl drops it over http -> no browser login is possible there.
-A test harness can still exercise the real backend by managing cookies MANUALLY (ignoring
-the Secure flag), which is exactly what this does. It proves the deployed API's full fan
-journey works end to end, independent of the browser-over-http limitation.
+Manages cookies MANUALLY (accumulating Set-Cookie name=value, ignoring the Secure flag),
+so it exercises the full authenticated backend journey regardless of scheme or client — a
+fast API-contract smoke that stays valid even where a browser cannot (e.g. Secure cookies
+over http). It proves the deployed API's fan journey works end to end.
 
-Complements ``e2e/tests/dev-live-surface.web.spec.ts`` (which covers the browser-testable
-UNauthenticated surface). Once the target is served over https, the browser spec can cover
-these authenticated flows directly and this harness becomes a fast contract smoke.
+Complements ``e2e/tests/dev-live-surface.web.spec.ts`` (public/unauth browser surface) and
+``e2e/tests/dev-https-auth.web.spec.ts`` (the authenticated browser flow, which works now
+that dev is served over https so the Secure auth cookies persist).
 
 Steps: csrf prime -> social(kakao) start -> callback (new fan) -> me -> kyc start/confirm
 -> me(verified) -> public catalogue. Creates one throwaway mock-social account; no money.
 
 Usage:
-    WEB_BASE_URL=http://<alb-or-host> python scripts/dev_journey_qa.py
+    WEB_BASE_URL=https://dev.assenent.com python scripts/dev_journey_qa.py
 Exit code 0 = journey passed, 1 = a step failed.
 """
 
@@ -29,10 +27,7 @@ import urllib.parse
 import urllib.request
 from http.cookiejar import split_header_words
 
-BASE = os.environ.get(
-    "WEB_BASE_URL",
-    "http://assen-dev-api-307204389.ap-northeast-2.elb.amazonaws.com",
-).rstrip("/")
+BASE = os.environ.get("WEB_BASE_URL", "https://dev.assenent.com").rstrip("/")
 COOKIES: dict[str, str] = {}
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -56,8 +51,12 @@ def req(method: str, path: str, body: dict | None = None, expect: str = "") -> t
         r.add_header("Content-Type", "application/json")
     if COOKIES:
         r.add_header("Cookie", "; ".join(f"{k}={v}" for k, v in COOKIES.items()))
-    if method in UNSAFE and "csrftoken" in COOKIES:
-        r.add_header("X-CSRFToken", COOKIES["csrftoken"])
+    if method in UNSAFE:
+        # A browser sends Origin on same-origin POSTs; Django's CSRF middleware checks it
+        # against CSRF_TRUSTED_ORIGINS over https (a 403 otherwise). Mirror the browser.
+        r.add_header("Origin", BASE)
+        if "csrftoken" in COOKIES:
+            r.add_header("X-CSRFToken", COOKIES["csrftoken"])
     try:
         resp = urllib.request.urlopen(r)  # noqa: S310 (trusted internal host)
         status, raw = resp.status, resp.read().decode("utf-8", "replace")

@@ -4,18 +4,18 @@ import { test, expect } from '@playwright/test';
  * Real-usage QA against the DEPLOYED dev stack (Next.js web + real API on the dev ALB),
  * reflecting the POST-auth-redesign UI: email/password + social login (phone OTP removed).
  *
- * Scope note (verified 2026-07-18): the deployed dev runs `config.settings.demo`
- * (prod-hardened) over http, so every auth cookie is `Secure` and a browser drops it
- * over http — no browser login is possible there (email verify token is not echoed,
- * the social-state cookie is dropped, the demo account is not seeded). Authenticated
- * flows are covered separately by the API harness (scratchpad/dev_journey.py, PASS).
- * This spec therefore covers what a browser CAN exercise on live dev: the public
- * surface, auth guards, the new auth UI rendering, and input-safety — the real-usage
- * unauthenticated journey.
+ * Scope note (2026-07-18): dev is served over https (dev.assenent.com + ACM), so the
+ * Secure auth cookies persist and browser self-service auth works — the authenticated
+ * social→session flow is covered by dev-https-auth.web.spec.ts, and the backend
+ * contract by scripts/dev_journey_qa.py. This spec covers the public/unauth surface:
+ * public pages, auth guards, open-redirect, unauth API, the new email+social auth UI
+ * (phone OTP removed), email-signup submit, verify-email fail-closed, input-safety.
+ * (On demo the email verify token is NOT echoed, so the browser email→verify round-trip
+ * stays out of scope here — it needs the token from the server logs.)
  *
- *   WEB_BASE_URL=http://<dev-alb> npx playwright test tests/dev-live-surface.web.spec.ts --config playwright.web.config.ts
+ *   WEB_BASE_URL=https://dev.assenent.com npx playwright test tests/dev-live-surface.web.spec.ts --config playwright.web.config.ts
  */
-const BASE = process.env.WEB_BASE_URL ?? 'http://assen-dev-api-307204389.ap-northeast-2.elb.amazonaws.com';
+const BASE = process.env.WEB_BASE_URL ?? 'https://dev.assenent.com';
 
 test.describe('dev live · public pages load without auth', () => {
   for (const path of ['/', '/discovery', '/store', '/login', '/signup', '/policy/terms', '/policy/privacy', '/policy/refund']) {
