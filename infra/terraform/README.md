@@ -5,13 +5,29 @@ API, Celery worker, and Celery beat services, plus the one-off schema-migrate ta
 the exact shape `scripts/deploy-prod-ecs.sh` deploys to. It provisions into an
 **existing VPC** (network is an input, not authored here).
 
-> ## ⚠️ STATUS: authored + CI-validated, **NOT YET APPLIED**
-> Provisioning an AWS account/environment is the **E10 gate** (`docs/adr/0003-hosting-aws.md`,
-> `docs/deployment.md`: "actual cloud runtime: not yet provisioned"). This stack is
-> **config-validated in CI** (`terraform fmt -check` + `terraform validate`, no creds),
-> but it has **never been `plan`/`apply`-ed against a live account**. Do not treat it as
-> deployed. A real first apply will surface account-specific details (quotas, IAM
-> boundaries, exact secret ARNs) that `validate` cannot.
+> ## STATUS: **dev is applied and live. prod is not.** (updated 2026-07-18)
+> - **dev — APPLIED.** State lives at `s3://assen-tfstate-793451441183/dev/ecs.tfstate`
+>   (lock table `assen-tf-lock`); the running cluster/ALB carry this module's
+>   `default_tags` (`ManagedBy=terraform`, `Env=dev`). Change dev **through terraform**,
+>   not by hand, or the next apply will revert you. Init + plan for dev:
+>   ```
+>   terraform init -reconfigure \
+>     -backend-config="bucket=assen-tfstate-793451441183" \
+>     -backend-config="key=dev/ecs.tfstate" \
+>     -backend-config="region=ap-northeast-2" \
+>     -backend-config="dynamodb_table=assen-tf-lock"
+>   terraform plan -var-file=dev.tfvars
+>   ```
+> - **prod — NOT applied.** Provisioning it is the **E10 gate**
+>   (`docs/adr/0003-hosting-aws.md`, `docs/ops/prod-deploy-runbook-2026-07-18.md`).
+>   `prod.tfvars` is a template full of `REPLACE_ME__*`, and this module does **not**
+>   create the VPC/subnets/NAT, RDS, ElastiCache, ACM certs, or DNS it depends on —
+>   those must exist first. A real first apply will surface account-specific details
+>   (quotas, IAM boundaries, exact secret ARNs) that `validate` cannot.
+>
+> (This block previously claimed the stack had "never been plan/apply-ed against a live
+> account". That went stale when dev was applied on 2026-07-14 and misled a later reader
+> into nearly treating a live, terraform-managed environment as unmanaged.)
 
 ## What it creates
 - `aws_ecr_repository` — the api image repo (or reference an existing one).
@@ -40,7 +56,12 @@ the exact shape `scripts/deploy-prod-ecs.sh` deploys to. It provisions into an
   `ses_identity_arn`. *Verifying* the identity, publishing DKIM records, and leaving the
   SES sandbox are account/DNS actions done out-of-band (see the prod deploy runbook).
   The grant is useless until they are done, and `validate` cannot detect that.
-- **CDN (CloudFront)** — media is served by signed S3 GET URLs directly; no CDN yet.
+- **CDN (CloudFront)** — none yet. Media is **not** served from S3 to the browser: the
+  app proxies it (`/media/*` → `apps.uploads.media`, streamed from `default_storage`
+  after a takedown-status check), which is what makes a moderation takedown effective
+  immediately. Putting a CDN in front of `/media/*` would cut the ALB/Fargate egress
+  this costs — but it makes **purge-on-takedown a hard requirement**, because a cached
+  object would outlive the takedown. Do not add one without solving that.
 
 ## Apply (once AWS is provisioned)
 ```sh
