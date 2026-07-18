@@ -2089,9 +2089,19 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostWriteError"
+                }
+              }
+            }
           }
         },
-        "description": "Create a post as the caller's creator profile; 403 if they operate none.\n\nOwner guard: only an account that operates a :class:`Creator` may post, and\nthe post is always attributed to *that* creator — the author is never taken\nfrom client input, so a fan cannot post as someone else.",
+        "description": "Create a post as the caller's creator profile; 403 if they operate none.\n\nOwner guard: only an account that operates a :class:`Creator` may post, and\nthe post is always attributed to *that* creator — the author is never taken\nfrom client input, so a fan cannot post as someone else.\n\nMembership gating (write side of the entitlement the read side already enforces):\n``visibility=members`` locks the post behind a subscription; a ``required_tier``, if\ngiven, must be one of the caller's creator's tiers (else 422) and is ignored for a\n``public`` post.",
         "tags": [
           "content"
         ],
@@ -2193,9 +2203,19 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostWriteError"
+                }
+              }
+            }
           }
         },
-        "description": "Update fields on the caller's own post; 404 if unknown or not theirs (no leak).\n\nOwner guard identical to ``create_post`` (scope is the caller's creator). Only\nthe provided fields (``body``/``media_url``/``is_adult``) are applied; the\n``media_url`` scheme is re-validated (A5). The response reflects fresh\nlike/comment counts and the caller's ``liked`` flag.",
+        "description": "Update fields on the caller's own post; 404 if unknown or not theirs (no leak).\n\nOwner guard identical to ``create_post`` (scope is the caller's creator). Only\nthe provided fields (``body``/``media_url``/``is_adult``/``visibility``/\n``required_tier``) are applied; the ``media_url`` scheme is re-validated (A5). A\n``public`` post never carries a ``required_tier``; when ``visibility`` is (re)set or\na tier is supplied, the payload's ``required_tier`` is authoritative for a ``members``\npost (NULL ⇒ any active subscription, else it must be one of the caller's tiers → 422).\nThe response reflects fresh like/comment counts and the caller's ``liked`` flag.",
         "tags": [
           "content"
         ],
@@ -10747,6 +10767,25 @@
         "title": "ErrorOut",
         "type": "object"
       },
+      "PostWriteError": {
+        "description": "422 body for a rejected post write (a ``required_tier`` not owned by the caller).\n\nCarries the stable :class:`~config.errors.ErrorCode` value the web branches on\nalongside the human ``detail`` copy, mirroring the ``{detail, code}`` shape the\ncommerce/membership studio writes use.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "code"
+        ],
+        "title": "PostWriteError",
+        "type": "object"
+      },
       "PostIn": {
         "description": "Request body for creating a post (author is the caller's creator profile).",
         "properties": {
@@ -10765,6 +10804,23 @@
             "default": false,
             "title": "Is Adult",
             "type": "boolean"
+          },
+          "visibility": {
+            "default": "public",
+            "title": "Visibility",
+            "type": "string"
+          },
+          "required_tier": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tier"
           }
         },
         "required": [
@@ -10810,6 +10866,29 @@
               }
             ],
             "title": "Is Adult"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility"
+          },
+          "required_tier": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tier"
           }
         },
         "title": "PostPatch",

@@ -738,6 +738,11 @@ export interface paths {
          *     Owner guard: only an account that operates a :class:`Creator` may post, and
          *     the post is always attributed to *that* creator — the author is never taken
          *     from client input, so a fan cannot post as someone else.
+         *
+         *     Membership gating (write side of the entitlement the read side already enforces):
+         *     ``visibility=members`` locks the post behind a subscription; a ``required_tier``, if
+         *     given, must be one of the caller's creator's tiers (else 422) and is ignored for a
+         *     ``public`` post.
          */
         post: operations["apps_content_api_create_post"];
         delete?: never;
@@ -776,9 +781,12 @@ export interface paths {
          * @description Update fields on the caller's own post; 404 if unknown or not theirs (no leak).
          *
          *     Owner guard identical to ``create_post`` (scope is the caller's creator). Only
-         *     the provided fields (``body``/``media_url``/``is_adult``) are applied; the
-         *     ``media_url`` scheme is re-validated (A5). The response reflects fresh
-         *     like/comment counts and the caller's ``liked`` flag.
+         *     the provided fields (``body``/``media_url``/``is_adult``/``visibility``/
+         *     ``required_tier``) are applied; the ``media_url`` scheme is re-validated (A5). A
+         *     ``public`` post never carries a ``required_tier``; when ``visibility`` is (re)set or
+         *     a tier is supplied, the payload's ``required_tier`` is authoritative for a ``members``
+         *     post (NULL ⇒ any active subscription, else it must be one of the caller's tiers → 422).
+         *     The response reflects fresh like/comment counts and the caller's ``liked`` flag.
          */
         patch: operations["apps_content_api_update_post"];
         trace?: never;
@@ -4135,6 +4143,20 @@ export interface components {
             detail: string;
         };
         /**
+         * PostWriteError
+         * @description 422 body for a rejected post write (a ``required_tier`` not owned by the caller).
+         *
+         *     Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+         *     alongside the human ``detail`` copy, mirroring the ``{detail, code}`` shape the
+         *     commerce/membership studio writes use.
+         */
+        PostWriteError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
          * PostIn
          * @description Request body for creating a post (author is the caller's creator profile).
          */
@@ -4151,6 +4173,13 @@ export interface components {
              * @default false
              */
             is_adult: boolean;
+            /**
+             * Visibility
+             * @default public
+             */
+            visibility: string;
+            /** Required Tier */
+            required_tier?: string | null;
         };
         /**
          * PostPatch
@@ -4163,6 +4192,10 @@ export interface components {
             media_url?: string | null;
             /** Is Adult */
             is_adult?: boolean | null;
+            /** Visibility */
+            visibility?: string | null;
+            /** Required Tier */
+            required_tier?: string | null;
         };
         /**
          * PostAck
@@ -7871,6 +7904,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostWriteError"];
+                };
+            };
         };
     };
     apps_content_api_get_post: {
@@ -7966,6 +8008,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostWriteError"];
                 };
             };
         };

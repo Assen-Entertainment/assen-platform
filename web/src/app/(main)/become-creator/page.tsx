@@ -6,6 +6,7 @@ import { TextField, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { useSession } from "@/lib/session";
 import { ApiError } from "@/lib/api/client";
+import { ERROR_CODES } from "@/lib/api";
 
 /** 핸들 규칙 — 서버(_HANDLE_VALIDATOR)와 동일: 영문 소문자·숫자·밑줄 2~32자. */
 const HANDLE_RE = /^[a-z0-9_]{2,32}$/;
@@ -42,7 +43,17 @@ export default function BecomeCreatorPage() {
       toast({ title: "크리에이터 페이지가 열렸어요", description: `@${normalized}` });
       router.push("/studio");
     } catch (e) {
-      // 서버의 사용자 문구(핸들 중복·형식 등)를 그대로 노출, 없으면 폴백.
+      // 미인증 팬의 403(IdentityVerificationRequired)은 전역 VerifyGate(MutationCache 신호)가
+      // 본인인증 다이얼로그로 유도하므로, 여기선 원시 서버 문구를 인라인으로 띄우지 않는다.
+      if (
+        e instanceof ApiError &&
+        e.status === 403 &&
+        e.code === ERROR_CODES.IdentityVerificationRequired
+      ) {
+        setBusy(false);
+        return;
+      }
+      // 그 외(핸들 중복·형식 등)는 서버의 사용자 문구를 그대로 노출, 없으면 폴백.
       setError(
         e instanceof ApiError && e.detail
           ? e.detail

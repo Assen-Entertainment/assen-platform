@@ -24,7 +24,7 @@ from django.http import HttpRequest
 from ninja import Router, Schema
 from pydantic import Field, field_validator
 
-from apps.content.models import Comment, Like, Post
+from apps.content.models import Comment, Like, Post, PostVisibility
 from apps.creator.models import Creator
 from apps.identity.auth import (
     authed,
@@ -33,6 +33,7 @@ from apps.identity.auth import (
     resolve_optional_account,
 )
 from apps.identity.models import Account
+from apps.membership.models import MembershipTier
 from apps.membership.services import can_view_post
 from apps.notification.services import notify
 from apps.social.models import blocked_creator_ids
@@ -66,6 +67,18 @@ class InteractionBlockedError(Schema):
     code: str
 
 
+class PostWriteError(Schema):
+    """422 body for a rejected post write (a ``required_tier`` not owned by the caller).
+
+    Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+    alongside the human ``detail`` copy, mirroring the ``{detail, code}`` shape the
+    commerce/membership studio writes use.
+    """
+
+    detail: str
+    code: str
+
+
 # 422 copy shared by every blocked write interaction (like/comment/order).
 _INTERACTION_BLOCKED_DETAIL = "차단한 크리에이터의 콘텐츠에는 상호작용할 수 없어요."
 
@@ -81,6 +94,24 @@ def _validated_media_url(value: str) -> str:
     if value == "" or value.startswith(("/", "http://", "https://")):
         return value
     raise ValueError("media_url must be an http(s) URL or a site-relative path.")
+
+
+def _validated_visibility(value: str) -> str:
+    """Reject a post visibility outside the ``PostVisibility`` choices (→ 422)."""
+    if value not in PostVisibility.values:
+        raise ValueError("visibility must be 'public' or 'members'.")
+    return value
+
+
+def _owned_tier(tier_id: uuid.UUID, creator_id: uuid.UUID) -> MembershipTier | None:
+    """The tier ``tier_id`` iff owned by ``creator_id`` (post-gating ownership guard).
+
+    Used to validate a ``members`` post's ``required_tier``: a fan can only gate a post
+    behind their own creator's tier, so a foreign or unknown tier returns ``None`` (the
+    caller surfaces that as a coded 422). Active/archived state is not required — gating
+    to any owned tier is valid (the read side matches by ``tier_id`` regardless).
+    """
+    return MembershipTier.objects.filter(id=tier_id, creator_id=creator_id).first()
 
 
 class PostOut(Schema):
@@ -148,12 +179,26 @@ class PostIn(Schema):
     # 19+ 성인 등급 토글 → Post.adult_only. 노출은 서버 게이트(ENABLE_ADULT_CONTENT +
     # adult_verified 뷰어)가 최종 결정 — 작성은 라이브에서도 허용하되 기본 노출은 숨김.
     is_adult: bool = False
+    # Membership entitlement (server-authoritative, mirrors the read side). ``members``
+    # gates the body/media behind an active subscription; ``public`` (default) leaves the
+    # post open — so an omitted field is backward-compatible.
+    visibility: str = PostVisibility.PUBLIC.value
+    # Which tier unlocks a ``members`` post. NULL/omitted ⇒ any active subscription. When
+    # set on a ``members`` post it MUST be a tier owned by the caller's creator (validated
+    # in the endpoint → 422). Ignored for a ``public`` post.
+    required_tier: uuid.UUID | None = None
 
     @field_validator("media_url")
     @classmethod
     def _validate_media_url(cls, value: str) -> str:
         """Reject non-http(s) / non-relative media URLs (A5)."""
         return _validated_media_url(value)
+
+    @field_validator("visibility")
+    @classmethod
+    def _validate_visibility(cls, value: str) -> str:
+        """Reject a visibility outside the known choices (→ 422)."""
+        return _validated_visibility(value)
 
 
 class PostPatch(Schema):
@@ -162,12 +207,20 @@ class PostPatch(Schema):
     body: str | None = Field(default=None, max_length=2000)
     media_url: str | None = Field(default=None, max_length=500)
     is_adult: bool | None = None
+    visibility: str | None = None
+    required_tier: uuid.UUID | None = None
 
     @field_validator("media_url")
     @classmethod
     def _validate_media_url(cls, value: str | None) -> str | None:
         """Validate media_url only when provided (A5, mirrors ``PostIn``)."""
         return None if value is None else _validated_media_url(value)
+
+    @field_validator("visibility")
+    @classmethod
+    def _validate_visibility(cls, value: str | None) -> str | None:
+        """Validate visibility only when provided (mirrors ``PostIn`` → 422)."""
+        return None if value is None else _validated_visibility(value)
 
 
 class PostAck(Schema):
@@ -302,26 +355,43 @@ def get_post(
 
 @posts_router.post(
     "",
-    response={201: PostOut, 403: ErrorOut},
+    response={201: PostOut, 403: ErrorOut, 422: PostWriteError},
     auth=fan_auth,
     throttle=user_write_throttle("6/min"),
 )
-def create_post(request: HttpRequest, data: PostIn) -> tuple[int, PostOut | ErrorOut]:
+def create_post(
+    request: HttpRequest, data: PostIn
+) -> tuple[int, PostOut | ErrorOut | PostWriteError]:
     """Create a post as the caller's creator profile; 403 if they operate none.
 
     Owner guard: only an account that operates a :class:`Creator` may post, and
     the post is always attributed to *that* creator — the author is never taken
     from client input, so a fan cannot post as someone else.
+
+    Membership gating (write side of the entitlement the read side already enforces):
+    ``visibility=members`` locks the post behind a subscription; a ``required_tier``, if
+    given, must be one of the caller's creator's tiers (else 422) and is ignored for a
+    ``public`` post.
     """
     account = authed(request)
     creator = Creator.objects.filter(owner=account).first()
     if creator is None:
         return 403, ErrorOut(detail="크리에이터만 게시물을 작성할 수 있어요.")
+    required_tier: MembershipTier | None = None
+    if data.visibility == PostVisibility.MEMBERS.value and data.required_tier is not None:
+        required_tier = _owned_tier(data.required_tier, creator.id)
+        if required_tier is None:
+            return 422, PostWriteError(
+                detail="본인 소유의 멤버십 등급만 지정할 수 있어요.",
+                code=ErrorCode.TIER_NOT_FOUND.value,
+            )
     post = Post.objects.create(
         creator=creator,
         body=data.body,
         media_url=data.media_url,
         adult_only=data.is_adult,
+        visibility=data.visibility,
+        required_tier=required_tier,
     )
     # A fresh post carries no count annotations; _post_out defaults them to 0 and
     # liked to False, which is correct for a just-created post. ``post.creator`` is
@@ -395,19 +465,22 @@ def studio_list_posts(
 
 @posts_router.patch(
     "/{post_id}",
-    response={200: PostOut, 404: ErrorOut},
+    response={200: PostOut, 404: ErrorOut, 422: PostWriteError},
     auth=fan_auth,
     throttle=user_write_throttle("6/min"),
 )
 def update_post(
     request: HttpRequest, post_id: uuid.UUID, data: PostPatch
-) -> tuple[int, PostOut | ErrorOut]:
+) -> tuple[int, PostOut | ErrorOut | PostWriteError]:
     """Update fields on the caller's own post; 404 if unknown or not theirs (no leak).
 
     Owner guard identical to ``create_post`` (scope is the caller's creator). Only
-    the provided fields (``body``/``media_url``/``is_adult``) are applied; the
-    ``media_url`` scheme is re-validated (A5). The response reflects fresh
-    like/comment counts and the caller's ``liked`` flag.
+    the provided fields (``body``/``media_url``/``is_adult``/``visibility``/
+    ``required_tier``) are applied; the ``media_url`` scheme is re-validated (A5). A
+    ``public`` post never carries a ``required_tier``; when ``visibility`` is (re)set or
+    a tier is supplied, the payload's ``required_tier`` is authoritative for a ``members``
+    post (NULL ⇒ any active subscription, else it must be one of the caller's tiers → 422).
+    The response reflects fresh like/comment counts and the caller's ``liked`` flag.
     """
     account = authed(request)
     post = _owned_post(account, post_id)
@@ -419,6 +492,25 @@ def update_post(
         post.media_url = data.media_url
     if data.is_adult is not None:
         post.adult_only = data.is_adult
+    if data.visibility is not None:
+        post.visibility = data.visibility
+    if post.visibility == PostVisibility.PUBLIC.value:
+        # A public post carries no tier gate (clears any prior tier, e.g. members→public).
+        post.required_tier = None
+    elif data.visibility is not None or data.required_tier is not None:
+        # Visibility was (re)set to members, or a tier was supplied → the payload's
+        # required_tier is authoritative (NULL ⇒ any active subscription). An untouched
+        # members post (neither field present) keeps its existing tier.
+        if data.required_tier is None:
+            post.required_tier = None
+        else:
+            tier = _owned_tier(data.required_tier, post.creator_id)
+            if tier is None:
+                return 422, PostWriteError(
+                    detail="본인 소유의 멤버십 등급만 지정할 수 있어요.",
+                    code=ErrorCode.TIER_NOT_FOUND.value,
+                )
+            post.required_tier = tier
     post.save()
     return 200, _post_out(_annotated_post(post.id, account), account)
 

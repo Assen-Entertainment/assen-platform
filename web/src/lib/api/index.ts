@@ -905,11 +905,29 @@ export async function apiUnblockCreator(creatorId: string): Promise<BlockResult>
   );
   return { blocked: raw.blocked, creatorId: raw.creator_id };
 }
-/** 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. is_adult=19+ 성인 등급(서버가 노출 통제). */
-export async function apiPublishPost(input: { body: string; mediaUrl?: string; isAdult?: boolean }): Promise<Post> {
+/** 포스트 공개 범위 — 서버 PostVisibility 미러("public"|"members"). "members"면 구독 게이트. */
+export type PostVisibilityValue = "public" | "members";
+/**
+ * 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. is_adult=19+ 성인 등급(서버가 노출 통제).
+ * visibility="members"면 멤버십 게이트(requiredTier 지정 시 그 티어 구독자에게만 공개 — 미지정=구독자 전체).
+ * requiredTier가 null/undefined면 body에서 생략돼 서버가 "구독자 전체"로 처리한다.
+ */
+export async function apiPublishPost(input: {
+  body: string;
+  mediaUrl?: string;
+  isAdult?: boolean;
+  visibility?: PostVisibilityValue;
+  requiredTier?: string | null;
+}): Promise<Post> {
   const raw = await apiFetch<RawPost>("/posts", {
     method: "POST",
-    body: JSON.stringify({ body: input.body, media_url: input.mediaUrl, is_adult: input.isAdult ?? false }),
+    body: JSON.stringify({
+      body: input.body,
+      media_url: input.mediaUrl,
+      is_adult: input.isAdult ?? false,
+      visibility: input.visibility ?? "public",
+      required_tier: input.requiredTier ?? undefined,
+    }),
   });
   return mapPost(raw);
 }
@@ -918,15 +936,24 @@ export interface PostUpdate {
   body?: string;
   mediaUrl?: string;
   isAdult?: boolean;
+  visibility?: PostVisibilityValue;
+  requiredTier?: string | null;
 }
 /**
- * 포스트 수정 — PATCH /posts/{id}(body/media_url/is_adult 부분 수정). 오너만 가능하며
- * 비오너/미지 id는 서버가 404(no-leak). undefined 필드는 JSON.stringify가 제거 → 서버 무변경.
+ * 포스트 수정 — PATCH /posts/{id}(body/media_url/is_adult/visibility/required_tier 부분 수정). 오너만
+ * 가능하며 비오너/미지 id는 서버가 404(no-leak). undefined 필드는 JSON.stringify가 제거 → 서버 무변경.
+ * visibility="public"이면 서버가 required_tier를 비운다(멤버십 해제). required_tier=null은 "구독자 전체".
  */
 export async function apiUpdatePost(id: string, patch: PostUpdate): Promise<Post> {
   const raw = await apiFetch<RawPost>(`/posts/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify({ body: patch.body, media_url: patch.mediaUrl, is_adult: patch.isAdult }),
+    body: JSON.stringify({
+      body: patch.body,
+      media_url: patch.mediaUrl,
+      is_adult: patch.isAdult,
+      visibility: patch.visibility,
+      required_tier: patch.requiredTier,
+    }),
   });
   return mapPost(raw);
 }

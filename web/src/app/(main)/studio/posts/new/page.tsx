@@ -18,7 +18,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
 import { ApiError, apiErrorMessage } from "@/lib/api";
-import { usePublishPost, useUploadImage } from "@/lib/api/queries";
+import { usePublishPost, useUploadImage, useStudioTiers } from "@/lib/api/queries";
 import { validateComposerDraft, VISIBILITY_OPTIONS, type PostVisibility } from "@/lib/studio-mock";
 
 /**
@@ -33,13 +33,19 @@ export default function PostComposerPage() {
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
   const [visibility, setVisibility] = React.useState<PostVisibility>("public");
+  // "특정 티어 이상"(tier) 선택 시 게이트할 티어 id. useStudioTiers에서 채운다(오너 자기 티어).
+  const [tierId, setTierId] = React.useState("");
   const [adult, setAdult] = React.useState(false);
   // 업로드 완료된 이미지 media_url(서버가 준 /media/uploads/… 또는 mock objectURL). 발행 시 PostIn에 실린다.
   const [mediaUrl, setMediaUrl] = React.useState<string | undefined>(undefined);
   const [submitted, setSubmitted] = React.useState(false);
   const publishPost = usePublishPost();
   const uploadImage = useUploadImage();
+  const tiersQuery = useStudioTiers();
+  const tiers = tiersQuery.data ?? [];
   const live = Boolean(config.apiUrl);
+  // "특정 티어 이상"인데 티어 미선택이면 발행 불가(서버 required_tier 검증 전 클라 가드).
+  const tierMissing = visibility === "tier" && !tierId;
 
   // mock 폴백(USE_API=false)의 미리보기 URL은 URL.createObjectURL(blob:) — 교체/제거·언마운트 시
   // 해제하지 않으면 브라우저에 objectURL이 누적된다. 이 cleanup은 mediaUrl이 blob:일 때만 revoke하며
@@ -68,12 +74,15 @@ export default function PostComposerPage() {
 
   const publish = () => {
     setSubmitted(true);
-    if (!validation.valid || publishPost.isPending || uploadImage.isPending) return;
-    // 제목은 본문 상단에 합성(서버 계약 PostIn={body, media_url?, is_adult} — 제목 필드 없음).
+    if (!validation.valid || tierMissing || publishPost.isPending || uploadImage.isPending) return;
+    // 제목은 본문 상단에 합성(서버 계약 PostIn={body, media_url?, is_adult, visibility, required_tier} — 제목 필드 없음).
     const composed = title.trim() ? `${title.trim()}\n\n${body}` : body;
+    // UI 공개범위 → 서버 계약 매핑: public=전체 공개, members=구독자 전체, tier=특정 티어(required_tier).
+    const serverVisibility: "public" | "members" = visibility === "public" ? "public" : "members";
+    const requiredTier = visibility === "tier" ? tierId : undefined;
     // 19+ 등급은 실 전송하되, 실제 노출은 서버 ENABLE_ADULT_CONTENT=False가 통제(등급만 기록).
     publishPost.mutate(
-      { body: composed, mediaUrl, isAdult: adult },
+      { body: composed, mediaUrl, isAdult: adult, visibility: serverVisibility, requiredTier },
       {
         onSuccess: () => {
           toast({
@@ -163,13 +172,9 @@ export default function PostComposerPage() {
         <label htmlFor="composer-visibility" className="text-label text-on-surface">
           공개 범위
         </label>
-        {/* 라이브(USE_API)면 서버 PostIn에 visibility 필드가 없어 공개범위가 조용히 소실된다 →
-            "전체 공개" 고정+비활성으로 게이트(mock 모드는 기존 3종 유지). */}
-        <Select
-          value={live ? "public" : visibility}
-          onValueChange={(v) => setVisibility(v as PostVisibility)}
-          disabled={live}
-        >
+        {/* 서버 PostIn.visibility(public|members)+required_tier로 실 전송. "특정 티어 이상"은
+            visibility=members + 선택 티어를 required_tier로 매핑(발행 시 publish()에서 변환). */}
+        <Select value={visibility} onValueChange={(v) => setVisibility(v as PostVisibility)}>
           <SelectTrigger id="composer-visibility" aria-label="공개 범위">
             <SelectValue />
           </SelectTrigger>
@@ -181,12 +186,38 @@ export default function PostComposerPage() {
             ))}
           </SelectContent>
         </Select>
-        {live ? (
-          <p className="text-caption text-on-surface-variant">
-            멤버십 전용·티어 공개는 서버 지원 예정이에요. 지금은 전체 공개로만 발행돼요. (게이트)
-          </p>
-        ) : visHint ? (
-          <p className="text-caption text-on-surface-variant">{visHint}</p>
+        {visHint ? <p className="text-caption text-on-surface-variant">{visHint}</p> : null}
+
+        {/* "특정 티어 이상" 선택 시 오너 자기 티어에서 공개할 티어를 고른다(useStudioTiers). */}
+        {visibility === "tier" ? (
+          <div className="mt-1 flex flex-col gap-1.5">
+            <label htmlFor="composer-tier" className="text-label text-on-surface">
+              공개할 티어
+            </label>
+            {tiers.length > 0 ? (
+              <Select value={tierId} onValueChange={setTierId}>
+                <SelectTrigger id="composer-tier" aria-label="공개할 티어">
+                  <SelectValue placeholder="티어를 선택하세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tiers.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-caption text-on-surface-variant">
+                {tiersQuery.isLoading
+                  ? "티어를 불러오는 중이에요…"
+                  : "먼저 멤버십 티어를 만들면 특정 티어로 공개할 수 있어요."}
+              </p>
+            )}
+            {submitted && tierMissing ? (
+              <p className="text-caption text-error">공개할 티어를 선택해 주세요.</p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
