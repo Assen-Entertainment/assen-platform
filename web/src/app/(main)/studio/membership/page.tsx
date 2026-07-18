@@ -7,6 +7,8 @@ import {
   Badge,
   Switch,
   Spinner,
+  EmptyState,
+  ErrorState,
   TextField,
   TextArea,
   Divider,
@@ -36,7 +38,7 @@ function useApiErrorToast() {
 export default function StudioMembershipPage() {
   const { toast } = useToast();
   const onError = useApiErrorToast();
-  const { data, isLoading } = useStudioTiers();
+  const { data, isLoading, isError, refetch } = useStudioTiers();
   const createTier = useCreateTier();
   const updateTier = useUpdateTier();
   const deleteTier = useDeleteTier();
@@ -98,6 +100,16 @@ export default function StudioMembershipPage() {
         <div className="flex justify-center py-16">
           <Spinner />
         </div>
+      ) : isError ? (
+        <div className="flex justify-center py-16">
+          <ErrorState onRetry={() => refetch()} />
+        </div>
+      ) : tiers.length === 0 ? (
+        <EmptyState
+          title="첫 멤버십 티어를 만들어보세요"
+          description="티어를 만들어 팬들에게 멤버십 혜택을 제공하세요."
+          action={<Button onClick={() => setCreateOpen(true)}>새 티어 만들기</Button>}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {tiers.map((t) => (

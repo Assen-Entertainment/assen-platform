@@ -6,7 +6,7 @@ import {
   Button,
   Tabs, TabsList, TabsTrigger, TabsContent,
   PostCard, MonetizableItem, MembershipTierCard, ErrorState, EmptyState,
-  CreatorHomeHeader, GiftSheet, LockedOverlay, DisclaimerNotice,
+  CreatorHomeHeader, GiftSheet, LockedOverlay, DisclaimerNotice, MediaImage,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription,
 } from "@/components/ui";
@@ -157,9 +157,6 @@ export function CreatorProfileView({
     );
   }
 
-  // 이번 달 목표(placeholder) — 다음 5k 팔로워 구간을 목표로 ProgressBar 소비(#10).
-  const goalMax = Math.max(5000, Math.ceil((c.followers + 1) / 5000) * 5000);
-
   return (
     <div
       style={accent ? creatorAccentVars(accent) : undefined}
@@ -182,7 +179,6 @@ export function CreatorProfileView({
         onGift={() => setGiftOpen(true)}
         isOwner={isOwner}
         followersHref={`/creator/${c.handle}/followers`}
-        goal={{ label: "이번 달 팔로워 목표", value: c.followers, max: goalMax }}
         menu={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -231,6 +227,12 @@ export function CreatorProfileView({
         </TabsList>
 
         <TabsContent value="posts" className="pt-2">
+          {postList.length === 0 ? (
+            <EmptyState
+              title="아직 포스트가 없어요"
+              description="이 크리에이터는 아직 포스트를 올리지 않았어요. 스토어·멤버십을 먼저 둘러보세요."
+            />
+          ) : (
           <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-1">
             {postList.map((p) => (
               <PostCard
@@ -243,8 +245,13 @@ export function CreatorProfileView({
                 body={p.body}
                 media={
                   p.locked ? (
-                    // 잠긴 콘텐츠(루브릭 #16) — 블러 + 락 + 해제 CTA(→ 멤버십 탭).
-                    <div className="relative aspect-video w-full" style={gradientStyle(p.id)}>
+                    // 잠긴 콘텐츠(루브릭 #16) — 실 미디어(있으면) 위 블러 + 락 + 해제 CTA(→ 멤버십 탭).
+                    <MediaImage
+                      src={p.mediaUrl}
+                      alt={`${p.creatorName}의 포스트 미디어`}
+                      gradientStyle={gradientStyle(p.id)}
+                      className="aspect-video w-full"
+                    >
                       <LockedOverlay
                         description="멤버십에 가입하면 이 포스트를 볼 수 있어요."
                         cta={
@@ -253,10 +260,15 @@ export function CreatorProfileView({
                           </Button>
                         }
                       />
-                    </div>
+                    </MediaImage>
                   ) : (
-                    <Link href={`/post/${p.id}`} aria-label="포스트 상세 보기">
-                      <div className="aspect-video w-full" style={gradientStyle(p.id)} />
+                    <Link href={`/post/${p.id}`} aria-label="포스트 상세 보기" className="block">
+                      <MediaImage
+                        src={p.mediaUrl}
+                        alt={`${p.creatorName}의 포스트 미디어`}
+                        gradientStyle={gradientStyle(p.id)}
+                        className="aspect-video w-full transition-opacity hover:opacity-90"
+                      />
                     </Link>
                   )
                 }
@@ -269,6 +281,7 @@ export function CreatorProfileView({
               />
             ))}
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="store" className="pt-4">

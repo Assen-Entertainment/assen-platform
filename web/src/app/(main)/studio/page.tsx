@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Card, CardBody, Button, ListItem, Divider, SectionHeader } from "@/components/ui";
-import { STUDIO_RECENT } from "@/lib/studio-mock";
+import { Card, CardBody, Button, EmptyState, SectionHeader } from "@/components/ui";
 import { StudioStatsGrid } from "./studio-stats";
 
 /** 서브메뉴 카드 — 스튜디오 각 영역 진입점. */
@@ -48,14 +47,10 @@ export default function StudioPage() {
       <section className="flex flex-col gap-3">
         <SectionHeader title="최근 항목" />
         <div className="overflow-hidden rounded-lg border border-outline">
-          {STUDIO_RECENT.map((r, i) => (
-            <div key={r.title}>
-              {i > 0 ? <Divider /> : null}
-              <Link href={r.href} className="block transition-colors hover:bg-surface-container-high">
-                <ListItem title={r.title} subtitle={r.meta} showChevron />
-              </Link>
-            </div>
-          ))}
+          <EmptyState
+            title="아직 최근 활동이 없어요"
+            description="포스트·상품·멤버십 활동이 쌓이면 여기에 표시돼요."
+          />
         </div>
       </section>
     </div>
