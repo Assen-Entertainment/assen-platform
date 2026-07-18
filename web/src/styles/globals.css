@@ -15,10 +15,14 @@
  */
 :root {
   --canvas: #f8f6f1;
+  /* 포커스 링(P2b) — 키보드 포커스 전용 브랜드 링. 라이트=브랜드 인디고. */
+  --focus-ring: var(--primary);
 }
 .dark {
   /* 다크 canvas = surface보다 한 단계 깊게 → 카드(surface)가 위로 떠 보임(편집형 깊이). */
   --canvas: #0f0f12;
+  /* 다크 포커스 링 = 밝은 인디고(--primary-bright, #0f0f12 위 8:1) → 어두운 표면에서도 또렷. */
+  --focus-ring: var(--primary-bright);
   /* a11y(WCAG 2 AA): 브랜드 인디고 --primary(#5A4DF0)는 '버튼 배경'색 — 다크 표면에
      '텍스트/링크 전경'으로 얹으면 3.42:1(AA 미달). 다크 전경 전용으로 같은 인디고 계열
      밝은 톤(#0f0f12 위 8.0:1, AAA)을 두어 text-primary만 리프트. bg-primary(흰글자
@@ -212,9 +216,10 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
-  /* 키보드 포커스 링 (WCAG 2.4.7) — focus.ring = primary, 2px + 2px offset */
+  /* 키보드 포커스 링 (WCAG 2.4.7·2.4.11) — 브랜드 링 2px + 2px offset. 라이트/다크 모두 또렷하게
+     var(--focus-ring)(라이트 인디고 · 다크 밝은 인디고)로 추종. focus-visible = 키보드 전용. */
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 

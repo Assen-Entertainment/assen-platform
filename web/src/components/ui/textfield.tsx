@@ -31,7 +31,7 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
           aria-describedby={descId}
           className={cn(
             "h-12 w-full rounded-md border bg-surface px-3 text-body-m text-on-surface",
-            "placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+            "placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
             error ? "border-error" : "border-outline",
             className,
           )}

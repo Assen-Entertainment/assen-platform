@@ -55,7 +55,8 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
       <div
         ref={ref}
         className={cn(
-          "group flex w-full flex-col overflow-hidden rounded-lg border border-outline bg-surface transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
+          // 카드 표면 규율(P2b) — 헤어라인(outline-variant) + hover 시 보더 타이트닝(outline) + 소프트 그림자 + 1px 리프트.
+          "group flex w-full flex-col overflow-hidden rounded-lg border border-outline-variant bg-surface transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-outline hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
           className,
         )}
         {...props}
@@ -73,9 +74,10 @@ export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemP
           {meta ? (
             <p className="line-clamp-1 text-body-s text-on-surface-variant">{meta}</p>
           ) : null}
-          <div className="mt-1.5 flex items-center justify-between gap-2">
+          {/* 가격/CTA — 가격과 pill 이 좁은 카드에서 붙지 않도록 CTA를 가격 아래 풀폭으로(숨 쉬는 리듬). */}
+          <div className="mt-2 flex flex-col gap-2.5">
             <span className="text-title-l tabular-nums text-on-surface">{price}</span>
-            <Button size="sm" onClick={onAction} disabled={actionDisabled}>
+            <Button size="sm" className="w-full" onClick={onAction} disabled={actionDisabled}>
               {ctaLabel ?? t.cta}
             </Button>
           </div>

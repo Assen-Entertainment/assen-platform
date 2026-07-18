@@ -25,7 +25,7 @@ export function SegmentedControl({ options, value, onValueChange, className }: S
             aria-checked={active}
             onClick={() => onValueChange?.(o.value)}
             className={cn(
-              "rounded-full px-4 py-1.5 text-label transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              "rounded-full px-4 py-1.5 text-label transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]",
               active ? "bg-surface text-on-surface shadow-1" : "text-on-surface-variant hover:text-on-surface",
             )}
           >
