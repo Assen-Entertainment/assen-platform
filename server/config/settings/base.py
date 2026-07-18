@@ -99,8 +99,11 @@ EMAIL_VERIFY_TTL_SECONDS: int = env.int("EMAIL_VERIFY_TTL_SECONDS", default=8640
 
 # Dev/QA affordance: when on, the /fan/signup/email response echoes the signed
 # verification token so e2e/QA can complete the confirm step without a real inbox.
-# Hardcoded False here (never leak the token in prod/demo); only dev/test opt in.
-EMAIL_VERIFY_RETURN_TOKEN: bool = False
+# Env-driven, default False: prod MUST leave it unset/False — echoing the token lets a
+# signup self-verify without the emailed link, so it is a dev/QA affordance only. dev/test
+# force True as a module attr; a non-prod host on prod/demo settings (e.g. dev) opts in
+# via the env var without ever flipping prod's default.
+EMAIL_VERIFY_RETURN_TOKEN: bool = env.bool("EMAIL_VERIFY_RETURN_TOKEN", default=False)
 
 # Gated feature flags for the R3 round (KYC / 19+ / payment methods). Each mirrors
 # the ENABLE_MOCK_FAN_OTP contract: hardcoded False here (NOT env-driven) so no
