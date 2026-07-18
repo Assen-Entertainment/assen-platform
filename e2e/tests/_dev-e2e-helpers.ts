@@ -1,8 +1,16 @@
 import { type Page, expect } from '@playwright/test';
 
-// Shared helpers for the dev https E2E journeys (fan + creator). Not a spec (no .web.spec
-// suffix), so the runner does not execute it directly. All flows run against the live dev
-// deployment where mock social/KYC gates are open (config.settings.demo).
+// Shared helpers for the dev E2E journeys (fan + creator). Not a spec (no .web.spec suffix).
+//
+// ⚠️ 2026-07-18: the DEPLOYED dev now uses REAL social login (kakao/google/naver) — the mock
+// social providers are GONE there. So socialLogin() below only works against a LOCAL mock
+// stack (config.settings.dev). To run these against the deployed dev they must move to
+// email/password auth, which needs a verified account — but the deployed demo neither echoes
+// the verify token (EMAIL_VERIFY_RETURN_TOKEN is hardcoded False in base.py) nor logs it
+// (prod-hardened JSON logging drops the extra token field). Enabling dev-automated E2E thus
+// needs a small change: make EMAIL_VERIFY_RETURN_TOKEN env-driven and set it True on dev so
+// signup self-serves the token. Until then, run these against a local mock stack. (mock
+// KYC/payment/uploads stay open on demo — only social changed.)
 
 export const BASE = process.env.WEB_BASE_URL ?? 'https://dev.assenent.com';
 
