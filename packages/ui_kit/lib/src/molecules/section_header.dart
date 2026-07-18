@@ -39,12 +39,15 @@ class AssenSectionHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: TypographyTokens.titleLSize,
-                fontWeight: FontWeight.w700,
-                color: colors.ink900,
+            child: Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: TypographyTokens.titleLSize,
+                  fontWeight: FontWeight.w700,
+                  color: colors.ink900,
+                ),
               ),
             ),
           ),
@@ -67,7 +70,7 @@ class AssenSectionHeader extends StatelessWidget {
                       style: TextStyle(
                         fontSize: TypographyTokens.labelSize,
                         fontWeight: FontWeight.w600,
-                        color: colors.ink700,
+                        color: colors.ink600,
                       ),
                     ),
                     Icon(

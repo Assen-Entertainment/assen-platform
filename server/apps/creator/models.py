@@ -4,8 +4,8 @@ A ``Creator`` is the public identity fans discover and follow. It optionally
 links 1:1 to an :class:`~apps.identity.models.Account` (the user who operates
 it); the link is nullable so demo/seed creators can exist before accounts do.
 
-Migration-less app (``migrate --run-syncdb`` materialises the tables — see
-[[assen-server-unmigrated-apps]]); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial`` (see
+[[assen-server-unmigrated-apps]]); regenerate with ``makemigrations`` when models change.
 
 Follower and post counts are *derived* (annotated at query time from the social
 and content relations), not stored, so they cannot drift.
@@ -41,6 +41,13 @@ class Creator(models.Model):
     cover_url = models.CharField(max_length=500, blank=True, default="")
     category = models.CharField(max_length=40, blank=True, default="")
     verified = models.BooleanField(default=False)
+    # Public visibility flag. True (default) => discoverable and viewable via the
+    # public list/detail/search surfaces. Set False to unpublish the profile — e.g.
+    # the owner's account withdrawal (탈퇴) offboarding, which also hides the
+    # storefront (see :func:`apps.identity.services.withdraw_account`). The row is
+    # kept, never deleted, so history stays linked; an unpublished creator simply
+    # 404s to the public reads (no existence leak).
+    published = models.BooleanField(default=True)
     # The operating account. 1:1, nullable so seed data can exist accountless.
     owner = models.OneToOneField(
         "identity.Account",

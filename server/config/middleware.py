@@ -11,23 +11,38 @@ because the production limiter is deployment-bound (Redis).
 
 from __future__ import annotations
 
+import re
 import uuid
-from collections import defaultdict
 from collections.abc import Callable
-from time import monotonic
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
+
+from config.clientip import client_ip
+from config.observability import bind_request_id, unbind_request_id
+from config.ratelimit import RateLimiter, get_rate_limiter
 
 # Header carrying the per-request correlation id, echoed to the client and
 # available to logs/audit so a request can be traced end to end.
 REQUEST_ID_HEADER = "X-Request-ID"
 
+# Grammar a *client-supplied* request id must satisfy to be trusted: a short,
+# opaque token of URL/log-safe characters only. Anything outside this alphabet
+# (whitespace, CR/LF, control chars, ``<``/quotes, percent-encoded PII, an
+# over-long blob) is rejected and a fresh server id is minted instead — so an
+# attacker cannot fold log-forging content or PII into the central log stream or
+# the echoed response header via ``X-Request-ID`` (ASS-291 #7).
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
 
 class RequestIDMiddleware:
     """Attach a unique id to every request and echo it on the response.
 
-    Placed first (§3.5 #1) so the id exists before any later concern logs. If the
-    client supplied one we keep it (distributed tracing); otherwise we mint one.
+    Placed first (§3.5 #1) so the id exists before any later concern logs. A
+    client-supplied id is honoured for distributed tracing **only when it matches
+    a bounded, opaque grammar** (:data:`_REQUEST_ID_RE`); an absent, malformed, or
+    over-long value is discarded and a fresh server id is minted, so untrusted
+    header content can never ride into the log stream / response header.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -35,11 +50,25 @@ class RequestIDMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Set ``request.request_id`` and mirror it onto the response header."""
+        """Set ``request.request_id`` and mirror it onto the response header.
+
+        The id is also bound to a context variable for the duration of the request
+        so log records can be correlated to it (see ``config.observability``); the
+        binding is always unwound, even if a downstream handler raises.
+        """
         incoming = request.headers.get(REQUEST_ID_HEADER)
-        request_id = incoming or uuid.uuid4().hex
+        # Trust the client id only if it fits the opaque grammar; otherwise mint a
+        # fresh one so no attacker-controlled content reaches the log/response.
+        if incoming and _REQUEST_ID_RE.match(incoming):
+            request_id = incoming
+        else:
+            request_id = uuid.uuid4().hex
         request.request_id = request_id  # type: ignore[attr-defined]
-        response = self.get_response(request)
+        token = bind_request_id(request_id)
+        try:
+            response = self.get_response(request)
+        finally:
+            unbind_request_id(token)
         response[REQUEST_ID_HEADER] = request_id
         return response
 
@@ -48,8 +77,14 @@ class SecurityHeadersMiddleware:
     """Add baseline security response headers (§3.5 #1, after request id).
 
     Complements Django's ``SecurityMiddleware`` with a few defaults Django does
-    not set by itself. Kept conservative so it is safe to enable platform-wide;
-    stricter CSP is deferred to when the front-end surfaces are known.
+    not set by itself. Kept conservative so it is safe to enable platform-wide.
+
+    Also carries the report-only CSP rollout (ASS-278): a
+    ``Content-Security-Policy-Report-Only`` header, never the enforcing
+    ``Content-Security-Policy`` header, so violations are observed without ever
+    breaking a response. Policy source/rationale live at
+    ``settings.CONTENT_SECURITY_POLICY_REPORT_ONLY``; enforcement is a future,
+    separate step once observed violations are clean.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -62,16 +97,22 @@ class SecurityHeadersMiddleware:
         response.setdefault("X-Content-Type-Options", "nosniff")
         response.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.setdefault("X-Frame-Options", "DENY")
+        policy = getattr(settings, "CONTENT_SECURITY_POLICY_REPORT_ONLY", "")
+        if policy:
+            response.setdefault("Content-Security-Policy-Report-Only", policy)
         return response
 
 
 class InMemoryRateLimitMiddleware:
     """A naive fixed-window rate limiter (skeleton; production uses Redis).
 
-    In-memory and per-process, so it is *not* correct across workers — it exists
-    to nail the middleware position (§3.5 #1, after security headers, before the
-    Ninja auth layer) and provide a working contract. The real limiter is a
-    drop-in that shares state in Redis (deployment-bound, hence not wired here).
+    The limiting *decision* now lives behind the :class:`~config.ratelimit.RateLimiter`
+    abstraction (selected by ``RATELIMIT_BACKEND``); this middleware only owns the
+    position (§3.5 #1, after security headers, before the Ninja auth layer) and the
+    per-client key. The default backend is in-memory and per-process, so it is *not*
+    correct across workers — the real limiter is a drop-in that shares state in Redis
+    (deployment-bound, hence not wired here). The class name is kept for the settings
+    ``MIDDLEWARE`` reference; the backend, not the middleware, is what swaps.
     """
 
     # Generous default so the placeholder never interferes with normal use/tests.
@@ -79,26 +120,30 @@ class InMemoryRateLimitMiddleware:
     WINDOW_SECONDS = 60
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
-        """Initialise the next handler and the per-client hit buckets."""
+        """Initialise the next handler and the configured rate-limiter backend."""
         self.get_response = get_response
-        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._limiter: RateLimiter = get_rate_limiter()
 
     def _client_key(self, request: HttpRequest) -> str:
-        """Identify the client for bucketing (remote address at this layer)."""
-        # request.META values are typed Any; coerce to str for a stable dict key.
-        return str(request.META.get("REMOTE_ADDR", "unknown"))
+        """Identify the client for bucketing.
+
+        Uses :func:`~config.clientip.client_ip` so the key is the real caller
+        behind a trusted proxy chain (TRUSTED_PROXY_HOPS) rather than the shared
+        load-balancer address — with the default 0 hops this is REMOTE_ADDR, so
+        dev/no-proxy behaviour is unchanged.
+        """
+        return client_ip(request)
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         """Reject the request with 429 if the per-window limit is exceeded."""
-        now = monotonic()
-        key = self._client_key(request)
-        window_start = now - self.WINDOW_SECONDS
-        recent = [t for t in self._hits[key] if t >= window_start]
-        if len(recent) >= self.DEFAULT_LIMIT:
-            self._hits[key] = recent
-            return JsonResponse(
-                {"detail": "Rate limit exceeded."}, status=429
-            )
-        recent.append(now)
-        self._hits[key] = recent
+        allowed = self._limiter.allow(
+            key=self._client_key(request),
+            limit=self.DEFAULT_LIMIT,
+            window_seconds=self.WINDOW_SECONDS,
+        )
+        if not allowed:
+            response = JsonResponse({"detail": "Rate limit exceeded."}, status=429)
+            # Advise the client how long to back off (the fixed window length).
+            response["Retry-After"] = str(self.WINDOW_SECONDS)
+            return response
         return self.get_response(request)

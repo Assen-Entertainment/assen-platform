@@ -7,7 +7,18 @@ nor the broker).
 
 from __future__ import annotations
 
+import tempfile
+
 from config.settings.base import *  # noqa: F403
+
+# Uploaded media goes to a throwaway temp dir so the suite never writes into the
+# repo tree (and each machine/run gets an isolated, disposable location).
+MEDIA_ROOT = tempfile.mkdtemp(prefix="assen-test-media-")
+
+# Accept uploads so the endpoint is active in the suite (the fail-closed 503 paths are
+# asserted explicitly via override_settings — see apps/uploads/test_gating.py for the
+# full gate matrix). Media is served by Django here exactly as in every environment.
+ALLOW_UPLOADS = True
 
 DATABASES = {
     "default": {
@@ -25,3 +36,35 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # Fan signup tests + live API E2E use the deterministic mock OTP sender.
 ENABLE_MOCK_FAN_OTP = True
+ENABLE_MOCK_SOCIAL_AUTH = True
+# Email + password auth tests use the mock (log-only) email sender and read the
+# verification token straight off the signup response (the fail-closed 503 when
+# ENABLE_MOCK_EMAIL is off is asserted explicitly with override_settings).
+ENABLE_MOCK_EMAIL = True
+EMAIL_VERIFY_RETURN_TOKEN = True
+
+# R3 gated features on for tests: the mock KYC verifier + mock payment tokenizer are
+# wired, and 19+ read exposure is on so the gating tests can assert both the
+# hidden-when-off and shown-when-verified paths. All mock/skeleton (see base.py); the
+# off-by-default (base) behaviour is asserted explicitly with override_settings.
+ENABLE_MOCK_KYC = True
+ENABLE_ADULT_CONTENT = True
+ENABLE_MOCK_PAYMENT = True
+# Mock push transport on for tests so the operator dispatch surface returns success;
+# the fail-closed 503 (base) is asserted explicitly with override_settings.
+ENABLE_MOCK_PUSH = True
+# Exercise the (privacy-gated) delivery checkout in fixtures; base/prod/demo keep
+# it hardcoded False (ASS-287 A-1).
+ENABLE_SHIPPING_CHECKOUT = True
+# Distinct insecure key for the phone-identifier HMAC in tests (ASS-287 A-2).
+PHONE_IDENTIFIER_HMAC_KEY = "test-insecure-phone-identifier-hmac-key-0123456789abcdef"
+
+# Retention sweep master switch ON for tests so the command/task exercise the real
+# purge path (base/prod default False = dry-run only). The fail-closed OFF behaviour is
+# asserted explicitly with override_settings in test_retention_sweep.py.
+RETENTION_PURGE_ENABLED = True
+
+# Disable per-user write throttling: the suite fires many writes for one fixture
+# account, and the shared LocMem throttle cache would otherwise leak state across
+# tests and trip 429s. Throttle behaviour itself is exercised in dev/prod config.
+FAN_WRITE_THROTTLE_ENABLED = False

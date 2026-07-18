@@ -12,6 +12,10 @@ related: ["[[screens]]"]
 
 # Vite 랜딩 → Flutter 앱 핸드오프 URL 계약
 
+> ℹ️ 아래에서 참조하는 `apps/fan_app`은 2026-06-30 플랫폼 피벗에서 제거되었다(M10
+> 아카이브). 신방향 앱은 `apps/assen_mobile`이고, 이 핸드오프 계약은 신방향 웹(`web/`)
+> 기준 재설계 대상이다(상단 status 참조). 본문은 ASS-140 시행 당시의 기록이다.
+
 공개 랜딩(`landing/`, Vite)과 앱(`apps/fan_app`, Flutter web)은 **별도 배포물**이다.
 랜딩의 `/`는 Flutter 라우트가 아니며, Flutter web의 진입점은 `/login`이다(plan §4.3).
 이 문서는 랜딩 CTA가 Flutter 앱으로 사용자를 넘길 때의 **URL 파라미터 계약**만 고정한다.

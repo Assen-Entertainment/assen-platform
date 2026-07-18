@@ -9,7 +9,11 @@ sha256-only storage guarantee.
 
 from __future__ import annotations
 
+from typing import Any
+from unittest import mock
+
 import pytest
+from django.db.models.query import QuerySet
 
 from apps.identity.models import (
     AccessToken,
@@ -103,6 +107,43 @@ def test_refresh_reuse_detection_revokes_family() -> None:
         rotate_refresh_token(rotated.refresh_token)
 
 
+def test_concurrent_rotation_second_consume_fails_and_burns_family() -> None:
+    """A rotation that loses the atomic consume race is treated as reuse (A1).
+
+    Simulates two rotations racing on the same refresh token: both pass the
+    ``used``/revoked pre-check on their snapshot, but only one conditional UPDATE
+    (``WHERE used = FALSE``) can match. Force the *losing* side by making the
+    refresh-consume UPDATE report 0 rows — the rotation must then burn the family
+    and raise, never mint a second successor pair.
+    """
+    account = _fan()
+    pair = issue_token_pair(account)
+
+    real_update = QuerySet.update
+
+    def sabotage_refresh_consume(self: QuerySet[Any], *args: object, **kwargs: object) -> int:
+        # Only the refresh-token consume (used=True) loses the race; every other
+        # UPDATE (e.g. revoke_family's access-token flip) runs for real.
+        if self.model is RefreshToken and kwargs.get("used") is True:
+            return 0
+        return real_update(self, *args, **kwargs)
+
+    with mock.patch.object(QuerySet, "update", sabotage_refresh_consume):
+        with pytest.raises(TokenError):
+            rotate_refresh_token(pair.refresh_token)
+
+    # No successor pair was minted, and the family is burned as reuse.
+    family = TokenFamily.objects.get()
+    assert family.revoked is True
+    assert family.revoked_reason == "refresh_reuse_detected"
+    # Only the original access + refresh exist (no second successor pair leaked).
+    assert AccessToken.objects.count() == 1
+    assert RefreshToken.objects.count() == 1
+    # The burned family's original access token no longer verifies.
+    with pytest.raises(TokenError):
+        verify_access_token(pair.access_token)
+
+
 def test_revoke_family_invalidates_access_immediately() -> None:
     """Revoking a family makes its access token fail verification at once (F11)."""
     account = _fan()
@@ -136,3 +177,42 @@ def test_fan_cannot_use_operator_login() -> None:
     Account.objects.create(role=Role.FAN.value, username="not_staff")
     with pytest.raises(TokenError):
         authenticate_operator(username="not_staff", password="anything")
+
+
+def test_duplicate_staff_username_is_rejected_by_constraint() -> None:
+    """A second account with the same non-empty username violates the partial unique.
+
+    ``authenticate_operator`` resolves the login with ``.get(username=…)``; the
+    ``uniq_staff_username`` partial constraint keeps that lookup single-valued so it
+    can never raise MultipleObjectsReturned (→ 500) on a collided username.
+    """
+    from django.db import IntegrityError, transaction
+
+    Account.objects.create(role=Role.OPERATOR.value, username="op_dup")
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Account.objects.create(role=Role.MANAGER.value, username="op_dup")
+
+
+def test_blank_username_is_not_constrained() -> None:
+    """Many accounts may keep the default empty username (fans/non-login staff).
+
+    The unique is partial (``username != ''``), so the common case of blank
+    usernames is unconstrained — otherwise every fan row (all "") would collide.
+    """
+    for _ in range(3):
+        Account.objects.create(role=Role.FAN.value)  # username defaults to ""
+    assert Account.objects.filter(username="").count() == 3
+
+
+@pytest.mark.django_db
+def test_access_token_rejected_when_family_revoked_even_if_row_not_flagged() -> None:
+    """Family-level gate: 소각-회전 경합으로 access 행이 revoked=False로 남아도 거부된다."""
+    account = Account.objects.create(role=Role.FAN.value, nickname="레이스팬")
+    pair = issue_token_pair(account)
+    # 경합 시뮬레이션: revoke_family()의 벌크 access 플립 없이 family만 소각.
+    family = TokenFamily.objects.filter(account=account).latest("created_at")
+    family.revoke(reason="race-simulation")
+    assert AccessToken.objects.filter(family=family, revoked=False).exists()
+
+    with pytest.raises(TokenError):
+        verify_access_token(pair.access_token)

@@ -28,6 +28,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capabilities
+         * @description Report which gated flows are open (see the settings behind each flag).
+         */
+        get: operations["config_api_capabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/rbac/roles": {
         parameters: {
             query?: never;
@@ -46,69 +66,6 @@ export interface paths {
          * @description Assign or revoke an account's staff role (admin only, audited).
          */
         post: operations["apps_admin_rbac_api_assign_role"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/fan/signup/otp": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Request Otp
-         * @description Send (mock) an OTP for the phone. Returns a bare ack — never the code.
-         */
-        post: operations["apps_identity_api_request_otp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/fan/signup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Signup
-         * @description Create/attach a fan from a verified OTP + consent; issue a token pair.
-         *
-         *     Delivery follows the requested surface (ADR-0002): the web flow gets hardened
-         *     httpOnly cookies (no token in the body); the app gets the tokens in the body.
-         */
-        post: operations["apps_identity_api_signup"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/fan/membership-card": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Membership Card
-         * @description Return the authenticated fan's digital membership card (either surface).
-         */
-        get: operations["apps_identity_api_get_membership_card"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -285,10 +242,471 @@ export interface paths {
         /**
          * List Products
          * @description List catalog products; filter by creator and/or type, cursor-paginated.
+         *
+         *     Consumer surface: draft/hidden listings and gated 19+ items are excluded
+         *     (:func:`_public_product_qs`) — the owner manages those via ``/studio/products``.
+         *
+         *     Personal-block gating (mirrors ``content.list_posts``): the global (unfiltered)
+         *     browse is an aggregate surface, so products from creators the authenticated
+         *     caller has personally blocked are excluded. A ``?creator_id=`` request is
+         *     explicit creator-scoped navigation (a store visit), so it is returned even for
+         *     a blocked creator — the web renders the block state; a personal block is not
+         *     existence hiding, unlike the 19+ gate.
          */
         get: operations["apps_commerce_api_list_products"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Product
+         * @description Return one catalog product by id; 404 if unknown or not publicly visible.
+         *
+         *     The web product-detail page consumes this contract. Gating goes through
+         *     :func:`_public_product_qs`, so a draft/hidden/gated-adult product 404s to a
+         *     consumer just like an unknown id (no existence leak).
+         */
+        get: operations["apps_commerce_api_get_product"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Products
+         * @description List the caller's own creator's products, including draft/hidden and 19+.
+         */
+        get: operations["apps_commerce_api_studio_list_products"];
+        put?: never;
+        /**
+         * Studio Create Product
+         * @description Create a product owned by the caller's creator profile; 403 if they operate none.
+         */
+        post: operations["apps_commerce_api_studio_create_product"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Studio Delete Product
+         * @description Delete the caller's own product; 403 (no creator) / 404 (not theirs) / 422 (sold).
+         *
+         *     A product with order history can't be hard-deleted: ``OrderItem.product`` is
+         *     SET_NULL, so deleting it would sever the historical order lines' attribution
+         *     back to this creator (breaking dashboard/stats counts and order provenance).
+         *     Instead of deleting, the owner should archive it (``status="hidden"``), which
+         *     removes it from public listings while keeping order history intact. A product
+         *     with no order history has nothing to preserve, so it deletes as before.
+         *
+         *     Concurrency (F5): the owner check, the reload under ``select_for_update`` and the
+         *     ``order_items`` re-check run in one ``transaction.atomic`` block so the
+         *     check→delete window is narrowed — the product row is locked for the duration, so
+         *     a second concurrent *delete* cannot slip between the check and the delete. NOT a
+         *     complete seal: an in-flight ``create_order`` does not lock the product row, so an
+         *     order committing during this block can still leave a just-deleted product with a
+         *     dangling (SET_NULL) line. Fully closing that needs the order path to lock the
+         *     product too (a broader change deferred), so the residual window is documented,
+         *     not hidden.
+         */
+        delete: operations["apps_commerce_api_studio_delete_product"];
+        options?: never;
+        head?: never;
+        /**
+         * Studio Update Product
+         * @description Update fields on the caller's own product; 403 (no creator) / 404 (not theirs).
+         */
+        patch: operations["apps_commerce_api_studio_update_product"];
+        trace?: never;
+    };
+    "/api/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Orders
+         * @description List the requesting fan's own orders, newest first, cursor-paginated.
+         */
+        get: operations["apps_commerce_api_list_orders"];
+        put?: never;
+        /**
+         * Create Order
+         * @description Place a mock order for one product via a 2-phase payment intent (#4/#2).
+         *
+         *     MOCK: the deterministic mock captures synchronously and approves, so the endpoint
+         *     still returns a ``paid`` order and snapshots the line item, but **no real payment
+         *     is taken and no money moves** (B7 gated). The order amounts
+         *     (``subtotal``/``shipping_fee``/``total``, ``total = subtotal + shipping_fee``)
+         *     are computed server-side so the fan is charged exactly what is shown; shipping
+         *     is a fixed mock ``0`` until the fee policy is set (대표·재무 게이트). A physical
+         *     (``goods``) order must carry a delivery address, else 422.
+         *
+         *     Two-phase structure (#4/#2 seam — so a real PG plugs in without a lost charge):
+         *
+         *     * **PHASE 1 (``transaction.atomic``, then COMMIT):** reserve stock with the
+         *       ``stock >= qty`` conditional UPDATE (0 rows = a concurrent buyer took the last
+         *       unit → 422; the last unit flips ``sold_out``), then persist the order as
+         *       **PENDING** with its line. NO gateway call and NO settlement happen inside this
+         *       transaction, so a capture that succeeds after a DB-commit failure can never
+         *       charge a customer with no order — the durable order exists first.
+         *     * **PHASE 2 (OUTSIDE the transaction):** capture through the gateway (idempotent —
+         *       the order's key is passed so a real PG dedups a retry). On approval, a SECOND
+         *       short transaction flips PENDING→PAID (conditional-UPDATE rowcount gate) and
+         *       ledgers the settlement. On decline/error, PENDING→FAILED and the reserved stock
+         *       is restored (mirrors ``cancel_order``), and the fan gets a coded 402 — never a
+         *       leaked stock unit or a silent stuck-pending order.
+         *
+         *     Idempotency (B1): if the caller supplies ``idempotency_key`` and already has an
+         *     order for it, the existing order is returned (200) rather than duplicated —
+         *     PENDING if a capture is still in flight, PAID once settled, so a retry never
+         *     double-charges or double-orders. The (buyer, key) unique constraint closes the
+         *     concurrent-retry race in PHASE 1 (both requests pass the pre-check, one insert
+         *     wins, the loser catches ``IntegrityError`` — which also rolls back its decrement —
+         *     and returns the winner's order). The fan notification is sent only *after*
+         *     PENDING→PAID, so a PENDING/FAILED order never emits a stray "order received" notice.
+         */
+        post: operations["apps_commerce_api_create_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/free": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Free Order
+         * @description Acquire an explicitly free product — no payment, provenance=free (ASS-297).
+         *
+         *     The ONLY way to obtain a ``pricing_kind=free`` product: the paid checkout
+         *     refuses it (``PricingIsFree``) and this path refuses a paid product
+         *     (``PricingNotFree``), so a price-0 placeholder can never be taken for free.
+         *     Every non-payment gate the paid path enforces still applies — visibility,
+         *     personal block, sell-out/stock, and (for goods) the shipping-checkout gate and
+         *     a complete delivery address — so "free" drops only the payment requirement, not
+         *     the shipping-PII or availability guards. Amounts are forced to 0 and a FREE
+         *     ``PaymentAttempt`` is ledgered exactly like a paid settlement.
+         */
+        post: operations["apps_commerce_api_create_free_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Order
+         * @description Return one of the requesting fan's own orders (404 if not theirs).
+         *
+         *     The owner-scoped detail endpoint — the only place a fan's own delivery address
+         *     (``shipping_address``) is exposed, one order at a time, never on the list (A-3).
+         */
+        get: operations["apps_commerce_api_get_order"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Order
+         * @description Cancel one of the fan's own orders (only while paid/shipping).
+         *
+         *     The cancellable → cancelled transition is sealed by a **conditional UPDATE
+         *     rowcount gate** inside the transaction (project pattern): only the request whose
+         *     ``filter(status__in=_CANCELLABLE).update(status=cancelled)`` touches a row (won
+         *     the race) proceeds to restore stock; a concurrent second cancel updates 0 rows
+         *     and returns 422 without restoring anything, so two racing cancels can never
+         *     double-restore stock. The pre-check below is a friendly early return only — the
+         *     rowcount gate is the actual invariant.
+         *
+         *     Stock restore (winner only): each stock-tracked line's product is incremented by
+         *     its ``qty`` (``F`` expression, no lost update). ``sold_out`` is only cleared for a
+         *     product that had **hit 0** (auto sold-out) — a product an owner manually marked
+         *     ``sold_out`` while stock remained keeps that flag (F-F): the restore adds stock
+         *     but does not silently re-open a listing the owner paused. A since-deleted product
+         *     line (SET_NULL) has nothing to restore and is skipped.
+         *
+         *     A refund *accepted* (operator-approved) re-stock is a separate operator flow and
+         *     is not handled here (후속 — 운영자 플로우).
+         */
+        post: operations["apps_commerce_api_cancel_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Refund
+         * @description Request a refund against one of the fan's own orders (shipping/completed).
+         */
+        post: operations["apps_commerce_api_request_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ship Order
+         * @description Mark one of the caller's orders SHIPPING (creator-owner or operator; from PAID).
+         *
+         *     Records the carrier + tracking number and stamps ``shipped_at``. The
+         *     PAID→SHIPPING transition is sealed by the conditional-UPDATE rowcount gate
+         *     (project pattern): shipping an order not in PAID (already shipping/completed/
+         *     cancelled) updates 0 rows → 422 ``OrderNotShippable``. A digital order may skip
+         *     this step and complete directly from PAID (see ``complete_order``).
+         */
+        post: operations["apps_commerce_api_ship_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Order
+         * @description Mark one of the caller's orders COMPLETED (creator-owner or operator).
+         *
+         *     A physical (goods) order completes only from SHIPPING (it must ship first). A
+         *     digital-only order (no goods line) completes directly from PAID — that is how a
+         *     digital/coupon/ticket entitlement is "delivered" without a shipping step (#11 §3).
+         *     The transition is sealed by the conditional-UPDATE rowcount gate: completing from
+         *     any other state updates 0 rows → 422 ``OrderNotCompletable``.
+         */
+        post: operations["apps_commerce_api_complete_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Orders
+         * @description List orders for the caller's creator's products, newest first, cursor-paginated.
+         *
+         *     Scoped to the caller's own creator (403 if they operate none) — an order is
+         *     included when any of its lines is a product this creator owns, so another
+         *     creator's orders never appear.
+         */
+        get: operations["apps_commerce_api_studio_list_orders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ops List Refunds
+         * @description List open refund requests (requested/reviewing), newest first, cursor-paginated.
+         *
+         *     Not caller-scoped: the whole platform's pending refund queue is an operator
+         *     surface (the ``operator_required`` guard is the access control).
+         */
+        get: operations["apps_commerce_api_ops_list_refunds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds/{refund_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops Review Refund
+         * @description Move a refund requested→reviewing (operator+). 422 if not in ``requested``.
+         */
+        post: operations["apps_commerce_api_ops_review_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds/{refund_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops Accept Refund
+         * @description Accept a refund (operator+): resolve it, cancel + restock the order, notify the fan.
+         *
+         *     The refund requested/reviewing→accepted transition is the rowcount gate: 0 rows
+         *     means a concurrent accept/reject already resolved it → 422 (so a double accept
+         *     cannot re-run the restock). The order is cancelled + restocked only when it is
+         *     still in a refundable (active) state — a second, independent rowcount gate — so a
+         *     refund accepted on an order a fan already cancelled does not double-restore stock
+         *     (the fan cancel restocked it then). Money never moves (mock, B7). The fan
+         *     notification is sent after commit so a rolled-back accept emits nothing.
+         */
+        post: operations["apps_commerce_api_ops_accept_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/refunds/{refund_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ops Reject Refund
+         * @description Reject a refund requested/reviewing→rejected (operator+); reason mandatory.
+         *
+         *     The reason is required (schema) and recorded on the audit entry so a refusal
+         *     always answers "why". The rowcount gate makes it single-winner (a concurrent
+         *     accept/reject leaves the loser with 0 rows → 422). The order is left untouched
+         *     (only accept cancels/restocks). The fan is notified of the outcome after commit.
+         */
+        post: operations["apps_commerce_api_ops_reject_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/commerce/{provider}/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commerce Webhook
+         * @description Receive a hosted-commerce provider webhook. Fail-closed + signature-verified.
+         *
+         *     503 when the bridge is disabled/unconfigured; 401 on a bad signature; 400 for an
+         *     unsupported provider/event; 200 otherwise. The raw body is read for the HMAC check
+         *     before any parsing.
+         */
+        post: operations["apps_commerce_bridge_api_commerce_webhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -305,10 +723,23 @@ export interface paths {
         /**
          * List Posts
          * @description List posts, newest first; filter to one creator via ``?creator_id=``.
+         *
+         *     Personal-block gating: the global (unfiltered) list is an aggregate surface, so
+         *     personally blocked creators are excluded. A ``?creator_id=`` request is explicit
+         *     creator-scoped navigation (a profile visit), so it is returned even for a blocked
+         *     creator — the web renders the block state; a personal block is not existence hiding.
          */
         get: operations["apps_content_api_list_posts"];
         put?: never;
-        post?: never;
+        /**
+         * Create Post
+         * @description Create a post as the caller's creator profile; 403 if they operate none.
+         *
+         *     Owner guard: only an account that operates a :class:`Creator` may post, and
+         *     the post is always attributed to *that* creator — the author is never taken
+         *     from client input, so a fan cannot post as someone else.
+         */
+        post: operations["apps_content_api_create_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -329,7 +760,55 @@ export interface paths {
         get: operations["apps_content_api_get_post"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Post
+         * @description Hard-delete the caller's own post; 404 if unknown or not theirs (no leak).
+         *
+         *     Owner guard identical to ``create_post``. Unlike an order/tier, a post has no
+         *     history constraint, so deletion is a hard delete — its comments and likes
+         *     CASCADE (``Comment.post`` / ``Like.post`` are ``on_delete=CASCADE``).
+         */
+        delete: operations["apps_content_api_delete_post"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Post
+         * @description Update fields on the caller's own post; 404 if unknown or not theirs (no leak).
+         *
+         *     Owner guard identical to ``create_post`` (scope is the caller's creator). Only
+         *     the provided fields (``body``/``media_url``/``is_adult``) are applied; the
+         *     ``media_url`` scheme is re-validated (A5). The response reflects fresh
+         *     like/comment counts and the caller's ``liked`` flag.
+         */
+        patch: operations["apps_content_api_update_post"];
+        trace?: never;
+    };
+    "/api/posts/{post_id}/like": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Like Post
+         * @description Like a post; idempotent (a second like is a no-op, still 200).
+         */
+        put: operations["apps_content_api_like_post"];
+        post?: never;
+        /**
+         * Unlike Post
+         * @description Unlike a post; idempotent (unliking a non-liked post is a no-op).
+         *
+         *     Retraction is exempt from the personal-block gate (F4): unliking is not a *new*
+         *     interaction against the creator but cleanup of the fan's own existing like, so a
+         *     fan who blocked the creator after liking can still withdraw that like (standard
+         *     block UX — you can always remove your own trace). New interactions
+         *     (``like``/comment/order) stay refused while blocked; only the 19+ read funnel
+         *     still applies here, so a gated adult post 404s.
+         */
+        delete: operations["apps_content_api_unlike_post"];
         options?: never;
         head?: never;
         patch?: never;
@@ -344,11 +823,19 @@ export interface paths {
         };
         /**
          * List Comments
-         * @description List a post's comments, oldest first; 404 if the post is unknown.
+         * @description List a post's comments, oldest first; 404 if the post is unknown or gated.
          */
         get: operations["apps_content_api_list_comments"];
         put?: never;
-        post?: never;
+        /**
+         * Create Comment
+         * @description Add a comment to a post as the authenticated fan; 404 if the post is unknown.
+         *
+         *     ``author`` is the account; ``author_name`` denormalises the display nickname so
+         *     the comment renders identically to a seeded one (and _comment_out never leaks
+         *     the internal fan_id).
+         */
+        post: operations["apps_content_api_create_comment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -366,10 +853,40 @@ export interface paths {
          * Feed
          * @description Anonymous feed = most recent posts across creators.
          *
-         *     Personalised (following-only) feed needs the authenticated user and lands in
-         *     B3/B4; for now this returns the same recent-posts page as ``/posts``.
+         *     Personalised (following-only) feed needs a richer ranking and lands later; for
+         *     now this returns the same recent-posts page as ``/posts``, but with the
+         *     per-user ``liked`` flag filled in when the caller is authenticated.
+         *
+         *     The feed is an aggregate surface, so posts from creators the caller has
+         *     personally blocked are excluded (anonymous callers block nothing).
          */
         get: operations["apps_content_api_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Posts
+         * @description List the caller's own creator's posts — including 19+ — newest first.
+         *
+         *     Owner surface (mirrors ``commerce.studio_list_products``): the consumer 19+ gate
+         *     (:func:`_post_qs`) is deliberately NOT applied, so the owner always sees their own
+         *     adult/full posts regardless of ``ENABLE_ADULT_CONTENT``. 403 if the caller
+         *     operates no creator. Each row carries the same annotations as :func:`_annotated_post`
+         *     (like/comment counts + the owner's own ``liked`` flag), cursor-paginated.
+         */
+        get: operations["apps_content_api_studio_list_posts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -572,6 +1089,16 @@ export interface paths {
         /**
          * List Creators
          * @description List creators (optionally filtered by category), cursor-paginated.
+         *
+         *     Discovery is an aggregate surface, so creators the authenticated caller has
+         *     personally blocked are excluded (anonymous callers block nothing).
+         *
+         *     ``sort`` selects a server-ranked discovery surface (``popular`` / ``new`` /
+         *     ``recommended`` — see :data:`_RECOMMENDATION_SORTS`), computed from real
+         *     follower/recency signals rather than the client sorting a single list. A ranked
+         *     surface returns one bounded top-N page (``next_cursor`` is None) because keyset
+         *     cursors assume the stable handle order; the default (no ``sort``) stays
+         *     cursor-paginated.
          */
         get: operations["apps_creator_api_list_creators"];
         put?: never;
@@ -592,8 +1119,38 @@ export interface paths {
         /**
          * Get Creator
          * @description Fetch a single creator by handle; 404 if unknown (no existence leak).
+         *
+         *     An unpublished profile (``published=False`` — e.g. the owner withdrew) 404s just
+         *     like an unknown handle, so an offboarded creator's page is no longer viewable.
          */
         get: operations["apps_creator_api_get_creator"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creators/{handle}/followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Followers
+         * @description List a creator's followers, newest first (public, keyset-paginated).
+         *
+         *     A public read: a follower's ``nickname`` is already public (comments, follow
+         *     notifications), so listing followers introduces no new PII exposure. Withdrawn
+         *     (deactivated) accounts are excluded so an anonymised fan is not surfaced. A
+         *     404 for an unknown handle keeps parity with the profile read (no existence
+         *     leak). ``select_related`` folds the follower + their optional creator profile
+         *     into the page query so the row build stays O(page), not O(followers).
+         */
+        get: operations["apps_creator_api_list_followers"];
         put?: never;
         post?: never;
         delete?: never;
@@ -611,9 +1168,79 @@ export interface paths {
         };
         /**
          * Search
-         * @description Search creators (name/handle) and products (title) by a query string.
+         * @description Ranked, paginated search over creators and products.
+         *
+         *     Creators match on name/handle/bio/category and products on title/meta/
+         *     description — multi-field substring (``icontains``). Substring (not a
+         *     whitespace ``tsvector``) is deliberate: Korean has no inter-morpheme spaces, so
+         *     a ``simple``-config full-text index would miss most intra-word matches. A
+         *     pg_trgm GIN index (indexed substring + typo tolerance) is the documented
+         *     scale/fuzzy follow-up (ASS-273). Results are ranked so the best hits lead — an
+         *     exact name, then a prefix, then any-field contains — and ``limit``/``offset``
+         *     page them; ``next_offset`` is set when a further page may exist.
          */
         get: operations["apps_creator_api_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Studio Create Profile
+         * @description Open the caller's own creator page — the self-serve "크리에이터 되기" flow (D4).
+         *
+         *     A signed-in fan becomes a creator by claiming a unique ``handle`` + display
+         *     ``name``; this creates their :class:`~apps.creator.models.Creator`
+         *     (``owner`` = the caller). "Creator" is derived from operating a creator
+         *     profile (``handle`` present on ``/fan/me``), not a separate role — so no
+         *     privilege change is made here. Idempotency is NOT wanted: a second call
+         *     (already a creator, or a taken handle) is a 409, and the unique(handle) /
+         *     one-to-one(owner) constraints close the concurrent-claim race even if two
+         *     requests both pass the pre-checks.
+         */
+        post: operations["apps_creator_api_studio_create_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Studio Update Profile
+         * @description Update the caller's own creator profile; 403 if they operate no creator.
+         */
+        patch: operations["apps_creator_api_studio_update_profile"];
+        trace?: never;
+    };
+    "/api/studio/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio Stats
+         * @description Real per-creator dashboard counts for the caller's own creator.
+         *
+         *     Owner-scoped: every figure is filtered to the creator this account operates, so
+         *     another creator's stats never leak. 403 (OwnerRequired) if the caller operates
+         *     no creator. Counts only — no revenue/settlement (ASS-229 gated).
+         *
+         *     A handful of owner-scoped scalar aggregates (no per-row query → no N+1): the
+         *     product total + selling counts collapse into one conditional aggregate, the
+         *     rest are single indexed ``COUNT``s.
+         */
+        get: operations["apps_creator_api_studio_stats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -914,6 +1541,412 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fan/social/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Social Start
+         * @description Begin social login: return the provider consent URL + an opaque state.
+         *
+         *     Fails closed (503) when no provider is wired (the mock is gated by
+         *     ENABLE_MOCK_SOCIAL_AUTH), mirroring the OTP/KYC surfaces. The state is echoed to
+         *     the provider AND signed into a path-scoped httpOnly cookie, so the callback can be
+         *     bound to the browser + provider + redirect_uri that started the flow (anti
+         *     login-CSRF); the signed cookie needs no server-side store (cross-worker safe).
+         */
+        get: operations["apps_identity_api_social_start"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/social/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Social Callback
+         * @description Complete social login: exchange the code, then log in / register the fan.
+         *
+         *     Delivery follows the requested surface (ADR-0002) — the web flow gets hardened
+         *     httpOnly cookies. A first-time social identity requires terms/privacy + 만 14세
+         *     consent (422 CONSENT_REQUIRED/UNDERAGE if missing); a returning one does not.
+         *
+         *     Anti login-CSRF (Codex #7): the signed state cookie set at ``/start`` is re-verified
+         *     against the echoed ``state`` + provider + redirect_uri BEFORE the code exchange, so a
+         *     callback forged by an attacker (no matching cookie, mismatched state, or a swapped
+         *     redirect_uri) is rejected (400) and can never mint tokens into the victim's browser.
+         */
+        post: operations["apps_identity_api_social_callback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/signup/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signup Email
+         * @description Create an (unverified) email + password fan and send a mock verification mail.
+         *
+         *     Fails closed (503) when no email sender is wired (the mock is gated by
+         *     ``ENABLE_MOCK_EMAIL``, off in production), mirroring the social surface. No token is
+         *     issued — the fan is logged in on ``/verify-email``. A duplicate verified email is
+         *     409; consent/age/password-length failures are 422. The verification token is
+         *     echoed only under the ``EMAIL_VERIFY_RETURN_TOKEN`` dev flag (else "").
+         */
+        post: operations["apps_identity_api_signup_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Email Endpoint
+         * @description Confirm an email-verification token, mark the account verified, and log in.
+         *
+         *     On the first valid confirm the account is marked verified and a token pair is
+         *     issued + delivered by surface (ADR-0002); a forged/expired/mismatched token is 400.
+         */
+        post: operations["apps_identity_api_verify_email_endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/login/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Email Endpoint
+         * @description Authenticate an email + password fan and issue a fresh token pair.
+         *
+         *     Disclosure-safe: a wrong email and a wrong password are indistinguishable (422
+         *     ``InvalidCredentials``). A correct password on an unverified account is 403
+         *     ``EMAIL_NOT_VERIFIED`` (verification is required before login). Delivery follows
+         *     the requested surface (ADR-0002).
+         */
+        post: operations["apps_identity_api_login_email_endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Best-effort logout: revoke the session's token family and clear cookies (A2).
+         *
+         *     Unauthenticated on purpose. A web session whose short-lived access cookie has
+         *     already expired must still be able to log out using its live refresh cookie, so
+         *     gating this on ``fan_auth`` (which validates the *access* token) would strand
+         *     exactly that case. Instead we revoke off whatever the caller presents: the
+         *     access token (bearer or cookie) and/or the refresh cookie — either burns the
+         *     whole family (F11). Cookie clearing is unconditional so the browser is logged
+         *     out even when no token was presented; the operation is idempotent.
+         *
+         *     CSRF: this endpoint is left CSRF-open. A forged cross-site logout can only
+         *     *destroy* a session (revoke tokens + clear cookies), never read data or act as
+         *     the user, so it is a nuisance-level risk accepted for reachability — consistent
+         *     with keeping logout usable from an access-expired web session.
+         */
+        post: operations["apps_identity_api_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description Rotate a refresh token and issue a fresh pair; deliver by surface.
+         *
+         *     The web surface presents the refresh token via the path-scoped cookie (and
+         *     gets fresh cookies back); the app presents it in the body (and gets a fresh
+         *     body pair). Rotation supersedes the presented token; replay of a consumed
+         *     token revokes the whole family (reuse detection in ``rotate_refresh_token``).
+         *     Any token failure returns a flat 401 that does not distinguish expired vs
+         *     revoked vs reused.
+         *
+         *     CSRF (A3): the cookie surface is browser-driven and auto-sends the refresh
+         *     cookie, so this endpoint — which the broadened cookie path (A2) now exposes on
+         *     an unsafe method — verifies the double-submit CSRF token (``/fan/csrf`` cookie
+         *     echoed in ``X-CSRFToken``) whenever the token arrives by cookie. The app/body
+         *     surface presents no cookie and is exempt.
+         */
+        post: operations["apps_identity_api_refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me
+         * @description Return the authenticated fan's identity summary (either surface).
+         */
+        get: operations["apps_identity_api_get_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Me
+         * @description Update the caller's own profile (nickname). Scope is always ``request.auth``.
+         *
+         *     The account is taken from the authenticated token, never from the body, so a
+         *     fan can only edit their own profile. nickname is display-only PII (already the
+         *     sole one stored); no new PII is introduced.
+         */
+        patch: operations["apps_identity_api_update_me"];
+        trace?: never;
+    };
+    "/api/fan/account/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw
+         * @description Withdraw (탈퇴) the authenticated fan's account and end the session.
+         *
+         *     Privacy decisions 2026-07-12 (D3): anonymises the account in place (clears
+         *     nickname + phone hash, sets is_active False, stamps withdrawn_at), offboards the
+         *     fan (cancels active subscriptions, unpublishes any creator storefront, pseudonymises
+         *     comment author snapshots — Codex #13) and revokes every token family, then clears
+         *     the web auth cookies so the browser is logged out. The scope is always the
+         *     authenticated account (never the body), so a fan can only withdraw their own
+         *     account. Idempotent at the service layer. Legal-hold transaction/dispute records
+         *     stay linked to the now-pseudonymous fan_id.
+         *
+         *     Staff guard (Codex #13): a staff account (operator/manager/admin/system) is refused
+         *     here (403 ``StaffWithdrawalForbidden``) — staff offboarding is a separate ops flow,
+         *     so the last-admin invariant can never be broken through fan self-service. Regular
+         *     fans (including creators, who are fans operating a creator page) proceed.
+         */
+        post: operations["apps_identity_api_withdraw"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/marketing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Marketing
+         * @description Return the caller's current per-channel marketing opt-in state (D8).
+         */
+        get: operations["apps_identity_api_get_marketing"];
+        /**
+         * Set Marketing
+         * @description Set the caller's per-channel marketing opt-in (settings save, D8).
+         *
+         *     Optional consent — any combination (including all-off) is valid and never blocks
+         *     service use. Each channel change appends a durable ConsentRecord audit row. Scope
+         *     is always the authenticated account (never the body).
+         */
+        put: operations["apps_identity_api_set_marketing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/consent/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Consent Versions
+         * @description Return the current presented version of each consent document (anonymous).
+         *
+         *     Anonymous by design: the signup page runs before auth and reads this to present +
+         *     echo the exact terms/privacy/age document versions recorded onto each
+         *     ConsentRecord at signup. Values come from the single source of truth
+         *     (apps.consent.versions — 법무-게이트: placeholders until legal versions the copy).
+         */
+        get: operations["apps_identity_api_get_consent_versions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/verify/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Start
+         * @description Begin (mock) 본인인증/성인 인증 for the authenticated fan.
+         *
+         *     Fail-closed: with no verifier wired (``ENABLE_MOCK_KYC`` off / no real provider)
+         *     this returns 503 rather than pretend a challenge started — mirroring the email
+         *     signup surface. On success the mock records a ``pending`` transition and returns a
+         *     bare ack (no PII is sent to or received from the mock).
+         */
+        post: operations["apps_identity_api_verify_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/verify/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Confirm
+         * @description Confirm (mock) 본인인증 and persist the derived adult flag + status.
+         *
+         *     Fail-closed (503) when no verifier is wired. On success the mock returns a
+         *     deterministic adult result; only the derived ``adult_verified`` / ``kyc_status``
+         *     / ``kyc_verified_at`` are written (never 주민번호/CI/DI/생년월일), and the age
+         *     consent is recorded (``ConsentKind.AGE``) so the age-gate has a durable grant.
+         *     No domain event is emitted (AGE consent is not the RULE kind — closed registry).
+         */
+        post: operations["apps_identity_api_verify_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Csrf
+         * @description Issue the ``csrftoken`` cookie for the web double-submit CSRF defense.
+         *
+         *     ``get_token`` marks the request so ``CsrfViewMiddleware`` writes the cookie on
+         *     the way out — the ninja-safe equivalent of ``@ensure_csrf_cookie`` (which can
+         *     only wrap a view returning an ``HttpResponse``, not a serialised dict). The web
+         *     client reads the cookie and echoes it in ``X-CSRFToken`` on unsafe methods.
+         */
+        get: operations["apps_identity_api_get_csrf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/membership-card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Membership Card
+         * @description Return the authenticated fan's digital membership card (either surface).
+         */
+        get: operations["apps_identity_api_get_membership_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tiers": {
         parameters: {
             query?: never;
@@ -923,7 +1956,17 @@ export interface paths {
         };
         /**
          * List Tiers
-         * @description List membership tiers, optionally filtered to one creator.
+         * @description List *active* membership tiers, optionally filtered to one creator.
+         *
+         *     Inactive tiers are owner-only (managed via ``/studio/tiers``) and excluded from
+         *     this consumer surface, mirroring draft/hidden products in the catalog.
+         *
+         *     Personal-block gating (F8 — the 6th aggregate surface, aligning with
+         *     ``content.list_posts`` / ``commerce.list_products``): the global (unfiltered)
+         *     browse excludes tiers from creators the authenticated caller has personally
+         *     blocked. An explicit ``?creator_id=`` visit is creator-scoped navigation and is
+         *     NOT hidden (a personal block is not existence hiding); an anonymous caller blocks
+         *     nothing.
          */
         get: operations["apps_membership_api_list_tiers"];
         put?: never;
@@ -932,6 +1975,168 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/studio/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Studio List Tiers
+         * @description List the caller's own creator's tiers, including inactive ones.
+         */
+        get: operations["apps_membership_api_studio_list_tiers"];
+        put?: never;
+        /**
+         * Studio Create Tier
+         * @description Create a membership tier owned by the caller's creator; 403 if they operate none.
+         */
+        post: operations["apps_membership_api_studio_create_tier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/studio/tiers/{tier_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Studio Delete Tier
+         * @description Delete the caller's own tier; 403 (no creator) / 404 (not theirs) / 422 (in use).
+         *
+         *     A tier with any ACTIVE subscription can't be deleted (422); the owner soft-archives
+         *     (``active=False``) instead. With no active subscription, a hard delete is attempted:
+         *     if the tier still has non-active subscriptions carrying settlement history, their
+         *     PROTECTed :class:`~apps.payments.models.PaymentAttempt` rows block the cascade
+         *     (financial history is never erased — #16), so the tier is soft-archived and the ack
+         *     reports ``archived``. Only a tier whose subscriptions (if any) have no financial
+         *     history is hard-deleted (``deleted``).
+         */
+        delete: operations["apps_membership_api_studio_delete_tier"];
+        options?: never;
+        head?: never;
+        /**
+         * Studio Update Tier
+         * @description Update fields on the caller's own tier; 403 (no creator) / 404 (not theirs).
+         */
+        patch: operations["apps_membership_api_studio_update_tier"];
+        trace?: never;
+    };
+    "/api/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Subscriptions
+         * @description List the requesting fan's own subscriptions (newest first).
+         */
+        get: operations["apps_membership_api_list_subscriptions"];
+        put?: never;
+        /**
+         * Subscribe
+         * @description Subscribe the requesting fan to a tier (mock — no money moves).
+         *
+         *     Refuses (422) if the fan already has an active subscription to the same
+         *     creator (one active membership per creator).
+         */
+        post: operations["apps_membership_api_subscribe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/free": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subscribe Free
+         * @description Join an explicitly free tier — no payment, provenance=free (ASS-297).
+         *
+         *     The ONLY way to join a ``pricing_kind=free`` tier: the paid subscribe refuses
+         *     it (``PricingIsFree``) and this path refuses a paid tier (``PricingNotFree``),
+         *     so a price-0 placeholder tier can never be joined free. A free membership has
+         *     no billing anchor (``next_billing_date=None``) and never auto-converts to paid;
+         *     the one-active-membership-per-creator rule still applies.
+         */
+        post: operations["apps_membership_api_subscribe_free"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/{subscription_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Subscription
+         * @description Schedule end-of-period cancellation of the fan's own subscription.
+         *
+         *     "말일 해지": records ``cancelled_at`` and keeps ``status = active`` so the
+         *     membership stays usable until period-end; the response's ``cancel_scheduled``
+         *     flag lets the web show "해지 예정". A real billing job would flip it later.
+         */
+        post: operations["apps_membership_api_cancel_subscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change Subscription Tier
+         * @description Switch the fan's own active subscription to another tier (up/downgrade).
+         *
+         *     The new tier must be an *active* tier of the **same creator** — the membership
+         *     is a relationship with one creator, so a cross-creator swap is not a tier change
+         *     but a different subscription. A tier that is unknown, inactive, or belongs to
+         *     another creator collapses to 422 ``TierNotFound`` (no cross-creator existence
+         *     leak). A non-active subscription can't be changed (422 ``SubscriptionNotActive``).
+         *     A subscription already scheduled to cancel (``cancelled_at`` set, "해지 예정") is
+         *     also refused (422): its tier is frozen until the cancellation is withdrawn (F-E).
+         *     Idempotent: switching to the tier already held is a 200 no-op.
+         */
+        patch: operations["apps_membership_api_change_subscription_tier"];
         trace?: never;
     };
     "/api/operator/notifications/policy": {
@@ -969,6 +2174,143 @@ export interface paths {
          */
         post: operations["apps_notification_api_dispatch_notification"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notifications
+         * @description List the requesting fan's own notifications, newest first, cursor-paginated.
+         */
+        get: operations["apps_notification_api_list_notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark All Read
+         * @description Mark all of the requesting fan's unread notifications as read.
+         */
+        post: operations["apps_notification_api_mark_all_read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Read
+         * @description Mark one of the fan's own notifications read (404 if not theirs).
+         */
+        post: operations["apps_notification_api_mark_read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Payment Methods
+         * @description List the requesting fan's own saved payment methods (newest first).
+         */
+        get: operations["apps_payments_api_list_payment_methods"];
+        put?: never;
+        /**
+         * Register Payment Method
+         * @description Register a (mock) payment method for the requesting fan.
+         *
+         *     Fail-closed (503) when no tokenizer is wired. The mock tokenizer discards the
+         *     card, keeping only brand + last4 + a placeholder token — the PAN never touches
+         *     the DB or logs. The first method (or one flagged ``make_primary``) becomes
+         *     primary; the per-owner partial-unique constraint keeps at most one primary.
+         */
+        post: operations["apps_payments_api_register_payment_method"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/payment-methods/{method_id}/primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Primary Payment Method
+         * @description Make one of the fan's own methods primary (404 if not theirs).
+         *
+         *     Demotes the current primary and promotes the target in one transaction so the
+         *     per-owner single-primary constraint is never transiently violated. The owner's
+         *     method rows are locked (``select_for_update``) for the swap so two concurrent
+         *     promotions (or one racing a ``make_primary`` registration) serialise instead of
+         *     both inserting/updating a primary and tripping the partial-unique constraint; an
+         *     ``IntegrityError`` from a lost race is caught and the current state re-read rather
+         *     than surfaced as a 500.
+         */
+        post: operations["apps_payments_api_set_primary_payment_method"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/payment-methods/{method_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Payment Method
+         * @description Delete one of the fan's own saved methods (404 if not theirs).
+         */
+        delete: operations["apps_payments_api_delete_payment_method"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1227,16 +2569,18 @@ export interface paths {
         put?: never;
         /**
          * Create Fan Report
-         * @description File a safety report as the authenticated fan (ASS-110, F11).
+         * @description File a safety report as the authenticated fan (ASS-110, F11; B3).
          *
-         *     **Bearer-only on purpose.** This is a state-changing POST, and the fan cookie
-         *     surface (ADR-0002 web httpOnly cookies) needs CSRF protection for unsafe
-         *     methods — the double-submit defense ASS-98 deferred to "the first authenticated
-         *     state-changing fan endpoint". Rather than ship a CSRF-exposed cookie path (an
-         *     auth/session concern, CONSTRAINTS #26 human-gated), v0 accepts only the bearer
-         *     token (the app surface, which browsers do not auto-send, so it is not CSRF-
-         *     prone). Web-cookie reporting lands with the CSRF work. The endpoint issues no
-         *     tokens, so it stays an ordinary business endpoint, not auth code.
+         *     **Both surfaces (B3).** Now accepts either the app bearer token or the web
+         *     httpOnly access cookie via :data:`~apps.identity.auth.fan_auth`. The cookie
+         *     surface is CSRF-prone on this state-changing POST, but the grace condition
+         *     ASS-98 attached to enabling it is now met: :data:`fan_auth`'s
+         *     :class:`~apps.identity.auth.FanCookieAuth` enforces Django's double-submit CSRF
+         *     on unsafe methods, so a web caller must echo the ``/fan/csrf`` cookie in
+         *     ``X-CSRFToken`` (the app/bearer surface is not browser-auto-sent and stays
+         *     exempt). Per-user rate-limited (``user_write_throttle``) like the other fan
+         *     writes. The endpoint issues no tokens, so it stays an ordinary business
+         *     endpoint, not auth code.
          *
          *     The fan is recorded as the reporter, severity is server-derived from the type,
          *     and the narrative goes only to the restricted store.
@@ -1290,6 +2634,10 @@ export interface paths {
         /**
          * Patch Report Status
          * @description Advance a report's handling status (operator+).
+         *
+         *     This is also the media-takedown control: moving a report that targets an upload to
+         *     ``actioned`` stops that image being served (report-driven human moderation). The
+         *     upload row survives — takedown is a status change, never a delete.
          */
         patch: operations["apps_safety_api_patch_report_status"];
         trace?: never;
@@ -1305,9 +2653,13 @@ export interface paths {
          * Get Report Detail
          * @description Read the restricted narrative (manager+ only).
          *
-         *     A non-empty ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED
-         *     audit entry: access to the platform's most sensitive data must answer "why"
-         *     (audit model compliance contract).
+         *     A ``reason`` is mandatory and recorded on the SAFETY_DETAIL_VIEWED audit entry:
+         *     access to the platform's most sensitive data must answer "why" (audit model
+         *     compliance contract). ``reason`` must be one of the closed
+         *     :class:`~apps.safety.models.DetailAccessReason` codes — never free text — so the
+         *     "why" travelling in the GET query string cannot carry PII into access logs /
+         *     referrers (ASS-291 #7). Validated before any row is read; the input is never
+         *     echoed back.
          */
         get: operations["apps_safety_api_get_report_detail"];
         put?: never;
@@ -1536,6 +2888,107 @@ export interface paths {
          * @description Reject a pending change.
          */
         post: operations["apps_schedule_api_reject_endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/creators/{handle}/follow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Follow Creator
+         * @description Follow a creator; idempotent (a second follow is a no-op, still 200).
+         */
+        put: operations["apps_social_api_follow_creator"];
+        post?: never;
+        /**
+         * Unfollow Creator
+         * @description Unfollow a creator; idempotent (unfollowing a non-follow is a no-op).
+         */
+        delete: operations["apps_social_api_unfollow_creator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Blocks
+         * @description List the creators the requesting fan has blocked (settings screen).
+         */
+        get: operations["apps_social_api_list_blocks"];
+        put?: never;
+        /**
+         * Block Creator
+         * @description Block a creator; idempotent (a second block is a no-op, still 200).
+         *
+         *     Blocking auto-unfollows (standard mute/block UX): a fan who blocks a creator
+         *     they follow should not keep receiving that creator's follow-derived surfaces.
+         *     An unknown creator id is 404 (``BlockTargetNotFound``) — unlike the 19+ gate,
+         *     a personal block does not hide the target's existence.
+         */
+        post: operations["apps_social_api_block_creator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fan/blocks/{creator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unblock Creator
+         * @description Unblock a creator; idempotent (unblocking a non-block is a no-op, still 200).
+         */
+        delete: operations["apps_social_api_unblock_creator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Validate + store a single uploaded image; return its media URL.
+         *
+         *     Rejects (coded ``ApiError``): the upload surface being fail-closed off (503,
+         *     no serving backend wired), a non-image declared content-type (415), a file over
+         *     :data:`~django.conf.settings.UPLOAD_MAX_BYTES` (413), bytes that are not a real
+         *     allowed image / are scriptable markup (422), or bytes that pass the magic-byte
+         *     sniff but fail Pillow's full decode-verify / exceed the pixel-count or
+         *     dimension bomb guard (422). On success writes the bytes under a UUID name via
+         *     the storage backend and records an :class:`Upload` row.
+         */
+        post: operations["apps_uploads_api_create_upload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1831,6 +3284,20 @@ export interface components {
             commit: string;
         };
         /**
+         * CapabilitiesResponse
+         * @description Runtime capability flags the web reads to gate UI and flows.
+         *
+         *     Single source of truth for whether a boundary flow is currently open, so the
+         *     web consumes these instead of duplicating the server settings (which would
+         *     drift). No secrets — only whether a gated flow is available.
+         */
+        CapabilitiesResponse: {
+            /** Shipping Checkout Available */
+            shipping_checkout_available: boolean;
+            /** Payment Available */
+            payment_available: boolean;
+        };
+        /**
          * AccountRoleOut
          * @description An account id + its current role.
          */
@@ -1865,87 +3332,6 @@ export interface components {
             role: string;
             /** Reason */
             reason: string;
-        };
-        /**
-         * OtpRequestIn
-         * @description Request body for sending a signup OTP.
-         */
-        OtpRequestIn: {
-            /** Phone */
-            phone: string;
-        };
-        /**
-         * SignupOut
-         * @description Signup result. ``token_delivery`` says where the tokens are.
-         *
-         *     ``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``
-         *     (web): both are empty here and delivered as httpOnly cookies instead, so no
-         *     secret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned
-         *     either way so the client knows when to refresh.
-         */
-        SignupOut: {
-            /** Token Delivery */
-            token_delivery: string;
-            /**
-             * Access Token
-             * @default
-             */
-            access_token: string;
-            /**
-             * Refresh Token
-             * @default
-             */
-            refresh_token: string;
-            /**
-             * Access Expires At
-             * Format: date-time
-             */
-            access_expires_at: string;
-            /**
-             * Refresh Expires At
-             * Format: date-time
-             */
-            refresh_expires_at: string;
-        };
-        /**
-         * SignupIn
-         * @description Request body for completing fan signup.
-         *
-         *     ``web`` lets the web flow ask for cookie delivery (ADR-0002): when true the
-         *     tokens are set as hardened httpOnly cookies and omitted from the body.
-         */
-        SignupIn: {
-            /** Phone */
-            phone: string;
-            /** Otp Code */
-            otp_code: string;
-            /** Nickname */
-            nickname: string;
-            /** Consent Terms */
-            consent_terms: boolean;
-            /** Consent Privacy */
-            consent_privacy: boolean;
-            /**
-             * Web
-             * @default false
-             */
-            web: boolean;
-        };
-        /**
-         * MembershipCardOut
-         * @description Digital membership card (counts only; nickname is the sole display PII).
-         */
-        MembershipCardOut: {
-            /** Nickname */
-            nickname: string;
-            /** Member Id */
-            member_id: string;
-            /** Visit Count */
-            visit_count: number;
-            /** Points */
-            points: number;
-            /** Coupons */
-            coupons: number;
         };
         /**
          * CastProfileOut
@@ -2187,6 +3573,16 @@ export interface components {
             id: string;
             /** Creator Id */
             creator_id?: string | null;
+            /**
+             * Creator Name
+             * @default
+             */
+            creator_name: string;
+            /**
+             * Creator Handle
+             * @default
+             */
+            creator_handle: string;
             /** Type */
             type: string;
             /** Title */
@@ -2197,6 +3593,26 @@ export interface components {
             meta: string;
             /** Media Url */
             media_url: string;
+            /** Description */
+            description: string;
+            /** Options */
+            options: string[];
+            /** Stock */
+            stock?: number | null;
+            /** Sold Out */
+            sold_out: boolean;
+            /** Locked */
+            locked: boolean;
+            /**
+             * Is Adult
+             * @default false
+             */
+            is_adult: boolean;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
         };
         /**
          * ProductPage
@@ -2207,6 +3623,448 @@ export interface components {
             items: components["schemas"]["ProductOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * CommerceError
+         * @description Stable error shape for commerce endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
+         */
+        CommerceError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * StudioProductOut
+         * @description Owner-view product: adds the management fields (status, 19+, timestamps).
+         *
+         *     ``sold`` is the total quantity sold via **non-cancelled** orders (ASS-264) — a
+         *     count, never a settlement/revenue figure (PG·재무 게이트 후행).
+         */
+        StudioProductOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Creator Id */
+            creator_id?: string | null;
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /** Price */
+            price: number;
+            /** Meta */
+            meta: string;
+            /** Media Url */
+            media_url: string;
+            /** Description */
+            description: string;
+            /** Options */
+            options: string[];
+            /** Stock */
+            stock?: number | null;
+            /** Sold Out */
+            sold_out: boolean;
+            /** Locked */
+            locked: boolean;
+            /** Status */
+            status: string;
+            /** Is Adult */
+            is_adult: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Sold */
+            sold: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
+        };
+        /**
+         * StudioProductIn
+         * @description Owner payload to create a catalog product (display price, not settlement).
+         */
+        StudioProductIn: {
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /**
+             * Price
+             * @default 0
+             */
+            price: number;
+            /**
+             * Meta
+             * @default
+             */
+            meta: string;
+            /**
+             * Media Url
+             * @default
+             */
+            media_url: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Options */
+            options?: string[];
+            /** Stock */
+            stock?: number | null;
+            /**
+             * Sold Out
+             * @default false
+             */
+            sold_out: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
+             * Status
+             * @default selling
+             */
+            status: string;
+            /**
+             * Is Adult
+             * @default false
+             */
+            is_adult: boolean;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
+        };
+        /**
+         * StudioProductPatch
+         * @description Owner payload to update a product; only the provided fields are applied.
+         */
+        StudioProductPatch: {
+            /** Type */
+            type?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Price */
+            price?: number | null;
+            /** Meta */
+            meta?: string | null;
+            /** Media Url */
+            media_url?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Options */
+            options?: string[] | null;
+            /** Stock */
+            stock?: number | null;
+            /** Sold Out */
+            sold_out?: boolean | null;
+            /** Locked */
+            locked?: boolean | null;
+            /** Status */
+            status?: string | null;
+            /** Is Adult */
+            is_adult?: boolean | null;
+            /** Pricing Kind */
+            pricing_kind?: string | null;
+        };
+        /**
+         * StudioAck
+         * @description Bare status ack for studio mutations that return no body (delete).
+         */
+        StudioAck: {
+            /** Status */
+            status: string;
+        };
+        /**
+         * OrderDetailOut
+         * @description A single order returned to its owner, extended with the delivery snapshot.
+         *
+         *     Used only by the owner-scoped single-order responses (detail read, place,
+         *     cancel, refund) — never the list — so ``shipping_address`` (a goods order's
+         *     recipient name / phone / postal / street PII) reaches a fan only for their own
+         *     order, one at a time, not enumerated across a paginated list (ASS-291 A-3).
+         *     ``None`` for an order that needs no address (digital/experience/ticket/coupon).
+         */
+        OrderDetailOut: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Items */
+            items: components["schemas"]["OrderItemOut"][];
+            /** Subtotal */
+            subtotal: number;
+            /** Shipping */
+            shipping: number;
+            /** Shipping Fee */
+            shipping_fee: number;
+            /** Total */
+            total: number;
+            /** Creator Name */
+            creator_name?: string | null;
+            refund?: components["schemas"]["OrderRefundOut"] | null;
+            tracking?: components["schemas"]["OrderTrackingOut"] | null;
+            shipping_address?: components["schemas"]["OrderShippingOut"] | null;
+        };
+        /**
+         * OrderItemOut
+         * @description One line of an order (snapshot at purchase; maps to frontend ``OrderItem``).
+         */
+        OrderItemOut: {
+            /** Product Id */
+            product_id?: string | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+            /** Option */
+            option: string;
+            /** Price */
+            price: number;
+            /** Qty */
+            qty: number;
+        };
+        /**
+         * OrderRefundOut
+         * @description The order's latest refund request, if any (embedded in ``OrderOut``).
+         */
+        OrderRefundOut: {
+            /** Status */
+            status: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * OrderShippingOut
+         * @description Delivery-address snapshot echoed on a physical (goods) order (own orders only).
+         */
+        OrderShippingOut: {
+            /** Recipient Name */
+            recipient_name: string;
+            /** Recipient Phone */
+            recipient_phone: string;
+            /** Postal Code */
+            postal_code: string;
+            /** Address1 */
+            address1: string;
+            /** Address2 */
+            address2: string;
+        };
+        /**
+         * OrderTrackingOut
+         * @description Shipment tracking echoed once a physical order has been shipped (#11).
+         *
+         *     Populated by the creator/operator at ``/orders/{id}/ship``; ``None`` on an order
+         *     that has not shipped (still PAID, or a digital order completed without shipping).
+         *     Mirrors the web ``Order.tracking`` shape (``{carrier, number}``) — carrier name
+         *     and tracking number only, no PII.
+         */
+        OrderTrackingOut: {
+            /** Carrier */
+            carrier: string;
+            /** Number */
+            number: string;
+        };
+        /**
+         * CreateOrderIn
+         * @description Fan payload to place a (mock) order for one product.
+         */
+        CreateOrderIn: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Qty
+             * @default 1
+             */
+            qty: number;
+            /**
+             * Option
+             * @default
+             */
+            option: string;
+            shipping?: components["schemas"]["ShippingIn"] | null;
+            /** Idempotency Key */
+            idempotency_key?: string | null;
+        };
+        /**
+         * ShippingIn
+         * @description Delivery address for a physical (goods) order (required for ``type=goods``).
+         */
+        ShippingIn: {
+            /**
+             * Recipient Name
+             * @default
+             */
+            recipient_name: string;
+            /**
+             * Recipient Phone
+             * @default
+             */
+            recipient_phone: string;
+            /**
+             * Postal Code
+             * @default
+             */
+            postal_code: string;
+            /**
+             * Address1
+             * @default
+             */
+            address1: string;
+            /**
+             * Address2
+             * @default
+             */
+            address2: string;
+        };
+        /**
+         * OrderOut
+         * @description A fan's order row (maps to the frontend ``Order`` type).
+         *
+         *     ``subtotal``/``shipping``/``shipping_fee``/``total`` are display snapshots
+         *     computed server-side (``total = subtotal + shipping_fee``; shipping is a mock
+         *     ``0`` until the fee policy is set). NOT settlement figures. ``shipping`` and
+         *     ``shipping_fee`` carry the same value — ``shipping`` is the pre-existing field
+         *     the web consumes; ``shipping_fee`` is the explicit alias matching the model.
+         *
+         *     Deliberately carries **no delivery address** (ASS-291 A-3): the shipping
+         *     snapshot (recipient name / phone / postal / street) is PII, and the orders
+         *     *list* must not echo it in every row. It is exposed only on the owner-scoped
+         *     single-order responses via :class:`OrderDetailOut`.
+         */
+        OrderOut: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Items */
+            items: components["schemas"]["OrderItemOut"][];
+            /** Subtotal */
+            subtotal: number;
+            /** Shipping */
+            shipping: number;
+            /** Shipping Fee */
+            shipping_fee: number;
+            /** Total */
+            total: number;
+            /** Creator Name */
+            creator_name?: string | null;
+            refund?: components["schemas"]["OrderRefundOut"] | null;
+            tracking?: components["schemas"]["OrderTrackingOut"] | null;
+        };
+        /**
+         * OrderPage
+         * @description One page of the fan's orders plus the next cursor (no addresses — A-3).
+         */
+        OrderPage: {
+            /** Items */
+            items: components["schemas"]["OrderOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * RefundIn
+         * @description Fan payload to request a refund against an order.
+         */
+        RefundIn: {
+            /** Reason */
+            reason: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+        };
+        /**
+         * ShipIn
+         * @description Creator/operator payload to ship a PAID order (carrier + tracking number).
+         */
+        ShipIn: {
+            /** Carrier */
+            carrier: string;
+            /** Tracking Number */
+            tracking_number: string;
+        };
+        /**
+         * OpsRefundOut
+         * @description A refund request as seen in the operator review queue.
+         *
+         *     Carries the request fields plus the minimal owning-order context an operator
+         *     tool needs to triage (buyer's public fan id, current order status, order total
+         *     — a display snapshot, never a settlement figure).
+         */
+        OpsRefundOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Order Id */
+            order_id: string;
+            /** Status */
+            status: string;
+            /** Reason */
+            reason: string;
+            /** Detail */
+            detail: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Buyer Fan Id
+             * Format: uuid
+             */
+            buyer_fan_id: string;
+            /** Order Status */
+            order_status: string;
+            /** Order Total */
+            order_total: number;
+        };
+        /**
+         * OpsRefundPage
+         * @description One page of the operator refund queue plus the next cursor.
+         */
+        OpsRefundPage: {
+            /** Items */
+            items: components["schemas"]["OpsRefundOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * OpsRefundRejectIn
+         * @description Operator payload to reject a refund; a reason is mandatory (audited).
+         */
+        OpsRefundRejectIn: {
+            /** Reason */
+            reason: string;
         };
         /**
          * PostOut
@@ -2243,6 +4101,16 @@ export interface components {
              */
             liked: boolean;
             /**
+             * Is Adult
+             * @default false
+             */
+            is_adult: boolean;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -2260,11 +4128,73 @@ export interface components {
         };
         /**
          * ErrorOut
-         * @description Stable error shape for creator endpoints.
+         * @description Stable error shape for social endpoints.
          */
         ErrorOut: {
             /** Detail */
             detail: string;
+        };
+        /**
+         * PostIn
+         * @description Request body for creating a post (author is the caller's creator profile).
+         */
+        PostIn: {
+            /** Body */
+            body: string;
+            /**
+             * Media Url
+             * @default
+             */
+            media_url: string;
+            /**
+             * Is Adult
+             * @default false
+             */
+            is_adult: boolean;
+        };
+        /**
+         * PostPatch
+         * @description Request body to update a post; only the provided fields are applied.
+         */
+        PostPatch: {
+            /** Body */
+            body?: string | null;
+            /** Media Url */
+            media_url?: string | null;
+            /** Is Adult */
+            is_adult?: boolean | null;
+        };
+        /**
+         * PostAck
+         * @description Bare status ack for a post mutation that returns no body (delete).
+         */
+        PostAck: {
+            /** Status */
+            status: string;
+        };
+        /**
+         * LikeOut
+         * @description Like state after a toggle (fresh aggregate like count).
+         */
+        LikeOut: {
+            /** Liked */
+            liked: boolean;
+            /** Like Count */
+            like_count: number;
+        };
+        /**
+         * InteractionBlockedError
+         * @description 422 body when a fan interacts with a personally-blocked creator's content.
+         *
+         *     Carries the stable :class:`~config.errors.ErrorCode` value the web branches on
+         *     (``InteractionBlocked``) alongside the human ``detail`` copy, mirroring the
+         *     ``{detail, code}`` shape used by commerce/membership.
+         */
+        InteractionBlockedError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * CommentOut
@@ -2300,6 +4230,14 @@ export interface components {
             items: components["schemas"]["CommentOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * CommentIn
+         * @description Request body for creating a comment.
+         */
+        CommentIn: {
+            /** Body */
+            body: string;
         };
         /**
          * CouponOut
@@ -2495,6 +4433,11 @@ export interface components {
              * @default false
              */
             following: boolean;
+            /**
+             * Blocked
+             * @default false
+             */
+            blocked: boolean;
         };
         /**
          * CreatorPage
@@ -2503,6 +4446,47 @@ export interface components {
         CreatorPage: {
             /** Items */
             items: components["schemas"]["CreatorOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * FollowerOut
+         * @description One follower of a creator — already-public display identity only.
+         *
+         *     Carries only fields that are already public elsewhere: the follower's
+         *     ``nickname`` (shown on comments and in follow notifications) and, when the
+         *     follower themselves operates a creator, that creator's ``handle``/
+         *     ``avatar_url`` so the row can link to their profile. No contact/identity PII
+         *     (phone, birth date, etc.) is ever exposed here.
+         */
+        FollowerOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nickname */
+            nickname: string;
+            /** Is Creator */
+            is_creator: boolean;
+            /**
+             * Handle
+             * @default
+             */
+            handle: string;
+            /**
+             * Avatar Url
+             * @default
+             */
+            avatar_url: string;
+        };
+        /**
+         * FollowerPage
+         * @description One keyset page of a creator's followers plus the next-page cursor.
+         */
+        FollowerPage: {
+            /** Items */
+            items: components["schemas"]["FollowerOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2527,13 +4511,89 @@ export interface components {
         };
         /**
          * SearchOut
-         * @description Search results across creators and products.
+         * @description Search results across creators and products (ranked, paginated).
          */
         SearchOut: {
             /** Creators */
             creators: components["schemas"]["CreatorOut"][];
             /** Products */
             products: components["schemas"]["ProductBrief"][];
+            /** Next Offset */
+            next_offset?: number | null;
+        };
+        /**
+         * StudioProfilePatch
+         * @description Owner payload to update the caller's own creator profile (provided fields only).
+         */
+        StudioProfilePatch: {
+            /** Name */
+            name?: string | null;
+            /** Bio */
+            bio?: string | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /** Cover Url */
+            cover_url?: string | null;
+            /** Accent Color */
+            accent_color?: string | null;
+            /** Category */
+            category?: string | null;
+        };
+        /**
+         * StudioProfileCreateIn
+         * @description Payload for a fan to open (self-serve) their own creator page.
+         */
+        StudioProfileCreateIn: {
+            /** Handle */
+            handle: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * StudioStatsOut
+         * @description Owner dashboard real counts (maps to the studio dashboard summary).
+         *
+         *     Every field is a pure count scoped to the caller's own creator. There is NO
+         *     revenue/settlement/amount field by design — money figures are gated (ASS-229),
+         *     so this endpoint carries counts only.
+         *
+         *     - ``followers``: fans following the creator (:class:`~apps.social.models.Follow`).
+         *     - ``posts``: the creator's feed posts.
+         *     - ``products``: catalog products the creator owns (all statuses).
+         *     - ``products_selling``: the subset currently ``selling`` (public on-sale).
+         *     - ``orders``: distinct **non-cancelled** orders that contain at least one of
+         *       the creator's products (order **count**, never an amount). A cancelled
+         *       order never happened commercially, so it is excluded from the dashboard
+         *       "order count" the same way a cancelled order is excluded everywhere else.
+         *     - ``subscribers``: the creator's active subscribers (``status = active``).
+         */
+        StudioStatsOut: {
+            /** Followers */
+            followers: number;
+            /** Posts */
+            posts: number;
+            /** Products */
+            products: number;
+            /** Products Selling */
+            products_selling: number;
+            /** Orders */
+            orders: number;
+            /** Subscribers */
+            subscribers: number;
+        };
+        /**
+         * StudioError
+         * @description Coded error for studio-owner endpoints (``detail`` + machine ``code``).
+         *
+         *     Mirrors the commerce/membership coded-error shape so the web branches on the
+         *     stable ``code`` (e.g. :attr:`~config.errors.ErrorCode.OWNER_REQUIRED`) rather
+         *     than the localized ``detail`` copy.
+         */
+        StudioError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
         };
         /**
          * DashboardOut
@@ -2768,6 +4828,292 @@ export interface components {
             status: string;
         };
         /**
+         * SocialStartOut
+         * @description Where to send the client to begin social login (+ the state to echo back).
+         */
+        SocialStartOut: {
+            /** Authorize Url */
+            authorize_url: string;
+            /** State */
+            state: string;
+        };
+        /**
+         * SignupOut
+         * @description Token issuance result. ``token_delivery`` says where the tokens are.
+         *
+         *     ``body`` (app): ``access_token``/``refresh_token`` are populated. ``cookie``
+         *     (web): both are empty here and delivered as httpOnly cookies instead, so no
+         *     secret is exposed to browser JS (ADR-0002 XSS defense). Expiries are returned
+         *     either way so the client knows when to refresh. Shared by verify-email, email
+         *     login, social callback, and refresh.
+         */
+        SignupOut: {
+            /** Token Delivery */
+            token_delivery: string;
+            /**
+             * Access Token
+             * @default
+             */
+            access_token: string;
+            /**
+             * Refresh Token
+             * @default
+             */
+            refresh_token: string;
+            /**
+             * Access Expires At
+             * Format: date-time
+             */
+            access_expires_at: string;
+            /**
+             * Refresh Expires At
+             * Format: date-time
+             */
+            refresh_expires_at: string;
+        };
+        /**
+         * SocialCallbackIn
+         * @description Callback body: the provider's authorization ``code`` + first-login consent.
+         *
+         *     ``consent_*`` / ``age_over_14`` are enforced only when the social identity is new
+         *     (first login = signup); a returning identity ignores them. ``web`` asks for cookie
+         *     delivery (ADR-0002), matching the email login surface.
+         */
+        SocialCallbackIn: {
+            /** Code */
+            code: string;
+            /**
+             * State
+             * @default
+             */
+            state: string;
+            /** Redirect Uri */
+            redirect_uri: string;
+            /**
+             * Consent Terms
+             * @default false
+             */
+            consent_terms: boolean;
+            /**
+             * Consent Privacy
+             * @default false
+             */
+            consent_privacy: boolean;
+            /**
+             * Age Over 14
+             * @default false
+             */
+            age_over_14: boolean;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
+        };
+        /**
+         * EmailSignupOut
+         * @description Email-signup ack. Never carries auth tokens (login happens on verify).
+         *
+         *     ``verification_token`` is populated only when ``EMAIL_VERIFY_RETURN_TOKEN`` is on
+         *     (dev/test) so e2e can confirm without a real inbox; it is "" on any real surface.
+         */
+        EmailSignupOut: {
+            /** Status */
+            status: string;
+            /**
+             * Verification Token
+             * @default
+             */
+            verification_token: string;
+        };
+        /**
+         * EmailSignupIn
+         * @description Request body for email + password fan signup.
+         *
+         *     ``password`` length is validated at the wire (min 8). Consent (terms/privacy + 만
+         *     14세) is mandatory, mirroring social signup. No token is issued here — the fan
+         *     verifies the emailed link first — so there is no ``web`` surface flag.
+         */
+        EmailSignupIn: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Nickname */
+            nickname: string;
+            /** Consent Terms */
+            consent_terms: boolean;
+            /** Consent Privacy */
+            consent_privacy: boolean;
+            /**
+             * Age Over 14
+             * @default false
+             */
+            age_over_14: boolean;
+            /**
+             * Marketing Consent
+             * @default false
+             */
+            marketing_consent: boolean;
+        };
+        /**
+         * VerifyEmailIn
+         * @description Request body for confirming an email-verification link.
+         *
+         *     ``web`` selects cookie delivery for the token pair issued on verify, exactly like
+         *     :class:`EmailLoginIn`.
+         */
+        VerifyEmailIn: {
+            /** Token */
+            token: string;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
+        };
+        /**
+         * EmailLoginIn
+         * @description Request body for email + password login. ``web`` selects cookie delivery.
+         */
+        EmailLoginIn: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
+        };
+        /**
+         * RefreshIn
+         * @description Request body for token rotation on the app surface.
+         *
+         *     The web surface presents the refresh token via the path-scoped httpOnly
+         *     cookie instead, so this field is optional (empty on the cookie surface).
+         */
+        RefreshIn: {
+            /**
+             * Refresh Token
+             * @default
+             */
+            refresh_token: string;
+        };
+        /**
+         * FanMeOut
+         * @description The authenticated fan's identity summary (web/app session bootstrap).
+         *
+         *     ``handle`` and ``avatar_url`` are populated only when the account operates a
+         *     creator profile (else ``None``); nickname is the sole display PII.
+         *     ``adult_verified`` / ``kyc_status`` are derived 인증 flags (never PII) the web
+         *     session reads to drive 19+ gating and the KYC banner (fail-closed defaults).
+         */
+        FanMeOut: {
+            /** Id */
+            id: string;
+            /** Nickname */
+            nickname: string;
+            /** Role */
+            role: string;
+            /** Handle */
+            handle?: string | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /**
+             * Adult Verified
+             * @default false
+             */
+            adult_verified: boolean;
+            /**
+             * Kyc Status
+             * @default unverified
+             */
+            kyc_status: string;
+        };
+        /**
+         * FanMeUpdateIn
+         * @description Request body for updating the fan's own profile (nickname only for now).
+         *
+         *     Email/phone change is out of this round: both are behind a 본인인증 re-verify
+         *     gate (they key the account's auth), so they are deliberately not editable here.
+         */
+        FanMeUpdateIn: {
+            /** Nickname */
+            nickname: string;
+        };
+        /**
+         * MarketingConsentOut
+         * @description A fan's current per-channel marketing opt-in state (D8, optional consent).
+         *
+         *     ``email`` is reported for forward compatibility but email is not collected yet,
+         *     so the settings UI shows it disabled and the send path never uses it.
+         */
+        MarketingConsentOut: {
+            /** Push */
+            push: boolean;
+            /** Sms */
+            sms: boolean;
+            /** Email */
+            email: boolean;
+        };
+        /**
+         * MarketingConsentIn
+         * @description Desired per-channel marketing opt-in (settings save writes all three).
+         */
+        MarketingConsentIn: {
+            /** Push */
+            push: boolean;
+            /** Sms */
+            sms: boolean;
+            /** Email */
+            email: boolean;
+        };
+        /**
+         * ConsentVersionsOut
+         * @description Current server-issued version string per presented consent document.
+         *
+         *     The (anonymous) signup page reads this before the fan authenticates so it can
+         *     present + echo the exact document versions that get stamped onto each
+         *     ConsentRecord at signup. 법무-게이트: values are placeholders until legal versions
+         *     the copy (single source of truth: apps.consent.versions).
+         */
+        ConsentVersionsOut: {
+            /** Terms */
+            terms: string;
+            /** Privacy */
+            privacy: string;
+            /** Age */
+            age: string;
+        };
+        /**
+         * VerifyConfirmOut
+         * @description Result of confirming (mock) 본인인증 — derived flags only, no PII.
+         */
+        VerifyConfirmOut: {
+            /** Adult Verified */
+            adult_verified: boolean;
+            /** Kyc Status */
+            kyc_status: string;
+        };
+        /**
+         * MembershipCardOut
+         * @description Digital membership card (counts only; nickname is the sole display PII).
+         */
+        MembershipCardOut: {
+            /** Nickname */
+            nickname: string;
+            /** Member Id */
+            member_id: string;
+            /** Visit Count */
+            visit_count: number;
+            /** Points */
+            points: number;
+            /** Coupons */
+            coupons: number;
+        };
+        /**
          * TierOut
          * @description Membership tier (maps to the frontend ``MembershipTier`` type).
          */
@@ -2793,6 +5139,207 @@ export interface components {
             featured: boolean;
             /** Sort Order */
             sort_order: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
+        };
+        /**
+         * StudioTierOut
+         * @description Owner-view membership tier (adds the ``active`` management flag + timestamp).
+         *
+         *     ``subscribers`` is the count of **active** (``status=active``) subscriptions to
+         *     this tier (ASS-264) — a count, never a settlement/revenue figure (PG·재무 게이트
+         *     후행).
+         */
+        StudioTierOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Creator Id */
+            creator_id?: string | null;
+            /** Name */
+            name: string;
+            /** Price */
+            price: number;
+            /** Period */
+            period: string;
+            /** Benefits */
+            benefits: string[];
+            /** Badge */
+            badge: string;
+            /** Featured */
+            featured: boolean;
+            /** Active */
+            active: boolean;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Subscribers */
+            subscribers: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
+        };
+        /**
+         * SubscriptionError
+         * @description Stable error shape for subscription and studio-tier endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
+         */
+        SubscriptionError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * StudioTierIn
+         * @description Owner payload to create a membership tier (display price, not settlement).
+         */
+        StudioTierIn: {
+            /** Name */
+            name: string;
+            /**
+             * Price
+             * @default 0
+             */
+            price: number;
+            /**
+             * Period
+             * @default 월
+             */
+            period: string;
+            /** Benefits */
+            benefits?: string[];
+            /**
+             * Badge
+             * @default
+             */
+            badge: string;
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /**
+             * Pricing Kind
+             * @default paid
+             */
+            pricing_kind: string;
+        };
+        /**
+         * StudioTierPatch
+         * @description Owner payload to update a tier; only the provided fields are applied.
+         */
+        StudioTierPatch: {
+            /** Name */
+            name?: string | null;
+            /** Price */
+            price?: number | null;
+            /** Period */
+            period?: string | null;
+            /** Benefits */
+            benefits?: string[] | null;
+            /** Badge */
+            badge?: string | null;
+            /** Featured */
+            featured?: boolean | null;
+            /** Active */
+            active?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Pricing Kind */
+            pricing_kind?: string | null;
+        };
+        /**
+         * StudioTierAck
+         * @description Bare status ack for studio mutations that return no body (delete).
+         */
+        StudioTierAck: {
+            /** Status */
+            status: string;
+        };
+        /**
+         * SubscriptionOut
+         * @description A fan's subscription (maps to the frontend ``Subscription`` type).
+         *
+         *     ``cancel_scheduled`` is ``True`` for an active subscription the fan has set to
+         *     end at period-end ("해지 예정"); the web renders that state distinctly.
+         */
+        SubscriptionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Creator Id */
+            creator_id?: string | null;
+            /** Creator Name */
+            creator_name: string;
+            /** Creator Handle */
+            creator_handle: string;
+            /** Tier Id */
+            tier_id?: string | null;
+            /** Tier Name */
+            tier_name: string;
+            /** Price */
+            price: number;
+            /** Period */
+            period: string;
+            /** Status */
+            status: string;
+            /** Next Billing Date */
+            next_billing_date?: string | null;
+            /** Cancel Scheduled */
+            cancel_scheduled: boolean;
+            /**
+             * Is Free
+             * @default false
+             */
+            is_free: boolean;
+        };
+        /**
+         * SubscribeIn
+         * @description Fan payload to subscribe to a membership tier.
+         */
+        SubscribeIn: {
+            /**
+             * Tier Id
+             * Format: uuid
+             */
+            tier_id: string;
+        };
+        /**
+         * ChangeTierIn
+         * @description Fan payload to switch an active subscription to another tier (up/downgrade).
+         */
+        ChangeTierIn: {
+            /**
+             * Tier Id
+             * Format: uuid
+             */
+            tier_id: string;
         };
         /**
          * ForbiddenOut
@@ -2863,6 +5410,113 @@ export interface components {
             };
             /** Scheduled Date */
             scheduled_date?: string | null;
+        };
+        /**
+         * NotificationOut
+         * @description One in-app notification (maps to the frontend ``Notification`` type).
+         */
+        NotificationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+            /** Href */
+            href: string;
+            /** Read */
+            read: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * NotificationPage
+         * @description One page of the fan's notifications plus the next cursor.
+         */
+        NotificationPage: {
+            /** Items */
+            items: components["schemas"]["NotificationOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * ReadAllOut
+         * @description Result of marking every notification read: how many changed.
+         */
+        ReadAllOut: {
+            /** Updated */
+            updated: number;
+        };
+        /**
+         * PaymentMethodOut
+         * @description A saved payment method — display metadata only (never a PAN).
+         */
+        PaymentMethodOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Brand */
+            brand: string;
+            /** Last4 */
+            last4: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * PaymentMethodError
+         * @description Stable error shape for payment-method endpoints.
+         *
+         *     ``detail`` is human-facing copy (display); ``code`` is the stable machine-readable
+         *     reason the web branches on (see :class:`~config.errors.ErrorCode`).
+         */
+        PaymentMethodError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * PaymentMethodIn
+         * @description Payload to register a (mock) payment method.
+         *
+         *     ``card_number`` is a MOCK card used ONLY to derive the display last4; the
+         *     tokenizer discards it and it is never stored or logged (R4 / PCI). No expiry/cvc
+         *     is accepted at all — those are out of scope for the mock and forbidden to store.
+         */
+        PaymentMethodIn: {
+            /**
+             * Brand
+             * @default
+             */
+            brand: string;
+            /** Card Number */
+            card_number: string;
+            /**
+             * Make Primary
+             * @default false
+             */
+            make_primary: boolean;
+        };
+        /**
+         * PaymentAck
+         * @description Bare status ack for a mutation that returns no body (delete).
+         */
+        PaymentAck: {
+            /** Status */
+            status: string;
         };
         /**
          * PosOrderOut
@@ -3260,6 +5914,8 @@ export interface components {
             cast_id: string;
             /** Visit Id */
             visit_id?: string | null;
+            /** Upload Id */
+            upload_id?: string | null;
         };
         /**
          * FanReportOut
@@ -3295,6 +5951,12 @@ export interface components {
          *     ``report_type`` is length-bounded so an oversized value is rejected by schema
          *     validation (never echoed); the unknown-type error is generic, so a fan cannot
          *     smuggle PII into ``report_type`` and have it reflected back in a 422.
+         *
+         *     ``upload_id`` is the one structured target a fan MAY supply, and it does not
+         *     reopen the free-text hole cast_id would: it is a server-minted UUID this platform
+         *     handed the fan from its own upload endpoint, resolved to a real row before use.
+         *     It is what makes an uploaded image reportable — the entry point for report-driven
+         *     media moderation.
          */
         FanReportCreateIn: {
             /** Report Type */
@@ -3304,6 +5966,8 @@ export interface components {
              * @default
              */
             narrative: string;
+            /** Upload Id */
+            upload_id?: string | null;
         };
         /**
          * ReportHandlingStatsOut
@@ -3383,32 +6047,16 @@ export interface components {
         };
         /**
          * BlockOut
-         * @description Block row exposed to managers.
+         * @description Block-edge state after a mutation (lets the client reconcile its state).
          */
         BlockOut: {
+            /** Blocked */
+            blocked: boolean;
             /**
-             * Id
+             * Creator Id
              * Format: uuid
              */
-            id: string;
-            /**
-             * Target Id
-             * Format: uuid
-             */
-            target_id: string;
-            /** Block Scope */
-            block_scope: string;
-            /** Block Reason */
-            block_reason: string;
-            /** Is Risk Flag */
-            is_risk_flag: boolean;
-            /** Status */
-            status: string;
-            /**
-             * Effective From
-             * Format: date-time
-             */
-            effective_from: string;
+            creator_id: string;
         };
         /**
          * BlockCreateIn
@@ -3607,6 +6255,60 @@ export interface components {
              * @default
              */
             decision_note: string;
+        };
+        /**
+         * FollowOut
+         * @description Follow-edge state after a mutation (fresh aggregate follower count).
+         */
+        FollowOut: {
+            /** Following */
+            following: boolean;
+            /** Followers */
+            followers: number;
+        };
+        /**
+         * BlockError
+         * @description Coded error shape for block endpoints (``detail`` copy + stable ``code``).
+         */
+        BlockError: {
+            /** Detail */
+            detail: string;
+            /** Code */
+            code: string;
+        };
+        /**
+         * BlockIn
+         * @description Request body to block a creator (by id).
+         */
+        BlockIn: {
+            /**
+             * Creator Id
+             * Format: uuid
+             */
+            creator_id: string;
+        };
+        /**
+         * BlockedCreatorOut
+         * @description One blocked creator, for the fan's block-list settings screen.
+         */
+        BlockedCreatorOut: {
+            /**
+             * Creator Id
+             * Format: uuid
+             */
+            creator_id: string;
+            /** Name */
+            name: string;
+            /** Handle */
+            handle: string;
+        };
+        /**
+         * UploadOut
+         * @description The stored object's site-relative media URL (drop-in for a ``media_url``).
+         */
+        UploadOut: {
+            /** Url */
+            url: string;
         };
         /**
          * VisitRecordOut
@@ -3904,6 +6606,26 @@ export interface operations {
             };
         };
     };
+    config_api_capabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitiesResponse"];
+                };
+            };
+        };
+    };
     apps_admin_rbac_api_list_staff: {
         parameters: {
             query?: never;
@@ -3971,72 +6693,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RbacError"];
-                };
-            };
-        };
-    };
-    apps_identity_api_request_otp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OtpRequestIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    apps_identity_api_signup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignupIn"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SignupOut"];
-                };
-            };
-        };
-    };
-    apps_identity_api_get_membership_card: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MembershipCardOut"];
                 };
             };
         };
@@ -4433,6 +7089,733 @@ export interface operations {
             };
         };
     };
+    apps_commerce_api_get_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_studio_list_products: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioProductOut"][];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_studio_create_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioProductIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioProductOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_studio_delete_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioAck"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_studio_update_product: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioProductPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioProductOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_list_orders: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_create_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrderIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_create_free_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrderIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_get_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_cancel_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_request_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefundIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ship_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_complete_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_studio_list_orders: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_list_refunds: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundPage"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_review_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_accept_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_api_ops_reject_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpsRefundRejectIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsRefundOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommerceError"];
+                };
+            };
+        };
+    };
+    apps_commerce_bridge_api_commerce_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     apps_content_api_list_posts: {
         parameters: {
             query?: {
@@ -4457,6 +7840,39 @@ export interface operations {
             };
         };
     };
+    apps_content_api_create_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apps_content_api_get_post: {
         parameters: {
             query?: never;
@@ -4475,6 +7891,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_content_api_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostAck"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_content_api_update_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_content_api_like_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LikeOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
+                };
+            };
+        };
+    };
+    apps_content_api_unlike_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LikeOut"];
                 };
             };
             /** @description Not Found */
@@ -4522,6 +8075,50 @@ export interface operations {
             };
         };
     };
+    apps_content_api_create_comment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionBlockedError"];
+                };
+            };
+        };
+    };
     apps_content_api_feed: {
         parameters: {
             query?: {
@@ -4541,6 +8138,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostPage"];
+                };
+            };
+        };
+    };
+    apps_content_api_studio_list_posts: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostPage"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -4913,6 +8542,7 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number | null;
                 category?: string | null;
+                sort?: string | null;
             };
             header?: never;
             path?: never;
@@ -4962,10 +8592,46 @@ export interface operations {
             };
         };
     };
+    apps_creator_api_list_followers: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowerPage"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     apps_creator_api_search: {
         parameters: {
             query?: {
                 q?: string;
+                limit?: number | null;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -4980,6 +8646,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+        };
+    };
+    apps_creator_api_studio_create_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioProfileCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_creator_api_studio_update_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_creator_api_studio_stats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioStatsOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioError"];
                 };
             };
         };
@@ -5519,6 +9289,372 @@ export interface operations {
             };
         };
     };
+    apps_identity_api_social_start: {
+        parameters: {
+            query: {
+                redirect_uri: string;
+            };
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SocialStartOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_social_callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SocialCallbackIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_signup_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSignupIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_verify_email_endpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_login_email_endpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailLoginIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apps_identity_api_refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefreshIn"] | null;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_get_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FanMeOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_update_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FanMeUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FanMeOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_withdraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apps_identity_api_get_marketing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketingConsentOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_set_marketing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketingConsentIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketingConsentOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_get_consent_versions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentVersionsOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_verify_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apps_identity_api_verify_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyConfirmOut"];
+                };
+            };
+        };
+    };
+    apps_identity_api_get_csrf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    apps_identity_api_get_membership_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipCardOut"];
+                };
+            };
+        };
+    };
     apps_membership_api_list_tiers: {
         parameters: {
             query?: {
@@ -5537,6 +9673,367 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TierOut"][];
+                };
+            };
+        };
+    };
+    apps_membership_api_studio_list_tiers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioTierOut"][];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_studio_create_tier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioTierIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioTierOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_studio_delete_tier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioTierAck"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_studio_update_tier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioTierPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioTierOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_list_subscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"][];
+                };
+            };
+        };
+    };
+    apps_membership_api_subscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_subscribe_free: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_cancel_subscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+        };
+    };
+    apps_membership_api_change_subscription_tier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeTierIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionError"];
                 };
             };
         };
@@ -5590,6 +10087,195 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationError"];
+                };
+            };
+        };
+    };
+    apps_notification_api_list_notifications: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+        };
+    };
+    apps_notification_api_mark_all_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadAllOut"];
+                };
+            };
+        };
+    };
+    apps_notification_api_mark_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationError"];
+                };
+            };
+        };
+    };
+    apps_payments_api_list_payment_methods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodOut"][];
+                };
+            };
+        };
+    };
+    apps_payments_api_register_payment_method: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentMethodIn"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodError"];
+                };
+            };
+        };
+    };
+    apps_payments_api_set_primary_payment_method: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                method_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodError"];
+                };
+            };
+        };
+    };
+    apps_payments_api_delete_payment_method: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                method_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentAck"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodError"];
                 };
             };
         };
@@ -6759,6 +11445,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScheduleError"];
+                };
+            };
+        };
+    };
+    apps_social_api_follow_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_social_api_unfollow_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    apps_social_api_list_blocks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedCreatorOut"][];
+                };
+            };
+        };
+    };
+    apps_social_api_block_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockError"];
+                };
+            };
+        };
+    };
+    apps_social_api_unblock_creator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                creator_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockOut"];
+                };
+            };
+        };
+    };
+    apps_uploads_api_create_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * File
+                     * Format: binary
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadOut"];
                 };
             };
         };

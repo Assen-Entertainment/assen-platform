@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { creatorAccentVars } from "@/lib/creator-accent";
+import { gradientStyle, hexToHue } from "@/lib/placeholder";
 
 /**
  * CreatorThumbCard — Figma DS(31:7). 디스커버리 크리에이터 카드.
@@ -13,39 +14,56 @@ export interface CreatorThumbCardProps extends React.AnchorHTMLAttributes<HTMLAn
   cover?: string;
   /** 이 크리에이터의 시그니처 색(hex). 주입 시 커버가 creator-accent(자동 대비 파생). */
   accentColor?: string;
+  /**
+   * 커버 이미지 렌더 슬롯(R5-W3 #6) — 기본 "img"(DS 이식성). SmartImage 등 next/image 래퍼 주입 가능.
+   * fill 주입을 위해 커버 컨테이너는 relative + 크기 확정.
+   */
+  imageComponent?: React.ElementType;
+  /** next/image 슬롯 주입 시 반응형 힌트. */
+  sizes?: string;
 }
 
 export const CreatorThumbCard = React.forwardRef<HTMLAnchorElement, CreatorThumbCardProps>(
-  ({ name, meta, cover, accentColor, className, style, ...props }, ref) => (
+  ({ name, meta, cover, accentColor, imageComponent, sizes, className, style, ...props }, ref) => {
+    const ImageComp = imageComponent ?? "img";
+    return (
     <a
       ref={ref}
       style={accentColor ? { ...creatorAccentVars(accentColor), ...style } : style}
-      className={cn("group flex flex-col gap-1.5", className)}
+      className={cn("group flex flex-col gap-2", className)}
       {...props}
     >
       <div
-        className="aspect-square w-full overflow-hidden rounded-md bg-surface-container-high"
+        className="relative aspect-square w-full overflow-hidden rounded-lg bg-surface-container-high shadow-1 ring-1 ring-inset ring-on-surface/10 transition-shadow duration-200 group-hover:shadow-3 motion-reduce:transition-none"
         style={
           cover
             ? undefined
-            : accentColor
-              ? { backgroundColor: "var(--creator-accent)" }
-              : { backgroundImage: "var(--gradient-brand)" }
+            : gradientStyle(name, accentColor ? hexToHue(accentColor) : undefined)
         }
       >
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element -- DS 이식성 위해 원시 img(소비자가 next/image 래핑 가능)
-          <img
+          <ImageComp
             src={cover}
             alt={name}
             loading="lazy"
-            className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.03] motion-reduce:transition-none"
+            sizes={sizes}
+            className="size-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.05] motion-reduce:transition-none"
           />
         ) : null}
+        {/* 하단 스크림 — hover 시 깊이/가독성. gradient·이미지 커버 공통. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/25 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 motion-reduce:transition-none"
+        />
       </div>
-      <span className="line-clamp-1 text-title-m text-on-surface">{name}</span>
-      {meta ? <span className="line-clamp-1 text-caption text-on-surface-variant">{meta}</span> : null}
+      <div className="flex flex-col gap-0.5 px-0.5">
+        <span className="line-clamp-1 text-title-m text-on-surface transition-colors group-hover:text-primary motion-reduce:transition-none">
+          {name}
+        </span>
+        {meta ? <span className="line-clamp-1 text-caption text-on-surface-variant">{meta}</span> : null}
+      </div>
     </a>
-  ),
+    );
+  },
 );
 CreatorThumbCard.displayName = "CreatorThumbCard";

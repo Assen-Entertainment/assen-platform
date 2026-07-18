@@ -31,6 +31,7 @@ class AssenAvatar extends StatelessWidget {
   const AssenAvatar({
     required this.name,
     this.imageProvider,
+    this.semanticLabel,
     this.size = AssenAvatarSize.m,
     this.hue,
     this.isOnline = false,
@@ -42,6 +43,13 @@ class AssenAvatar extends StatelessWidget {
 
   /// Optional avatar image. When null, initials are shown instead.
   final ImageProvider<Object>? imageProvider;
+
+  /// Optional screen-reader description for the photo (e.g. "미오 프로필 사진").
+  ///
+  /// Domain-agnostic: the host passes the label so no product wording is
+  /// hard-coded here. Applied only when [imageProvider] is set — the initials
+  /// fallback is already announced as its letter.
+  final String? semanticLabel;
 
   /// Avatar diameter bucket — see [AssenAvatarSize].
   final AssenAvatarSize size;
@@ -88,9 +96,9 @@ class AssenAvatar extends StatelessWidget {
               width: _dotSize,
               height: _dotSize,
               decoration: BoxDecoration(
-                color: colors.matchaInk,
+                color: colors.mintInk,
                 shape: BoxShape.circle,
-                border: Border.all(color: colors.cream50, width: 2),
+                border: Border.all(color: colors.white, width: 2),
               ),
             ),
           ),
@@ -98,6 +106,9 @@ class AssenAvatar extends StatelessWidget {
       );
     }
 
+    if (imageProvider != null && semanticLabel != null) {
+      return Semantics(image: true, label: semanticLabel, child: avatar);
+    }
     return avatar;
   }
 
@@ -126,24 +137,24 @@ class AssenAvatar extends StatelessWidget {
   };
 
   Color _fallbackBg(AssenColors c) {
-    if (hue == null) return c.strawberryBg;
+    if (hue == null) return c.indigo100;
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.strawberryBg,
-      AssenBadgeHue.peach => c.peachBg,
-      AssenBadgeHue.lemon => c.lemonBg,
-      AssenBadgeHue.matcha => c.matchaBg,
+      AssenBadgeHue.brand => c.indigo100,
+      AssenBadgeHue.peach => c.violetBg,
+      AssenBadgeHue.lemon => c.creamBg,
+      AssenBadgeHue.matcha => c.mintBg,
       AssenBadgeHue.sky => c.skyBg,
       AssenBadgeHue.lavender => c.lavenderBg,
     };
   }
 
   Color _fallbackInk(AssenColors c) {
-    if (hue == null) return c.strawberryInk;
+    if (hue == null) return c.indigoInk;
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.strawberryInk,
-      AssenBadgeHue.peach => c.peachInk,
-      AssenBadgeHue.lemon => c.lemonInk,
-      AssenBadgeHue.matcha => c.matchaInk,
+      AssenBadgeHue.brand => c.indigoInk,
+      AssenBadgeHue.peach => c.violetInk,
+      AssenBadgeHue.lemon => c.creamInk,
+      AssenBadgeHue.matcha => c.mintInk,
       AssenBadgeHue.sky => c.skyInk,
       AssenBadgeHue.lavender => c.lavenderInk,
     };
@@ -151,12 +162,12 @@ class AssenAvatar extends StatelessWidget {
 
   Color _ringColor(AssenColors c) {
     return switch (hue!) {
-      AssenBadgeHue.strawberry => c.strawberryBorder,
-      AssenBadgeHue.peach => c.peachBorder,
-      AssenBadgeHue.lemon => c.lemonBorder,
-      AssenBadgeHue.matcha => c.matchaBorder,
-      AssenBadgeHue.sky => c.skyBorder,
-      AssenBadgeHue.lavender => c.lavenderBorder,
+      AssenBadgeHue.brand => c.indigoInk,
+      AssenBadgeHue.peach => c.violetInk,
+      AssenBadgeHue.lemon => c.creamInk,
+      AssenBadgeHue.matcha => c.mintInk,
+      AssenBadgeHue.sky => c.skyInk,
+      AssenBadgeHue.lavender => c.lavenderInk,
     };
   }
 }

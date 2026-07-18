@@ -15,10 +15,10 @@ import 'package:ui_kit/src/atoms/skeleton.dart';
 /// A single-screen gallery of every Atom for visual review.
 ///
 /// This is the human-facing review surface for ASS-88: it renders all 18 atoms
-/// (each in its relevant variants) on the cream surface so reviewers and the
-/// `flutter build web` smoke test exercise the whole catalogue at once. It is
-/// stateful so interactive atoms (toggles, chips, selection controls) actually
-/// respond in the gallery.
+/// (each in its relevant variants) on the warm-paper surface so reviewers and
+/// the `flutter build web` smoke test exercise the whole catalogue at once. It
+/// is stateful so interactive atoms (toggles, chips, selection controls)
+/// actually respond in the gallery.
 class AtomCatalog extends StatefulWidget {
   /// Creates the atom catalogue screen.
   const AtomCatalog({super.key});
@@ -33,17 +33,17 @@ class _AtomCatalogState extends State<AtomCatalog> {
   bool _favorite = true;
   int _radio = 0;
   int _page = 0;
-  final Set<String> _filters = {'체키'};
+  final Set<String> _filters = {'인기'};
   AssenTimeSlotState _slot = AssenTimeSlotState.available;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
     return Scaffold(
-      backgroundColor: colors.cream50,
+      backgroundColor: colors.white,
       appBar: AppBar(
         title: const Text('Atoms'),
-        backgroundColor: colors.cream100,
+        backgroundColor: colors.neutral100,
         foregroundColor: colors.ink900,
       ),
       body: ListView(
@@ -137,11 +137,11 @@ class _AtomCatalogState extends State<AtomCatalog> {
             child: Wrap(
               spacing: SpacingTokens.s2,
               children: [
-                for (final f in const ['체키', '게임', '이벤트'])
+                for (final f in const ['인기', '게임', '이벤트'])
                   AssenFilterChip(
                     label: f,
                     selected: _filters.contains(f),
-                    count: f == '체키' ? 12 : null,
+                    count: f == '인기' ? 12 : null,
                     onSelected: (sel) => setState(() {
                       if (sel) {
                         _filters.add(f);
@@ -309,7 +309,7 @@ class _Section extends StatelessWidget {
           Text(
             title,
             style: TypographyTokens.label.copyWith(
-              color: colors.ink700,
+              color: colors.ink600,
               fontWeight: FontWeight.w700,
             ),
           ),

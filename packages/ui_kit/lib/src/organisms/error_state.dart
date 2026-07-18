@@ -39,57 +39,62 @@ class AssenErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(SpacingTokens.s8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Peach pastel disc + warning glyph — a recoverable, non-alarming
-            // error face (red is for destructive/validation only, tokens.md §1).
-            Container(
-              width: SpacingTokens.s16,
-              height: SpacingTokens.s16,
-              decoration: BoxDecoration(
-                color: colors.peachBg,
-                shape: BoxShape.circle,
+    // A live region so screen readers announce a load failure when it replaces
+    // the in-flight content (title + message are read out on appear).
+    return Semantics(
+      liveRegion: true,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(SpacingTokens.s8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Peach pastel disc + warning glyph — a recoverable, non-alarming
+              // error face (red is for destructive/validation only, tokens.md §1).
+              Container(
+                width: SpacingTokens.s16,
+                height: SpacingTokens.s16,
+                decoration: BoxDecoration(
+                  color: colors.violetBg,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.cloud_off_outlined,
+                  size: SpacingTokens.s8,
+                  color: colors.violetInk,
+                ),
               ),
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.cloud_off_outlined,
-                size: SpacingTokens.s8,
-                color: colors.peachInk,
-              ),
-            ),
-            const SizedBox(height: SpacingTokens.s6),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: TypographyTokens.titleMSize,
-                fontWeight: FontWeight.w700,
-                color: colors.ink900,
-              ),
-            ),
-            const SizedBox(height: SpacingTokens.s2),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: TypographyTokens.bodyMSize,
-                height: 1.5,
-                color: colors.ink700,
-              ),
-            ),
-            if (onRetry != null) ...[
               const SizedBox(height: SpacingTokens.s6),
-              AssenButton(
-                label: retryLabel,
-                icon: Icons.refresh,
-                onPressed: onRetry,
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: TypographyTokens.titleMSize,
+                  fontWeight: FontWeight.w700,
+                  color: colors.ink900,
+                ),
               ),
+              const SizedBox(height: SpacingTokens.s2),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: TypographyTokens.bodyMSize,
+                  height: 1.5,
+                  color: colors.ink600,
+                ),
+              ),
+              if (onRetry != null) ...[
+                const SizedBox(height: SpacingTokens.s6),
+                AssenButton(
+                  label: retryLabel,
+                  icon: Icons.refresh,
+                  onPressed: onRetry,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

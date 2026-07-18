@@ -1,5 +1,5 @@
 // GENERATED — DO NOT EDIT BY HAND (#32).
-// Source: docs/design/tokens.json (W3C DTCG 2025.10).
+// Source: docs/design/tokens.v2.json (Assen Indigo — W3C DTCG 2025.10).
 // Regenerate: dart run melos run codegen   (verify: melos run codegen:verify).
 
 import 'package:flutter/material.dart';
@@ -15,181 +15,182 @@ import 'spacing.gen.dart';
 /// semantic ColorScheme is NOT here — it is hand-mapped in ui_kit.
 final class AssenColors extends ThemeExtension<AssenColors> {
   const AssenColors({
-    this.cream50 = RefColors.cream50,
-    this.cream100 = RefColors.cream100,
-    this.cream200 = RefColors.cream200,
-    this.cream300 = RefColors.cream300,
     this.white = RefColors.white,
-    this.ink100 = RefColors.ink100,
-    this.ink200 = RefColors.ink200,
-    this.ink300 = RefColors.ink300,
+    this.neutral50 = RefColors.neutral50,
+    this.neutral100 = RefColors.neutral100,
+    this.neutral200 = RefColors.neutral200,
+    this.neutral300 = RefColors.neutral300,
+    this.ink400 = RefColors.ink400,
     this.ink500 = RefColors.ink500,
-    this.ink700 = RefColors.ink700,
+    this.ink600 = RefColors.ink600,
     this.ink900 = RefColors.ink900,
-    this.strawberryBgSubtle = RefColors.strawberryBgSubtle,
-    this.strawberryBg = RefColors.strawberryBg,
-    this.strawberryBorder = RefColors.strawberryBorder,
-    this.strawberryInk = RefColors.strawberryInk,
-    this.peachBgSubtle = RefColors.peachBgSubtle,
-    this.peachBg = RefColors.peachBg,
-    this.peachBorder = RefColors.peachBorder,
-    this.peachInk = RefColors.peachInk,
-    this.lemonBgSubtle = RefColors.lemonBgSubtle,
-    this.lemonBg = RefColors.lemonBg,
-    this.lemonBorder = RefColors.lemonBorder,
-    this.lemonInk = RefColors.lemonInk,
-    this.matchaBgSubtle = RefColors.matchaBgSubtle,
-    this.matchaBg = RefColors.matchaBg,
-    this.matchaBorder = RefColors.matchaBorder,
-    this.matchaInk = RefColors.matchaInk,
-    this.skyBgSubtle = RefColors.skyBgSubtle,
-    this.skyBg = RefColors.skyBg,
-    this.skyBorder = RefColors.skyBorder,
-    this.skyInk = RefColors.skyInk,
-    this.lavenderBgSubtle = RefColors.lavenderBgSubtle,
+    this.darkBg = RefColors.darkBg,
+    this.darkSurface = RefColors.darkSurface,
+    this.darkSurfaceHigh = RefColors.darkSurfaceHigh,
+    this.darkBorder = RefColors.darkBorder,
+    this.darkInk = RefColors.darkInk,
+    this.darkInkSub = RefColors.darkInkSub,
+    this.indigo100 = RefColors.indigo100,
+    this.indigo500 = RefColors.indigo500,
+    this.indigo600 = RefColors.indigo600,
+    this.indigoHover = RefColors.indigoHover,
+    this.indigoInk = RefColors.indigoInk,
+    this.indigoDarkContainer = RefColors.indigoDarkContainer,
+    this.indigoOnDarkContainer = RefColors.indigoOnDarkContainer,
+    this.indigoText = RefColors.indigoText,
     this.lavenderBg = RefColors.lavenderBg,
-    this.lavenderBorder = RefColors.lavenderBorder,
     this.lavenderInk = RefColors.lavenderInk,
-    this.brassBg = RefColors.brassBg,
-    this.brassMain = RefColors.brassMain,
-    this.brassInk = RefColors.brassInk,
+    this.violetBg = RefColors.violetBg,
+    this.violetInk = RefColors.violetInk,
+    this.creamBg = RefColors.creamBg,
+    this.creamInk = RefColors.creamInk,
+    this.mintBg = RefColors.mintBg,
+    this.mintInk = RefColors.mintInk,
+    this.skyBg = RefColors.skyBg,
+    this.skyInk = RefColors.skyInk,
+    this.pinkBg = RefColors.pinkBg,
+    this.pinkInk = RefColors.pinkInk,
+    this.zincBg = RefColors.zincBg,
+    this.zincInk = RefColors.zincInk,
+    this.greenMain = RefColors.greenMain,
+    this.amberMain = RefColors.amberMain,
     this.redMain = RefColors.redMain,
     this.redBg = RefColors.redBg,
     this.redInk = RefColors.redInk,
-    this.roseMain = RefColors.roseMain,
   });
 
-  final Color cream50;
-  final Color cream100;
-  final Color cream200;
-  final Color cream300;
   final Color white;
-  final Color ink100;
-  final Color ink200;
-  final Color ink300;
+  final Color neutral50;
+  final Color neutral100;
+  final Color neutral200;
+  final Color neutral300;
+  final Color ink400;
   final Color ink500;
-  final Color ink700;
+  final Color ink600;
   final Color ink900;
-  final Color strawberryBgSubtle;
-  final Color strawberryBg;
-  final Color strawberryBorder;
-  final Color strawberryInk;
-  final Color peachBgSubtle;
-  final Color peachBg;
-  final Color peachBorder;
-  final Color peachInk;
-  final Color lemonBgSubtle;
-  final Color lemonBg;
-  final Color lemonBorder;
-  final Color lemonInk;
-  final Color matchaBgSubtle;
-  final Color matchaBg;
-  final Color matchaBorder;
-  final Color matchaInk;
-  final Color skyBgSubtle;
-  final Color skyBg;
-  final Color skyBorder;
-  final Color skyInk;
-  final Color lavenderBgSubtle;
+  final Color darkBg;
+  final Color darkSurface;
+  final Color darkSurfaceHigh;
+  final Color darkBorder;
+  final Color darkInk;
+  final Color darkInkSub;
+  final Color indigo100;
+  final Color indigo500;
+  final Color indigo600;
+  final Color indigoHover;
+  final Color indigoInk;
+  final Color indigoDarkContainer;
+  final Color indigoOnDarkContainer;
+  final Color indigoText;
   final Color lavenderBg;
-  final Color lavenderBorder;
   final Color lavenderInk;
-  final Color brassBg;
-  final Color brassMain;
-  final Color brassInk;
+  final Color violetBg;
+  final Color violetInk;
+  final Color creamBg;
+  final Color creamInk;
+  final Color mintBg;
+  final Color mintInk;
+  final Color skyBg;
+  final Color skyInk;
+  final Color pinkBg;
+  final Color pinkInk;
+  final Color zincBg;
+  final Color zincInk;
+  final Color greenMain;
+  final Color amberMain;
   final Color redMain;
   final Color redBg;
   final Color redInk;
-  final Color roseMain;
 
   @override
   AssenColors copyWith({
-    Color? cream50,
-    Color? cream100,
-    Color? cream200,
-    Color? cream300,
     Color? white,
-    Color? ink100,
-    Color? ink200,
-    Color? ink300,
+    Color? neutral50,
+    Color? neutral100,
+    Color? neutral200,
+    Color? neutral300,
+    Color? ink400,
     Color? ink500,
-    Color? ink700,
+    Color? ink600,
     Color? ink900,
-    Color? strawberryBgSubtle,
-    Color? strawberryBg,
-    Color? strawberryBorder,
-    Color? strawberryInk,
-    Color? peachBgSubtle,
-    Color? peachBg,
-    Color? peachBorder,
-    Color? peachInk,
-    Color? lemonBgSubtle,
-    Color? lemonBg,
-    Color? lemonBorder,
-    Color? lemonInk,
-    Color? matchaBgSubtle,
-    Color? matchaBg,
-    Color? matchaBorder,
-    Color? matchaInk,
-    Color? skyBgSubtle,
-    Color? skyBg,
-    Color? skyBorder,
-    Color? skyInk,
-    Color? lavenderBgSubtle,
+    Color? darkBg,
+    Color? darkSurface,
+    Color? darkSurfaceHigh,
+    Color? darkBorder,
+    Color? darkInk,
+    Color? darkInkSub,
+    Color? indigo100,
+    Color? indigo500,
+    Color? indigo600,
+    Color? indigoHover,
+    Color? indigoInk,
+    Color? indigoDarkContainer,
+    Color? indigoOnDarkContainer,
+    Color? indigoText,
     Color? lavenderBg,
-    Color? lavenderBorder,
     Color? lavenderInk,
-    Color? brassBg,
-    Color? brassMain,
-    Color? brassInk,
+    Color? violetBg,
+    Color? violetInk,
+    Color? creamBg,
+    Color? creamInk,
+    Color? mintBg,
+    Color? mintInk,
+    Color? skyBg,
+    Color? skyInk,
+    Color? pinkBg,
+    Color? pinkInk,
+    Color? zincBg,
+    Color? zincInk,
+    Color? greenMain,
+    Color? amberMain,
     Color? redMain,
     Color? redBg,
     Color? redInk,
-    Color? roseMain,
   }) {
     return AssenColors(
-      cream50: cream50 ?? this.cream50,
-      cream100: cream100 ?? this.cream100,
-      cream200: cream200 ?? this.cream200,
-      cream300: cream300 ?? this.cream300,
       white: white ?? this.white,
-      ink100: ink100 ?? this.ink100,
-      ink200: ink200 ?? this.ink200,
-      ink300: ink300 ?? this.ink300,
+      neutral50: neutral50 ?? this.neutral50,
+      neutral100: neutral100 ?? this.neutral100,
+      neutral200: neutral200 ?? this.neutral200,
+      neutral300: neutral300 ?? this.neutral300,
+      ink400: ink400 ?? this.ink400,
       ink500: ink500 ?? this.ink500,
-      ink700: ink700 ?? this.ink700,
+      ink600: ink600 ?? this.ink600,
       ink900: ink900 ?? this.ink900,
-      strawberryBgSubtle: strawberryBgSubtle ?? this.strawberryBgSubtle,
-      strawberryBg: strawberryBg ?? this.strawberryBg,
-      strawberryBorder: strawberryBorder ?? this.strawberryBorder,
-      strawberryInk: strawberryInk ?? this.strawberryInk,
-      peachBgSubtle: peachBgSubtle ?? this.peachBgSubtle,
-      peachBg: peachBg ?? this.peachBg,
-      peachBorder: peachBorder ?? this.peachBorder,
-      peachInk: peachInk ?? this.peachInk,
-      lemonBgSubtle: lemonBgSubtle ?? this.lemonBgSubtle,
-      lemonBg: lemonBg ?? this.lemonBg,
-      lemonBorder: lemonBorder ?? this.lemonBorder,
-      lemonInk: lemonInk ?? this.lemonInk,
-      matchaBgSubtle: matchaBgSubtle ?? this.matchaBgSubtle,
-      matchaBg: matchaBg ?? this.matchaBg,
-      matchaBorder: matchaBorder ?? this.matchaBorder,
-      matchaInk: matchaInk ?? this.matchaInk,
-      skyBgSubtle: skyBgSubtle ?? this.skyBgSubtle,
-      skyBg: skyBg ?? this.skyBg,
-      skyBorder: skyBorder ?? this.skyBorder,
-      skyInk: skyInk ?? this.skyInk,
-      lavenderBgSubtle: lavenderBgSubtle ?? this.lavenderBgSubtle,
+      darkBg: darkBg ?? this.darkBg,
+      darkSurface: darkSurface ?? this.darkSurface,
+      darkSurfaceHigh: darkSurfaceHigh ?? this.darkSurfaceHigh,
+      darkBorder: darkBorder ?? this.darkBorder,
+      darkInk: darkInk ?? this.darkInk,
+      darkInkSub: darkInkSub ?? this.darkInkSub,
+      indigo100: indigo100 ?? this.indigo100,
+      indigo500: indigo500 ?? this.indigo500,
+      indigo600: indigo600 ?? this.indigo600,
+      indigoHover: indigoHover ?? this.indigoHover,
+      indigoInk: indigoInk ?? this.indigoInk,
+      indigoDarkContainer: indigoDarkContainer ?? this.indigoDarkContainer,
+      indigoOnDarkContainer:
+          indigoOnDarkContainer ?? this.indigoOnDarkContainer,
+      indigoText: indigoText ?? this.indigoText,
       lavenderBg: lavenderBg ?? this.lavenderBg,
-      lavenderBorder: lavenderBorder ?? this.lavenderBorder,
       lavenderInk: lavenderInk ?? this.lavenderInk,
-      brassBg: brassBg ?? this.brassBg,
-      brassMain: brassMain ?? this.brassMain,
-      brassInk: brassInk ?? this.brassInk,
+      violetBg: violetBg ?? this.violetBg,
+      violetInk: violetInk ?? this.violetInk,
+      creamBg: creamBg ?? this.creamBg,
+      creamInk: creamInk ?? this.creamInk,
+      mintBg: mintBg ?? this.mintBg,
+      mintInk: mintInk ?? this.mintInk,
+      skyBg: skyBg ?? this.skyBg,
+      skyInk: skyInk ?? this.skyInk,
+      pinkBg: pinkBg ?? this.pinkBg,
+      pinkInk: pinkInk ?? this.pinkInk,
+      zincBg: zincBg ?? this.zincBg,
+      zincInk: zincInk ?? this.zincInk,
+      greenMain: greenMain ?? this.greenMain,
+      amberMain: amberMain ?? this.amberMain,
       redMain: redMain ?? this.redMain,
       redBg: redBg ?? this.redBg,
       redInk: redInk ?? this.redInk,
-      roseMain: roseMain ?? this.roseMain,
     );
   }
 
@@ -199,48 +200,48 @@ final class AssenColors extends ThemeExtension<AssenColors> {
   AssenColors lerp(ThemeExtension<AssenColors>? other, double t) {
     if (other is! AssenColors || t < 0.5) return this;
     return AssenColors(
-      cream50: other.cream50,
-      cream100: other.cream100,
-      cream200: other.cream200,
-      cream300: other.cream300,
       white: other.white,
-      ink100: other.ink100,
-      ink200: other.ink200,
-      ink300: other.ink300,
+      neutral50: other.neutral50,
+      neutral100: other.neutral100,
+      neutral200: other.neutral200,
+      neutral300: other.neutral300,
+      ink400: other.ink400,
       ink500: other.ink500,
-      ink700: other.ink700,
+      ink600: other.ink600,
       ink900: other.ink900,
-      strawberryBgSubtle: other.strawberryBgSubtle,
-      strawberryBg: other.strawberryBg,
-      strawberryBorder: other.strawberryBorder,
-      strawberryInk: other.strawberryInk,
-      peachBgSubtle: other.peachBgSubtle,
-      peachBg: other.peachBg,
-      peachBorder: other.peachBorder,
-      peachInk: other.peachInk,
-      lemonBgSubtle: other.lemonBgSubtle,
-      lemonBg: other.lemonBg,
-      lemonBorder: other.lemonBorder,
-      lemonInk: other.lemonInk,
-      matchaBgSubtle: other.matchaBgSubtle,
-      matchaBg: other.matchaBg,
-      matchaBorder: other.matchaBorder,
-      matchaInk: other.matchaInk,
-      skyBgSubtle: other.skyBgSubtle,
-      skyBg: other.skyBg,
-      skyBorder: other.skyBorder,
-      skyInk: other.skyInk,
-      lavenderBgSubtle: other.lavenderBgSubtle,
+      darkBg: other.darkBg,
+      darkSurface: other.darkSurface,
+      darkSurfaceHigh: other.darkSurfaceHigh,
+      darkBorder: other.darkBorder,
+      darkInk: other.darkInk,
+      darkInkSub: other.darkInkSub,
+      indigo100: other.indigo100,
+      indigo500: other.indigo500,
+      indigo600: other.indigo600,
+      indigoHover: other.indigoHover,
+      indigoInk: other.indigoInk,
+      indigoDarkContainer: other.indigoDarkContainer,
+      indigoOnDarkContainer: other.indigoOnDarkContainer,
+      indigoText: other.indigoText,
       lavenderBg: other.lavenderBg,
-      lavenderBorder: other.lavenderBorder,
       lavenderInk: other.lavenderInk,
-      brassBg: other.brassBg,
-      brassMain: other.brassMain,
-      brassInk: other.brassInk,
+      violetBg: other.violetBg,
+      violetInk: other.violetInk,
+      creamBg: other.creamBg,
+      creamInk: other.creamInk,
+      mintBg: other.mintBg,
+      mintInk: other.mintInk,
+      skyBg: other.skyBg,
+      skyInk: other.skyInk,
+      pinkBg: other.pinkBg,
+      pinkInk: other.pinkInk,
+      zincBg: other.zincBg,
+      zincInk: other.zincInk,
+      greenMain: other.greenMain,
+      amberMain: other.amberMain,
       redMain: other.redMain,
       redBg: other.redBg,
       redInk: other.redInk,
-      roseMain: other.roseMain,
     );
   }
 }

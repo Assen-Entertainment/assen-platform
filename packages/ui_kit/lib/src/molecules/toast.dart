@@ -141,9 +141,9 @@ class AssenToast extends StatelessWidget {
   (Color, Color, Color, IconData) _palette(AssenColors c) {
     return switch (kind) {
       AssenToastKind.success => (
-        c.matchaBgSubtle,
-        c.matchaInk,
-        c.matchaBorder,
+        c.mintBg,
+        c.mintInk,
+        c.mintInk,
         Icons.check_circle_outline,
       ),
       AssenToastKind.error => (
@@ -153,9 +153,9 @@ class AssenToast extends StatelessWidget {
         Icons.error_outline,
       ),
       AssenToastKind.info => (
-        c.skyBgSubtle,
+        c.skyBg,
         c.skyInk,
-        c.skyBorder,
+        c.skyInk,
         Icons.info_outline,
       ),
     };

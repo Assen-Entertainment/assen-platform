@@ -1,47 +1,59 @@
 import Link from "next/link";
-import { Card, CardBody, Button, ListItem, Divider } from "@/components/ui";
+import { Card, CardBody, Button, ListItem, Divider, SectionHeader } from "@/components/ui";
+import { STUDIO_RECENT } from "@/lib/studio-mock";
+import { StudioStatsGrid } from "./studio-stats";
 
-const STATS = [
-  { label: "팔로워", value: "12,400", delta: "+3.2%" },
-  { label: "이번 달 수익", value: "₩1,840,000", delta: "+12%" },
-  { label: "신규 구독", value: "86", delta: "+9" },
-  { label: "포스트 조회", value: "54,200", delta: "+5%" },
+/** 서브메뉴 카드 — 스튜디오 각 영역 진입점. */
+const SECTIONS = [
+  { title: "포스트 관리", desc: "발행한 포스트 수정·삭제", href: "/studio/posts" },
+  { title: "상품 관리", desc: "굿즈·디지털·티켓 판매 관리", href: "/studio/products" },
+  { title: "멤버십", desc: "티어·혜택 편집", href: "/studio/membership" },
+  { title: "정산", desc: "수익·정산 내역", href: "/studio/settlement" },
+  { title: "애널리틱스", desc: "구독자·수익 추이", href: "/studio/analytics" },
 ];
 
-const RECENT = [
-  { title: "신작 일러스트 공개", meta: "포스트 · 좋아요 842" },
-  { title: "아크릴 스탠드", meta: "상품 · 판매 124" },
-  { title: "스탠다드 멤버십", meta: "멤버십 · 구독 86" },
-];
-
-/** Creator Studio — 대시보드(통계 + 최근). E4. */
+/** Creator Studio — 대시보드(통계 + 최근 + 서브메뉴). E4 / W3 개선. */
 export default function StudioPage() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-headline text-on-surface">크리에이터 스튜디오</h1>
         <Button asChild>
-          <Link href="/post">새 포스트</Link>
+          <Link href="/studio/posts/new">새 포스트</Link>
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {STATS.map((s) => (
-          <Card key={s.label}>
-            <CardBody className="flex flex-col gap-1">
-              <span className="text-body-s text-on-surface-variant">{s.label}</span>
-              <span className="text-display-m text-on-surface">{s.value}</span>
-              <span className="text-caption text-success">{s.delta}</span>
-            </CardBody>
-          </Card>
-        ))}
-      </div>
+
+      {/* 실 카운트 대시보드(R4-W5) — GET /studio/stats 소비. 수익 카드 없음(정산 게이트). */}
+      <StudioStatsGrid />
+
       <section className="flex flex-col gap-3">
-        <h2 className="text-title-l text-on-surface">최근 항목</h2>
+        <SectionHeader title="바로가기" description="스튜디오 주요 영역으로 이동" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {SECTIONS.map((s) => (
+            <Card key={s.href} className="transition-colors hover:bg-surface-container-high">
+              <Link href={s.href} className="block">
+                <CardBody className="flex-row items-center justify-between gap-3">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-title-m text-on-surface">{s.title}</span>
+                    <span className="text-body-s text-on-surface-variant">{s.desc}</span>
+                  </div>
+                  <span aria-hidden className="text-on-surface-variant">→</span>
+                </CardBody>
+              </Link>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <SectionHeader title="최근 항목" />
         <div className="overflow-hidden rounded-lg border border-outline">
-          {RECENT.map((r, i) => (
+          {STUDIO_RECENT.map((r, i) => (
             <div key={r.title}>
               {i > 0 ? <Divider /> : null}
-              <ListItem title={r.title} subtitle={r.meta} showChevron />
+              <Link href={r.href} className="block transition-colors hover:bg-surface-container-high">
+                <ListItem title={r.title} subtitle={r.meta} showChevron />
+              </Link>
             </div>
           ))}
         </div>

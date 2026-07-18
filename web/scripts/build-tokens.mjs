@@ -23,7 +23,7 @@ const SYS = {
   surface: "surface", surfaceContainer: "surface-container",
   surfaceContainerHigh: "surface-container-high", onSurface: "on-surface",
   onSurfaceVariant: "on-surface-variant", outline: "outline", outlineVariant: "outline-variant",
-  primary: "primary", onPrimary: "on-primary", primaryContainer: "primary-container",
+  primary: "primary", primaryHover: "primary-hover", onPrimary: "on-primary", primaryContainer: "primary-container",
   onPrimaryContainer: "on-primary-container", secondary: "secondary",
   error: "error", onError: "on-error", errorContainer: "error-container",
   onErrorContainer: "on-error-container", success: "success", warning: "warning",
@@ -54,6 +54,7 @@ ${sysBlock("sys")}
   --gradient-brand: linear-gradient(${g.angle}deg, ${g.stops[0].toLowerCase()} 0%, ${g.stops[1].toLowerCase()} 100%);
 
   --creator-accent: ${resolveColor(tokens.color.sys.primary.$value)};
+  --creator-accent-hover: ${resolveColor(tokens.color.sys.primaryHover.$value)};
   --on-creator-accent: #ffffff;
   --creator-accent-container: ${resolveColor(tokens.color.sys.primaryContainer.$value)};
   --on-creator-accent-container: ${resolveColor(tokens.color.sys.onPrimaryContainer.$value)};

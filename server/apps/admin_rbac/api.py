@@ -12,7 +12,6 @@ guard refusal is a 409 (conflict); an unknown/non-assignable role is a 400.
 from __future__ import annotations
 
 import uuid
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -21,6 +20,7 @@ from pydantic import Field
 
 from apps.admin_rbac.permissions import admin_required
 from apps.admin_rbac.services import RoleChangeConflict, change_role
+from apps.identity.auth import authed
 from apps.identity.models import Account, Role
 from config.api import api
 
@@ -84,7 +84,7 @@ def list_staff(request: HttpRequest) -> list[AccountRoleOut]:
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated admin account supplied by the auth class."""
     # request.auth is untyped without Ninja stubs (same idiom as visit/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 api.add_router("/admin/rbac", admin_router)

@@ -28,11 +28,19 @@ require_cmd aws
 require_cmd curl
 
 : "${ASSEN_ECR_REPOSITORY_URI:?set ASSEN_ECR_REPOSITORY_URI}"
+: "${ASSEN_WEB_ECR_REPOSITORY_URI:?set ASSEN_WEB_ECR_REPOSITORY_URI}"
 : "${ASSEN_ECS_CLUSTER:?set ASSEN_ECS_CLUSTER}"
 : "${ASSEN_ECS_API_SERVICE:?set ASSEN_ECS_API_SERVICE}"
 : "${ASSEN_ECS_WORKER_SERVICE:?set ASSEN_ECS_WORKER_SERVICE}"
 : "${ASSEN_ECS_BEAT_SERVICE:?set ASSEN_ECS_BEAT_SERVICE}"
+: "${ASSEN_ECS_WEB_SERVICE:?set ASSEN_ECS_WEB_SERVICE}"
 : "${ASSEN_PROD_API_URL:?set ASSEN_PROD_API_URL}"
+
+# Public origin baked into the web bundle at build time. web and api are same-origin
+# behind one ALB (web.tf routes /api/*, /healthz, /readyz to the API and everything
+# else to web), so the API URL IS the site origin — override only if that stops being
+# true. Resolved here because build-prod-image.sh fail-closes on an empty value.
+WEB_SITE_URL="${ASSEN_PROD_SITE_URL:-${ASSEN_PROD_API_URL%/}}"
 
 if [ "${ASSEN_SKIP_GITHUB_CI_CHECK:-}" != "1" ]; then
   require_cmd gh
@@ -51,14 +59,18 @@ if [ "${ASSEN_SKIP_GITHUB_CI_CHECK:-}" != "1" ]; then
   fi
 fi
 
+# One login covers both repositories: api and web live in the same ECR registry
+# (same account + region), so the host is identical.
 REGISTRY_HOST="$(printf '%s' "$ASSEN_ECR_REPOSITORY_URI" | awk -F/ '{print $1}')"
 
 echo "prod deploy: logging into ECR ${REGISTRY_HOST}"
 aws ecr get-login-password --region "$AWS_REGION" |
   "$(docker_cmd)" login --username AWS --password-stdin "$REGISTRY_HOST"
 
-echo "prod deploy: building image"
+echo "prod deploy: building images (api + web)"
 ASSEN_IMAGE_REPOSITORY="$ASSEN_ECR_REPOSITORY_URI" \
+ASSEN_WEB_IMAGE_REPOSITORY="$ASSEN_WEB_ECR_REPOSITORY_URI" \
+ASSEN_PROD_SITE_URL="$WEB_SITE_URL" \
 ASSEN_PROD_IMAGE_TAG="$PROD_IMAGE_TAG" \
 COMMIT_SHA="$COMMIT_SHA" \
   "$SCRIPT_DIR/build-prod-image.sh"
@@ -66,13 +78,15 @@ COMMIT_SHA="$COMMIT_SHA" \
 echo "prod deploy: pushing image tags"
 docker_run push "${ASSEN_ECR_REPOSITORY_URI}:${COMMIT_SHA}"
 docker_run push "${ASSEN_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}"
+docker_run push "${ASSEN_WEB_ECR_REPOSITORY_URI}:${COMMIT_SHA}"
+docker_run push "${ASSEN_WEB_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}"
 
-# Schema provisioning (migration-less apps): domain tables only come from
-# `migrate --noinput --run-syncdb`, which a plain service boot never runs.
-# Until the formal-migrations gate flips (SDLC 11 §5), run it as a one-off
-# ECS task per release — the task definition's command carries the migrate.
+# Schema provisioning: every app now ships real migrations (0001_initial,
+# 2026-07-09 — ASS-266), applied by `migrate --noinput`, which a plain service
+# boot never runs. Run it as a one-off ECS task per release — the task
+# definition's command carries the migrate (must be `migrate`, NOT `--run-syncdb`).
 if [ -n "${ASSEN_ECS_MIGRATE_TASKDEF:-}" ]; then
-  echo "prod deploy: running one-off schema task (migrate --run-syncdb)"
+  echo "prod deploy: running one-off schema task (migrate)"
   # Fire-and-forget is not enough: run-task can fail placement, and the task
   # itself can exit nonzero — either way deploying services on top would ship
   # an API whose domain tables are missing. Capture, wait, and assert exit 0.
@@ -111,11 +125,11 @@ if [ -n "${ASSEN_ECS_MIGRATE_TASKDEF:-}" ]; then
   echo "prod deploy: schema task succeeded"
 else
   echo "prod deploy: NOTE — schema provisioning is manual until ASSEN_ECS_MIGRATE_TASKDEF is set"
-  echo "             run once per release: manage.py migrate --noinput --run-syncdb (SDLC 11 §5)"
+  echo "             run once per release: manage.py migrate --noinput"
 fi
 
 echo "prod deploy: forcing ECS deployments"
-for SERVICE in "$ASSEN_ECS_API_SERVICE" "$ASSEN_ECS_WORKER_SERVICE" "$ASSEN_ECS_BEAT_SERVICE"; do
+for SERVICE in "$ASSEN_ECS_API_SERVICE" "$ASSEN_ECS_WORKER_SERVICE" "$ASSEN_ECS_BEAT_SERVICE" "$ASSEN_ECS_WEB_SERVICE"; do
   aws ecs update-service \
     --region "$AWS_REGION" \
     --cluster "$ASSEN_ECS_CLUSTER" \
@@ -128,7 +142,8 @@ echo "prod deploy: waiting for ECS services to stabilize"
 aws ecs wait services-stable \
   --region "$AWS_REGION" \
   --cluster "$ASSEN_ECS_CLUSTER" \
-  --services "$ASSEN_ECS_API_SERVICE" "$ASSEN_ECS_WORKER_SERVICE" "$ASSEN_ECS_BEAT_SERVICE"
+  --services "$ASSEN_ECS_API_SERVICE" "$ASSEN_ECS_WORKER_SERVICE" "$ASSEN_ECS_BEAT_SERVICE" \
+  "$ASSEN_ECS_WEB_SERVICE"
 
 echo "prod deploy: smoke /healthz"
 curl -fsS "${ASSEN_PROD_API_URL%/}/healthz"
@@ -141,9 +156,10 @@ printf '\n'
 cat <<EOF
 prod deploy: complete
 - commit: ${FULL_SHA}
-- image: ${ASSEN_ECR_REPOSITORY_URI}:${COMMIT_SHA}
-- mutable tag: ${ASSEN_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}
+- api image: ${ASSEN_ECR_REPOSITORY_URI}:${COMMIT_SHA}
+- web image: ${ASSEN_WEB_ECR_REPOSITORY_URI}:${COMMIT_SHA}
+- mutable tags: ${ASSEN_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}, ${ASSEN_WEB_ECR_REPOSITORY_URI}:${PROD_IMAGE_TAG}
 - cluster: ${ASSEN_ECS_CLUSTER}
-- services: ${ASSEN_ECS_API_SERVICE}, ${ASSEN_ECS_WORKER_SERVICE}, ${ASSEN_ECS_BEAT_SERVICE}
+- services: ${ASSEN_ECS_API_SERVICE}, ${ASSEN_ECS_WORKER_SERVICE}, ${ASSEN_ECS_BEAT_SERVICE}, ${ASSEN_ECS_WEB_SERVICE}
 - smoke: ${ASSEN_PROD_API_URL%/}/api/health
 EOF

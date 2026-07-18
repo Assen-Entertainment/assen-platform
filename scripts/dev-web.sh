@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-# Run a Flutter fan/operator app in web dev mode with hot restart (ASS-145).
-# Usage: scripts/dev-web.sh [fan|operator] [port]
+# Run the assen_mobile Flutter app in web dev mode with hot restart (ASS-145).
+# Usage: scripts/dev-web.sh [port]
 #
 # Flutter web supports hot RESTART (press R in the attached session), not the
 # stateful hot reload of mobile — but it still beats the static build/serve
@@ -15,17 +15,9 @@ REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
 require_cmd flutter
 
-APP="${1:-fan}"
-PORT="${2:-8081}"
-case "$APP" in
-  fan) APP_DIR="$REPO_ROOT/apps/fan_app" ;;
-  operator) APP_DIR="$REPO_ROOT/apps/operator_app" ;;
-  *)
-    echo "usage: scripts/dev-web.sh [fan|operator] [port]" >&2
-    exit 2
-    ;;
-esac
+PORT="${1:-8081}"
+APP_DIR="$REPO_ROOT/apps/assen_mobile"
 
 cd "$APP_DIR"
-echo "dev-web: $APP on http://127.0.0.1:${PORT} (press R to hot restart, q to quit)"
+echo "dev-web: assen_mobile on http://127.0.0.1:${PORT} (press R to hot restart, q to quit)"
 exec flutter run -d web-server --web-hostname 127.0.0.1 --web-port "$PORT"

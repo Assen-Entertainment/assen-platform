@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 /// carousel (pairs with the `AssenPageIndicator` atom). It is a wide rounded
 /// card carrying a [background] (image/colour fill) with the [title]/[subtitle]
 /// laid over a bottom scrim so the copy stays legible on any artwork. The scrim
-/// is a translucent ink wash, not a gradient brand effect (tokens.md — no
-/// decorative gradients); it exists purely for text contrast.
+/// is a translucent ink wash, not a decorative gradient — the one sanctioned
+/// brand gradient (AssenGradients.brand) is bounded to hero/cover/lockup/login
+/// surfaces (tokens.md exception 2026-07-09); the scrim exists purely for text
+/// contrast.
 class AssenBannerCard extends StatelessWidget {
   /// Creates a banner card titled [title] over [background].
   ///
@@ -50,7 +52,7 @@ class AssenBannerCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             ColoredBox(
-              color: colors.strawberryBg,
+              color: colors.indigo100,
               child: FittedBox(fit: BoxFit.cover, child: background),
             ),
             // Bottom scrim purely for text legibility (not a brand gradient).

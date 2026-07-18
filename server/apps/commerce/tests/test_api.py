@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from django.apps import apps
 from django.test import Client
@@ -39,3 +41,21 @@ def test_products_list_and_filters(client: Client) -> None:
     by_type = client.get(f"{BASE}?product_type=digital").json()
     assert len(by_type["items"]) == 1
     assert by_type["items"][0]["title"] == "화보집"
+
+
+def test_get_product_by_id_and_404(client: Client) -> None:
+    """The single-product endpoint returns one product; unknown id is 404 (B5)."""
+    creator = Creator.objects.create(handle="stellar", name="별빛")
+    product = Product.objects.create(
+        creator=creator, type="goods", title="아크릴 스탠드", price=18000, description="설명"
+    )
+    ok = client.get(f"{BASE}/{product.id}")
+    assert ok.status_code == 200
+    body = ok.json()
+    assert body["title"] == "아크릴 스탠드"
+    assert body["creator_name"] == "별빛"
+    assert body["description"] == "설명"
+
+    missing = client.get(f"{BASE}/{uuid.uuid4()}")
+    assert missing.status_code == 404
+    assert "detail" in missing.json()

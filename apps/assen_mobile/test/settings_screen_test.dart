@@ -1,0 +1,229 @@
+// Render + edit tests for the 설정 screen: a 401 shows the login prompt, a loaded
+// profile renders the identity and the read-only 인증 badges, and editing the
+// nickname PATCHes the server (mocked) and reflects the new value. 성인/KYC 인증 is
+// display-only here (法務 gate) — no verify call is issued. No network.
+
+import 'package:assen_mobile/src/app/theme_mode_controller.dart';
+import 'package:assen_mobile/src/mypage/fan_me.dart';
+import 'package:assen_mobile/src/settings/settings_repository.dart';
+import 'package:assen_mobile/src/settings/settings_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ui_kit/ui_kit.dart';
+
+/// A repository stand-in: returns a fixed profile (or the 401 error) and keeps
+/// the nickname PATCH so the edit test can assert the request was made.
+class _FakeSettingsRepository implements SettingsRepository {
+  _FakeSettingsRepository(FanMe me, {this.updateThrowsAuth = false}) : _me = me;
+  _FakeSettingsRepository.authRequired() : _me = null, updateThrowsAuth = false;
+
+  FanMe? _me;
+
+  /// When true, [updateNickname] throws as if the PATCH returned 401/403.
+  final bool updateThrowsAuth;
+
+  /// The nickname passed to the last [updateNickname] call, or null if none.
+  String? patchedNickname;
+
+  @override
+  Future<FanMe> fetchMe() async {
+    final me = _me;
+    if (me == null) throw const SettingsAuthRequiredException();
+    return me;
+  }
+
+  @override
+  Future<FanMe> updateNickname(String nickname) async {
+    if (updateThrowsAuth) throw const SettingsAuthRequiredException();
+    patchedNickname = nickname;
+    final current = _me!;
+    final updated = FanMe(
+      id: current.id,
+      nickname: nickname,
+      role: current.role,
+      handle: current.handle,
+      avatarUrl: current.avatarUrl,
+      adultVerified: current.adultVerified,
+      kycStatus: current.kycStatus,
+    );
+    _me = updated;
+    return updated;
+  }
+
+  @override
+  Future<VerifyResult> verifyAdult() async =>
+      const VerifyResult(adultVerified: true, kycStatus: 'verified');
+}
+
+Widget _host(SettingsRepository repository) => ProviderScope(
+  overrides: [settingsRepositoryProvider.overrideWithValue(repository)],
+  child: MaterialApp(theme: AssenTheme.light(), home: const SettingsScreen()),
+);
+
+void main() {
+  setUp(() {
+    // ThemeModeController reads/writes shared_preferences on build/pick; stub
+    // it to an empty in-memory store so the 테마 tests below are deterministic
+    // rather than relying on the (also fail-closed) missing-platform-channel
+    // path.
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('a 401 shows the login-required empty state', (tester) async {
+    await tester.pumpWidget(_host(_FakeSettingsRepository.authRequired()));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('로그인이 필요해요'), findsOneWidget);
+    expect(find.text('로그인'), findsOneWidget); // the CTA
+  });
+
+  testWidgets('renders the profile and read-only 인증 badges', (tester) async {
+    // A tall surface so the whole settings ListView builds (the app-intro row
+    // and sign-out sit below a default 600px test viewport).
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _host(
+        _FakeSettingsRepository(
+          const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('민지'), findsWidgets); // header + 닉네임 row subtitle
+    expect(find.text('미인증'), findsWidgets); // 성인 + KYC badges (both unverified)
+    expect(find.text('앱 소개 다시 보기'), findsOneWidget);
+    expect(find.text('로그아웃'), findsOneWidget);
+  });
+
+  testWidgets('editing the nickname PATCHes and reflects the new value', (
+    tester,
+  ) async {
+    final repo = _FakeSettingsRepository(
+      const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    await tester.pump();
+
+    // Open the nickname editor sheet from the 닉네임 row.
+    await tester.tap(find.text('닉네임'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '지민');
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    // The PATCH carried the new nickname and the loaded profile reflects it.
+    expect(repo.patchedNickname, '지민');
+    expect(find.text('지민'), findsWidgets);
+    expect(find.text('민지'), findsNothing);
+  });
+
+  testWidgets('the mock 성인 인증 flips the profile to adult-verified', (
+    tester,
+  ) async {
+    // The KYC action sits below the identity + account rows, so give the
+    // ListView a tall surface to build them all.
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _host(
+        _FakeSettingsRepository(
+          const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('미인증'), findsWidgets); // 성인 badge starts unverified
+    await tester.tap(find.text('성인 인증하기 (19+)'));
+    await tester.pumpAndSettle();
+
+    // The derived flags updated in place: the confirmation notice shows and the
+    // badge flips (no reload, no PII — the mock result is deterministic).
+    expect(find.text('성인(19+) 인증이 완료되었어요.'), findsOneWidget);
+    expect(find.text('인증 완료'), findsWidgets);
+    expect(find.text('미인증'), findsNothing);
+  });
+
+  testWidgets('a 401/403 on nickname save drops to the login-required state', (
+    tester,
+  ) async {
+    // A session that expires mid-edit must not leave a stale, still-signed-in
+    // profile behind a generic error — the screen drops to "로그인이 필요해요".
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = _FakeSettingsRepository(
+      const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+      updateThrowsAuth: true,
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('닉네임'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '지민');
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    // Login-required state shows; no generic inline error, no PATCH recorded.
+    expect(find.text('로그인이 필요해요'), findsOneWidget);
+    expect(find.text('닉네임을 변경하지 못했어요. 다시 시도해 주세요.'), findsNothing);
+    expect(repo.patchedNickname, isNull);
+  });
+
+  testWidgets('the 테마 selector defaults to 시스템 설정 and switching updates it', (
+    tester,
+  ) async {
+    // The 테마 row sits in the 앱 section, below the identity + account +
+    // 인증 rows, so give the ListView a tall surface to build it.
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _host(
+        _FakeSettingsRepository(
+          const FanMe(id: 'fan-1', nickname: '민지', role: 'fan'),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SettingsScreen)),
+    );
+    // ThemeMode.system is the unchanged default (ASS-282) until the fan picks
+    // a mode.
+    expect(container.read(themeModeControllerProvider), ThemeMode.system);
+    expect(find.text('테마'), findsOneWidget);
+    expect(find.text('밝게'), findsOneWidget);
+    expect(find.text('어둡게'), findsOneWidget);
+    expect(find.text('시스템 설정'), findsOneWidget);
+
+    await tester.tap(find.text('어둡게'));
+    await tester.pump();
+
+    expect(container.read(themeModeControllerProvider), ThemeMode.dark);
+  });
+}

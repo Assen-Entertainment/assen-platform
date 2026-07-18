@@ -44,40 +44,45 @@ class AssenEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(SpacingTokens.s8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (slot != null) ...[
-              slot!,
-              const SizedBox(height: SpacingTokens.s6),
-            ],
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: TypographyTokens.titleMSize,
-                fontWeight: FontWeight.w700,
-                color: colors.ink900,
+    // A live region so screen readers announce the empty state when it replaces
+    // the in-flight content (title + message are read out on appear).
+    return Semantics(
+      liveRegion: true,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(SpacingTokens.s8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (slot != null) ...[
+                slot!,
+                const SizedBox(height: SpacingTokens.s6),
+              ],
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: TypographyTokens.titleMSize,
+                  fontWeight: FontWeight.w700,
+                  color: colors.ink900,
+                ),
               ),
-            ),
-            const SizedBox(height: SpacingTokens.s2),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: TypographyTokens.bodyMSize,
-                height: 1.5,
-                color: colors.ink700,
+              const SizedBox(height: SpacingTokens.s2),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: TypographyTokens.bodyMSize,
+                  height: 1.5,
+                  color: colors.ink600,
+                ),
               ),
-            ),
-            if (actionLabel != null) ...[
-              const SizedBox(height: SpacingTokens.s6),
-              AssenButton(label: actionLabel!, onPressed: onAction),
+              if (actionLabel != null) ...[
+                const SizedBox(height: SpacingTokens.s6),
+                AssenButton(label: actionLabel!, onPressed: onAction),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

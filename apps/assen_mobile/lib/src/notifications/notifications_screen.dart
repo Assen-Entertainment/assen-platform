@@ -1,0 +1,192 @@
+import 'package:assen_mobile/src/app/router.dart';
+import 'package:assen_mobile/src/common/async_view.dart';
+import 'package:assen_mobile/src/common/now.dart';
+import 'package:assen_mobile/src/common/relative_time.dart';
+import 'package:assen_mobile/src/notifications/app_notification.dart';
+import 'package:assen_mobile/src/notifications/notifications_controller.dart';
+import 'package:assen_mobile/src/notifications/notifications_repository.dart';
+import 'package:core_tokens/core_tokens.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:ui_kit/ui_kit.dart';
+
+/// The 알림 tab: the signed-in fan's notification feed.
+///
+/// Wired to `GET /api/notifications` through
+/// [notificationsControllerProvider]. Because the app ships signed-out, the
+/// default path is a 401 → [NotificationsAuthRequiredException], which this
+/// screen renders as a "로그인이 필요해요" empty state (with a login CTA) rather than
+/// an error. When authenticated it shows the list (read/unread + relative
+/// time); other failures fall back to [AssenErrorState] with retry.
+class NotificationsScreen extends ConsumerWidget {
+  /// Creates the notifications tab.
+  const NotificationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feed = ref.watch(notificationsControllerProvider);
+    final now = ref.watch(nowProvider);
+    final controller = ref.read(notificationsControllerProvider.notifier);
+    // Only offer "모두 읽음" when the loaded feed still has an unread row.
+    final hasUnread = feed.value?.any((n) => !n.read) ?? false;
+    return Scaffold(
+      appBar: AssenAppBar(
+        title: '알림',
+        actions: [
+          if (hasUnread)
+            AssenIconButton(
+              icon: Icons.done_all,
+              semanticLabel: '모두 읽음',
+              onPressed: controller.markAllRead,
+            ),
+        ],
+      ),
+      body: AssenAsyncView<List<AppNotification>>(
+        value: feed,
+        loading: const _NotificationsSkeleton(),
+        onRetry: () =>
+            ref.read(notificationsControllerProvider.notifier).refresh(),
+        // A 401 → auth-required is not a failure: show the login wall instead
+        // of the generic error state.
+        errorBuilder: (error, _) => error is NotificationsAuthRequiredException
+            ? AssenEmptyState(
+                title: '로그인이 필요해요',
+                message: '알림을 보려면 먼저 로그인해 주세요.',
+                actionLabel: '로그인',
+                onAction: () => context.go(RoutePaths.login),
+              )
+            : null,
+        isEmpty: (items) => items.isEmpty,
+        empty: () => const AssenEmptyState(
+          title: '알림이 없어요',
+          message: '새로운 소식이 도착하면 이곳에 표시됩니다.',
+        ),
+        data: (items) => RefreshIndicator(
+          onRefresh: controller.refresh,
+          child: _NotificationList(
+            items: items,
+            now: now,
+            onMarkRead: controller.markRead,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The loaded feed: a list of notifications, newest first.
+class _NotificationList extends StatelessWidget {
+  const _NotificationList({
+    required this.items,
+    required this.now,
+    required this.onMarkRead,
+  });
+
+  final List<AppNotification> items;
+  final DateTime now;
+
+  /// Marks the tapped notification read (by id).
+  final void Function(String id) onMarkRead;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: SpacingTokens.s2),
+      itemCount: items.length,
+      itemBuilder: (context, index) => _NotificationTile(
+        notification: items[index],
+        now: now,
+        onMarkRead: onMarkRead,
+      ),
+    );
+  }
+}
+
+/// One notification row: a bell (rose-tinted when unread) + title + time.
+///
+/// An unread row is tappable to mark it read (optimistically); a read row is
+/// inert (no navigation is wired here — the deep-link `href` is a follow-up).
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({
+    required this.notification,
+    required this.now,
+    required this.onMarkRead,
+  });
+
+  final AppNotification notification;
+  final DateTime now;
+
+  /// Marks this notification read (by id) when an unread row is tapped.
+  final void Function(String id) onMarkRead;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AssenColors>()!;
+    final unread = !notification.read;
+
+    return AssenListItem(
+      title: notification.title,
+      subtitle: relativeTime(notification.createdAt, now),
+      showChevron: false,
+      onTap: unread ? () => onMarkRead(notification.id) : null,
+      leading: Container(
+        width: SpacingTokens.s10,
+        height: SpacingTokens.s10,
+        decoration: BoxDecoration(
+          color: unread ? colors.indigo100 : colors.neutral200,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.notifications_none,
+          size: SpacingTokens.s5,
+          color: unread ? colors.indigoInk : colors.ink500,
+        ),
+      ),
+      trailing: unread
+          ? Container(
+              width: SpacingTokens.s2,
+              height: SpacingTokens.s2,
+              decoration: BoxDecoration(
+                color: colors.indigo500,
+                shape: BoxShape.circle,
+              ),
+            )
+          : null,
+    );
+  }
+}
+
+/// The loading state: skeleton rows standing in for the feed.
+class _NotificationsSkeleton extends StatelessWidget {
+  const _NotificationsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(SpacingTokens.s4),
+      itemCount: 6,
+      itemBuilder: (context, index) => const Padding(
+        padding: EdgeInsets.symmetric(vertical: SpacingTokens.s3),
+        child: Row(
+          children: [
+            AssenSkeleton(width: 40, height: 40, radius: 20),
+            SizedBox(width: SpacingTokens.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AssenSkeleton(width: 200),
+                  SizedBox(height: SpacingTokens.s2),
+                  AssenSkeleton(width: 80),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

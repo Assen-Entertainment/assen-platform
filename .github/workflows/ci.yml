@@ -6,10 +6,12 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
-  # ios-smoke is also reachable on demand / on a weekly schedule (see below).
+  # The assen_mobile web build-smoke runs on every PR/push (catches packaging
+  # breaks that analyze/test miss); the heavier android apk build-smoke (debug)
+  # runs on every PR too (ASS-279), plus on demand or on the weekly schedule below.
   workflow_dispatch:
   schedule:
-    # Weekly, Mondays 03:00 UTC — drives the macOS ios-smoke job only.
+    # Weekly, Mondays 03:00 UTC — drives the on-demand app build-smoke steps.
     - cron: "0 3 * * 1"
 
 # Cancel superseded runs on the same ref to save minutes.
@@ -18,6 +20,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # compose 잡만 경로 필터링(DevOps 위생) — server/flutter/gitleaks/hooks 잡은 그대로 매
+  # push/PR에서 돈다(범위 확대 없음). dorny/paths-filter는 push 이벤트에서 자동으로 이전
+  # 커밋(github.event.before) 대비 diff를 본다 — 별도 base 설정 불요.
+  #
+  # ⚠️ compose가 GitHub 브랜치 보호 규칙의 required status check이면, 이 필터로 인해
+  # server/**를 건드리지 않는 PR에서는 "skipped"로 뜨고 GitHub은 이를 미충족으로 간주해
+  # 머지가 막힐 수 있다 — 그 경우 브랜치 보호 필수 체크 목록에서 compose를 빼거나(대신
+  # changes 잡을 필수 체크로 지정), 이 필터를 되돌려야 한다. 인간 판단 필요.
+  changes:
+    name: Detect changed paths (gates the compose job)
+    runs-on: ubuntu-latest
+    # dorny/paths-filter reads the PR's changed files via the API on pull_request
+    # events; without pull-requests:read the token is refused ("Resource not
+    # accessible by integration"). contents:read keeps the checkout working.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      compose: ${{ steps.filter.outputs.compose }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            compose:
+              - 'server/**'
+              - 'docker-compose.yml'
+              - 'docker-compose.dev.yml'
+              - 'scripts/up-local.sh'
+              - 'scripts/smoke-local.sh'
+              - 'scripts/lib/**'
+
   server:
     name: Server (ruff + mypy + pytest + migrations)
     runs-on: ubuntu-latest
@@ -25,9 +60,9 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: server/uv.lock
@@ -41,18 +76,26 @@ jobs:
         run: uv run pytest
       - name: Migrations are committed (sqlite test settings, no DB server)
         run: uv run python manage.py makemigrations --check --dry-run --settings=config.settings.test
+      - name: OpenAPI snapshot matches the live schema (no drift, ASS-290)
+        run: |
+          uv run python scripts/export_openapi.py
+          if ! git -C "$GITHUB_WORKSPACE" diff --quiet -- web/src/lib/api/openapi.json; then
+            echo "::error::web/src/lib/api/openapi.json is stale. Run server/scripts/export_openapi.py + (cd web && npm run gen:types), then commit."
+            git -C "$GITHUB_WORKSPACE" --no-pager diff --stat -- web/src/lib/api/openapi.json
+            exit 1
+          fi
 
   flutter:
     name: Flutter (format + analyze + test + web/android build smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - name: Cache pub-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.pub-cache
           key: pub-cache-${{ runner.os }}-${{ hashFiles('**/pubspec.yaml') }}
@@ -65,45 +108,85 @@ jobs:
         run: dart run melos run analyze --no-select
       - name: Test
         run: dart run melos run test --no-select
-      # 레거시 메이드 앱(fan_app/operator_app)은 M10 아카이브 예정 — 상시 PR
-      # 게이트에서 제외하고 iOS smoke처럼 수동/주간으로만 빌드한다(SDLC 11 §7).
-      # 재사용 패키지(core_tokens·ui_kit·api_client)는 위 analyze/test가 계속 게이트.
-      - name: Web build smoke (fan_app)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        working-directory: apps/fan_app
+      # 메이드 앱(fan_app/operator_app)은 플랫폼 피벗에서 제거됨(B9/M10). 신방향 앱
+      # apps/assen_mobile의 웹 빌드 스모크는 매 PR/push에서 실행해 analyze/test는
+      # green인데 패키징(웹 번들)이 깨지는 갭을 차단한다. android apk 빌드(debug)는
+      # PR·수동 dispatch·주간 schedule에서 실행한다(ASS-279: 이전엔 dispatch/schedule
+      # 전용이라 PR에서 패키징 회귀가 새지 않는지 확인이 안 됐다). 매 push(dev/main)까지는
+      # 비용상 미포함. 재사용 패키지(core_tokens·ui_kit·api_client)는 위 analyze/test가
+      # 계속 게이트한다.
+      - name: Web build smoke (assen_mobile)
+        if: ${{ hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
+        working-directory: apps/assen_mobile
         run: flutter build web --no-pub
-      - name: Web build smoke (operator_app)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        working-directory: apps/operator_app
-        run: flutter build web --no-pub
-      - name: Android build smoke (fan_app, debug)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-        working-directory: apps/fan_app
+      # Regression guard for the mobile release breaker: a release/profile build has
+      # network access ONLY if the MAIN manifest declares INTERNET (the Flutter
+      # template shipped it in the debug manifest only, so release builds could not
+      # reach the API). A build smoke would not catch this (it is a runtime miss), so
+      # assert the permission is present in the committed main manifest.
+      - name: Release manifest declares INTERNET (assen_mobile release-breaker guard)
+        if: ${{ hashFiles('apps/assen_mobile/android/app/src/main/AndroidManifest.xml') != '' }}
+        run: |
+          grep -q 'android.permission.INTERNET' apps/assen_mobile/android/app/src/main/AndroidManifest.xml \
+            || { echo "::error::apps/assen_mobile main AndroidManifest is missing INTERNET — release builds cannot reach the network"; exit 1; }
+      - name: Android build smoke (assen_mobile, debug)
+        if: ${{ (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && hashFiles('apps/assen_mobile/pubspec.yaml') != '' }}
+        working-directory: apps/assen_mobile
         run: flutter build apk --debug --no-pub
 
-  ios-smoke:
-    name: iOS build smoke (fan_app)
-    # macOS minutes bill at ~10x, so this is intentionally NOT run per-PR.
-    # It runs only on manual dispatch or the weekly schedule above.
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+  # iOS 빌드 스모크(assen_mobile) — iOS 빌드는 macOS 러너 필수라 위 ubuntu `flutter` 잡에
+  # 넣을 수 없어 별도 잡(runs-on: macos-latest)으로 분리한다. macOS 러너는 포함 분(minutes)을
+  # 약 10배 소모하므로 매 PR/push엔 돌리지 않고 수동 dispatch 또는 주간 schedule에서만 돈다
+  # (android 스모크의 이벤트 게이팅을 따르되 pull_request는 제외). 이로써 감사가 지적한
+  # "Flutter 3-target CI: web+Android debug만, iOS 없음"(ASS-294) 갭을 닫는다. --no-codesign은
+  # 서명 인증서 없이 컴파일/링크만 검증한다.
+  # ★이력: 처음 추가됐을 때 워크플로가 startup에서 통째로 거부됐다(잡 0개). 진짜 원인은
+  # macOS 정책이 아니라 이 잡의 job-level `if:`가 hashFiles()를 호출한 것 — hashFiles는
+  # step 컨텍스트 전용이라 job-level if에선 파싱 실패한다. if를 이벤트 체크만으로 고쳐 재도입.
+  # ★규칙: ci.yml 변경은 base가 dev/main인 PR에서만 검증되므로(workflow_dispatch로 실증) 스택 PR로 우회하지 말 것.
+  flutter-ios:
+    name: Flutter iOS build smoke (assen_mobile, no-codesign)
     runs-on: macos-latest
+    # job-level `if:` can't call hashFiles() (step-context only) — that invalid
+    # expression is what made the workflow fail to start when this job was first
+    # added. assen_mobile always exists, so gate on the event only.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      - name: Cache pub-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: pub-cache-${{ runner.os }}-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: pub-cache-${{ runner.os }}-
       - name: Bootstrap workspace
         run: dart pub get
-      - name: iOS build smoke (fan_app, no codesign)
-        working-directory: apps/fan_app
-        run: flutter build ios --debug --no-codesign --no-pub
+      # iOS는 Swift Package Manager로 Flutter 플러그인을 등재한다. `flutter build ios
+      # --no-pub`은 pub get을 건너뛰어, flutter 툴이 pub get 중 생성하는
+      # ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage(플러그인 SPM
+      # manifest)가 없어 xcodebuild의 SPM 해석이 실패한다("Could not resolve package
+      # dependencies ... FlutterGeneratedPluginSwiftPackage doesn't exist"). web/android
+      # 스모크는 이 패키지가 불필요해 --no-pub로 충분하지만, iOS는 앱 디렉터리 레벨
+      # `flutter pub get`으로 SPM 패키지를 먼저 생성해야 한다(상위 `dart pub get`은
+      # Dart 워크스페이스만 해석하고 flutter 플러그인 SPM 아티팩트는 만들지 않는다).
+      - name: Generate iOS plugin SPM package (flutter pub get)
+        working-directory: apps/assen_mobile
+        run: flutter pub get
+      - name: iOS build smoke (assen_mobile, no-codesign)
+        working-directory: apps/assen_mobile
+        run: flutter build ios --no-codesign --no-pub
 
   compose:
     name: docker compose validate + boot smoke
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Boot and smoke local backend stack
         run: scripts/up-local.sh
       - name: Tear down
@@ -114,7 +197,7 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # gitleaks-action@v2는 org 저장소에 GITLEAKS_LICENSE를 요구한다.
@@ -128,7 +211,7 @@ jobs:
     name: Harness hooks (guard.py + pre-commit behavioral tests)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # 순수 stdlib — 의존성 설치 불요. guard.py 회귀를 CI에서 게이트한다 (ASS-132).
       - name: Run hook guard tests (guard.py)
         run: python3 scripts/hooks/test_hooks.py

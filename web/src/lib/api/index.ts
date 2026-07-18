@@ -6,80 +6,141 @@
  * 아래 mock으로 폴백 → `next build`(SSG)와 백엔드 없는 개발이 그대로 동작한다.
  * 계약 타입: openapi.json → schema.d.ts (openapi-typescript, `npm run gen:types`).
  */
-import { config } from "@/lib/config";
 import { apiFetch, ApiError } from "./client";
-import type { Comment, Creator, MembershipTier, Paginated, Post, Product, SearchResult } from "./types";
+import type {
+  BlockedCreator,
+  Comment,
+  Creator,
+  CreatorSort,
+  MarketingConsentState,
+  MembershipTier,
+  Notification,
+  NotificationKind,
+  Order,
+  OrderItem,
+  OrderStatus,
+  Paginated,
+  Post,
+  Product,
+  RefundStatus,
+  SavedPaymentMethod,
+  ShippingAddress,
+  StudioStats,
+  Subscription,
+  SearchResult,
+} from "./types";
+// ASS-290: consume the generated OpenAPI DTOs (schema.d.ts, produced by
+// `npm run gen:types`) directly as the wire types, so the client is compile-time
+// coupled to the contract — tsc breaks here if the server schema drifts (the
+// CI drift gate catches the snapshot; this makes a domain's client code fail to
+// build too). Migrated incrementally; `Notification` is the first domain, the
+// rest keep their hand-written Raw* shapes until each is field-verified.
+import type { components } from "./schema";
+// 스튜디오 카탈로그 타입/목업은 studio-mock의 순수 유틸을 정본으로 재사용(데이터만 실 API로 전환).
+import {
+  STUDIO_PRODUCTS,
+  STUDIO_TIERS,
+  type StudioProduct,
+  type StudioTier,
+  type ProductStatus,
+} from "@/lib/studio-mock";
+// 스튜디오 재무 mock(정산/애널리틱스 placeholder 금액) — USE_API=false 폴백에서만 참조(ASS-289 #5
+// 번들 격리). 라이브 빌드에선 아래 데드코드 분기가 접혀 이 모듈이 mock/data.ts와 동일하게
+// 트리셰이킹된다 → 날조 금액이 라이브 산출물에서 제거된다.
+import { SETTLEMENT_ROWS, ANALYTICS_SERIES, type SettlementRow, type AnalyticsPoint } from "@/lib/studio-mock-finance";
+// mock 폴백 데이터/전용 로직 — USE_API=false 경로에서만 참조(R6-W2C 번들 격리).
+// 라이브 빌드에선 USE_API가 빌드타임 상수 true로 접혀 아래 참조가 DCE → 이 모듈이 트리셰이킹된다.
+import {
+  CREATORS,
+  PRODUCTS,
+  TIERS,
+  POSTS,
+  COMMENTS,
+  ORDERS,
+  NOTIFICATIONS,
+  SUBSCRIPTIONS,
+  PAYMENT_METHODS,
+  STUDIO_STATS,
+  MOCK_BLOCKED,
+} from "./mock/data";
 
 export * from "./types";
 export { apiFetch, ApiError } from "./client";
+export { apiErrorMessage, ERROR_CODE_MESSAGES, ERROR_CODES } from "./error-messages";
+export type { ErrorCode } from "./error-messages";
+// mock 차단 토글 — 정본은 ./mock/data. queries.ts의 mock 분기·테스트가 "./index" 경로로 소비(경로 안정).
+export { mockSetBlocked } from "./mock/data";
 
-const USE_API = Boolean(config.apiUrl);
-interface RawCreator {
-  id: string;
-  handle: string;
-  name: string;
-  bio: string;
-  accent_color: string;
-  avatar_url: string;
-  cover_url: string;
-  category: string;
-  verified: boolean;
-  followers: number;
-  posts: number;
-  following: boolean;
-}
-interface RawPost {
-  id: string;
-  creator_id: string;
-  creator_name: string;
-  creator_handle: string;
-  verified: boolean;
-  body: string;
-  media_url: string;
-  like_count: number;
-  comment_count: number;
-  liked: boolean;
-  created_at: string;
-}
-interface RawComment {
-  id: string;
-  post_id: string;
-  author: string;
-  body: string;
-  created_at: string;
-}
-interface RawProduct {
-  id: string;
-  creator_id: string | null;
-  type: string;
-  title: string;
-  price: number;
-  meta: string;
-  media_url: string;
-}
-interface RawTier {
-  id: string;
-  creator_id: string | null;
-  name: string;
-  price: number;
-  period: string;
-  benefits: string[];
-  badge: string;
-  featured: boolean;
-  sort_order: number;
-}
+// USE_API — 빌드타임 상수. NEXT_PUBLIC_API_URL을 번들러가 리터럴로 인라인하므로 이 분기는 DCE 가능
+// → 라이브 빌드에서 mock 폴백(./mock/data)이 클라이언트 번들에서 트리셰이킹된다(R6-W2C).
+// 의미론은 기존 Boolean(config.apiUrl)과 동일(config.apiUrl = NEXT_PUBLIC_API_URL || "").
+const USE_API = Boolean(process.env.NEXT_PUBLIC_API_URL);
+// ASS-290 확장: 손수 작성한 Raw* 미러를 생성 DTO(schema.d.ts, `npm run gen:types`)로 전면
+// 교체한다. 각 wire 타입이 서버 OpenAPI 스키마에 컴파일타임으로 결합되어, 서버 계약이
+// 드리프트하면 여기서 tsc가 깨진다(CI 스냅샷 게이트가 openapi.json 드리프트를 잡고, 이
+// 결합이 도메인 클라 코드까지 빌드 실패로 밀어붙인다). 필드별 옵셔널/nullable/enum은
+// 이제 서버가 단일 출처 — 아래 매퍼가 그 계약을 그대로 소비한다.
+type RawCreator = components["schemas"]["CreatorOut"];
+type RawPost = components["schemas"]["PostOut"];
+type RawComment = components["schemas"]["CommentOut"];
+type RawProduct = components["schemas"]["ProductOut"];
+type RawTier = components["schemas"]["TierOut"];
 /** /search 결과의 축약 상품(ProductBrief — creator_id/media_url 없음). */
-interface RawProductBrief {
-  id: string;
-  type: string;
-  title: string;
-  price: number;
-  meta: string;
+type RawProductBrief = components["schemas"]["ProductBrief"];
+type RawSearch = components["schemas"]["SearchOut"];
+// --- B4 쓰기/커머스 wire 계약 -------------------------------------------------
+type RawOrderItem = components["schemas"]["OrderItemOut"];
+/** 배송지 스냅샷 wire(OrderShippingOut) — 배송 상품 주문 조회에만 임베드. */
+type RawOrderShipping = components["schemas"]["OrderShippingOut"];
+/** 주문 리스트 wire(OrderOut) — 배송지(shipping_address) 미포함(A-3 정책). */
+type RawOrder = components["schemas"]["OrderOut"];
+/**
+ * 단건 주문 wire(OrderDetailOut) — OrderOut + shipping_address(배송지 스냅샷, 옵셔널).
+ * 조회/생성/취소/환불 등 단건 응답에만 배송지가 실린다(리스트는 미노출). mapOrder는 이
+ * 넓은 타입을 받으므로 리스트의 RawOrder(배송지 없음)도 그대로 넘길 수 있다(구조적 할당).
+ */
+type RawOrderDetail = components["schemas"]["OrderDetailOut"];
+type RawSubscription = components["schemas"]["SubscriptionOut"];
+// Wire shape = the generated NotificationOut DTO (ASS-290), not a hand-written
+// mirror: any server-side field/nullability change to NotificationOut surfaces
+// here as a compile error rather than a silent runtime mismatch.
+type RawNotification = components["schemas"]["NotificationOut"];
+// --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기·결제수단 wire 계약 -----------------
+/** 오너 뷰 상품(StudioProductOut) — 관리 필드(status/is_adult/sold/timestamp) 포함. */
+type RawStudioProduct = components["schemas"]["StudioProductOut"];
+/** 오너 뷰 티어(StudioTierOut) — active/subscribers 관리 필드 포함. */
+type RawStudioTier = components["schemas"]["StudioTierOut"];
+/** 저장된 결제수단(PaymentMethodOut) — brand+last4만(PAN 미보관). */
+type RawPaymentMethod = components["schemas"]["PaymentMethodOut"];
+/** 스튜디오 대시보드 실 카운트(StudioStatsOut) — 전부 정수 카운트(금액 필드 없음·정산 게이트). */
+type RawStudioStats = components["schemas"]["StudioStatsOut"];
+/** 소셜 토글 응답(카운트 정정용). */
+export interface FollowResult {
+  following: boolean;
+  followers: number;
 }
-interface RawSearch {
-  creators: RawCreator[];
-  products: RawProductBrief[];
+export interface LikeResult {
+  liked: boolean;
+  like_count: number;
 }
+/** 신고 접수 응답. */
+export interface ReportResult {
+  safetyReportId: string;
+  status: string;
+  createdAt: string;
+}
+/** 차단 토글 응답(서버 BlockOut — 클라 상태 정정용). */
+export interface BlockResult {
+  blocked: boolean;
+  creatorId: string;
+}
+/** 설정 차단 목록 wire(BlockedCreatorOut). */
+type RawBlockedCreator = components["schemas"]["BlockedCreatorOut"];
+const mapBlockedCreator = (b: RawBlockedCreator): BlockedCreator => ({
+  creatorId: b.creator_id,
+  name: b.name,
+  handle: b.handle,
+});
 
 /** ISO 시각 → 상대 라벨(방금 / N분·시간·일 전 / 날짜). */
 function relativeTime(iso: string): string {
@@ -109,6 +170,7 @@ const mapCreator = (c: RawCreator): Creator => ({
   verified: c.verified,
   category: c.category || undefined,
   following: c.following,
+  blocked: c.blocked,
 });
 const mapPost = (p: RawPost): Post => ({
   id: p.id,
@@ -121,6 +183,7 @@ const mapPost = (p: RawPost): Post => ({
   likeCount: p.like_count,
   commentCount: p.comment_count,
   liked: p.liked,
+  isAdult: p.is_adult || undefined,
 });
 const mapComment = (c: RawComment): Comment => ({
   id: c.id,
@@ -132,11 +195,23 @@ const mapComment = (c: RawComment): Comment => ({
 const mapProduct = (p: RawProduct): Product => ({
   id: p.id,
   creatorId: p.creator_id ?? undefined,
+  creatorName: p.creator_name || undefined,
   type: p.type as Product["type"],
   title: p.title,
   price: p.price,
+  creatorHandle: p.creator_handle || undefined,
   meta: p.meta || undefined,
   mediaUrl: p.media_url || undefined,
+  // 확장 필드 — 품절/잠금/옵션 UI가 라이브에서도 동작해야 한다(누락 시 서버 422가 최후 방어막이 됨).
+  description: p.description || undefined,
+  options: p.options?.length ? p.options : undefined,
+  stock: p.stock ?? undefined,
+  soldOut: p.sold_out || undefined,
+  locked: p.locked || undefined,
+  isAdult: p.is_adult || undefined,
+  // status(판매 상태)는 오너 스코프(StudioProductOut) 전용 — 공개 ProductOut 계약엔 없어
+  // (생성 DTO에 미존재) 매핑하지 않는다. Product.status는 스튜디오 매핑에서만 채워진다.
+  pricingKind: p.pricing_kind === "free" ? "free" : "paid",
 });
 const mapTier = (t: RawTier): MembershipTier => ({
   id: t.id,
@@ -147,6 +222,7 @@ const mapTier = (t: RawTier): MembershipTier => ({
   benefits: t.benefits,
   badge: t.badge || undefined,
   featured: t.featured,
+  pricingKind: t.pricing_kind === "free" ? "free" : "paid",
 });
 const mapProductBrief = (p: RawProductBrief): Product => ({
   id: p.id,
@@ -156,48 +232,197 @@ const mapProductBrief = (p: RawProductBrief): Product => ({
   meta: p.meta || undefined,
 });
 
-// --- mock 폴백 데이터 (apiUrl 미설정 시) ------------------------------------
-const CREATORS: Creator[] = [
-  { id: "c1", name: "별빛 일러스트", handle: "stellar", category: "일러스트", followers: 12400, posts: 320, verified: true, accentColor: "#E14B8A", bio: "별빛이 흐르는 일러스트를 그립니다." },
-  { id: "c2", name: "Neon Beats", handle: "neonbeats", category: "뮤직", followers: 8100, accentColor: "#3B82F6" },
-  { id: "c3", name: "토끼방송국", handle: "rabbit", category: "버튜버", followers: 23500, accentColor: "#F59E0B" },
-  { id: "c4", name: "묘화가", handle: "myo", category: "일러스트", followers: 5200, accentColor: "#10B981" },
-  { id: "c5", name: "Studio Lumi", handle: "lumi", category: "굿즈", followers: 3000, accentColor: "#8B5CF6" },
-];
+/** ISO 시각 → 표시용 날짜(YYYY-MM-DD). 비정상 값은 원문 유지. */
+function dateLabel(iso: string): string {
+  return /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : iso;
+}
+/** 서버 환불 상태 → 웹 표기(accepted→approved, reviewing/그 외→requested). */
+function mapRefundStatus(s: string): RefundStatus {
+  if (s === "accepted") return "approved";
+  if (s === "rejected") return "rejected";
+  return "requested";
+}
+const mapOrderItem = (it: RawOrderItem): OrderItem => ({
+  productId: it.product_id ?? "",
+  title: it.title,
+  type: it.type as OrderItem["type"],
+  option: it.option || undefined,
+  price: it.price,
+  qty: it.qty,
+});
+const mapShipping = (s: RawOrderShipping): ShippingAddress => ({
+  recipientName: s.recipient_name,
+  recipientPhone: s.recipient_phone,
+  postalCode: s.postal_code,
+  address1: s.address1,
+  address2: s.address2,
+});
+// RawOrderDetail(OrderDetailOut) — 리스트의 RawOrder(OrderOut, 배송지 없음)도 구조적으로
+// 할당 가능하므로 리스트/단건 응답 모두 이 매퍼로 처리한다. shipping_address는 단건에만
+// 실려 옵셔널 — 없으면 undefined.
+const mapOrder = (o: RawOrderDetail): Order => ({
+  id: o.id,
+  createdAt: dateLabel(o.created_at),
+  status: o.status as OrderStatus,
+  items: o.items.map(mapOrderItem),
+  subtotal: o.subtotal,
+  // shipping_fee = model 정합 별칭(shipping과 동일 값). 서버 계약상 항상 존재.
+  shipping: o.shipping_fee,
+  total: o.total,
+  creatorName: o.creator_name ?? undefined,
+  shippingAddress: o.shipping_address ? mapShipping(o.shipping_address) : undefined,
+  refund: o.refund
+    ? { status: mapRefundStatus(o.refund.status), reason: o.refund.reason || undefined }
+    : undefined,
+});
+const mapSubscription = (s: RawSubscription): Subscription => ({
+  id: s.id,
+  creatorId: s.creator_id ?? "",
+  creatorName: s.creator_name,
+  creatorHandle: s.creator_handle,
+  tierId: s.tier_id ?? undefined,
+  tierName: s.tier_name,
+  price: s.price,
+  period: s.period,
+  // 무료 멤버십은 next_billing_date=null → 결제일 UI를 숨긴다(날조 날짜 금지).
+  nextBillingDate: s.next_billing_date ? dateLabel(s.next_billing_date) : null,
+  status: s.status === "cancelled" ? "cancelled" : "active",
+  cancelScheduled: s.cancel_scheduled,
+  isFree: s.is_free ?? false,
+});
+const NOTIFICATION_KINDS: NotificationKind[] = ["like", "comment", "follow", "order", "system"];
+const mapNotification = (n: RawNotification): Notification => {
+  const kind = NOTIFICATION_KINDS.includes(n.kind as NotificationKind) ? (n.kind as NotificationKind) : "system";
+  const t = new Date(n.created_at).getTime();
+  // 24시간 이내는 "오늘" 그룹, 그 외는 "이전"(서버는 group 필드를 주지 않아 파생).
+  const group: Notification["group"] =
+    !Number.isNaN(t) && Date.now() - t < 86400000 ? "today" : "earlier";
+  return {
+    id: n.id,
+    kind,
+    title: n.title,
+    time: relativeTime(n.created_at),
+    group,
+    href: n.href || undefined,
+    read: n.read,
+  };
+};
 
-const PRODUCTS: Product[] = [
-  { id: "p1", creatorId: "c1", type: "goods", title: "아크릴 스탠드", price: 18000, meta: "한정 200개" },
-  { id: "p2", creatorId: "c1", type: "digital", title: "고해상도 화보집", price: 9900, meta: "다운로드" },
-  { id: "p3", creatorId: "c1", type: "experience", title: "포토카드 팬사인", price: 30000, meta: "선착순 20" },
-  { id: "p4", creatorId: "c1", type: "ticket", title: "온라인 팬미팅", price: 25000, meta: "12/24 20:00" },
-];
+const PRODUCT_STATUSES: readonly ProductStatus[] = ["selling", "soldout", "draft", "hidden"];
+/**
+ * 오너 상품 매핑 — sold는 서버가 집계한 비취소 주문 기준 누적 판매 수량(ASS-264, 카운트만·수익
+ * 금액 아님). updatedAt은 생성 시각 파생.
+ */
+const mapStudioProduct = (p: RawStudioProduct): StudioProduct => ({
+  id: p.id,
+  type: p.type as StudioProduct["type"],
+  title: p.title,
+  price: p.price,
+  status: (PRODUCT_STATUSES as readonly string[]).includes(p.status) ? (p.status as ProductStatus) : "draft",
+  sold: p.sold,
+  stock: p.stock ?? null,
+  updatedAt: relativeTime(p.created_at),
+  pricingKind: p.pricing_kind === "free" ? "free" : "paid",
+});
+/** 오너 티어 매핑 — subscribers는 서버가 집계한 활성(status=active) 구독자 수(ASS-264, 카운트만). */
+const mapStudioTier = (t: RawStudioTier): StudioTier => ({
+  id: t.id,
+  name: t.name,
+  price: t.price,
+  benefits: t.benefits,
+  subscribers: t.subscribers,
+  active: t.active,
+  pricingKind: t.pricing_kind === "free" ? "free" : "paid",
+});
+const mapPaymentMethod = (m: RawPaymentMethod): SavedPaymentMethod => ({
+  id: m.id,
+  brand: m.brand,
+  last4: m.last4,
+  isPrimary: m.is_primary,
+  createdAt: m.created_at,
+});
+/** 스튜디오 스탯 매핑 — snake→camel(products_selling→productsSelling). 전부 정수 카운트(금액 없음). */
+const mapStudioStats = (s: RawStudioStats): StudioStats => ({
+  followers: s.followers,
+  posts: s.posts,
+  products: s.products,
+  productsSelling: s.products_selling,
+  orders: s.orders,
+  subscribers: s.subscribers,
+});
 
-const TIERS: MembershipTier[] = [
-  { id: "t1", creatorId: "c1", name: "라이트", price: 4900, period: "월", benefits: ["전용 포스트", "멤버 뱃지"] },
-  { id: "t2", creatorId: "c1", name: "스탠다드", price: 9900, period: "월", badge: "인기", featured: true, benefits: ["라이트 혜택 전부", "고해상도 화보", "월간 라이브"] },
-  { id: "t3", creatorId: "c1", name: "프리미엄", price: 19900, period: "월", benefits: ["스탠다드 전부", "팬사인 우선", "한정 굿즈 우선"] },
-];
+// --- mock 폴백 데이터 → ./mock/data 로 분리(R6-W2C 번들 격리). USE_API=false 폴백에서만 참조. ------
 
-const POSTS: Post[] = [
-  { id: "po1", creatorId: "c1", creatorName: "별빛 일러스트", creatorMeta: "@stellar · 3시간 전", verified: true, body: "신작 공개! 많은 관심 부탁드려요.", likeCount: 842, commentCount: 2 },
-  { id: "po2", creatorId: "c1", creatorName: "별빛 일러스트", creatorMeta: "@stellar · 어제", verified: true, body: "다음 주 팬미팅 신청 받아요.", likeCount: 331, commentCount: 1 },
-  { id: "po3", creatorId: "c3", creatorName: "토끼방송국", creatorMeta: "@rabbit · 2시간 전", body: "오늘 저녁 8시 라이브 켜요! 놀러오세요 🐰", likeCount: 1204, commentCount: 1 },
-  { id: "po4", creatorId: "c2", creatorName: "Neon Beats", creatorMeta: "@neonbeats · 5시간 전", body: "새 EP 티저 공개 🎧", likeCount: 512, commentCount: 0 },
-  { id: "po5", creatorId: "c4", creatorName: "묘화가", creatorMeta: "@myo · 3일 전", body: "냥이 그림 모음집 작업 중 🐱", likeCount: 210, commentCount: 0 },
-  { id: "po6", creatorId: "c5", creatorName: "Studio Lumi", creatorMeta: "@lumi · 1주 전", body: "굿즈 재입고 안내드립니다.", likeCount: 88, commentCount: 0 },
-];
+// --- 커서 페이지네이션(R4-W1): 커서 인지 fetcher --------------------------------
+/**
+ * 커서 페이지 — 뷰/훅이 소비하는 언랩 형태(camelCase). 서버 `Paginated<T>`(next_cursor)에서
+ * items를 매핑하고 next_cursor→nextCursor로 좁힌다. 마지막 페이지·mock 폴백은 nextCursor=undefined.
+ */
+export interface Page<T> {
+  items: T[];
+  nextCursor?: string;
+}
 
-const COMMENTS: Comment[] = [
-  { id: "cm1", postId: "po1", author: "팬 하나", authorFallback: "팬", body: "응원합니다! 항상 잘 보고 있어요", createdAt: "2시간 전" },
-  { id: "cm2", postId: "po1", author: "루미덕후", authorFallback: "루", body: "다음 작품도 기대할게요 🙌", createdAt: "1시간 전" },
-  { id: "cm3", postId: "po2", author: "팬 셋", authorFallback: "팬", body: "신청 완료했어요!", createdAt: "20시간 전" },
-  { id: "cm4", postId: "po3", author: "토끼팬", authorFallback: "토", body: "기다렸어요!!", createdAt: "1시간 전" },
-];
+/** cursor + 추가 파라미터(creator_id 등)를 병합해 쿼리스트링 구성(빈 값은 생략). */
+function pageQuery(cursor?: string, ...extra: (string | false | undefined)[]): string {
+  const parts = [...extra, cursor ? `cursor=${encodeURIComponent(cursor)}` : undefined].filter(
+    (p): p is string => Boolean(p),
+  );
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
+/** 서버 Paginated 응답 → Page(매퍼 적용 + next_cursor 정규화). */
+function toPage<R, T>(raw: Paginated<R>, map: (r: R) => T): Page<T> {
+  return { items: raw.items.map(map), nextCursor: raw.next_cursor ?? undefined };
+}
+
+// --- 런타임 capability 플래그(ASS-287) — 서버 설정 단일 출처 ------------------
+/** 런타임 capability 플래그(camelCase) — 게이트된 흐름의 개방 여부. 서버 CapabilitiesResponse 미러. */
+export interface Capabilities {
+  /** 배송(굿즈) 결제 흐름 개방 여부(서버 ENABLE_SHIPPING_CHECKOUT). false면 배송 PII 폼에 도달시키지 않는다. */
+  shippingCheckoutAvailable: boolean;
+  /** mock 결제 흐름 개방 여부(서버 ENABLE_MOCK_PAYMENT). */
+  paymentAvailable: boolean;
+}
+type RawCapabilities = components["schemas"]["CapabilitiesResponse"];
+/**
+ * 런타임 capability — `GET /api/capabilities`(서버 설정 단일 출처, 웹이 플래그를 별도로 복제하지
+ * 않는다 → 서버와 드리프트 방지). mock 폴백(USE_API=false)은 게이트 닫힘으로 취급(fail-closed) —
+ * 실제로 일어날 수 없는 배송 결제를 mock에서 노출하지 않는다(방어심층).
+ */
+export async function getCapabilities(): Promise<Capabilities> {
+  if (USE_API) {
+    const raw = await apiFetch<RawCapabilities>("/capabilities");
+    return { shippingCheckoutAvailable: raw.shipping_checkout_available, paymentAvailable: raw.payment_available };
+  }
+  return { shippingCheckoutAvailable: false, paymentAvailable: false };
+}
 
 // --- 도메인 함수 (apiUrl 설정 시 실 B2 API, 아니면 mock 폴백) ----------------
 export async function getCreators(): Promise<Creator[]> {
   if (USE_API) return (await apiFetch<Paginated<RawCreator>>("/creators")).items.map(mapCreator);
   return CREATORS;
+}
+/**
+ * mock 크리에이터 서버 랭킹 근사(E11) — popular=팔로워 desc, new=배열 역순(최근 합류 근사, 기존
+ * 클라 `.reverse()`와 동일 의미론), recommended=팔로워 desc(목업엔 가입시각이 없어 동률 없음 →
+ * 서버 recommended(-followers,-created_at)와 동일 결과). sort 미지정은 원본 순서(handle 커서).
+ */
+function sortCreatorsMock(sort?: CreatorSort): Creator[] {
+  if (sort === "popular" || sort === "recommended") return [...CREATORS].sort((a, b) => b.followers - a.followers);
+  if (sort === "new") return [...CREATORS].reverse();
+  return CREATORS;
+}
+/**
+ * 크리에이터 커서 페이지 — 디스커버리 무한 로드(21번째+ 도달). `sort` 지정 시 서버 랭킹 단일
+ * 페이지(next_cursor 없음 — popular/new/recommended). mock은 단일 페이지(nextCursor 없음).
+ */
+export async function getCreatorsPage(cursor?: string, sort?: CreatorSort): Promise<Page<Creator>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, sort && `sort=${encodeURIComponent(sort)}`);
+    return toPage(await apiFetch<Paginated<RawCreator>>(`/creators${q}`), mapCreator);
+  }
+  return { items: sortCreatorsMock(sort) };
 }
 export async function getCreator(handle: string): Promise<Creator | undefined> {
   if (USE_API) {
@@ -209,7 +434,9 @@ export async function getCreator(handle: string): Promise<Creator | undefined> {
       throw e;
     }
   }
-  return CREATORS.find((c) => c.handle === handle);
+  // mock: 로컬 차단 상태를 반영(단건 blocked 코히어런스 — 정적 CREATORS는 불변 유지).
+  const found = CREATORS.find((c) => c.handle === handle);
+  return found ? { ...found, blocked: MOCK_BLOCKED.has(found.id) } : undefined;
 }
 export async function getProducts(creatorId?: string): Promise<Product[]> {
   if (USE_API) {
@@ -217,6 +444,14 @@ export async function getProducts(creatorId?: string): Promise<Product[]> {
     return (await apiFetch<Paginated<RawProduct>>(`/products${q}`)).items.map(mapProduct);
   }
   return creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS;
+}
+/** 상품 커서 페이지 — 스토어·디스커버리 무한 로드. mock은 단일 페이지(nextCursor 없음). */
+export async function getProductsPage(creatorId?: string, cursor?: string): Promise<Page<Product>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, creatorId && `creator_id=${encodeURIComponent(creatorId)}`);
+    return toPage(await apiFetch<Paginated<RawProduct>>(`/products${q}`), mapProduct);
+  }
+  return { items: creatorId ? PRODUCTS.filter((p) => p.creatorId === creatorId) : PRODUCTS };
 }
 export async function getMembershipTiers(creatorId?: string): Promise<MembershipTier[]> {
   if (USE_API) {
@@ -233,26 +468,103 @@ export async function getPosts(creatorId?: string): Promise<Post[]> {
   }
   return creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS;
 }
+/** 포스트 커서 페이지 — 크리에이터 포스트 무한 로드. mock은 단일 페이지. */
+export async function getPostsPage(creatorId?: string, cursor?: string): Promise<Page<Post>> {
+  if (USE_API) {
+    const q = pageQuery(cursor, creatorId && `creator_id=${encodeURIComponent(creatorId)}`);
+    return toPage(await apiFetch<Paginated<RawPost>>(`/posts${q}`), mapPost);
+  }
+  return { items: creatorId ? POSTS.filter((p) => p.creatorId === creatorId) : POSTS };
+}
+/**
+ * 스튜디오 오너 포스트 커서 페이지 — GET /studio/posts(fan_auth 오너 스코프). 공개 `/posts`와 달리
+ * 소비자 게이트(19+ 숨김)가 적용되지 않아 오너가 자신의 draft·19+ 포스트를 전부 본다.
+ * 401·403 모두 그대로 전파한다 — client.ts가 이미 401 refresh-and-retry를 하므로 여기 도달한
+ * 401은 회복 불가 세션(만료-잔존 쿠키)이다. 빈 페이지로 삼키면 "발행 포스트 없음"으로 오표시되므로,
+ * 호출측(StudioPostsPage)이 401=재로그인 안내·403(OwnerRequired)=크리에이터 안내로 분기 렌더한다.
+ * mock=데모 오너(c1: 별빛 일러스트) 목록.
+ */
+export async function getStudioPostsPage(cursor?: string): Promise<Page<Post>> {
+  if (USE_API) {
+    return toPage(await apiFetch<Paginated<RawPost>>(`/studio/posts${pageQuery(cursor)}`), mapPost);
+  }
+  return { items: POSTS.filter((p) => p.creatorId === "c1") };
+}
 /** 피드 — B2 `/feed` 소비(익명=최신 전체). B3 개인화(팔로잉) 피드의 배선 지점. */
 export async function getFeed(): Promise<Post[]> {
   if (USE_API) return (await apiFetch<Paginated<RawPost>>("/feed")).items.map(mapPost);
   return POSTS;
 }
-/** 검색 — B2 `/search?q=` 소비. mock 폴백은 서버 의미론(name/handle·title 부분일치, 10건)을 미러. */
-export async function getSearch(q: string): Promise<SearchResult> {
+/** 피드 커서 페이지 — 무한 로드. mock은 단일 페이지. */
+export async function getFeedPage(cursor?: string): Promise<Page<Post>> {
+  if (USE_API) return toPage(await apiFetch<Paginated<RawPost>>(`/feed${pageQuery(cursor)}`), mapPost);
+  return { items: POSTS };
+}
+const SEARCH_LIMIT_DEFAULT = 10;
+const SEARCH_LIMIT_MAX = 50;
+
+/** mock 크리에이터 매치 랭크 — 서버 match_rank(이름 완전일치→접두→포함→핸들→기타)를 근사. */
+function creatorMatchRank(c: Creator, t: string): number {
+  const name = c.name.toLowerCase();
+  if (name === t) return 0;
+  if (name.startsWith(t)) return 1;
+  if (name.includes(t)) return 2;
+  if (c.handle.toLowerCase().includes(t)) return 3;
+  return 4; // bio/category만 매치
+}
+/** mock 상품 매치 랭크 — 서버 match_rank(제목 접두→포함→기타)를 근사. */
+function productMatchRank(p: Product, t: string): number {
+  const title = p.title.toLowerCase();
+  if (title.startsWith(t)) return 0;
+  if (title.includes(t)) return 1;
+  return 2;
+}
+/**
+ * 검색 mock 폴백 — 서버 의미론 미러: 크리에이터는 name/handle/bio/category, 상품은
+ * title/meta/description 다필드 substring 매칭 + 랭킹(best match 먼저) + limit/offset 페이지네이션.
+ */
+function mockSearch(term: string, limit: number | undefined, offset: number): SearchResult {
+  const t = term.toLowerCase();
+  const size = Math.max(1, Math.min(limit ?? SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX));
+  const matchedCreators = CREATORS.filter(
+    (c) =>
+      c.name.toLowerCase().includes(t) ||
+      c.handle.toLowerCase().includes(t) ||
+      (c.bio?.toLowerCase().includes(t) ?? false) ||
+      (c.category?.toLowerCase().includes(t) ?? false),
+  ).sort((a, b) => creatorMatchRank(a, t) - creatorMatchRank(b, t) || b.followers - a.followers);
+  const matchedProducts = PRODUCTS.filter(
+    (p) =>
+      p.title.toLowerCase().includes(t) ||
+      (p.meta?.toLowerCase().includes(t) ?? false) ||
+      (p.description?.toLowerCase().includes(t) ?? false),
+  ).sort((a, b) => productMatchRank(a, t) - productMatchRank(b, t));
+  const more = matchedCreators.length > offset + size || matchedProducts.length > offset + size;
+  return {
+    creators: matchedCreators.slice(offset, offset + size),
+    products: matchedProducts.slice(offset, offset + size),
+    nextOffset: more ? offset + size : null,
+  };
+}
+/**
+ * 검색 — B2 `/search?q=&limit=&offset=` 소비(랭킹 + 페이지네이션). mock 폴백은 서버 의미론을 미러.
+ */
+export async function getSearch(q: string, opts: { limit?: number; offset?: number } = {}): Promise<SearchResult> {
   const term = q.trim();
   if (!term) return { creators: [], products: [] };
+  const offset = Math.max(0, opts.offset ?? 0);
   if (USE_API) {
-    const raw = await apiFetch<RawSearch>(`/search?q=${encodeURIComponent(term)}`);
-    return { creators: raw.creators.map(mapCreator), products: raw.products.map(mapProductBrief) };
+    const params = [`q=${encodeURIComponent(term)}`];
+    if (opts.limit != null) params.push(`limit=${opts.limit}`);
+    if (offset) params.push(`offset=${offset}`);
+    const raw = await apiFetch<RawSearch>(`/search?${params.join("&")}`);
+    return {
+      creators: raw.creators.map(mapCreator),
+      products: raw.products.map(mapProductBrief),
+      nextOffset: raw.next_offset ?? null,
+    };
   }
-  const t = term.toLowerCase();
-  return {
-    creators: CREATORS.filter(
-      (c) => c.name.toLowerCase().includes(t) || c.handle.toLowerCase().includes(t),
-    ).slice(0, 10),
-    products: PRODUCTS.filter((p) => p.title.toLowerCase().includes(t)).slice(0, 10),
-  };
+  return mockSearch(term, opts.limit, offset);
 }
 export async function getPost(id: string): Promise<Post | undefined> {
   if (USE_API) {
@@ -272,4 +584,656 @@ export async function getComments(postId: string): Promise<Comment[]> {
     return (await apiFetch<Paginated<RawComment>>(path)).items.map(mapComment);
   }
   return COMMENTS.filter((c) => c.postId === postId);
+}
+/** 댓글 커서 페이지 — 포스트 상세 무한 로드. mock은 단일 페이지. */
+export async function getCommentsPage(postId: string, cursor?: string): Promise<Page<Comment>> {
+  if (USE_API) {
+    const path = `/posts/${encodeURIComponent(postId)}/comments${pageQuery(cursor)}`;
+    return toPage(await apiFetch<Paginated<RawComment>>(path), mapComment);
+  }
+  return { items: COMMENTS.filter((c) => c.postId === postId) };
+}
+
+/**
+ * 단일 상품 — USE_API면 `GET /products/{id}`(ProductOut) 단건 조회(404/422→undefined),
+ * 아니면 목록에서 id로 find 폴백. 확장 필드(options/description/stock/soldOut/locked/creatorName)는
+ * 서버 계약(B4)에 포함되어 라이브·mock 양쪽에서 동일하게 흐른다.
+ */
+export async function getProduct(id: string): Promise<Product | undefined> {
+  if (USE_API) {
+    try {
+      return mapProduct(await apiFetch<RawProduct>(`/products/${encodeURIComponent(id)}`));
+    } catch (e) {
+      // 404(없음) + 422(잘못된 식별자) 모두 undefined로 → notFound() 계약.
+      if (e instanceof ApiError && (e.status === 404 || e.status === 422)) return undefined;
+      throw e;
+    }
+  }
+  const list = await getProducts();
+  return list.find((p) => p.id === id);
+}
+
+/** 주문 목록 — USE_API면 커서 페이지 소비, 아니면 mock. SSR 401(비로그인)은 빈 목록. */
+export async function getOrders(): Promise<Order[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<Paginated<RawOrder>>("/orders")).items.map(mapOrder);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return ORDERS;
+}
+/** 주문 커서 페이지 — 무한 로드. 401(비로그인)은 빈 단일 페이지. mock은 단일 페이지. */
+export async function getOrdersPage(cursor?: string): Promise<Page<Order>> {
+  if (USE_API) {
+    try {
+      return toPage(await apiFetch<Paginated<RawOrder>>(`/orders${pageQuery(cursor)}`), mapOrder);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: ORDERS };
+}
+/**
+ * 단일 주문 — USE_API면 실 조회. 미지의 id/잘못된 식별자(404·422)만 undefined(notFound 계약).
+ * 401(세션 만료)은 삼키지 않고 전파한다 — 만료된 access를 가짜 404로 오변환하면 안 되기 때문(SSR-401≠404).
+ * 클라이언트에서는 client.ts가 401 refresh-and-retry를 하므로, 여기 도달한 401은 회복 불가 세션이다.
+ */
+export async function getOrder(id: string): Promise<Order | undefined> {
+  if (USE_API) {
+    try {
+      return mapOrder(await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(id)}`));
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 404 || e.status === 422)) return undefined;
+      throw e;
+    }
+  }
+  return ORDERS.find((o) => o.id === id);
+}
+/** 알림 목록 — USE_API면 커서 페이지 소비, 아니면 mock. SSR 401(비로그인)은 빈 목록. */
+export async function getNotifications(): Promise<Notification[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<Paginated<RawNotification>>("/notifications")).items.map(mapNotification);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return NOTIFICATIONS;
+}
+/** 알림 커서 페이지 — 무한 로드. 401(비로그인)은 빈 단일 페이지. mock은 단일 페이지. */
+export async function getNotificationsPage(cursor?: string): Promise<Page<Notification>> {
+  if (USE_API) {
+    try {
+      const raw = await apiFetch<Paginated<RawNotification>>(`/notifications${pageQuery(cursor)}`);
+      return toPage(raw, mapNotification);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { items: [] };
+      throw e;
+    }
+  }
+  return { items: NOTIFICATIONS };
+}
+/** 구독 목록 — USE_API면 실 조회(배열 응답), 아니면 mock. SSR 401(비로그인)은 빈 목록. */
+export async function getSubscriptions(): Promise<Subscription[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawSubscription[]>("/subscriptions")).map(mapSubscription);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return SUBSCRIPTIONS;
+}
+/** 내 차단 목록 — USE_API면 GET /fan/blocks, 아니면 mock 로컬 상태. 401(비로그인)은 빈 목록. */
+export async function getBlocks(): Promise<BlockedCreator[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawBlockedCreator[]>("/fan/blocks")).map(mapBlockedCreator);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return CREATORS.filter((c) => MOCK_BLOCKED.has(c.id)).map((c) => ({
+    creatorId: c.id,
+    name: c.name,
+    handle: c.handle,
+  }));
+}
+
+/** 내 마케팅 수신 동의(채널별, D8) — USE_API면 GET /fan/marketing, 401(비로그인)은 전부 off(fail-closed). */
+export async function getMarketingConsent(): Promise<MarketingConsentState> {
+  if (USE_API) {
+    try {
+      const raw = await apiFetch<components["schemas"]["MarketingConsentOut"]>("/fan/marketing");
+      return { push: raw.push, sms: raw.sms, email: raw.email };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return { push: false, sms: false, email: false };
+      throw e;
+    }
+  }
+  // mock 폴백(오프라인·데모): 서버가 없어 저장되지 않으니 전부 off로 시작한다.
+  return { push: false, sms: false, email: false };
+}
+
+/** 마케팅 수신 동의 저장 — PUT /fan/marketing(채널 전체 상태). mock은 입력을 그대로 반영(비영속). */
+export async function setMarketingConsent(
+  state: MarketingConsentState,
+): Promise<MarketingConsentState> {
+  if (USE_API) {
+    const raw = await apiFetch<components["schemas"]["MarketingConsentOut"]>("/fan/marketing", {
+      method: "PUT",
+      body: JSON.stringify(state satisfies components["schemas"]["MarketingConsentIn"]),
+    });
+    return { push: raw.push, sms: raw.sms, email: raw.email };
+  }
+  return state;
+}
+
+// --- 뮤테이션 API(실 호출 전용 — queries.ts가 USE_API로 분기해 호출) ----------
+/** 팔로우 토글 — next=true PUT, false DELETE → {following, followers}. */
+export function apiToggleFollow(handle: string, next: boolean): Promise<FollowResult> {
+  return apiFetch<FollowResult>(`/creators/${encodeURIComponent(handle)}/follow`, {
+    method: next ? "PUT" : "DELETE",
+  });
+}
+/** 좋아요 토글 — next=true PUT, false DELETE → {liked, like_count}. */
+export function apiToggleLike(id: string, next: boolean): Promise<LikeResult> {
+  return apiFetch<LikeResult>(`/posts/${encodeURIComponent(id)}/like`, {
+    method: next ? "PUT" : "DELETE",
+  });
+}
+/** 댓글 작성 → 201 Comment. */
+export async function apiAddComment(postId: string, body: string): Promise<Comment> {
+  const raw = await apiFetch<RawComment>(`/posts/${encodeURIComponent(postId)}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+  return mapComment(raw);
+}
+/**
+ * 주문 생성(mock 결제 확정 — 실 PG·금액이동 없음) → 201 Order.
+ * 배송 상품(굿즈)이면 shipping(배송지)을 함께 전송한다 — 누락 시 서버 422 ShippingAddressRequired.
+ */
+export async function apiCreateOrder(input: {
+  productId: string;
+  qty: number;
+  option?: string;
+  shipping?: ShippingAddress;
+  idempotencyKey?: string;
+}): Promise<Order> {
+  const raw = await apiFetch<RawOrderDetail>("/orders", {
+    method: "POST",
+    body: JSON.stringify(orderInBody(input)),
+  });
+  return mapOrder(raw);
+}
+/** CreateOrderIn wire 바디(snake_case) — 유료(/orders)·무료(/orders/free) 공용 계약. */
+function orderInBody(input: {
+  productId: string;
+  qty: number;
+  option?: string;
+  shipping?: ShippingAddress;
+  idempotencyKey?: string;
+}) {
+  return {
+    product_id: input.productId,
+    qty: input.qty,
+    option: input.option,
+    shipping: input.shipping
+      ? {
+          recipient_name: input.shipping.recipientName,
+          recipient_phone: input.shipping.recipientPhone,
+          postal_code: input.shipping.postalCode,
+          address1: input.shipping.address1,
+          address2: input.shipping.address2,
+        }
+      : undefined,
+    idempotency_key: input.idempotencyKey,
+  };
+}
+/**
+ * 무료 상품 획득(ASS-297) — 결제 없이 `POST /api/orders/free`(pricing_kind=free 전용). 바디는
+ * apiCreateOrder와 동일한 CreateOrderIn. 배송·품절·차단 등 비결제 게이트는 유료 경로와 동일하게
+ * 적용된다(무료는 결제만 뺀다). 유료 상품엔 서버가 422 PricingNotFree, 유료 경로에 무료 상품이면
+ * 422 PricingIsFree로 거부한다.
+ */
+export async function apiCreateOrderFree(input: {
+  productId: string;
+  qty: number;
+  option?: string;
+  shipping?: ShippingAddress;
+}): Promise<Order> {
+  const raw = await apiFetch<RawOrderDetail>("/orders/free", {
+    method: "POST",
+    body: JSON.stringify(orderInBody(input)),
+  });
+  return mapOrder(raw);
+}
+/** 주문 취소(paid/shipping) → Order. */
+export async function apiCancelOrder(id: string): Promise<Order> {
+  return mapOrder(await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(id)}/cancel`, { method: "POST" }));
+}
+/** 환불 신청(shipping/completed) → refund 임베드 포함 Order. */
+export async function apiRequestRefund(input: { id: string; reason: string; detail?: string }): Promise<Order> {
+  const raw = await apiFetch<RawOrderDetail>(`/orders/${encodeURIComponent(input.id)}/refund`, {
+    method: "POST",
+    body: JSON.stringify({ reason: input.reason, detail: input.detail }),
+  });
+  return mapOrder(raw);
+}
+/** 구독 시작(mock-paid) → 201 Subscription. */
+export async function apiSubscribe(tierId: string): Promise<Subscription> {
+  const raw = await apiFetch<RawSubscription>("/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({ tier_id: tierId }),
+  });
+  return mapSubscription(raw);
+}
+/**
+ * 무료 멤버십 가입(ASS-297) — 결제 없이 `POST /api/subscriptions/free`(pricing_kind=free 전용).
+ * 바디는 apiSubscribe와 동일한 SubscribeIn({tier_id}). 무료 멤버십은 결제 앵커가 없어
+ * next_billing_date=null이고 유료로 자동 전환되지 않는다. 유료 티어엔 422 PricingNotFree,
+ * 유료 경로에 무료 티어면 422 PricingIsFree로 거부한다.
+ */
+export async function apiSubscribeFree(tierId: string): Promise<Subscription> {
+  const raw = await apiFetch<RawSubscription>("/subscriptions/free", {
+    method: "POST",
+    body: JSON.stringify({ tier_id: tierId }),
+  });
+  return mapSubscription(raw);
+}
+/** 구독 해지(말일 해지 — status=active 유지 + cancel_scheduled) → Subscription. */
+export async function apiCancelSubscription(id: string): Promise<Subscription> {
+  return mapSubscription(
+    await apiFetch<RawSubscription>(`/subscriptions/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  );
+}
+/**
+ * 구독 티어 전환(업/다운그레이드) — PATCH /subscriptions/{id} {tier_id} → Subscription.
+ * 같은 크리에이터의 active 티어만 가능(다른 크리에이터/비활성/미지 티어=422 TierNotFound),
+ * 비활성 구독은 전환 불가(422 SubscriptionNotActive), 현재 티어로의 전환은 200 no-op(멱등).
+ */
+export async function apiChangeSubscriptionTier(id: string, tierId: string): Promise<Subscription> {
+  return mapSubscription(
+    await apiFetch<RawSubscription>(`/subscriptions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tier_id: tierId }),
+    }),
+  );
+}
+/** 알림 읽음 → Notification. */
+export async function apiMarkNotificationRead(id: string): Promise<Notification> {
+  return mapNotification(
+    await apiFetch<RawNotification>(`/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+  );
+}
+/** 알림 모두 읽음 → 갱신 건수. */
+export function apiMarkAllNotificationsRead(): Promise<{ updated: number }> {
+  return apiFetch<{ updated: number }>("/notifications/read-all", { method: "POST" });
+}
+/** 팬 신고 접수(운영자용 /safety/reports 아님) → 접수 결과. */
+export async function apiReport(input: { reportType: string; narrative?: string }): Promise<ReportResult> {
+  const raw = await apiFetch<{ safety_report_id: string; status: string; created_at: string }>(
+    "/safety/fan-reports",
+    { method: "POST", body: JSON.stringify({ report_type: input.reportType, narrative: input.narrative }) },
+  );
+  return { safetyReportId: raw.safety_report_id, status: raw.status, createdAt: raw.created_at };
+}
+/**
+ * 크리에이터 차단 — POST /fan/blocks {creator_id} → {blocked, creator_id}(멱등).
+ * 부수효과: 서버가 자동 언팔로우(팔로우 파생 노출 제거). 404=BlockTargetNotFound.
+ */
+export async function apiBlockCreator(creatorId: string): Promise<BlockResult> {
+  const raw = await apiFetch<{ blocked: boolean; creator_id: string }>("/fan/blocks", {
+    method: "POST",
+    body: JSON.stringify({ creator_id: creatorId }),
+  });
+  return { blocked: raw.blocked, creatorId: raw.creator_id };
+}
+/** 크리에이터 차단 해제 — DELETE /fan/blocks/{creator_id} → {blocked, creator_id}(멱등). */
+export async function apiUnblockCreator(creatorId: string): Promise<BlockResult> {
+  const raw = await apiFetch<{ blocked: boolean; creator_id: string }>(
+    `/fan/blocks/${encodeURIComponent(creatorId)}`,
+    { method: "DELETE" },
+  );
+  return { blocked: raw.blocked, creatorId: raw.creator_id };
+}
+/** 포스트 발행(크리에이터 오너만 — 403 시 안내) → 201 Post. is_adult=19+ 성인 등급(서버가 노출 통제). */
+export async function apiPublishPost(input: { body: string; mediaUrl?: string; isAdult?: boolean }): Promise<Post> {
+  const raw = await apiFetch<RawPost>("/posts", {
+    method: "POST",
+    body: JSON.stringify({ body: input.body, media_url: input.mediaUrl, is_adult: input.isAdult ?? false }),
+  });
+  return mapPost(raw);
+}
+/** 포스트 부분 수정 입력(W1A: PATCH /posts/{id}) — 제공한 필드만 반영. */
+export interface PostUpdate {
+  body?: string;
+  mediaUrl?: string;
+  isAdult?: boolean;
+}
+/**
+ * 포스트 수정 — PATCH /posts/{id}(body/media_url/is_adult 부분 수정). 오너만 가능하며
+ * 비오너/미지 id는 서버가 404(no-leak). undefined 필드는 JSON.stringify가 제거 → 서버 무변경.
+ */
+export async function apiUpdatePost(id: string, patch: PostUpdate): Promise<Post> {
+  const raw = await apiFetch<RawPost>(`/posts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ body: patch.body, media_url: patch.mediaUrl, is_adult: patch.isAdult }),
+  });
+  return mapPost(raw);
+}
+/** 포스트 삭제 — DELETE /posts/{id}. 오너만 가능(비오너/미지 id는 404 no-leak). */
+export async function apiDeletePost(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/posts/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+// --- R12: 이미지 업로드(포스트·상품·아바타 media_url 소스) ----------------------
+/**
+ * 이미지 업로드 — USE_API면 `POST /api/uploads`에 multipart(`file` 필드)로 전송하고 서버가 검증·저장 후
+ * 반환하는 `{url}`(=`/media/uploads/<uuid>.<ext>`)을 그대로 media_url로 쓴다. apiFetch가 FormData 바디를
+ * 감지하면 JSON Content-Type을 생략해 boundary가 살아있고, 쿠키/CSRF/401 재발급은 다른 뮤테이션과 동일 적용된다.
+ * 실패는 서버 `{detail, code}`가 담긴 ApiError로 전파(415·413·422·503) → 호출측이 apiErrorMessage로 안내한다.
+ *
+ * mock 폴백(USE_API=false)은 실 업로드 없이 로컬 objectURL(미리보기용)만 반환한다 — 번들 격리 규율상
+ * 라이브 빌드에선 이 분기가 DCE되고, mock 발행(apiPublishPost)도 실제 저장이 없어 objectURL로 충분하다.
+ */
+export async function apiUpload(file: File): Promise<{ url: string }> {
+  if (USE_API) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<{ url: string }>("/uploads", { method: "POST", body: form });
+  }
+  // mock: 실 저장 없이 미리보기용 URL. objectURL 미가용(테스트/SSR 등)이면 플레이스홀더로 폴백.
+  const url =
+    typeof URL !== "undefined" && typeof URL.createObjectURL === "function"
+      ? URL.createObjectURL(file)
+      : "/media/uploads/mock-placeholder.png";
+  return { url };
+}
+
+// --- 게이트 기능(R3): KYC 본인인증 -------------------------------------------
+/**
+ * 본인인증 시작(mock) — 서버 verifier 미배선 시 503. 성공은 pending 전이만 기록(PII 무전송).
+ * ※실 provider(PASS/NICE/KCB) 연동은 명시적 게이트(대표·법무).
+ */
+export function apiStartVerify(): Promise<void> {
+  return apiFetch<void>("/fan/verify/start", { method: "POST" });
+}
+/** 본인인증 확인(mock) → 파생 플래그만 반환(주민번호/CI/DI/생년월일 미수신·미저장). */
+export async function apiConfirmVerify(): Promise<{ adultVerified: boolean; kycStatus: string }> {
+  const raw = await apiFetch<{ adult_verified: boolean; kyc_status: string }>("/fan/verify/confirm", {
+    method: "POST",
+  });
+  return { adultVerified: raw.adult_verified, kycStatus: raw.kyc_status };
+}
+
+// --- 이메일/비밀번호 인증(B1: 폰 OTP 대체) -----------------------------------
+/**
+ * 이메일 가입 — POST /fan/signup/email. 토큰/쿠키 미발급(가입은 인증 메일 발송까지 —
+ * 로그인은 verify-email에서 이뤄진다). 반환 verification_token은 dev/test(EMAIL_VERIFY_RETURN_TOKEN)
+ * 에서만 비어있지 않다("" on prod). 실패: 503 EmailUnavailable·409 EmailAlreadyRegistered·422(동의/나이/비밀번호 길이).
+ */
+export async function apiSignupEmail(input: {
+  email: string;
+  password: string;
+  nickname: string;
+  consentTerms: boolean;
+  consentPrivacy: boolean;
+  ageOver14: boolean;
+  marketingConsent: boolean;
+}): Promise<{ status: string; verificationToken: string }> {
+  const raw = await apiFetch<{ status: string; verification_token: string }>("/fan/signup/email", {
+    method: "POST",
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      nickname: input.nickname,
+      consent_terms: input.consentTerms,
+      consent_privacy: input.consentPrivacy,
+      age_over_14: input.ageOver14,
+      marketing_consent: input.marketingConsent,
+    }),
+  });
+  return { status: raw.status, verificationToken: raw.verification_token };
+}
+/**
+ * 이메일 로그인 — POST /fan/login/email {web:true}(httpOnly assen_access 쿠키 세션). 실패:
+ * 422 InvalidCredentials(이메일·비밀번호 오류 비구분)·403 EmailNotVerified(인증 미완료).
+ */
+export async function apiLoginEmail(input: { email: string; password: string }): Promise<void> {
+  await apiFetch<void>("/fan/login/email", {
+    method: "POST",
+    body: JSON.stringify({ email: input.email, password: input.password, web: true }),
+  });
+}
+/**
+ * 이메일 인증 확인 — POST /fan/verify-email {web:true}. 성공 시 쿠키 세션이 발급되어 로그인 상태가 된다.
+ * 실패: 400 EmailVerificationInvalid(위조·만료·불일치 토큰).
+ */
+export async function apiVerifyEmail(token: string): Promise<void> {
+  await apiFetch<void>("/fan/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token, web: true }),
+  });
+}
+
+// --- 게이트 기능(R3): 계정 수정 ----------------------------------------------
+/** 내 프로필 수정 — nickname만(이메일/전화는 재인증 게이트). 세션 무효화는 호출측(useUpdateMe). */
+export async function apiUpdateMe(nickname: string): Promise<void> {
+  await apiFetch("/fan/me", { method: "PATCH", body: JSON.stringify({ nickname }) });
+}
+
+// --- R4-W5: 스튜디오 대시보드 실 카운트(오너 스코프) -------------------------
+/**
+ * 스튜디오 대시보드 실 카운트 — USE_API면 GET /studio/stats(StudioStatsOut) 소비.
+ * 401(비로그인)/403(OwnerRequired, 비크리에이터)은 null(방어적 — 호출측이 빈 상태/안내 렌더).
+ * mock 폴백은 결정적 카운트(STUDIO_STATS). 서버 계약에 수익/금액은 없다(정산 게이트).
+ */
+export async function getStudioStats(): Promise<StudioStats | null> {
+  if (USE_API) {
+    try {
+      return mapStudioStats(await apiFetch<RawStudioStats>("/studio/stats"));
+    } catch (e) {
+      // 비크리에이터(403)·비로그인(401)은 통계 없음 → null(카운트를 0으로 날조하지 않는다).
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
+      throw e;
+    }
+  }
+  return STUDIO_STATS;
+}
+
+// --- ASS-289(#5): 스튜디오 재무(정산·애널리틱스) 데모 데이터 접근 ------------------
+export type { SettlementRow, AnalyticsPoint } from "@/lib/studio-mock-finance";
+/**
+ * 정산 데모 행 — 서버가 정산/수익 금액을 제공하는 계약이 없으므로(정산 게이트) 라이브(USE_API)에선
+ * null을 반환한다(클라이언트가 금액을 날조하지 않는다 → 호출측이 "준비 중" 렌더). mock 폴백에서만
+ * placeholder 정산표를 반환한다. 라이브 빌드에선 이 else 참조가 데드코드가 되어 studio-mock-finance가
+ * 트리셰이킹된다(mock/data.ts와 동일 규율).
+ */
+export function getSettlementDemoRows(): SettlementRow[] | null {
+  if (USE_API) return null;
+  return SETTLEMENT_ROWS;
+}
+/**
+ * 애널리틱스 데모 시계열 — 서버가 수익/구독자 시계열 계약을 제공하지 않으므로 라이브에선 null(→ "준비 중").
+ * mock 폴백에서만 placeholder 시계열을 반환한다. 라이브 빌드에서 트리셰이킹되는 것은 위와 동일.
+ */
+export function getAnalyticsDemoSeries(): AnalyticsPoint[] | null {
+  if (USE_API) return null;
+  return ANALYTICS_SERIES;
+}
+
+// --- 게이트 기능(R3): 스튜디오 카탈로그 쓰기(오너 스코프) ---------------------
+/** 오너 상품 목록 — 관리 필드 포함(draft/hidden·19+ 포함). 401/403(크리에이터 아님)은 빈 목록. */
+export async function getStudioProducts(): Promise<StudioProduct[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawStudioProduct[]>("/studio/products")).map(mapStudioProduct);
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return [];
+      throw e;
+    }
+  }
+  return STUDIO_PRODUCTS;
+}
+/** 상품 생성 입력(가격은 크리에이터 표시가 — 정산가 아님). */
+export interface StudioProductCreate {
+  type: StudioProduct["type"];
+  title: string;
+  price: number;
+  description?: string;
+  status?: ProductStatus;
+  /** 가격 종류(기본 "paid") — "free"면 서버가 0원을 강제(PricingFreeRequiresZeroPrice). */
+  pricingKind?: "paid" | "free";
+}
+/** 상품 수정 입력 — 제공한 필드만 반영(PATCH). */
+export interface StudioProductUpdate {
+  type?: StudioProduct["type"];
+  title?: string;
+  price?: number;
+  status?: ProductStatus;
+  stock?: number | null;
+  pricingKind?: "paid" | "free";
+}
+export async function apiCreateStudioProduct(input: StudioProductCreate): Promise<StudioProduct> {
+  const raw = await apiFetch<RawStudioProduct>("/studio/products", {
+    method: "POST",
+    body: JSON.stringify({
+      type: input.type,
+      title: input.title,
+      price: input.price,
+      description: input.description ?? "",
+      status: input.status ?? "draft",
+      pricing_kind: input.pricingKind ?? "paid",
+    }),
+  });
+  return mapStudioProduct(raw);
+}
+export async function apiUpdateStudioProduct(id: string, patch: StudioProductUpdate): Promise<StudioProduct> {
+  const raw = await apiFetch<RawStudioProduct>(`/studio/products/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    // undefined 필드는 JSON.stringify가 제거 → 미제공 필드는 서버에서 무변경.
+    body: JSON.stringify({ type: patch.type, title: patch.title, price: patch.price, status: patch.status, stock: patch.stock, pricing_kind: patch.pricingKind }),
+  });
+  return mapStudioProduct(raw);
+}
+export async function apiDeleteStudioProduct(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/studio/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** 오너 티어 목록 — active/비활성 모두 포함. 401/403은 빈 목록. */
+export async function getStudioTiers(): Promise<StudioTier[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawStudioTier[]>("/studio/tiers")).map(mapStudioTier);
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return [];
+      throw e;
+    }
+  }
+  return STUDIO_TIERS;
+}
+export interface StudioTierCreate {
+  name: string;
+  price: number;
+  benefits: string[];
+  /** 가격 종류(기본 "paid") — "free"면 서버가 0원을 강제(PricingFreeRequiresZeroPrice). */
+  pricingKind?: "paid" | "free";
+}
+export interface StudioTierUpdate {
+  name?: string;
+  price?: number;
+  benefits?: string[];
+  active?: boolean;
+  pricingKind?: "paid" | "free";
+}
+export async function apiCreateStudioTier(input: StudioTierCreate): Promise<StudioTier> {
+  const raw = await apiFetch<RawStudioTier>("/studio/tiers", {
+    method: "POST",
+    body: JSON.stringify({ name: input.name, price: input.price, benefits: input.benefits, pricing_kind: input.pricingKind ?? "paid" }),
+  });
+  return mapStudioTier(raw);
+}
+export async function apiUpdateStudioTier(id: string, patch: StudioTierUpdate): Promise<StudioTier> {
+  const raw = await apiFetch<RawStudioTier>(`/studio/tiers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name: patch.name, price: patch.price, benefits: patch.benefits, active: patch.active, pricing_kind: patch.pricingKind }),
+  });
+  return mapStudioTier(raw);
+}
+export async function apiDeleteStudioTier(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/studio/tiers/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** 스튜디오 프로필 수정(오너 스코프) → 갱신된 Creator. */
+export interface StudioProfileUpdate {
+  name?: string;
+  bio?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  accentColor?: string;
+  category?: string;
+}
+export async function apiUpdateStudioProfile(input: StudioProfileUpdate): Promise<Creator> {
+  const raw = await apiFetch<RawCreator>("/studio/profile", {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: input.name,
+      bio: input.bio,
+      avatar_url: input.avatarUrl,
+      cover_url: input.coverUrl,
+      accent_color: input.accentColor,
+      category: input.category,
+    }),
+  });
+  return mapCreator(raw);
+}
+
+// --- 게이트 기능(R3): 결제수단(mock PG) --------------------------------------
+/**
+ * mock PG 토큰 — 실 PG SDK가 카드번호를 클라에서 토큰화하는 자리(자리표시).
+ * ★PCI(R4): raw 카드번호(PAN)/CVC는 이 경로로 서버에 절대 전송되지 않는다. 서버는 토큰
+ * 끝 4자리로 last4만 파생하고 나머지는 폐기한다.
+ */
+function mockPgToken(): string {
+  const last4 = String(1000 + Math.floor(Math.random() * 9000));
+  return `pg_mock_tok_${last4}`;
+}
+/** 내 결제수단 목록(최신순). 401(비로그인)은 빈 목록. */
+export async function getPaymentMethods(): Promise<SavedPaymentMethod[]> {
+  if (USE_API) {
+    try {
+      return (await apiFetch<RawPaymentMethod[]>("/fan/payment-methods")).map(mapPaymentMethod);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return [];
+      throw e;
+    }
+  }
+  return PAYMENT_METHODS;
+}
+/** 결제수단 등록 — brand + mock PG 토큰만 전송(raw PAN/CVC 미전송·PCI). */
+export async function apiAddPaymentMethod(input: { brand: string; makePrimary?: boolean }): Promise<SavedPaymentMethod> {
+  const raw = await apiFetch<RawPaymentMethod>("/fan/payment-methods", {
+    method: "POST",
+    body: JSON.stringify({ brand: input.brand, card_number: mockPgToken(), make_primary: input.makePrimary ?? false }),
+  });
+  return mapPaymentMethod(raw);
+}
+/** 기본 결제수단 지정 → 갱신된 결제수단. */
+export async function apiSetPrimaryPaymentMethod(id: string): Promise<SavedPaymentMethod> {
+  return mapPaymentMethod(
+    await apiFetch<RawPaymentMethod>(`/fan/payment-methods/${encodeURIComponent(id)}/primary`, { method: "POST" }),
+  );
+}
+/** 결제수단 삭제. */
+export async function apiRemovePaymentMethod(id: string): Promise<void> {
+  await apiFetch<{ status: string }>(`/fan/payment-methods/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

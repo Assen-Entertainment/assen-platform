@@ -11,20 +11,19 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date as date_cls
 from datetime import datetime
-from typing import cast
 
 from django.http import HttpRequest
 from django.utils import timezone
 from ninja import Router, Schema
-from ninja.errors import HttpError
 
 from apps.admin_rbac.permissions import operator_required
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.dashboard.metrics import month_bounds, operator_kpi_metrics
 from apps.event_log.services import daily_metrics
-from apps.identity.models import Account
+from apps.identity.auth import authed
 from config.api import api
+from config.errors import ApiError, ErrorCode
 
 router = Router(auth=operator_required, tags=["operator-dashboard"])
 
@@ -50,7 +49,7 @@ def get_dashboard(request: HttpRequest, date: date_cls | None = None) -> Dashboa
     day = date or timezone.localdate()
     metrics = daily_metrics(day=day)
     record_audit(
-        actor=cast(Account, request.auth),  # type: ignore[attr-defined]
+        actor=authed(request),
         action=AuditAction.DASHBOARD_VIEWED.value,
         # target is the accessed subject (the dashboard); the viewed day is data.
         target="operator_dashboard",
@@ -128,11 +127,13 @@ def get_metrics(
         else month_end
     )
     if period_end <= period_start:
-        raise HttpError(422, "end must be after start.")
+        raise ApiError(
+            422, "end must be after start.", code=ErrorCode.DATE_RANGE_INVALID
+        )
 
     metrics = operator_kpi_metrics(period_start=period_start, period_end=period_end)
     record_audit(
-        actor=cast(Account, request.auth),  # type: ignore[attr-defined]
+        actor=authed(request),
         action=AuditAction.DASHBOARD_VIEWED.value,
         target="operator_metrics",
         metadata={

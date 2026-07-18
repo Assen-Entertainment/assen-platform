@@ -9,7 +9,7 @@ import 'package:ui_kit/src/atoms/button.dart';
 /// blocking confirm for a single decision (e.g. 예약을 취소할까요?). It is a white
 /// card (`RadiusTokens.xl`) holding a [title], an optional [message] and one or
 /// two [AssenButton] actions. A [destructive] confirm swaps the primary to the
-/// error rose so irreversible actions read as such (tokens.md §1 — colour plus
+/// error red so irreversible actions read as such (tokens.md §1 — colour plus
 /// label, never colour alone).
 ///
 /// Present it with [AssenDialog.show].
@@ -48,7 +48,7 @@ class AssenDialog extends StatelessWidget {
   /// The cancel handler.
   final VoidCallback? onCancel;
 
-  /// Whether the confirm is a destructive/irreversible action (error rose).
+  /// Whether the confirm is a destructive/irreversible action (error red).
   final bool destructive;
 
   /// Presents [dialog] as an Assen-styled modal dialog.
@@ -77,14 +77,14 @@ class AssenDialog extends StatelessWidget {
       onPressed: onConfirm,
       expand: true,
     );
-    // Destructive confirms wear the error rose. Overriding the AssenColors
-    // extension's action anchor (roseMain) in this subtree recolours the
+    // Destructive confirms wear the error red. Overriding the AssenColors
+    // extension's action anchor (indigo500) in this subtree recolours the
     // primary AssenButton without a new style enum (single use; tokens.md §1 —
     // irreversible actions also carry the cancel label, never colour alone).
     final confirm = destructive
         ? Theme(
             data: Theme.of(context).copyWith(
-              extensions: [colors.copyWith(roseMain: colors.redMain)],
+              extensions: [colors.copyWith(indigo500: colors.redMain)],
             ),
             child: confirmButton,
           )
@@ -122,7 +122,7 @@ class AssenDialog extends StatelessWidget {
                 style: TextStyle(
                   fontSize: TypographyTokens.bodyMSize,
                   height: 1.5,
-                  color: colors.ink700,
+                  color: colors.ink600,
                 ),
               ),
             ],

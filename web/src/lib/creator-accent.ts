@@ -107,6 +107,17 @@ export function bestOn(accent: string): string {
   return contrastRatio("#ffffff", accent) >= contrastRatio("#000000", accent) ? "#ffffff" : "#000000";
 }
 
+/**
+ * hover 색조 시프트 — 명도를 텍스트(onAccent)와 반대 방향으로 amount 만큼 이동해 톤을 심화한다.
+ * 텍스트에서 멀어지는 방향이라 hover 시 텍스트 대비가 (감소하지 않고) 유지·상승 → AA 보존.
+ * primary 정적 토큰(indigo.hover, -8% darken)과 같은 언어의 런타임 파생.
+ */
+export function hoverShift(accent: string, onAccent: string, amount = 0.08): string {
+  const { h, s, l } = rgbToHsl(hexToRgb(accent));
+  const darken = onAccent === "#ffffff"; // 흰 텍스트(어두운 accent) → 더 어둡게, 검은 텍스트 → 더 밝게
+  return rgbToHex(hslToRgb({ h, s, l: clamp(darken ? l - amount : l + amount) }));
+}
+
 /** base 색을 surface 에 ratio 만큼 섞기. */
 function mix(base: string, surface: string, ratio: number): string {
   const a = hexToRgb(base), b = hexToRgb(surface);
@@ -119,6 +130,7 @@ function mix(base: string, surface: string, ratio: number): string {
 
 export interface CreatorAccent {
   accent: string;
+  accentHover: string;
   onAccent: string;
   accentContainer: string;
   onAccentContainer: string;
@@ -128,9 +140,11 @@ export interface CreatorAccent {
 export function creatorAccentFromBase(base: string, surface = "#ffffff"): CreatorAccent {
   const accent = ensureContrast(base, surface, AA_UI);
   const accentContainer = mix(base, surface, 0.12);
+  const onAccent = bestOn(accent);
   return {
     accent,
-    onAccent: bestOn(accent),
+    accentHover: hoverShift(accent, onAccent),
+    onAccent,
     accentContainer,
     onAccentContainer: ensureContrast(base, accentContainer, AA_TEXT),
   };
@@ -145,6 +159,7 @@ export function creatorAccentVars(
   const a = creatorAccentFromBase(base, surface);
   return {
     "--creator-accent": a.accent,
+    "--creator-accent-hover": a.accentHover,
     "--on-creator-accent": a.onAccent,
     "--creator-accent-container": a.accentContainer,
     "--on-creator-accent-container": a.onAccentContainer,

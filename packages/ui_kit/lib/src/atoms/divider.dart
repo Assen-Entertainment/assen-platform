@@ -29,7 +29,7 @@ class AssenDivider extends StatelessWidget {
       thickness: 1,
       indent: indent,
       endIndent: endIndent,
-      color: colors.ink100,
+      color: colors.neutral100,
     );
   }
 }

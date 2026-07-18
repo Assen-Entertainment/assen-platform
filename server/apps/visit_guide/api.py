@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -29,7 +28,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth, authed
 from apps.identity.models import Account, Role
 from apps.visit_guide.models import GuideSection, GuideStatus
 from apps.visit_guide.services import (
@@ -41,6 +40,7 @@ from apps.visit_guide.services import (
     update_section,
 )
 from config.api import api
+from config.throttle import user_write_throttle
 
 operator_router = Router(auth=operator_required, tags=["operator-visit-guide"])
 public_router = Router(tags=["visit-guide"])
@@ -236,6 +236,7 @@ def public_get_section(
 @fan_router.post(
     "/acknowledge-rules",
     response={200: AckOut, 400: GuideError, 403: GuideError, 409: GuideError},
+    throttle=user_write_throttle("30/min"),
 )
 def fan_acknowledge_rules(request: HttpRequest, payload: AckIn) -> tuple[int, AckOut | GuideError]:
     """Record the fan's consent to the usage-rules version they read.
@@ -259,7 +260,7 @@ def fan_acknowledge_rules(request: HttpRequest, payload: AckIn) -> tuple[int, Ac
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated account supplied by the auth class."""
     # request.auth is untyped without Ninja stubs (same idiom as visit/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _section_out(section: GuideSection) -> SectionOut:

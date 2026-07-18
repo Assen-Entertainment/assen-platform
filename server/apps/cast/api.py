@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -35,9 +34,10 @@ from apps.cast.services import (
     update_cast_profile,
     view_public_profile,
 )
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth, authed
 from apps.identity.models import Account, Role
 from config.api import api
+from config.throttle import user_write_throttle
 
 router = Router(tags=["cast"])
 
@@ -115,12 +115,12 @@ class CastPublicProfileOut(Schema):
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated staff account supplied by RoleRequired."""
     # request.auth is untyped without Ninja stubs (same idiom as safety/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _fan_account(request: HttpRequest) -> Account:
     """Return the authenticated fan account supplied by FanBearerAuth."""
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _operator_out(profile: CastProfile) -> CastProfileOut:
@@ -142,6 +142,7 @@ def _operator_out(profile: CastProfile) -> CastProfileOut:
     "/profiles",
     auth=operator_required,
     response={201: CastProfileOut, 422: CastError},
+    throttle=user_write_throttle("20/min"),
 )
 def create_profile(
     request: HttpRequest,
@@ -197,6 +198,7 @@ def get_profile(
     "/profiles/{cast_id}",
     auth=operator_required,
     response={200: CastProfileOut, 404: CastError, 422: CastError},
+    throttle=user_write_throttle("30/min"),
 )
 def patch_profile(
     request: HttpRequest,
@@ -226,6 +228,7 @@ def patch_profile(
     "/profiles/{cast_id}/consent",
     auth=manager_required,
     response={200: CastProfileOut, 404: CastError, 422: CastError},
+    throttle=user_write_throttle("30/min"),
 )
 def record_consent(
     request: HttpRequest,

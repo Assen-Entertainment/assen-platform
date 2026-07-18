@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_type
 from datetime import datetime, time, timedelta
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -16,9 +15,11 @@ from pydantic import Field
 from apps.admin_rbac.permissions import operator_required
 from apps.cheki.models import ChekiRecord, ChekiType
 from apps.cheki.services import correct_cheki, record_cheki, void_cheki
+from apps.identity.auth import authed
 from apps.identity.models import Account
 from apps.visit.models import VisitRecord
 from config.api import api
+from config.throttle import user_write_throttle
 
 router = Router(auth=operator_required, tags=["operator-cheki"])
 
@@ -83,7 +84,11 @@ def _valid_type(value: str) -> bool:
     return value in ChekiType.values
 
 
-@router.post("/", response={201: ChekiRecordOut, 400: ChekiError, 404: ChekiError})
+@router.post(
+    "/",
+    response={201: ChekiRecordOut, 400: ChekiError, 404: ChekiError},
+    throttle=user_write_throttle("30/min"),
+)
 def create_cheki(
     request: HttpRequest,
     payload: ChekiCreateIn,
@@ -125,7 +130,11 @@ def list_cheki(
     return [_record_out(record) for record in records.order_by("-created_at")]
 
 
-@router.patch("/{record_id}", response={200: ChekiRecordOut, 400: ChekiError, 404: ChekiError})
+@router.patch(
+    "/{record_id}",
+    response={200: ChekiRecordOut, 400: ChekiError, 404: ChekiError},
+    throttle=user_write_throttle("30/min"),
+)
 def patch_cheki(
     request: HttpRequest,
     record_id: uuid.UUID,
@@ -149,6 +158,7 @@ def patch_cheki(
 @router.post(
     "/{record_id}/void",
     response={200: ChekiRecordOut, 400: ChekiError, 404: ChekiError},
+    throttle=user_write_throttle("30/min"),
 )
 def void_cheki_endpoint(
     request: HttpRequest,
@@ -167,7 +177,7 @@ def void_cheki_endpoint(
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated operator account supplied by RoleRequired."""
     # request.auth is untyped without Ninja stubs (same idiom as identity/auth.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _record_out(record: ChekiRecord) -> ChekiRecordOut:

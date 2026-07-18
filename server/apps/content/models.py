@@ -9,7 +9,8 @@ Comments denormalise ``author_name`` (display string, matching the frontend
 ``Comment.author``) so seed/anonymous comments render without an account, while
 still keeping a nullable ``author`` FK for real authored comments.
 
-Migration-less app (``migrate --run-syncdb``); do not add a migrations package.
+Migrated app — ``migrate`` applies ``0001_initial``; regenerate with
+``makemigrations`` when models change.
 """
 
 from __future__ import annotations
@@ -17,6 +18,20 @@ from __future__ import annotations
 import uuid
 
 from django.db import models
+
+
+class PostVisibility(models.TextChoices):
+    """Who may read a post's gated body/media (server-authoritative entitlement).
+
+    ``public`` posts are readable by everyone (subject only to the independent 19+
+    gate). ``members`` posts expose title/metadata as a teaser but redact the
+    body/media to anyone who lacks an active subscription matching
+    :attr:`Post.required_tier` (see :func:`apps.membership.services.can_view_post`).
+    Default ``public`` keeps every existing row open.
+    """
+
+    PUBLIC = "public", "public"
+    MEMBERS = "members", "members"
 
 
 class Post(models.Model):
@@ -30,6 +45,27 @@ class Post(models.Model):
     )
     body = models.TextField(blank=True, default="")
     media_url = models.CharField(max_length=500, blank=True, default="")
+    # 19+ 성인 등급 토글. 읽기 API는 ENABLE_ADULT_CONTENT=True + adult_verified 뷰어에게만
+    # 노출한다(config.settings; 플래그 off면 전원 숨김 — 법무 사인 전 안전). 저장은
+    # 등급 플래그뿐 — 실 성인 노출 활성화는 대표·법무 게이트(R3 정본 §55).
+    adult_only = models.BooleanField(default=False)
+    # Membership entitlement (server-authoritative). ``members`` gates the body/media
+    # behind an active subscription to the creator; ``public`` (default) leaves the
+    # post open. This is independent of the 19+ gate — both apply.
+    visibility = models.CharField(
+        max_length=8, choices=PostVisibility.choices, default=PostVisibility.PUBLIC
+    )
+    # Which tier unlocks a ``members`` post. NULL means "any active subscription to
+    # the creator"; set means "an active subscription whose tier is exactly this
+    # one". SET_NULL so archiving/deleting a tier falls back to any-active-sub rather
+    # than orphaning the post.
+    required_tier = models.ForeignKey(
+        "membership.MembershipTier",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gated_posts",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

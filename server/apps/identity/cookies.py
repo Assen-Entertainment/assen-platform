@@ -22,6 +22,10 @@ SameSite = Literal["Lax", "Strict", "None"]
 # Default cookie names for the web surface. The app surface does not use cookies.
 ACCESS_COOKIE_NAME = "assen_access"
 REFRESH_COOKIE_NAME = "assen_refresh"
+# Non-secret session-presence marker (path="/") so page routes / Edge middleware can
+# tell a refresh session exists even after the 15-min access cookie expires. Carries
+# no token — its sole meaning is presence. Lives as long as the refresh token.
+SESSION_MARKER_COOKIE_NAME = "assen_session"
 
 
 def set_auth_cookie(

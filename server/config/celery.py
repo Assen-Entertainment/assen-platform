@@ -8,11 +8,11 @@ jobs such as billing retries are introduced in later phases.
 
 from __future__ import annotations
 
-import os
-
 from celery import Celery
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.dev")
+from config.require_settings import require_settings_module
+
+require_settings_module()
 
 app = Celery("assen")
 

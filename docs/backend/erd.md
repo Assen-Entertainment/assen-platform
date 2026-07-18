@@ -2,7 +2,8 @@
 
 > **코드 = 정본**(SDLC 09 §3): 본 다이어그램은 `server/apps/{creator,social,content,commerce,membership}/models.py` +
 > `identity.Account`의 **참조용 투영**이다. 모델 변경 시 이 문서를 갱신한다.
-> 전 앱 migration-less — 테이블은 `migrate --run-syncdb`로 생성(SDLC 11 §5).
+> 마이그레이션 정식 전환 완료(2026-07-09, #25 승인 하) — 모델 보유 앱은 각자 `0001_initial`을 보유하고,
+> 테이블은 `migrate`로 생성된다(server/AGENTS.md). 모델 변경 시 `makemigrations`로 갱신, `makemigrations --check`는 항상 clean이어야 한다.
 
 ```mermaid
 erDiagram

@@ -10,15 +10,17 @@ export interface BottomNavItem {
 export interface BottomNavProps extends React.HTMLAttributes<HTMLElement> {
   items: BottomNavItem[];
   activeHref?: string;
+  /** 네비 링크 렌더러 주입 슬롯 — 기본 "a"(DS 이식성 보존). 앱에선 next/link를 주입해 클라 라우팅(풀 리로드 방지). */
+  linkComponent?: React.ElementType;
 }
 
-export function BottomNav({ items, activeHref, className, ...props }: BottomNavProps) {
+export function BottomNav({ items, activeHref, className, linkComponent: LinkComponent = "a", ...props }: BottomNavProps) {
   return (
     <nav aria-label="하단 탐색" className={cn("flex h-16 items-stretch border-t border-outline bg-surface", className)} {...props}>
       {items.map((it) => {
         const active = it.href === activeHref;
         return (
-          <a
+          <LinkComponent
             key={it.href}
             href={it.href}
             aria-current={active ? "page" : undefined}
@@ -29,7 +31,7 @@ export function BottomNav({ items, activeHref, className, ...props }: BottomNavP
           >
             <span>{it.icon}</span>
             {it.label}
-          </a>
+          </LinkComponent>
         );
       })}
     </nav>

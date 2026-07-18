@@ -36,6 +36,21 @@ class Role(models.TextChoices):
     SYSTEM = "system", "system"
 
 
+class KycStatus(models.TextChoices):
+    """Identity-verification (KYC / 성인인증) state on an :class:`Account`.
+
+    A derived *status* only — never the underlying PII. The mock verifier
+    (``config.identity_verify``) transitions ``unverified → verified``; ``pending``
+    and ``failed`` exist for a real provider's async/negative outcomes so the enum
+    is stable when the mock is replaced behind the 대표·법무 gate.
+    """
+
+    UNVERIFIED = "unverified", "unverified"
+    PENDING = "pending", "pending"
+    VERIFIED = "verified", "verified"
+    FAILED = "failed", "failed"
+
+
 class AnonymousSession(models.Model):
     """A pre-signup identity used to record activity before a fan account exists.
 
@@ -82,20 +97,71 @@ class Account(models.Model):
     nickname = models.CharField(max_length=40, blank=True, default="")
     auth_method = models.CharField(max_length=16, blank=True, default="")
     auth_subject_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    # Email + password fan auth (additive to phone OTP / social). Unlike phone —
+    # which is hashed into auth_subject_hash and never stored raw — email MUST be
+    # stored in plaintext to actually deliver the verification mail, so the raw
+    # address already sits in the row and an extra e1: HMAC in auth_subject_hash
+    # would add no privacy while creating a second unique key to keep in agreement.
+    # So an email account keys its identity on this field (uniq_fan_email below) and
+    # leaves auth_subject_hash "" (like staff rows); the fan password reuses the
+    # existing password_hash. email_verified_at is None until the fan confirms the
+    # (mock) verification link — login is refused until it is set.
+    email = models.EmailField(blank=True, default="", db_index=True)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    # KYC / 성인(19+) 인증 결과 — 파생/최소 데이터만. birth_date 원본·주민번호·CI/DI는
+    # 저장하지 않는다(법무 경계 §2): 실 인증기관은 성인 여부(bool)만 돌려주고, 여기엔
+    # 그 파생 플래그와 상태만 남는다. 실 provider(NICE/PASS/KCB/아이핀) 연동은
+    # config.identity_verify 뒤의 대표·법무 게이트. (PII 아님 — Account 직접 필드 OK.)
+    adult_verified = models.BooleanField(default=False)
+    kyc_status = models.CharField(
+        max_length=16, choices=KycStatus.choices, default=KycStatus.UNVERIFIED
+    )
+    kyc_verified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Set when the fan withdraws (D3, privacy decisions 2026-07-12). Withdrawal
+    # anonymises the row in place — nickname and auth_subject_hash are cleared and
+    # is_active is set False — so this timestamp is the only record that the row is a
+    # withdrawn (tombstoned) account, kept so legal-hold retention can purge it later.
+    # The row itself is retained (not deleted) so orders/subscriptions/events that
+    # reference fan_id keep their FK integrity under the anonymised id.
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
             # One fan per phone-hash: the re-signup path keys on this hash, so a
             # DB-level partial unique (only on non-empty hashes — staff rows keep
             # the default "" and stay unconstrained) closes the concurrent-signup
-            # race that filter()+create() alone cannot. Migration-less app — this
-            # constraint is materialised by ``migrate --run-syncdb``.
+            # race that filter()+create() alone cannot. This constraint is
+            # materialised by the app's migration (applied by ``migrate``).
             models.UniqueConstraint(
                 fields=["auth_subject_hash"],
                 condition=~models.Q(auth_subject_hash=""),
                 name="uniq_fan_auth_subject",
+            ),
+            # One staff account per username, but only for populated usernames:
+            # operator login resolves the account with ``.get(username=…)``
+            # (identity.services.authenticate_operator), which would raise
+            # MultipleObjectsReturned → 500 if two staff rows shared a username.
+            # Fan rows leave username at the default "" and stay unconstrained, so
+            # any number of them coexist (the partial ``username != ''`` condition
+            # mirrors the auth_subject_hash pattern above). Materialised by the
+            # app's migration (applied by ``migrate``).
+            models.UniqueConstraint(
+                fields=["username"],
+                condition=~models.Q(username=""),
+                name="uniq_staff_username",
+            ),
+            # One fan per email: the email-signup path keys identity on this field, so
+            # a partial DB unique (only on non-empty emails — phone/social/staff rows
+            # keep the default "" and stay unconstrained) closes the concurrent-signup
+            # race the same way uniq_fan_auth_subject does for phone. Withdrawal clears
+            # email (identity.services.withdraw_account), so a withdrawn address frees
+            # for a fresh signup — mirroring how clearing auth_subject_hash frees a phone.
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=~models.Q(email=""),
+                name="uniq_fan_email",
             ),
         ]
 

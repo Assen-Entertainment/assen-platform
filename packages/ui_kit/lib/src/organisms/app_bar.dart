@@ -6,7 +6,7 @@ import 'package:ui_kit/src/atoms/icon_button.dart';
 /// The top app bar (`기본형 — 센터 타이틀`).
 ///
 /// Covers the Navigation/AppBar row of `components.md`. A centre-titled bar that
-/// sits on the cream container surface with an optional back affordance and a
+/// sits on the neutral container surface with an optional back affordance and a
 /// trailing action slot. It wraps Material's [AppBar] so the colours, the 44pt
 /// touch targets and the centred title come from the Assen tokens rather than
 /// each screen re-theming the frame. Implements [PreferredSizeWidget] so it
@@ -20,14 +20,22 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// hairline bottom border for screens that scroll under the bar.
   const AssenAppBar({
     required this.title,
+    this.titleWidget,
     this.onBack,
     this.actions = const [],
     this.showDivider = false,
     super.key,
   });
 
-  /// The centred screen title.
+  /// The centred screen title. Always set — it is the accessibility header even
+  /// when [titleWidget] paints something else in its place.
   final String title;
+
+  /// Optional widget shown in place of the [title] text (e.g. the brand
+  /// AssenLogo on the discovery home bar). [title] is still announced to
+  /// screen readers as the header, so the visual lockup does not steal the
+  /// screen's semantic name.
+  final Widget? titleWidget;
 
   /// Optional back handler; when set, a leading back button is shown.
   final VoidCallback? onBack;
@@ -46,7 +54,7 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
     final colors = Theme.of(context).extension<AssenColors>()!;
 
     return AppBar(
-      backgroundColor: colors.cream100,
+      backgroundColor: colors.neutral100,
       foregroundColor: colors.ink900,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -59,19 +67,25 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
               semanticLabel: '뒤로',
               onPressed: onBack,
             ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: TypographyTokens.titleLSize,
-          fontWeight: FontWeight.w700,
-          color: colors.ink900,
-        ),
+      title: Semantics(
+        header: true,
+        label: titleWidget == null ? null : title,
+        child:
+            titleWidget ??
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: TypographyTokens.titleLSize,
+                fontWeight: FontWeight.w700,
+                color: colors.ink900,
+              ),
+            ),
       ),
       actions: actions,
       bottom: showDivider
           ? PreferredSize(
               preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.ink100),
+              child: Container(height: 1, color: colors.neutral100),
             )
           : null,
     );
@@ -82,7 +96,7 @@ class AssenAppBar extends StatelessWidget implements PreferredSizeWidget {
 ///
 /// The [icon]/[activeIcon] pair lets the active tab swap to a filled glyph
 /// (a common Korean B2C convention for the home indicator). [badgeCount]
-/// overlays an [AssenCountBadge] for unread markers (e.g. 체키, 알림).
+/// overlays an [AssenCountBadge] for unread markers (e.g. notifications).
 class AssenTabItem {
   /// Creates a tab destination.
   const AssenTabItem({
@@ -105,18 +119,18 @@ class AssenTabItem {
   final int badgeCount;
 }
 
-/// The bottom navigation bar (`TabBar(Bottom) — 5탭, active 표시`).
+/// The bottom navigation bar (`TabBar(Bottom) — active 표시`).
 ///
-/// Covers the Navigation/TabBar row of `components.md` and the fan app's five
-/// destinations (홈/출근표/예약/체키/마이 — screens.md). The active tab is shown
-/// with the rose action colour and a filled glyph; inactive tabs use the
+/// Covers the Navigation/TabBar row of `components.md`. A domain-neutral bottom
+/// nav: the host app supplies its own destinations. The active tab is shown
+/// with the indigo action colour and a filled glyph; inactive tabs use the
 /// secondary ink. It wraps Material [BottomNavigationBar] so every tab keeps a
-/// 44pt+ target and reads its colours from the tokens. Badges (e.g. unread 체키)
-/// ride on top via [AssenCountBadge].
+/// 44pt+ target and reads its colours from the tokens. Unread badges ride on
+/// top via [AssenCountBadge].
 class AssenTabBar extends StatelessWidget {
   /// Creates the bottom tab bar.
   ///
-  /// [items] are the destinations (the fan app uses five). [currentIndex] is
+  /// [items] are the destinations supplied by the host app. [currentIndex] is
   /// the selected tab; [onChanged] reports taps. Asserts two+ destinations.
   const AssenTabBar({
     required this.items,
@@ -125,7 +139,7 @@ class AssenTabBar extends StatelessWidget {
     super.key,
   }) : assert(items.length >= 2, 'A tab bar needs at least two destinations');
 
-  /// The tab destinations (홈/출근표/예약/체키/마이 in the fan app).
+  /// The tab destinations supplied by the host app.
   final List<AssenTabItem> items;
 
   /// The currently selected tab index.
@@ -141,7 +155,7 @@ class AssenTabBar extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.white,
-        border: Border(top: BorderSide(color: colors.ink100)),
+        border: Border(top: BorderSide(color: colors.neutral100)),
       ),
       child: BottomNavigationBar(
         currentIndex: currentIndex,
@@ -149,7 +163,7 @@ class AssenTabBar extends StatelessWidget {
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        selectedItemColor: colors.roseMain,
+        selectedItemColor: colors.indigo500,
         unselectedItemColor: colors.ink500,
         selectedFontSize: TypographyTokens.captionMicroSize,
         unselectedFontSize: TypographyTokens.captionMicroSize,

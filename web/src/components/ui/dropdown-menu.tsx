@@ -15,7 +15,12 @@ export const DropdownMenuContent = React.forwardRef<
     <MenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
-      className={cn("z-50 min-w-44 rounded-md border border-outline bg-surface p-1 shadow-2", className)}
+      className={cn(
+        "z-50 min-w-44 rounded-md border border-outline bg-surface p-1 shadow-2",
+        // fade+zoom(R5-W3 #1) — 트리거 방향에서 확대. reduced-motion 전역 가드로 축소.
+        "origin-[var(--radix-dropdown-menu-content-transform-origin)] data-[state=open]:[animation:popover-in_150ms_ease-out] data-[state=closed]:[animation:popover-out_120ms_ease-in]",
+        className,
+      )}
       {...props}
     />
   </MenuPrimitive.Portal>

@@ -1,33 +1,57 @@
 [project]
 name = "assen-server"
 version = "0.0.1"
-description = "Assen Platform backend — Django 5.2 LTS + Django Ninja (ADR-0001)."
+description = "Assen Platform backend — Django 6.0 + Django Ninja (ADR-0001)."
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "django==5.2.*",
+    "django>=6.0,<7.0",
     "django-ninja>=1.3,<2.0",
     "django-cors-headers>=4.4,<5.0",
-    "django-environ>=0.11,<1.0",
+    "django-environ>=0.14.0,<1.0",
     "celery[redis]>=5.4,<6.0",
     "redis>=5.0,<6.0",
+    # Image decode-verify for the upload boundary (ASS-271): PIL.Image.verify() +
+    # a MAX_IMAGE_PIXELS decompression-bomb guard, beyond the 64-byte magic sniff.
+    "Pillow>=10.0,<12.0",
     "psycopg[binary]>=3.2,<4.0",
-    "gunicorn>=23.0,<24.0",
+    "gunicorn>=26.0,<27.0",
     "django-linear-migrations>=2.3,<3.0",
+    # Realtime (ASS-240): Channels adds the ASGI WebSocket stack; daphne is the
+    # ASGI server (must lead INSTALLED_APPS to override runserver). The shared
+    # cross-worker layer (channels-redis) is an optional extra, see below.
+    "channels>=4.0,<5.0",
+    "daphne>=4.0,<5.0",
+    # Error tracking. No-op unless SENTRY_DSN is set (config.observability); the
+    # Django integration ships in the base package, so no extra is needed.
+    "sentry-sdk>=2.0,<3.0",
+    "django-storages[s3]>=1.14,<2.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3,<9.0",
-    "pytest-django>=4.9,<5.0",
+    "pytest>=9.0,<10.0",
+    "pytest-django>=4.11,<5.0",
     "factory-boy>=3.3,<4.0",
-    "ruff>=0.8,<1.0",
+    "ruff>=0.15.21,<1.0",
     "mypy>=1.13,<2.0",
-    "django-stubs[compatible-mypy]>=5.1,<6.0",
+    "django-stubs[compatible-mypy]>=6.0,<7.0",
+    # Async test driver for the Channels WebSocket tests (ASS-240).
+    "pytest-asyncio>=0.24,<2.0",
 ]
+
+[project.optional-dependencies]
+# Shared cross-worker channel layer for realtime (ASS-240). Only needed when
+# CHANNEL_LAYERS_BACKEND=redis in a multi-process deployment; dev/test use the
+# in-memory layer and never install this. The settings loader fails safe to the
+# in-memory layer if it is unset/absent (config.settings.base._build_channel_layers).
+realtime-redis = ["channels-redis>=4.2,<5.0"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Generated Django migrations are not hand-maintained (and are #25 human-gated),
+# so ruff neither lints nor auto-fixes them — mirroring the [tool.mypy] exclude.
+extend-exclude = ["**/migrations/**"]
 
 [tool.ruff.lint]
 # E/F: pyflakes+pycodestyle, I: isort, UP: pyupgrade, B: bugbear.
@@ -56,3 +80,6 @@ DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py", "tests.py"]
 # Discover tests inside each domain app's tests/ package.
 testpaths = ["apps", "config"]
+# Realtime WebSocket tests opt in explicitly with @pytest.mark.asyncio (ASS-240);
+# strict mode leaves every existing sync test untouched.
+asyncio_mode = "strict"

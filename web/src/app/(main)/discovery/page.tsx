@@ -1,8 +1,30 @@
-import { getCreators, getProducts } from "@/lib/api";
+import type { Metadata } from "next";
+import { getCreatorsPage, getProductsPage } from "@/lib/api";
 import { DiscoveryView } from "./discovery-view";
 
-/** Discovery — 서버 컴포넌트에서 데이터 fetch(현재 mock) → 클라이언트 뷰. 실 API 전환 시 lib/api만 교체. */
+export const metadata: Metadata = {
+  title: "발견",
+  description: "취향에 맞는 크리에이터와 추천 상품을 카테고리·선반으로 둘러보세요.",
+  openGraph: { title: "크리에이터 발견 · Assen", description: "취향에 맞는 크리에이터와 상품을 발견하세요.", type: "website" },
+};
+
+/**
+ * Discovery — 서버에서 커서 Page 시드(크리에이터·상품) + 서버 랭킹 Page 시드(인기/신규, E11 sort=)를
+ * 병렬 조회 → 클라 뷰. 실 API 전환 시 lib/api만 교체.
+ */
 export default async function DiscoveryPage() {
-  const [creators, products] = await Promise.all([getCreators(), getProducts()]);
-  return <DiscoveryView creators={creators} products={products} />;
+  const [creators, products, popularCreators, freshCreators] = await Promise.all([
+    getCreatorsPage(),
+    getProductsPage(),
+    getCreatorsPage(undefined, "popular"),
+    getCreatorsPage(undefined, "new"),
+  ]);
+  return (
+    <DiscoveryView
+      creators={creators}
+      products={products}
+      popularCreators={popularCreators}
+      freshCreators={freshCreators}
+    />
+  );
 }

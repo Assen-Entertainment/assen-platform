@@ -12,11 +12,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-primary text-on-primary hover:opacity-90",
+        // filled hover = Stripe식 색조 시프트(명도 ~8% darken 토큰). opacity 페이드 대신 tone shift.
+        primary: "bg-primary text-on-primary hover:bg-primary-hover",
         secondary: "bg-surface-container-high text-on-surface hover:bg-outline",
         outline: "border border-outline bg-surface text-on-surface hover:bg-surface-container-high",
         ghost: "text-on-surface hover:bg-surface-container-high",
-        accent: "bg-creator-accent text-on-creator-accent hover:opacity-90",
+        accent: "bg-creator-accent text-on-creator-accent hover:bg-creator-accent-hover",
       },
       size: {
         sm: "h-8 rounded-full px-3.5 text-label", // pill (카드 CTA)

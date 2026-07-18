@@ -76,6 +76,25 @@ class ActorKind(models.TextChoices):
     UNKNOWN = "unknown", "unknown"
 
 
+class DetailAccessReason(models.TextChoices):
+    """Closed reason codes for reading a report's restricted narrative (ASS-291 #7).
+
+    The manager-only detail read must state *why* for the ``SAFETY_DETAIL_VIEWED``
+    audit trail, but the reason previously travelled as **free text in the GET query
+    string** — where it lands in access logs / referrers and could carry PII (a
+    copied name, phone, or the narrative itself). A closed enum keeps the "why"
+    auditable while ensuring only a short, opaque code ever reaches a URL; free text
+    is refused at the API boundary. Not a model field, so it adds no migration.
+    """
+
+    ABUSE_INVESTIGATION = "abuse_investigation", "abuse_investigation"
+    REPORT_TRIAGE = "report_triage", "report_triage"
+    LEGAL_REQUEST = "legal_request", "legal_request"
+    USER_APPEAL = "user_appeal", "user_appeal"
+    SAFETY_ESCALATION = "safety_escalation", "safety_escalation"
+    QUALITY_AUDIT = "quality_audit", "quality_audit"
+
+
 class SafetyReport(models.Model):
     """Summary + classification row for a safety report (operator-visible).
 
@@ -119,6 +138,19 @@ class SafetyReport(models.Model):
     cast_id = models.CharField(max_length=64, blank=True, default="")
     visit = models.ForeignKey(
         "visit.VisitRecord",
+        on_delete=models.PROTECT,
+        related_name="safety_reports",
+        null=True,
+        blank=True,
+    )
+    # The uploaded image this report is about, when it is about one (most reports are
+    # not — hence nullable, exactly like ``visit``). This is what makes user-uploaded
+    # media reportable: taking such a report to ``actioned`` takes the upload down
+    # (apps.safety.services.change_report_status). PROTECT preserves the link between
+    # a takedown and the report that justified it. Carries no PII — an Upload row is
+    # a server-minted UUID + URL, never a filename.
+    upload = models.ForeignKey(
+        "uploads.Upload",
         on_delete=models.PROTECT,
         related_name="safety_reports",
         null=True,

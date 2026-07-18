@@ -39,7 +39,7 @@ class AssenSegmentedTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(SpacingTokens.s1),
       decoration: BoxDecoration(
-        color: colors.cream200,
+        color: colors.neutral200,
         borderRadius: const BorderRadius.all(Radius.circular(RadiusTokens.md)),
       ),
       child: Row(
@@ -108,7 +108,7 @@ class _Segment extends StatelessWidget {
             style: TextStyle(
               fontSize: TypographyTokens.labelSize,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? colors.ink900 : colors.ink700,
+              color: selected ? colors.ink900 : colors.ink600,
             ),
           ),
         ),

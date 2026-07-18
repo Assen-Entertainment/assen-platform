@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 /// A heart toggle for marking a cast member as 최애 (favourite).
 ///
 /// Covers the Domain/FavoriteButton row of `components.md` (`on / off` toggle).
-/// The two states are visually distinct: filled rose heart when on, outlined
+/// The two states are visually distinct: filled indigo heart when on, outlined
 /// ink heart when off — never a colour-only difference, so the state is legible
 /// without relying on hue.
 ///
-/// `RefColors.roseMain` (the solid action anchor) signals the active favourite;
+/// `RefColors.indigo500` (the action anchor) signals the active favourite;
 /// the off state uses the ink ramp. Disabled is a null [onChanged]. The hit
 /// area meets the 44pt minimum.
 class AssenFavoriteButton extends StatelessWidget {
@@ -36,15 +36,15 @@ class AssenFavoriteButton extends StatelessWidget {
     final colors = Theme.of(context).extension<AssenColors>()!;
     final enabled = onChanged != null;
     final color = !enabled
-        ? colors.ink300
-        : (isFavorite ? colors.roseMain : colors.ink500);
+        ? colors.neutral300
+        : (isFavorite ? colors.indigo500 : colors.ink500);
 
     return IconButton(
       onPressed: enabled ? () => onChanged!(!isFavorite) : null,
       icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border),
       iconSize: SpacingTokens.s6,
       color: color,
-      disabledColor: colors.ink300,
+      disabledColor: colors.neutral300,
       tooltip: isFavorite ? '최애 해제' : '최애 등록',
       constraints: const BoxConstraints(
         minWidth: _minTouchTarget,

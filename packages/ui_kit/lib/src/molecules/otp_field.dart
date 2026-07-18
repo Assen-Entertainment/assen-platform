@@ -20,7 +20,7 @@ enum AssenOtpStatus {
 /// verification convention #5 (본인인증 — the standard flow ends in a 6-digit
 /// OTP). Renders [length] cells (6 by default) over a single hidden input so
 /// the platform autofill / SMS-code suggestion still works. The focused cell is
-/// outlined in the rose action anchor; [status] recolours every cell
+/// outlined in the indigo action anchor; [status] recolours every cell
 /// (matcha when complete, `red.main` on error). Solid fills only.
 ///
 /// Accessibility: the underlying field is a real text input with a semantics
@@ -172,11 +172,11 @@ class _Cell extends StatelessWidget {
     if (status == AssenOtpStatus.error) {
       border = colors.redMain;
     } else if (status == AssenOtpStatus.complete) {
-      border = colors.matchaBorder;
+      border = colors.mintInk;
     } else if (isCursor) {
-      border = colors.roseMain;
+      border = colors.indigo500;
     } else {
-      border = colors.ink200;
+      border = colors.neutral200;
     }
 
     return Container(

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -39,9 +38,10 @@ from apps.event_campaign.services import (
     unpublish_campaign,
     update_campaign,
 )
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth, authed
 from apps.identity.models import Account, Role
 from config.api import api
+from config.throttle import user_write_throttle
 
 operator_router = Router(auth=operator_required, tags=["operator-event-campaign"])
 fan_campaign_router = Router(auth=[FanBearerAuth()], tags=["fan-event-campaign"])
@@ -292,6 +292,7 @@ def fan_list_campaigns(
         403: EventCampaignError,
         404: EventCampaignError,
     },
+    throttle=user_write_throttle("60/min"),
 )
 def fan_view_campaign(
     request: HttpRequest,
@@ -320,6 +321,7 @@ def fan_view_campaign(
         403: EventCampaignError,
         404: EventCampaignError,
     },
+    throttle=user_write_throttle("20/min"),
 )
 def fan_reserve_event(
     request: HttpRequest,
@@ -364,6 +366,7 @@ def fan_list_reservations(
         403: EventCampaignError,
         404: EventCampaignError,
     },
+    throttle=user_write_throttle("20/min"),
 )
 def fan_cancel_reservation(
     request: HttpRequest,
@@ -385,7 +388,7 @@ def fan_cancel_reservation(
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated account supplied by the auth class."""
     # request.auth is untyped without Ninja stubs (same idiom as visit/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _campaign_out(campaign: EventCampaign) -> CampaignOut:

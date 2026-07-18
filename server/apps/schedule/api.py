@@ -10,7 +10,6 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_cls
 from datetime import datetime, time
-from typing import cast
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
@@ -18,6 +17,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
+from apps.identity.auth import authed
 from apps.identity.models import Account
 from apps.schedule.models import (
     ChangeRequestStatus,
@@ -265,7 +265,7 @@ def reject_endpoint(
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated operator account supplied by RoleRequired."""
     # request.auth is untyped without Ninja stubs (same idiom as identity/auth.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _entry_out(entry: ScheduleEntry) -> ScheduleEntryOut:

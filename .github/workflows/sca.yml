@@ -1,0 +1,74 @@
+name: SCA
+
+# 의존성 CVE 스캔 + SBOM (DevOps 위생 — ★DX 다음 우선순위). Trivy 하나로 filesystem 스캔
+# (server/uv.lock, web·landing·e2e/package-lock.json, pubspec.lock 전부 자동 탐지) +
+# CycloneDX SBOM 생성을 겸한다. codeql.yml과 동일 패턴(주간 스케줄 + concurrency 취소 +
+# 최소 권한) — 별도 워크플로로 분리해 스캔 실패가 ci.yml 필수 게이트를 막지 않게 한다.
+#
+# ⚠️ 현재는 report-only(exit-code: 0) — 기존 의존성의 기지정 CVE로 PR을 갑자기 막지
+# 않기 위함(이 스캔은 오늘 처음 도입됨, 베이스라인 없음). severity 필터(CRITICAL,HIGH)는
+# 이미 걸어 두었으니, 베이스라인을 정리한 뒤 exit-code만 "1"로 바꾸면 차단 게이트로
+# 전환된다 — 그 결정은 별도 PR + 인간 승인.
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  schedule:
+    # 주간, 월요일 04:00 UTC — codeql(03:30 UTC)·android(03:00 UTC)과 겹치지 않게 오프셋.
+    - cron: "0 4 * * 1"
+
+# 최소 권한(W4) — 체크아웃 + 아티팩트 업로드만 하므로 read로 충분.
+permissions:
+  contents: read
+
+# 같은 ref의 이전 실행은 취소해 러너 분을 아낀다(ci.yml/e2e.yml/codeql.yml 패턴 미러).
+concurrency:
+  group: sca-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vuln-scan:
+    name: Dependency CVE scan (Trivy fs, report-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: table
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate CycloneDX SBOM (server — uv.lock)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: server
+          format: cyclonedx
+          output: sbom-server.cdx.json
+          exit-code: "0"
+      - name: Generate CycloneDX SBOM (web — package-lock.json)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: web
+          format: cyclonedx
+          output: sbom-web.cdx.json
+          exit-code: "0"
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: |
+            sbom-server.cdx.json
+            sbom-web.cdx.json
+          retention-days: 30

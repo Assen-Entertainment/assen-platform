@@ -26,6 +26,11 @@ export const Toast = React.forwardRef<
     ref={ref}
     className={cn(
       "flex items-center justify-between gap-3 rounded-md border border-outline bg-surface-container-high p-4 shadow-3",
+      // slide-in/swipe-out(R5-W3 #1) — 우측에서 진입, 닫힘/스와이프-끝은 우측으로 이탈. reduced-motion 전역 가드로 축소.
+      "data-[state=open]:[animation:toast-in_200ms_ease-out] data-[state=closed]:[animation:toast-out_150ms_ease-in]",
+      "data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
+      "data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-transform",
+      "data-[swipe=end]:[animation:toast-out_150ms_ease-in]",
       className,
     )}
     {...props}

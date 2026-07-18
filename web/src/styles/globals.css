@@ -8,8 +8,33 @@
 /* 클래스 기반 다크모드: <html class="dark"> 토글 */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * canvas — 앱 배경 "웜 페이퍼"(R13 발전형 폴리시, 온기 미세조정). Figma DS 시맨틱 색이 아니라
+ * 웹 셸 배경 처리이므로 tokens.css(생성 미러) 대신 여기(수작성 앱 스타일)에 정의 → 토큰 재생성에 불변.
+ * surface(카드)는 순백 유지 → 흰 카드가 종이 위에 떠 보이는 편집형 리듬. 색 아이덴티티 불변(가드레일).
+ */
+:root {
+  --canvas: #f8f6f1;
+}
+.dark {
+  /* 다크 canvas = surface보다 한 단계 깊게 → 카드(surface)가 위로 떠 보임(편집형 깊이). */
+  --canvas: #0f0f12;
+  /* a11y(WCAG 2 AA): 브랜드 인디고 --primary(#5A4DF0)는 '버튼 배경'색 — 다크 표면에
+     '텍스트/링크 전경'으로 얹으면 3.42:1(AA 미달). 다크 전경 전용으로 같은 인디고 계열
+     밝은 톤(#0f0f12 위 8.0:1, AAA)을 두어 text-primary만 리프트. bg-primary(흰글자
+     버튼)는 --primary 그대로 유지된다. */
+  --primary-bright: #a79bff;
+}
+
+/* 다크에서 text-primary는 '전경'이므로 --primary-bright로 리프트(버튼 배경은 불변).
+   언레이어드 규칙 → Tailwind 유틸(@layer)보다 우선. */
+.dark .text-primary {
+  color: var(--primary-bright);
+}
+
 /* 시맨틱 색 → 모드 반응(원시 CSS변수 참조). inline = 유틸이 var()를 직접 사용 → 라이트/다크/런타임 액센트 자동 추종. */
 @theme inline {
+  --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-container: var(--surface-container);
   --color-surface-container-high: var(--surface-container-high);
@@ -18,6 +43,7 @@
   --color-outline: var(--outline);
   --color-outline-variant: var(--outline-variant);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-on-primary: var(--on-primary);
   --color-primary-container: var(--primary-container);
   --color-on-primary-container: var(--on-primary-container);
@@ -33,6 +59,7 @@
   --color-warning-container: var(--warning-container);
   --color-on-warning-container: var(--on-warning-container);
   --color-creator-accent: var(--creator-accent);
+  --color-creator-accent-hover: var(--creator-accent-hover);
   --color-on-creator-accent: var(--on-creator-accent);
   --color-creator-accent-container: var(--creator-accent-container);
   --color-on-creator-accent-container: var(--on-creator-accent-container);
@@ -52,7 +79,7 @@
 
 /* 정적 스케일 (radius·타이포·폰트·elevation) — tokens.v2.json 일치 */
 @theme {
-  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", sans-serif;
+  --font-sans: var(--font-pretendard, "Pretendard Variable", Pretendard), "Apple SD Gothic Neo", sans-serif;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -96,10 +123,71 @@
   --text-caption--line-height: 1.33;
   --text-caption--font-weight: 500;
 
-  --shadow-1: 0 2px 8px rgba(25, 25, 25, 0.08);
-  --shadow-2: 0 8px 24px rgba(25, 25, 25, 0.12);
-  --shadow-3: 0 6px 16px rgba(25, 25, 25, 0.12);
-  --shadow-4: 0 12px 32px rgba(25, 25, 25, 0.16);
+  /* Elevation — R13 프리미엄 리파인: 기존 앰비언트 그림자를 보존하고 얇은 컨택트 레이어(0 1~2px)를
+     겹쳐 카드 가장자리를 또렷하게(부유감↑·저비용). 확산/성격은 불변 → DS 무게감 유지. */
+  --shadow-1: 0 1px 2px rgba(25, 25, 25, 0.05), 0 2px 8px rgba(25, 25, 25, 0.08);
+  --shadow-2: 0 1px 3px rgba(25, 25, 25, 0.06), 0 8px 24px rgba(25, 25, 25, 0.12);
+  --shadow-3: 0 1px 2px rgba(25, 25, 25, 0.06), 0 6px 16px rgba(25, 25, 25, 0.12);
+  --shadow-4: 0 2px 4px rgba(25, 25, 25, 0.08), 0 12px 32px rgba(25, 25, 25, 0.16);
+
+  /* 모션 일관화(루브릭 #39·#42) — 전 transition-* 유틸의 기본 = 200ms ease-out.
+     hover/focus/press 트랜지션을 단일 지속·이징으로 통일(과도한 개별 duration 제거). */
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* 딜라이트 모먼트 키프레임(루브릭 #41) — 좋아요 하트 팝 / 성취 체크 드로우 / 성취 팝.
+   전부 아래 prefers-reduced-motion 가드로 축소된다(#43). */
+@keyframes heart-pop {
+  0% { transform: scale(0.6); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@keyframes check-draw {
+  from { stroke-dashoffset: var(--check-dash, 32); }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes success-pop {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+/* 진입 리빌(편집형 로드 모먼트) — 히어로·섹션이 살짝 떠오르며 페이드인. 전역 reduced-motion 가드(#43)로 축소. */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 오버레이 enter/exit 모션(R5-W3 #1) — Radix data-[state=open|closed] 기반. shadcn 표준을
+   tailwindcss-animate 의존 없이 재현. enter 200ms ease-out(스냅·즉각 반응), exit 150ms ease-in.
+   Radix Presence가 exit 애니메이션 종료(animationend)까지 언마운트를 지연한다.
+   전부 아래 prefers-reduced-motion 가드(#43)로 0.01ms 축소된다(모션 억제). */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+}
+@keyframes popover-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes popover-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+@keyframes sheet-in-bottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-out-bottom { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes sheet-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes sheet-out-right { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes sheet-in-left { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes sheet-out-left { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes toast-in { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
+
+/* 가로 스크롤 선반 레일용 — 스크롤바 숨김(레이아웃 시프트 없이). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
 @layer base {
@@ -110,7 +198,7 @@
     color-scheme: dark;
   }
   body {
-    background-color: var(--surface);
+    background-color: var(--canvas);
     color: var(--on-surface);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -120,5 +208,17 @@
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
+  }
+
+  /* 모션 민감 사용자 존중(루브릭 #43) — 애니메이션/트랜지션/스무스 스크롤 전역 축소. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

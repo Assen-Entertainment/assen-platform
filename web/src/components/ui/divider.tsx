@@ -6,9 +6,10 @@ export interface DividerProps extends React.HTMLAttributes<HTMLDivElement> {
   orientation?: "horizontal" | "vertical";
 }
 
-export function Divider({ className, orientation = "horizontal", ...props }: DividerProps) {
-  return (
+export const Divider = React.forwardRef<HTMLDivElement, DividerProps>(
+  ({ className, orientation = "horizontal", ...props }, ref) => (
     <div
+      ref={ref}
       role="separator"
       aria-orientation={orientation}
       className={cn(
@@ -18,5 +19,6 @@ export function Divider({ className, orientation = "horizontal", ...props }: Div
       )}
       {...props}
     />
-  );
-}
+  ),
+);
+Divider.displayName = "Divider";

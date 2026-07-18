@@ -1,7 +1,8 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { MediaImage } from "@/components/ui/media-image";
+import { gradientStyle } from "@/lib/placeholder";
 
 /**
  * MonetizableItem — Figma DS MonetizableItem 세트(260:28) 매핑.
@@ -31,37 +32,52 @@ export interface MonetizableItemProps extends React.HTMLAttributes<HTMLDivElemen
   title: string;
   price: string;
   meta?: string;
-  /** 썸네일/이미지 노드. 없으면 surface-container-high placeholder. */
+  /** 썸네일/이미지 노드. 없으면 surface-container-high placeholder(mediaUrl 있으면 그걸 우선 사용). */
   media?: React.ReactNode;
+  /** 실 미디어 URL(Codex #18) — media 노드가 없을 때 이 URL로 MediaImage를 렌더(없거나 로드 실패면 seed 그라디언트). */
+  mediaUrl?: string;
+  /** 크리에이터 표기 슬롯(이름/프로필 링크 등) — 있을 때만 제목 아래 노출. 전역 상품은 생략. */
+  creator?: React.ReactNode;
   /** 기본 CTA 라벨은 type 파생; 필요 시 오버라이드. */
   ctaLabel?: string;
+  /** CTA 비활성 — 상위 게이트(예: 배송 결제 준비 중)에서 액션을 막을 때. 라벨은 ctaLabel로 함께 조정. */
+  actionDisabled?: boolean;
   onAction?: () => void;
 }
 
 export const MonetizableItem = React.forwardRef<HTMLDivElement, MonetizableItemProps>(
-  ({ type, title, price, meta, media, ctaLabel, onAction, className, ...props }, ref) => {
+  ({ type, title, price, meta, media, mediaUrl, creator, ctaLabel, actionDisabled, onAction, className, ...props }, ref) => {
     const t = TYPE_META[type];
+    const resolvedMedia =
+      media ?? (mediaUrl ? <MediaImage src={mediaUrl} alt={title} gradientStyle={gradientStyle(title)} className="h-full w-full" /> : undefined);
     return (
       <div
         ref={ref}
         className={cn(
-          "flex w-full flex-col overflow-hidden rounded-lg border border-outline bg-surface",
+          "group flex w-full flex-col overflow-hidden rounded-lg border border-outline bg-surface transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
           className,
         )}
         {...props}
       >
-        <div className="aspect-[5/3] w-full bg-surface-container-high">{media}</div>
-        <div className="flex flex-col gap-2 p-3">
-          <Badge variant="primary" className="self-start">
+        <div
+          className="relative aspect-[5/3] w-full overflow-hidden bg-surface-container-high"
+          style={resolvedMedia ? undefined : gradientStyle(title)}
+        >
+          {resolvedMedia}
+          {/* 타입 태그 — 미디어 위 프로스티드 칩(임의 커버색 위에서도 가독). */}
+          <span className="absolute left-2.5 top-2.5 rounded-full bg-surface/85 px-2.5 py-1 text-caption font-medium text-on-surface shadow-1 backdrop-blur-sm">
             {t.tag}
-          </Badge>
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5 p-3.5">
           <h3 className="line-clamp-1 text-title-m text-on-surface">{title}</h3>
+          {creator ? <div className="line-clamp-1 text-body-s text-on-surface-variant">{creator}</div> : null}
           {meta ? (
             <p className="line-clamp-1 text-body-s text-on-surface-variant">{meta}</p>
           ) : null}
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <span className="text-title-m text-on-surface">{price}</span>
-            <Button size="sm" onClick={onAction}>
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <span className="text-title-l tabular-nums text-on-surface">{price}</span>
+            <Button size="sm" onClick={onAction} disabled={actionDisabled}>
               {ctaLabel ?? t.cta}
             </Button>
           </div>

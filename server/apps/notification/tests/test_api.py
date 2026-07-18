@@ -12,7 +12,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from django.test import Client
+from django.test import Client, override_settings
 from django.utils import timezone
 
 from apps.identity.models import Account, Role
@@ -74,6 +74,24 @@ def test_dispatch_allowed_category_is_accepted(client: Client) -> None:
     assert body["accepted"] is True
     assert body["category"] == "reservation_status"
     assert body["message_id"]
+
+
+def test_dispatch_fails_closed_when_no_push_transport(client: Client) -> None:
+    """With no push transport wired (ENABLE_MOCK_PUSH off / prod), dispatch → 503.
+
+    Mirrors the OTP / KYC / payment mock gates: rather than claim a delivery that
+    cannot happen (no real FCM/APNs), the surface fails closed with a coded 503.
+    """
+    op = _account(Role.OPERATOR.value)
+    with override_settings(ENABLE_MOCK_PUSH=False):
+        res = _dispatch(client, op)
+    assert res.status_code == 503
+    assert res.json()["code"] == "PushUnavailable"
+
+    # Mock on (the test default): the same dispatch succeeds.
+    ok = _dispatch(client, op)
+    assert ok.status_code == 200
+    assert ok.json()["accepted"] is True
 
 
 def test_dispatch_forbidden_category_is_422(client: Client) -> None:

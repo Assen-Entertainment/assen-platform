@@ -7,15 +7,14 @@ import 'package:flutter/material.dart';
 /// (`components.md` Actions), so an enum makes illegal combinations
 /// unrepresentable and keeps call sites self-documenting.
 enum AssenButtonStyle {
-  /// Solid rose fill — the single primary action per screen (Korean B2C
+  /// Solid indigo fill — the single primary action per screen (Korean B2C
   /// convention #1: one main action, usually the bottom CTA). Uses the only
-  /// solid action colour in the palette (`RefColors.roseMain`).
+  /// solid action colour in the palette (`RefColors.indigo500`).
   primary,
 
-  /// Tonal strawberry fill for secondary actions that still need presence but
-  /// must not compete with [primary]. Pastel surface + strawberry ink text
-  /// (pastels are background-only; text uses the hue's ink step —
-  /// tokens.md §1).
+  /// Tonal indigo fill for secondary actions that still need presence but must
+  /// not compete with [primary]. Indigo container surface + indigo ink text
+  /// (containers are background-only; text uses the ink step — tokens.md §1).
   secondary,
 
   /// Text-only action for the lowest-emphasis / tertiary case. No fill, ink
@@ -35,7 +34,9 @@ enum AssenButtonStyle {
 /// stay comfortably tappable.
 ///
 /// Colour, radius and spacing come exclusively from tokens — never hard-code a
-/// hex or inset here (tokens.md). Gradients are forbidden; every fill is solid.
+/// hex or inset here (tokens.md). Every fill is solid: the one sanctioned brand
+/// gradient (AssenGradients.brand) is bounded to hero/cover/lockup/login
+/// surfaces (tokens.md exception 2026-07-09) and never reaches a button.
 class AssenButton extends StatelessWidget {
   /// Creates a button rendered with [style] (defaults to
   /// [AssenButtonStyle.primary]).
@@ -101,9 +102,9 @@ class AssenButton extends StatelessWidget {
 
   ButtonStyle _primaryStyle(AssenColors colors) {
     return FilledButton.styleFrom(
-      backgroundColor: colors.roseMain,
+      backgroundColor: colors.indigo500,
       foregroundColor: colors.white,
-      disabledBackgroundColor: colors.ink100,
+      disabledBackgroundColor: colors.neutral100,
       disabledForegroundColor: colors.ink500,
       minimumSize: const Size(_minTouchTarget, _minTouchTarget),
       padding: const EdgeInsets.symmetric(
@@ -119,9 +120,9 @@ class AssenButton extends StatelessWidget {
 
   ButtonStyle _secondaryStyle(AssenColors colors) {
     return FilledButton.styleFrom(
-      backgroundColor: colors.strawberryBg,
-      foregroundColor: colors.strawberryInk,
-      disabledBackgroundColor: colors.ink100,
+      backgroundColor: colors.indigo100,
+      foregroundColor: colors.indigoInk,
+      disabledBackgroundColor: colors.neutral100,
       disabledForegroundColor: colors.ink500,
       minimumSize: const Size(_minTouchTarget, _minTouchTarget),
       padding: const EdgeInsets.symmetric(
@@ -137,7 +138,7 @@ class AssenButton extends StatelessWidget {
 
   ButtonStyle _ghostStyle(AssenColors colors) {
     return TextButton.styleFrom(
-      foregroundColor: colors.strawberryInk,
+      foregroundColor: colors.indigoInk,
       disabledForegroundColor: colors.ink500,
       minimumSize: const Size(_minTouchTarget, _minTouchTarget),
       padding: const EdgeInsets.symmetric(

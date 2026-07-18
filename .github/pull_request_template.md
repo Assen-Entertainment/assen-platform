@@ -10,13 +10,13 @@
 - [ ] web: `npm run build`(타입+ESLint) · `npm test` green
 - [ ] Flutter: `melos format/analyze/test` green (Dart 변경 시)
 - [ ] OpenAPI 계약: `server/scripts/export_openapi.py` + `npm run gen:types` 재생성 후 드리프트 없음 (API 변경 시)
-- [ ] 신규 Django 모델: **migrations 미생성**(migration-less·run-syncdb 관례, server/AGENTS.md)
+- [ ] 신규/변경 Django 모델: `makemigrations`로 마이그레이션 갱신, `makemigrations --check` clean (모델 변경 시. 2026-07-09 정식 전환, server/AGENTS.md)
 
 ## 인간 게이트 (해당 시 체크 — 단독 머지 금지)
 
 - [ ] 인증/세션/토큰 코드 (#26 인간 리뷰)
 - [ ] 결제/정산/가격/약관/본인인증/IAP (대표·법무 게이트)
-- [ ] DB `migrate`(로컬 초과) / 프로덕션 배포 (#25/#30)
+- [ ] migrations 파일 생성(`makemigrations`, `ALLOW_MIGRATIONS=1` 필요) / DB `migrate` 적용(로컬 초과) / 프로덕션 배포 (#25/#30)
 
 ## 참조
 

@@ -14,9 +14,13 @@ export const SheetDescription = DialogPrimitive.Description;
 const sheetVariants = cva("fixed z-50 flex flex-col gap-3 border-outline bg-surface p-5 shadow-4 focus:outline-none", {
   variants: {
     side: {
-      bottom: "inset-x-0 bottom-0 rounded-t-xl border-t",
-      right: "inset-y-0 right-0 h-full w-[min(90vw,400px)] border-l",
-      left: "inset-y-0 left-0 h-full w-[min(90vw,400px)] border-r",
+      // 방향별 slide-in/out(R5-W3 #1) — enter 200ms ease-out / exit 150ms ease-in. reduced-motion 전역 가드로 축소.
+      bottom:
+        "inset-x-0 bottom-0 rounded-t-xl border-t data-[state=open]:[animation:sheet-in-bottom_200ms_ease-out] data-[state=closed]:[animation:sheet-out-bottom_150ms_ease-in]",
+      right:
+        "inset-y-0 right-0 h-full w-[min(90vw,400px)] border-l data-[state=open]:[animation:sheet-in-right_200ms_ease-out] data-[state=closed]:[animation:sheet-out-right_150ms_ease-in]",
+      left:
+        "inset-y-0 left-0 h-full w-[min(90vw,400px)] border-r data-[state=open]:[animation:sheet-in-left_200ms_ease-out] data-[state=closed]:[animation:sheet-out-left_150ms_ease-in]",
     },
   },
   defaultVariants: { side: "bottom" },
@@ -31,7 +35,7 @@ export const SheetContent = React.forwardRef<
   SheetContentProps
 >(({ className, side = "bottom", children, ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
+    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:[animation:overlay-in_200ms_ease-out] data-[state=closed]:[animation:overlay-out_150ms_ease-in]" />
     <DialogPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
       {side === "bottom" ? <div className="mx-auto mb-1 h-1 w-9 rounded-full bg-outline" /> : null}
       {children}

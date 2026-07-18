@@ -17,7 +17,7 @@ class AssenBottomCta extends StatelessWidget {
   /// Creates a single full-width primary CTA.
   ///
   /// [onPrimary] null disables the button (e.g. an incomplete form). [primary]
-  /// chooses the emphasis (defaults to the rose primary).
+  /// chooses the emphasis (defaults to the indigo primary).
   const AssenBottomCta({
     required this.primaryLabel,
     required this.onPrimary,
@@ -99,7 +99,7 @@ class AssenBottomCta extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.white,
-        border: Border(top: BorderSide(color: colors.ink100)),
+        border: Border(top: BorderSide(color: colors.neutral100)),
       ),
       // SafeArea keeps the bar clear of the home indicator; the viewInsets
       // padding (added by Scaffold via MediaQuery) lifts it above the keyboard.

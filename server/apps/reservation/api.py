@@ -19,7 +19,6 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_type
 from datetime import datetime, time
-from typing import cast
 
 from django.db.models import QuerySet
 from django.http import HttpRequest
@@ -29,7 +28,7 @@ from ninja import Router, Schema
 from pydantic import Field
 
 from apps.admin_rbac.permissions import operator_required
-from apps.identity.api import FanBearerAuth
+from apps.identity.auth import FanBearerAuth, authed
 from apps.identity.models import Account, Role
 from apps.reservation.models import Reservation
 from apps.reservation.services import (
@@ -40,6 +39,7 @@ from apps.reservation.services import (
     mark_no_show,
 )
 from config.api import api
+from config.throttle import user_write_throttle
 
 operator_router = Router(auth=operator_required, tags=["operator-reservation"])
 fan_router = Router(auth=[FanBearerAuth()], tags=["fan-reservation"])
@@ -122,7 +122,8 @@ class ReservationReasonIn(Schema):
 # Operator surface
 # --------------------------------------------------------------------------- #
 @operator_router.post(
-    "", response={201: ReservationOut, 400: ReservationError, 404: ReservationError}
+    "", response={201: ReservationOut, 400: ReservationError, 404: ReservationError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_create_reservation(
     request: HttpRequest,
@@ -164,6 +165,7 @@ def operator_list_reservations(
 @operator_router.post(
     "/{reservation_id}/confirm",
     response={200: ReservationOut, 400: ReservationError, 404: ReservationError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_confirm_reservation(
     request: HttpRequest,
@@ -181,6 +183,7 @@ def operator_confirm_reservation(
 @operator_router.post(
     "/{reservation_id}/change",
     response={200: ReservationOut, 400: ReservationError, 404: ReservationError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_change_reservation(
     request: HttpRequest,
@@ -205,6 +208,7 @@ def operator_change_reservation(
 @operator_router.post(
     "/{reservation_id}/cancel",
     response={200: ReservationOut, 400: ReservationError, 404: ReservationError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_cancel_reservation(
     request: HttpRequest,
@@ -225,6 +229,7 @@ def operator_cancel_reservation(
 @operator_router.post(
     "/{reservation_id}/no-show",
     response={200: ReservationOut, 400: ReservationError, 404: ReservationError},
+    throttle=user_write_throttle("60/min"),
 )
 def operator_no_show_reservation(
     request: HttpRequest,
@@ -246,7 +251,8 @@ def operator_no_show_reservation(
 # Fan surface (bearer only; role-gated to fans)
 # --------------------------------------------------------------------------- #
 @fan_router.post(
-    "", response={201: FanReservationOut, 400: ReservationError, 403: ReservationError}
+    "", response={201: FanReservationOut, 400: ReservationError, 403: ReservationError},
+    throttle=user_write_throttle("20/min"),
 )
 def fan_create_reservation(
     request: HttpRequest,
@@ -290,6 +296,7 @@ def fan_list_reservations(
         403: ReservationError,
         404: ReservationError,
     },
+    throttle=user_write_throttle("20/min"),
 )
 def fan_cancel_reservation(
     request: HttpRequest,
@@ -315,7 +322,7 @@ def fan_cancel_reservation(
 def _actor(request: HttpRequest) -> Account:
     """Return the authenticated account supplied by the auth class."""
     # request.auth is untyped without Ninja stubs (same idiom as visit/api.py).
-    return cast(Account, request.auth)  # type: ignore[attr-defined]
+    return authed(request)
 
 
 def _out(record: Reservation) -> ReservationOut:

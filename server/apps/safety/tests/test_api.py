@@ -7,11 +7,16 @@ narrative (audited) and resolve/block; non-managers are refused those routes.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from django.test import Client
 
 from apps.admin_rbac.redaction import REDACTED
 from apps.audit.models import AuditAction, AuditEntry
+from apps.cast.models import CastProfile
+from apps.event_log.models import EventRecord
+from apps.identity.cookies import ACCESS_COOKIE_NAME
 from apps.identity.models import Account, Role
 from apps.identity.services import issue_token_pair
 from apps.safety.models import SafetyReport
@@ -91,7 +96,7 @@ def test_manager_reads_detail_and_it_is_audited(client: Client) -> None:
 
     response = client.get(
         f"/api/safety/reports/{report.id}/detail",
-        data={"reason": "triage review"},
+        data={"reason": "report_triage"},
         headers=_auth(manager),
     )
     assert response.status_code == 200
@@ -99,7 +104,29 @@ def test_manager_reads_detail_and_it_is_audited(client: Client) -> None:
     audit = AuditEntry.objects.get(
         action=AuditAction.SAFETY_DETAIL_VIEWED.value, target=str(report.id)
     )
-    assert audit.reason == "triage review"
+    # The audit trail records the closed reason CODE, never free text (ASS-291 #7).
+    assert audit.reason == "report_triage"
+
+
+def test_detail_reason_must_be_a_closed_code(client: Client) -> None:
+    """A free-text detail-access reason is refused so PII can't ride the query string.
+
+    The "why" now travels as a bounded reason CODE; a free-text reason carrying a
+    name/phone is rejected (400), never recorded, and never echoed back (ASS-291 #7).
+    """
+    manager = _account(Role.MANAGER.value)
+    report = _seed_report(_account(Role.OPERATOR.value))
+
+    response = client.get(
+        f"/api/safety/reports/{report.id}/detail",
+        data={"reason": "피해자 이름 010-0000-0000 확인차"},
+        headers=_auth(manager),
+    )
+    assert response.status_code == 400
+    assert "010-0000-0000" not in response.content.decode()
+    assert not AuditEntry.objects.filter(
+        action=AuditAction.SAFETY_DETAIL_VIEWED.value
+    ).exists()
 
 
 def test_operator_cannot_resolve_or_block(client: Client) -> None:
@@ -202,6 +229,66 @@ def test_unknown_report_type_rejected(client: Client) -> None:
     )
     assert response.status_code == 400
     assert not SafetyReport.objects.exists()
+
+
+# --- operator cast_id validation (ASS-291 #7) -------------------------------- #
+
+_REPORT_BASE = {
+    "report_type": "verbal_abuse",
+    "severity": "medium",
+    "reporter_type": "fan",
+    "target_type": "cast",
+    "narrative": _SECRET,
+}
+
+
+def test_create_report_rejects_malformed_cast_id(client: Client) -> None:
+    """A cast_id that isn't a well-formed cast id is refused before any row is written.
+
+    The operator-supplied cast_id is written verbatim into the append-only event
+    ledger; arbitrary free text (a name / phone) must never be persisted there
+    (ASS-291 #7). No report or event is written, and the input is not echoed back.
+    """
+    operator = _account(Role.OPERATOR.value)
+    response = client.post(
+        "/api/safety/reports",
+        data={**_REPORT_BASE, "cast_id": "홍길동 010-0000-0000"},
+        content_type="application/json",
+        headers=_auth(operator),
+    )
+    assert response.status_code == 400
+    assert "010-0000-0000" not in response.content.decode()
+    assert not SafetyReport.objects.exists()
+    assert not EventRecord.objects.exists()
+
+
+def test_create_report_rejects_unknown_cast_id(client: Client) -> None:
+    """A well-formed but unknown cast_id (no such profile) is refused (400)."""
+    operator = _account(Role.OPERATOR.value)
+    response = client.post(
+        "/api/safety/reports",
+        data={**_REPORT_BASE, "cast_id": str(uuid.uuid4())},
+        content_type="application/json",
+        headers=_auth(operator),
+    )
+    assert response.status_code == 400
+    assert not SafetyReport.objects.exists()
+    assert not EventRecord.objects.exists()
+
+
+def test_create_report_accepts_existing_cast_id_onto_event(client: Client) -> None:
+    """A well-formed cast_id of an existing profile is accepted and rides the event."""
+    operator = _account(Role.OPERATOR.value)
+    profile = CastProfile.objects.create(stage_name="스텔라", created_by=operator)
+    response = client.post(
+        "/api/safety/reports",
+        data={**_REPORT_BASE, "cast_id": str(profile.id)},
+        content_type="application/json",
+        headers=_auth(operator),
+    )
+    assert response.status_code == 201
+    event = EventRecord.objects.get(event_name="safety_report_created")
+    assert event.cast_id == str(profile.id)
 
 
 # --- Fan self-reporting (ASS-110, F11) --------------------------------------
@@ -334,3 +421,31 @@ def test_fan_report_invalid_type_error_does_not_echo_input(client: Client) -> No
     assert response.status_code == 422
     assert "010-9999-8888" not in response.content.decode()
     assert not SafetyReport.objects.exists()
+
+
+def test_fan_report_cookie_surface_with_csrf_is_201() -> None:
+    """The web cookie surface can file a report when the CSRF token accompanies it (B3).
+
+    Uses a CSRF-enforcing client: the fan's access token rides the web httpOnly
+    cookie, and the ``/fan/csrf`` cookie is echoed in ``X-CSRFToken`` (the
+    double-submit grace condition). ``fan_auth``'s cookie surface enforces CSRF on
+    this unsafe POST, so a valid token yields 201.
+    """
+    csrf_client = Client(enforce_csrf_checks=True)
+    fan = _account(Role.FAN.value)
+    # Plant the access token as the web access cookie (cookie surface, not bearer).
+    csrf_client.cookies[ACCESS_COOKIE_NAME] = issue_token_pair(fan).access_token
+    # Obtain the CSRF cookie, then echo it back on the report POST.
+    csrf_client.get("/api/fan/csrf")
+    token = csrf_client.cookies["csrftoken"].value
+
+    response = csrf_client.post(
+        "/api/safety/fan-reports",
+        data={"report_type": "private_contact", "narrative": _SECRET},
+        content_type="application/json",
+        HTTP_X_CSRFTOKEN=token,
+    )
+    assert response.status_code == 201
+    report = SafetyReport.objects.get(id=response.json()["safety_report_id"])
+    assert report.reporter == fan
+    assert report.reporter_type == "fan"
