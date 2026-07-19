@@ -104,6 +104,12 @@ export function CreatorProfileView({
   const changeTier = useChangeSubscriptionTier();
   const [pendingTier, setPendingTier] = React.useState<MembershipTier | null>(null);
 
+  // 추천 티어 앵커(뷰 레벨 heuristic — 데이터 모델 불변). 서버가 featured 티어를 주면 그대로 존중하고,
+  // 하나도 없으면(시드가 전부 false) 구독 결정을 도울 앵커가 사라지므로 가운데 티어를 추천으로 승격한다.
+  //  티어 2개 → 두 번째, 3개 → 중앙, 1개 → 그 자체(index 0)가 앵커. 표시(뷰)만 바꾸고 계약은 건드리지 않는다.
+  const serverHasFeaturedTier = tiers.some((t) => t.featured);
+  const recommendedTierIndex = serverHasFeaturedTier ? -1 : Math.floor(tiers.length / 2);
+
   const onConfirmTierChange = () => {
     if (!mySub || !pendingTier) return;
     const targetTier = pendingTier;
@@ -351,6 +357,10 @@ export function CreatorProfileView({
                 const isCurrent = mySub?.tierId === t.id;
                 // 무료 멤버십(ASS-297) — 신규 가입 CTA를 "무료로 시작하기"로. 체크아웃이 무료 획득을 처리한다.
                 const free = t.pricingKind === "free";
+                // 서버 featured 최우선, 없으면 뷰 heuristic으로 추천 티어를 solid 앵커(강조 바+solid CTA)로 승격.
+                const isRecommended = t.featured || (!serverHasFeaturedTier && i === recommendedTierIndex);
+                // 추천 배지 — 서버 badge 최우선, 없고 티어가 여럿이면 "추천"(단일 티어는 비교 대상이 없어 생략).
+                const tierBadge = t.badge ?? (isRecommended && tiers.length > 1 ? "추천" : undefined);
                 return (
                   <StaggerItem key={t.id}>
                   <MembershipTierCard
@@ -358,9 +368,9 @@ export function CreatorProfileView({
                     price={t.price}
                     period={t.period}
                     benefits={t.benefits}
-                    badge={t.badge}
-                    featured={t.featured}
-                    accent={t.featured}
+                    badge={tierBadge}
+                    featured={isRecommended}
+                    accent={isRecommended}
                     inheritNote={i > 0 ? `${tiers[i - 1]?.name ?? ""} 혜택 포함` : undefined}
                     currentPlan={isCurrent}
                     ctaLabel={mySub ? "이 티어로 변경" : free ? "무료로 시작하기" : "구독하기"}
