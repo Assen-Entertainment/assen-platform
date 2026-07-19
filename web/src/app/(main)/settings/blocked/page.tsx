@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { Avatar, Button, Card, Divider, EmptyState, ErrorState, Skeleton } from "@/components/ui";
+import { BlockLineIcon } from "@/components/ui/empty-state-icons";
 import { useToast } from "@/components/ui/use-toast";
 import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useBlocks, useUnblockCreator } from "@/lib/api/queries";
@@ -63,9 +64,9 @@ export default function BlockedSettingsPage() {
       ) : blocks.length === 0 ? (
         <Card>
           <EmptyState
+            icon={<BlockLineIcon />}
             title="차단한 크리에이터가 없어요"
             description="크리에이터 프로필이나 피드에서 차단하면 여기에 표시돼요."
-            icon={<span className="text-2xl">🔕</span>}
           />
         </Card>
       ) : (

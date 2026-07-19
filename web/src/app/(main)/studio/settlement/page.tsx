@@ -9,6 +9,7 @@ import {
   EmptyState,
   SHOW_GATE_NOTES,
 } from "@/components/ui";
+import { ChartBarLineIcon } from "@/components/ui/empty-state-icons";
 import { won } from "@/lib/studio-mock";
 import { getSettlementDemoRows, type SettlementRow } from "@/lib/api";
 
@@ -56,6 +57,7 @@ export default function StudioSettlementPage() {
         <SectionHeader title="정산" description="수익과 정산 내역을 확인하세요" />
         <div className="rounded-lg border border-outline bg-surface p-4">
           <EmptyState
+            icon={<ChartBarLineIcon />}
             title="정산 데이터 준비 중이에요"
             description="정산 내역은 준비되는 대로 이곳에 표시됩니다. 아직 표시할 정산 데이터가 없어요."
           />

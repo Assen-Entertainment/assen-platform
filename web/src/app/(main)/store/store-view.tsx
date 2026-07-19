@@ -2,7 +2,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Chip, MonetizableItem, EmptyState, LoadMore, Spinner } from "@/components/ui";
+import { Card, Chip, MonetizableItem, EmptyState, LoadMore, Spinner } from "@/components/ui";
+import { SearchLineIcon } from "@/components/ui/empty-state-icons";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { useProducts, useShippingCheckoutAvailable } from "@/lib/api/queries";
 import type { Page, Product } from "@/lib/api";
@@ -89,7 +90,13 @@ export function StoreView({ products }: { products: Page<Product> }) {
           <Spinner />
         </div>
       ) : (
-        <EmptyState title="상품이 없어요" description="다른 카테고리를 선택해 보세요." />
+        <Card>
+          <EmptyState
+            icon={<SearchLineIcon />}
+            title="상품이 없어요"
+            description="다른 카테고리를 선택해 보세요."
+          />
+        </Card>
       )}
       {/* 무한 스크롤은 '전체'에서만 — 필터 중엔 위 effect가 남은 페이지를 자동 로드하므로 수동 더보기를 숨긴다. */}
       {!filtering ? (

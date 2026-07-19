@@ -2,6 +2,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { Card, CardBody, StatItem, SegmentedControl, SectionHeader, GateNote, Skeleton, EmptyState } from "@/components/ui";
+import { TrendLineIcon } from "@/components/ui/empty-state-icons";
 import { won } from "@/lib/studio-mock";
 import { getAnalyticsDemoSeries, type AnalyticsPoint } from "@/lib/api";
 
@@ -35,6 +36,7 @@ export default function StudioAnalyticsPage() {
         <h1 className="text-headline text-on-surface">애널리틱스</h1>
         <div className="rounded-lg border border-outline bg-surface p-4">
           <EmptyState
+            icon={<TrendLineIcon />}
             title="애널리틱스 데이터 준비 중이에요"
             description="구독자·수익 추이는 준비되는 대로 이곳에 표시됩니다. 아직 표시할 데이터가 없어요."
           />

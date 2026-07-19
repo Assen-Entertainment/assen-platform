@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardBody, Button, EmptyState, SectionHeader } from "@/components/ui";
+import { ActivityLineIcon } from "@/components/ui/empty-state-icons";
 import { StudioStatsGrid } from "./studio-stats";
 
 /** 서브메뉴 카드 — 스튜디오 각 영역 진입점. */
@@ -46,8 +47,9 @@ export default function StudioPage() {
 
       <section className="flex flex-col gap-3">
         <SectionHeader title="최근 항목" />
-        <div className="overflow-hidden rounded-lg border border-outline">
+        <div className="overflow-hidden rounded-lg border border-outline bg-surface">
           <EmptyState
+            icon={<ActivityLineIcon />}
             title="아직 최근 활동이 없어요"
             description="포스트·상품·멤버십 활동이 쌓이면 여기에 표시돼요."
           />
