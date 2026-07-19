@@ -363,7 +363,7 @@ export function CreatorProfileView({
                 // 추천 배지 — 서버 badge 최우선, 없고 티어가 여럿이면 "추천"(단일 티어는 비교 대상이 없어 생략).
                 const tierBadge = t.badge ?? (isRecommended && tiers.length > 1 ? "추천" : undefined);
                 return (
-                  <StaggerItem key={t.id}>
+                  <StaggerItem key={t.id} className="h-full">
                   <MembershipTierCard
                     name={t.name}
                     price={t.price}
