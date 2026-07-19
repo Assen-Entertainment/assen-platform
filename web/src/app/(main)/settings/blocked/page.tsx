@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Avatar, Button, Card, Divider, EmptyState, ErrorState, Spinner } from "@/components/ui";
+import { Avatar, Button, Card, Divider, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useBlocks, useUnblockCreator } from "@/lib/api/queries";
@@ -35,8 +35,21 @@ export default function BlockedSettingsPage() {
       <h1 className="text-headline text-on-surface">차단 목록</h1>
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
+        // 로딩 — 차단 목록 행(아바타 + 이름/핸들 2줄 + 해제 버튼)을 근사한 톤 스켈레톤(CLS 최소화).
+        <div className="overflow-hidden rounded-lg border border-outline" aria-busy="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i}>
+              {i > 0 ? <Divider /> : null}
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Skeleton className="size-10 shrink-0 rounded-full" />
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+                <Skeleton className="h-8 w-20 shrink-0 rounded-md" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : isError ? (
         // 로드 실패(비401) — 빈 목록으로 오인 표시하지 않고 에러+재시도. 401은 전역 세션 가드가 처리.

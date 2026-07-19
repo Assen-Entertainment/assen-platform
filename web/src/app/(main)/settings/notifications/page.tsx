@@ -1,5 +1,5 @@
 "use client";
-import { ListItem, Switch, Divider, SectionHeader, Spinner } from "@/components/ui";
+import { ListItem, Switch, Divider, SectionHeader, Skeleton } from "@/components/ui";
 import { usePersistentToggle } from "@/lib/use-persistent-state";
 import { useMarketingConsent, useSetMarketingConsent } from "@/lib/api/queries";
 import type { MarketingConsentState } from "@/lib/api/types";
@@ -52,8 +52,20 @@ function MarketingConsentSection() {
       />
       <div className="overflow-hidden rounded-lg border border-outline">
         {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
+          // 로딩 — 채널 토글 행(라벨/서브 2줄 + 우측 스위치 자리)을 근사한 톤 스켈레톤(CLS 최소화).
+          <div aria-busy="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i}>
+                {i > 0 ? <Divider /> : null}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <>

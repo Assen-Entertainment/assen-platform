@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogClose,
-  Spinner,
+  Skeleton,
   EmptyState,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
@@ -54,9 +54,44 @@ export function OrderDetailClient({ id }: { id: string }) {
   const { data: order, isPending } = useOrder(id);
   if (order) return <OrderDetailView order={order} />;
   if (isPending) {
+    // 로딩 — 주문 상세 레이아웃(헤더/상태 · 주문 항목 카드 · 결제 정보 카드)을 근사한 톤 스켈레톤(CLS 최소화).
     return (
-      <div className="mx-auto flex max-w-2xl justify-center py-16">
-        <Spinner />
+      <div className="mx-auto flex max-w-2xl flex-col gap-4" aria-busy="true">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-20" />
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+          <Skeleton className="h-3 w-40" />
+        </div>
+        <Card>
+          <CardBody className="flex flex-col gap-3">
+            <Skeleton className="h-5 w-20" />
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-14 shrink-0 rounded-md" />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+              <Skeleton className="h-5 w-16 shrink-0" />
+            </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody className="flex flex-col gap-2">
+            <Skeleton className="h-5 w-20" />
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Divider className="my-1" />
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+          </CardBody>
+        </Card>
       </div>
     );
   }
