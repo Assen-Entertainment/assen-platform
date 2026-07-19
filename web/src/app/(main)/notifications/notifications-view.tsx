@@ -40,7 +40,7 @@ export function NotificationsView({ notifications }: { notifications: Page<Notif
 
   if (isError && !data) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4">
         <h1 className="text-headline text-on-surface">알림</h1>
         <ErrorState onRetry={() => refetch()} />
       </div>
@@ -49,7 +49,7 @@ export function NotificationsView({ notifications }: { notifications: Page<Notif
 
   if (!list.length) {
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4">
         <h1 className="text-headline text-on-surface">알림</h1>
         <EmptyState title="알림이 없어요" description="새 소식이 오면 여기에 표시됩니다." />
       </div>
@@ -57,7 +57,7 @@ export function NotificationsView({ notifications }: { notifications: Page<Notif
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-headline text-on-surface">알림</h1>
         {unread > 0 ? (

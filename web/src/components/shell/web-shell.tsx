@@ -246,7 +246,12 @@ export function WebShell({ children }: { children: React.ReactNode }) {
             </>
           }
         />
-        <main id="main" className="flex-1 overflow-auto p-4 pb-20 sm:p-6 lg:pb-6">{children}</main>
+        {/* 통일된 콘텐츠 프레임 — 체크아웃과 동일한 "중앙 정렬 컨테이너" 논리를 앱 셸에도 적용한다.
+            main은 풀폭(스크롤바·상단바 정렬 유지)이고, 안쪽 컨테이너가 콘텐츠를 중앙 정렬 + 상한(초광폭
+            모니터에서 우측 드리프트 방지)한다. 각 면은 자체 max-w로 이 프레임 안에서 폭을 정한다. */}
+        <main id="main" className="flex-1 overflow-auto">
+          <div className="mx-auto w-full max-w-[100rem] p-4 pb-20 sm:p-6 lg:pb-6">{children}</div>
+        </main>
       </div>
       <BottomNav
         className="fixed inset-x-0 bottom-0 z-40 lg:hidden"

@@ -56,7 +56,7 @@ export function OrderDetailClient({ id }: { id: string }) {
   if (isPending) {
     // 로딩 — 주문 상세 레이아웃(헤더/상태 · 주문 항목 카드 · 결제 정보 카드)을 근사한 톤 스켈레톤(CLS 최소화).
     return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-4" aria-busy="true">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4" aria-busy="true">
         <div className="flex flex-col gap-2">
           <Skeleton className="h-4 w-20" />
           <div className="flex items-center justify-between gap-3">
@@ -96,7 +96,7 @@ export function OrderDetailClient({ id }: { id: string }) {
     );
   }
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <Link href="/orders" className="text-body-s text-on-surface-variant hover:text-on-surface">
         ← 주문 내역
       </Link>
@@ -153,7 +153,7 @@ export function OrderDetailView({ order }: { order: Order }) {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Link href="/orders" className="text-body-s text-on-surface-variant hover:text-on-surface">
           ← 주문 내역

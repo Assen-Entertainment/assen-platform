@@ -16,7 +16,7 @@ export function OrdersView({ initialOrders }: { initialOrders: Page<Order> }) {
   const orders = data ?? initialOrders.items;
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <h1 className="text-headline text-on-surface">주문 내역</h1>
       {isError && !data ? (
         <ErrorState onRetry={() => refetch()} />

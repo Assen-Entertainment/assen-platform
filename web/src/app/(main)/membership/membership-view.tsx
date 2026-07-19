@@ -19,7 +19,7 @@ export function MembershipView({ subscriptions }: { subscriptions: Subscription[
   const loggedIn = mounted && Boolean(user);
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <Reveal>
         <div className="flex flex-col gap-2">
           <h1 className="text-balance text-headline text-on-surface">내 멤버십</h1>
