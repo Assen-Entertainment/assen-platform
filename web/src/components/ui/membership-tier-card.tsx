@@ -42,19 +42,28 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
       ref={ref}
       className={cn(
         // 카드 표면 규율(P2b) — 헤어라인 + hover 소프트 그림자 + 1px 리프트(MonetizableItem 과 동일 시스템).
-        "flex w-full flex-col overflow-hidden rounded-lg border bg-surface-container transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
+        // h-full: 그리드 셀(StaggerItem)을 꽉 채워 3장 등높이 정렬(짧은 카드도 행 높이만큼 늘어남).
+        "flex h-full w-full flex-col overflow-hidden rounded-lg border bg-surface-container transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-2 motion-reduce:transform-none motion-reduce:transition-none",
         featured ? (accent ? "border-creator-accent shadow-2" : "border-primary shadow-2") : "border-outline-variant hover:border-outline",
         className,
       )}
       {...props}
     >
-      {featured ? (
-        <div
-          className="h-1.5 w-full"
-          style={accent ? { backgroundColor: "var(--creator-accent)" } : { backgroundImage: "var(--gradient-brand)" }}
-        />
-      ) : null}
-      <div className="flex flex-col gap-4 p-5">
+      {/* 상단 액센트 바 — featured=크리에이터 액센트/브랜드 그라디언트로 앵커를 강조.
+          비featured도 동일 h-1.5를 투명(배경 없음)으로 렌더해 3장의 상단 baseline을 맞춘다
+          (등높이 정렬: 강조를 높이 차이 없이 색으로만 표현). shrink-0로 flex 축소 방지. */}
+      <div
+        aria-hidden
+        className="h-1.5 w-full shrink-0"
+        style={
+          featured
+            ? accent
+              ? { backgroundColor: "var(--creator-accent)" }
+              : { backgroundImage: "var(--gradient-brand)" }
+            : undefined
+        }
+      />
+      <div className="flex flex-1 flex-col gap-4 p-5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-title-l text-on-surface">{name}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -100,7 +109,8 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
           variant={featured ? (accent ? "accent" : "primary") : "outline"}
           size="lg"
           className={cn(
-            "w-full",
+            // mt-auto: 콘텐츠(칩 유/무·혜택 개수)와 무관하게 CTA를 카드 하단에 고정 → 3장의 버튼이 한 y선 정렬.
+            "mt-auto w-full",
             // 비featured 구독 CTA — 회색 secondary(비활성과 혼동) 대신 브랜드 아웃라인.
             // 라벨 text-primary 는 다크에서 globals(.dark .text-primary=primary-bright)가 자동 리프트 →
             // 라이트/다크 모두 WCAG AA. currentPlan(disabled)일 땐 muted 표면으로 남겨 "구독 중"을 또렷이.
