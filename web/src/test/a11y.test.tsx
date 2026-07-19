@@ -93,6 +93,21 @@ describe("a11y 스모크 (vitest-axe) — 대표 컴포넌트/뷰 위반 0", () 
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("멤버십 티어 카드 — 비featured 브랜드 아웃라인 CTA(대비)", async () => {
+    // 비featured 구독 CTA는 회색 secondary 대신 브랜드 아웃라인(border-primary·text-primary).
+    // 라벨 대비가 라이트/다크 모두 AA인지 axe로 확인(회귀 가드).
+    const { container } = render(
+      <MembershipTierCard
+        name="라이트"
+        price={4900}
+        period="월"
+        benefits={["전용 포스트", "멤버 뱃지"]}
+        onSubscribe={() => {}}
+      />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it("다이얼로그 열림 상태(ReportSheet)", async () => {
     // Radix 포털은 document.body로 렌더되므로 baseElement로 axe를 돌린다.
     const { baseElement } = render(

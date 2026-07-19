@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
  * MembershipTierCard — Figma DS(19:3). surfaceContainer·radius lg·outline, 가격 Display/M.
  * [브랜드 루브릭] B 시그니처: featured 티어 강조 바/보더. C 크리에이터: accent=true → 크리에이터 액센트로 강조
  *  (creatorAccentVars 스코프 내에서 의미). 기본 false=primary/gradient.brand(전역 chrome). A: 가격 tabular. D: 혜택 체크.
+ * [CTA 위계] 구독은 크리에이터 플랫폼에서 LTV가 가장 큰 액션 → 회색 secondary(비활성과 혼동) 금지.
+ *  featured=solid(primary/creator-accent, 최고 강조 앵커), 비featured=브랜드 아웃라인(border-primary·text-primary,
+ *  다크에서 라벨 자동 리프트로 WCAG AA 유지). 일회성 "구매하기" primary와 최소 동급 이상으로 읽힌다.
  */
 export interface MembershipTierCardProps extends React.HTMLAttributes<HTMLDivElement> {
   name: string;
@@ -94,9 +97,15 @@ export const MembershipTierCard = React.forwardRef<HTMLDivElement, MembershipTie
           ))}
         </ul>
         <Button
-          variant={featured ? (accent ? "accent" : "primary") : "secondary"}
+          variant={featured ? (accent ? "accent" : "primary") : "outline"}
           size="lg"
-          className="w-full"
+          className={cn(
+            "w-full",
+            // 비featured 구독 CTA — 회색 secondary(비활성과 혼동) 대신 브랜드 아웃라인.
+            // 라벨 text-primary 는 다크에서 globals(.dark .text-primary=primary-bright)가 자동 리프트 →
+            // 라이트/다크 모두 WCAG AA. currentPlan(disabled)일 땐 muted 표면으로 남겨 "구독 중"을 또렷이.
+            !featured && !currentPlan && "border-primary text-primary hover:border-primary hover:bg-primary-container",
+          )}
           disabled={currentPlan}
           onClick={currentPlan ? undefined : onSubscribe}
         >
