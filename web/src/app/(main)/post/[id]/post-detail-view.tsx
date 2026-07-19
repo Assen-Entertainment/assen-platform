@@ -70,7 +70,7 @@ export function PostDetailView({ post: initialPost, comments: initialComments }:
           creatorMeta={p.creatorMeta}
           verified={p.verified}
           avatarFallback={p.creatorName.slice(0, 1)}
-          avatarTone={p.creatorId}
+          avatarTone={p.creatorHandle ?? p.creatorId}
           body={p.locked ? "멤버십 전용 콘텐츠예요" : p.body}
           media={
             adultBlocked ? (

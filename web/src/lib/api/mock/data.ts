@@ -51,12 +51,12 @@ export const TIERS: MembershipTier[] = [
 ];
 
 export const POSTS: Post[] = [
-  { id: "po1", creatorId: "c1", creatorName: "별빛 일러스트", creatorMeta: "@stellar · 3시간 전", verified: true, body: "신작 공개! 많은 관심 부탁드려요.", likeCount: 842, commentCount: 2 },
-  { id: "po2", creatorId: "c1", creatorName: "별빛 일러스트", creatorMeta: "@stellar · 어제", verified: true, body: "[멤버십 전용] 신작 러프 스케치를 먼저 공개해요.", likeCount: 331, commentCount: 1, locked: true },
-  { id: "po3", creatorId: "c3", creatorName: "토끼방송국", creatorMeta: "@rabbit · 2시간 전", body: "오늘 저녁 8시 라이브 켜요! 놀러오세요 🐰", likeCount: 1204, commentCount: 1 },
-  { id: "po4", creatorId: "c2", creatorName: "Neon Beats", creatorMeta: "@neonbeats · 5시간 전", body: "새 EP 티저 공개 🎧", likeCount: 512, commentCount: 0 },
-  { id: "po5", creatorId: "c4", creatorName: "묘화가", creatorMeta: "@myo · 3일 전", body: "냥이 그림 모음집 작업 중 🐱", likeCount: 210, commentCount: 0 },
-  { id: "po6", creatorId: "c5", creatorName: "Studio Lumi", creatorMeta: "@lumi · 1주 전", body: "굿즈 재입고 안내드립니다.", likeCount: 88, commentCount: 0 },
+  { id: "po1", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", creatorMeta: "@stellar · 3시간 전", verified: true, body: "신작 공개! 많은 관심 부탁드려요.", likeCount: 842, commentCount: 2 },
+  { id: "po2", creatorId: "c1", creatorName: "별빛 일러스트", creatorHandle: "stellar", creatorMeta: "@stellar · 어제", verified: true, body: "[멤버십 전용] 신작 러프 스케치를 먼저 공개해요.", likeCount: 331, commentCount: 1, locked: true },
+  { id: "po3", creatorId: "c3", creatorName: "토끼방송국", creatorHandle: "rabbit", creatorMeta: "@rabbit · 2시간 전", body: "오늘 저녁 8시 라이브 켜요! 놀러오세요 🐰", likeCount: 1204, commentCount: 1 },
+  { id: "po4", creatorId: "c2", creatorName: "Neon Beats", creatorHandle: "neonbeats", creatorMeta: "@neonbeats · 5시간 전", body: "새 EP 티저 공개 🎧", likeCount: 512, commentCount: 0 },
+  { id: "po5", creatorId: "c4", creatorName: "묘화가", creatorHandle: "myo", creatorMeta: "@myo · 3일 전", body: "냥이 그림 모음집 작업 중 🐱", likeCount: 210, commentCount: 0 },
+  { id: "po6", creatorId: "c5", creatorName: "Studio Lumi", creatorHandle: "lumi", creatorMeta: "@lumi · 1주 전", body: "굿즈 재입고 안내드립니다.", likeCount: 88, commentCount: 0 },
 ];
 
 export const COMMENTS: Comment[] = [

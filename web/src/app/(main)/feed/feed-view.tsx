@@ -96,7 +96,7 @@ export function FeedView({ initialFeed }: { initialFeed: Page<Post> }) {
               creatorMeta={p.creatorMeta}
               verified={p.verified}
               avatarFallback={p.creatorName.slice(0, 1)}
-              avatarTone={p.creatorId}
+              avatarTone={p.creatorHandle ?? p.creatorId}
               body={p.locked ? "멤버십 전용 콘텐츠예요" : p.body}
               media={
                 // 세션 복원 전(mounted=false)엔 게이트 판정 보류 — 인증 뷰어에게 블러→언블러 플래시 방지

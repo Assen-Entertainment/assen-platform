@@ -5,7 +5,10 @@ import type { StatusChipVariant } from "@/components/ui";
 export function orderStatusMeta(status: OrderStatus): { label: string; variant: StatusChipVariant } {
   switch (status) {
     case "paid":
-      return { label: "결제완료", variant: "info" };
+      // 결제완료=성공/긍정 상태 → 브랜드 퍼플(info)이 아니라 시맨틱 success(그린)로.
+      // 구독 "구독 중"과 같은 계열로 통일해 브랜드색 희석·의미 혼선을 제거한다.
+      // 브랜드 퍼플(info)은 이제 "진행 중/정보"(배송중·환불처리중)에만 쓰인다.
+      return { label: "결제완료", variant: "success" };
     case "shipping":
       return { label: "배송중", variant: "info" };
     case "completed":
