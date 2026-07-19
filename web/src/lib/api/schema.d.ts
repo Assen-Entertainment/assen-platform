@@ -1225,6 +1225,11 @@ export interface paths {
         /**
          * Studio Update Profile
          * @description Update the caller's own creator profile; 403 if they operate no creator.
+         *
+         *     ``category``, when provided, must be a canonical creator category
+         *     (:data:`~apps.creator.categories.CREATOR_CATEGORIES`) or the empty string to
+         *     clear it; anything else is a 422 so the discovery filter's exact-match set can
+         *     never accumulate off-list values (which would make a creator unreachable).
          */
         patch: operations["apps_creator_api_studio_update_profile"];
         trace?: never;
@@ -4575,12 +4580,21 @@ export interface components {
         /**
          * StudioProfileCreateIn
          * @description Payload for a fan to open (self-serve) their own creator page.
+         *
+         *     ``category`` is optional (defaults to unset) — a canonical creator category
+         *     (:data:`~apps.creator.categories.CREATOR_CATEGORIES`) chosen at open time so a
+         *     new creator is immediately discoverable under a filter; blank leaves it unset.
          */
         StudioProfileCreateIn: {
             /** Handle */
             handle: string;
             /** Name */
             name: string;
+            /**
+             * Category
+             * @default
+             */
+            category: string;
         };
         /**
          * StudioStatsOut
@@ -8767,6 +8781,15 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

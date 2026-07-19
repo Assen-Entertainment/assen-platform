@@ -29,7 +29,8 @@ export const CREATORS: Creator[] = [
   { id: "c2", name: "Neon Beats", handle: "neonbeats", category: "뮤직", followers: 8100, accentColor: "#3B82F6" },
   { id: "c3", name: "토끼방송국", handle: "rabbit", category: "버튜버", followers: 23500, accentColor: "#F59E0B" },
   { id: "c4", name: "묘화가", handle: "myo", category: "일러스트", followers: 5200, accentColor: "#10B981" },
-  { id: "c5", name: "Studio Lumi", handle: "lumi", category: "굿즈", followers: 3000, accentColor: "#8B5CF6" },
+  // 굿즈는 상품유형이라 크리에이터 카테고리(정본 CREATOR_CATEGORIES)에서 제외 — '일러스트'로 매핑(서버 seed_demo와 일치).
+  { id: "c5", name: "Studio Lumi", handle: "lumi", category: "일러스트", followers: 3000, accentColor: "#8B5CF6" },
 ];
 
 export const PRODUCTS: Product[] = [

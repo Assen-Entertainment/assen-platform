@@ -3522,9 +3522,19 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
           }
         },
-        "description": "Update the caller's own creator profile; 403 if they operate no creator.",
+        "description": "Update the caller's own creator profile; 403 if they operate no creator.\n\n``category``, when provided, must be a canonical creator category\n(:data:`~apps.creator.categories.CREATOR_CATEGORIES`) or the empty string to\nclear it; anything else is a 422 so the discovery filter's exact-match set can\nnever accumulate off-list values (which would make a creator unreachable).",
         "tags": [
           "studio-creator"
         ],
@@ -11627,7 +11637,7 @@
         "type": "object"
       },
       "StudioProfileCreateIn": {
-        "description": "Payload for a fan to open (self-serve) their own creator page.",
+        "description": "Payload for a fan to open (self-serve) their own creator page.\n\n``category`` is optional (defaults to unset) — a canonical creator category\n(:data:`~apps.creator.categories.CREATOR_CATEGORIES`) chosen at open time so a\nnew creator is immediately discoverable under a filter; blank leaves it unset.",
         "properties": {
           "handle": {
             "title": "Handle",
@@ -11635,6 +11645,11 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "category": {
+            "default": "",
+            "title": "Category",
             "type": "string"
           }
         },

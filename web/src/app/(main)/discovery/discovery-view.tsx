@@ -3,7 +3,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  SegmentedControl,
+  Chip,
+  Spinner,
   CreatorThumbCard,
   MonetizableItem,
   ErrorState,
@@ -24,15 +25,16 @@ import {
   WritingIcon,
 } from "@/lib/icons";
 import { useCreators, useProducts } from "@/lib/api/queries";
+import { CREATOR_CATEGORIES, categoryLabel } from "@/lib/creator-categories";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { COVER_GRAIN_URI } from "@/lib/placeholder";
 import type { Creator, Page, Product } from "@/lib/api";
 
+// 전체 둘러보기 필터 — 정본 크리에이터 카테고리(CREATOR_CATEGORIES) 전부 + '전체'.
+// 서버 필터(정확일치)와 값이 일치하고, 8개까지 늘어도 칩 행(줄바꿈)이라 오버플로/CLS가 없다.
 const CATS = [
   { label: "전체", value: "all" },
-  { label: "일러스트", value: "일러스트" },
-  { label: "뮤직", value: "뮤직" },
-  { label: "버튜버", value: "버튜버" },
+  ...CREATOR_CATEGORIES.map((c) => ({ label: categoryLabel(c), value: c })),
 ];
 
 /** 카테고리 아이콘 행(#7) — 콜드스타트 탐색 진입점. 클릭 → 검색으로 이동. */
@@ -53,7 +55,9 @@ function followers(n: number): string {
 }
 
 function creatorMeta(c: Creator): string {
-  return `${c.category ?? ""} · 팔로워 ${followers(c.followers)}`;
+  // 카테고리가 있을 때만 "카테고리 · " 접두 — 빈 카테고리에서 dangling 구분자(" · 팔로워")를 없앤다.
+  const prefix = c.category ? `${categoryLabel(c.category)} · ` : "";
+  return `${prefix}팔로워 ${followers(c.followers)}`;
 }
 
 export function DiscoveryView({
@@ -83,7 +87,16 @@ export function DiscoveryView({
     (productsQ.isError && !productsQ.data) ||
     (popularQ.isError && !popularQ.data) ||
     (freshQ.isError && !freshQ.data);
-  const shown = cat === "all" ? cList : cList.filter((c) => c.category === cat);
+  const filtering = cat !== "all";
+  const shown = filtering ? cList.filter((c) => c.category === cat) : cList;
+  // 카테고리 필터는 클라에 로드된 목록에만 적용된다 — 여러 페이지면 뒤 페이지의 매칭이 누락되고,
+  // 로드된 페이지에 매칭이 없으면 "없어요" 빈 상태와 "더보기"가 동시에 뜬다. 필터 활성 시 남은
+  // 페이지를 모두 당겨 필터가 전체 집합을 보게 한다(store-view와 동일한 하드닝, 모순 제거).
+  React.useEffect(() => {
+    if (filtering && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [filtering, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  // 필터 집합이 아직 완성 전(더 당길 페이지 남음)이면 성급한 빈 상태 대신 로딩을 보여준다.
+  const filteredIncomplete = filtering && hasNextPage;
 
   // 인기/신규 크리에이터 선반 — 서버 랭킹(sort=popular/new, E11) 소비(클라 sort/reverse 제거).
   const popular = popularQ.data ?? popularCreators.items;
@@ -220,14 +233,28 @@ export function DiscoveryView({
       {/* 전체 둘러보기 — 카테고리 필터 + 고밀도 그리드. */}
       <section className="flex flex-col gap-4">
         <h2 className="text-balance text-title-l text-on-surface">전체 둘러보기</h2>
-        <SegmentedControl options={CATS} value={cat} onValueChange={setCat} />
+        {/* 카테고리 필터 — 정본 카테고리 칩 행(줄바꿈). 단일 선택(전체 = 필터 해제). */}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="카테고리 필터">
+          {CATS.map((x) => (
+            <Chip key={x.value} selected={cat === x.value} onClick={() => setCat(x.value)}>
+              {x.label}
+            </Chip>
+          ))}
+        </div>
         {/* 스태거드 진입 + hover 리프트(#8) — 그리드 카드가 순차로 떠오르고, 커서 오버 시 살짝 뜬다.
-            카테고리 필터가 0건이면 빈 그리드 대신 안내(sparse 런치 blank body 방지). */}
+            카테고리 필터가 0건이면 빈 그리드 대신 안내(sparse 런치 blank body 방지). 단, 필터 집합이
+            아직 완성 전(뒤 페이지 로드 중)이면 성급한 빈 상태 대신 스피너를 보인다. */}
         {shown.length === 0 ? (
-          <EmptyState
-            title="해당하는 크리에이터가 없어요"
-            description="다른 카테고리를 선택해보세요."
-          />
+          filteredIncomplete ? (
+            <div className="flex justify-center py-12">
+              <Spinner />
+            </div>
+          ) : (
+            <EmptyState
+              title="해당하는 크리에이터가 없어요"
+              description="다른 카테고리를 선택해보세요."
+            />
+          )
         ) : (
           <Stagger className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" amount={0.08}>
             {shown.map((c) => (
@@ -242,13 +269,15 @@ export function DiscoveryView({
             ))}
           </Stagger>
         )}
-        {/* 무한 스크롤 sentinel + 폴백 버튼(카테고리 필터는 로드된 전체에 적용). */}
-        <LoadMore
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={() => fetchNextPage()}
-          itemCount={cList.length}
-        />
+        {/* 무한 스크롤은 '전체'에서만 — 필터 중엔 위 effect가 남은 페이지를 자동 로드하므로 수동 더보기를 숨긴다. */}
+        {!filtering ? (
+          <LoadMore
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={() => fetchNextPage()}
+            itemCount={cList.length}
+          />
+        ) : null}
       </section>
     </div>
   );

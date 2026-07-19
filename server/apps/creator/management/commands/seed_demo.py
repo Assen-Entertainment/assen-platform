@@ -43,7 +43,9 @@ _CREATORS = [
     ("neonbeats", "Neon Beats", "뮤직", False, "#3B82F6", ""),
     ("rabbit", "토끼방송국", "버튜버", False, "#F59E0B", ""),
     ("myo", "묘화가", "일러스트", False, "#10B981", ""),
-    ("lumi", "Studio Lumi", "굿즈", False, "#8B5CF6", ""),
+    # 굿즈는 상품유형이라 크리에이터 카테고리(정본 CREATOR_CATEGORIES)에서 제외 — 굿즈 스튜디오는
+    # 콘텐츠 카테고리 '일러스트'로 매핑(제작물이 일러스트 기반).
+    ("lumi", "Studio Lumi", "일러스트", False, "#8B5CF6", ""),
 ]
 
 # (handle, body)

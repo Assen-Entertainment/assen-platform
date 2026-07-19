@@ -36,6 +36,7 @@ from pydantic import Field
 
 from apps.commerce.models import OrderItem, OrderStatus, Product, ProductStatus
 from apps.content.models import Post
+from apps.creator.categories import is_valid_category
 from apps.creator.models import Creator
 from apps.identity.auth import (
     authed,
@@ -465,17 +466,25 @@ class StudioProfilePatch(Schema):
 
 @studio_profile_router.patch(
     "",
-    response={200: CreatorOut, 403: ErrorOut},
+    response={200: CreatorOut, 403: ErrorOut, 422: ErrorOut},
     throttle=user_write_throttle("30/min"),
 )
 def studio_update_profile(
     request: HttpRequest, payload: StudioProfilePatch
 ) -> tuple[int, CreatorOut | ErrorOut]:
-    """Update the caller's own creator profile; 403 if they operate no creator."""
+    """Update the caller's own creator profile; 403 if they operate no creator.
+
+    ``category``, when provided, must be a canonical creator category
+    (:data:`~apps.creator.categories.CREATOR_CATEGORIES`) or the empty string to
+    clear it; anything else is a 422 so the discovery filter's exact-match set can
+    never accumulate off-list values (which would make a creator unreachable).
+    """
     account = authed(request)
     creator = Creator.objects.filter(owner=account).first()
     if creator is None:
         return 403, ErrorOut(detail="크리에이터만 프로필을 수정할 수 있어요.")
+    if payload.category is not None and not is_valid_category(payload.category):
+        return 422, ErrorOut(detail="유효하지 않은 카테고리예요.")
     apply_optional(
         creator,
         payload,
@@ -495,10 +504,16 @@ _RESERVED_HANDLES = frozenset(
 
 
 class StudioProfileCreateIn(Schema):
-    """Payload for a fan to open (self-serve) their own creator page."""
+    """Payload for a fan to open (self-serve) their own creator page.
+
+    ``category`` is optional (defaults to unset) — a canonical creator category
+    (:data:`~apps.creator.categories.CREATOR_CATEGORIES`) chosen at open time so a
+    new creator is immediately discoverable under a filter; blank leaves it unset.
+    """
 
     handle: str
     name: str
+    category: str = ""
 
 
 @studio_profile_router.post(
@@ -528,12 +543,15 @@ def studio_create_profile(
     require_kyc_verified(account)
     handle = payload.handle.strip().lower()
     name = payload.name.strip()
+    category = payload.category.strip()
     if not 2 <= len(handle) <= 32 or re.fullmatch(r"[a-z0-9_]+", handle) is None:
         return 422, ErrorOut(
             detail="핸들은 소문자·숫자·밑줄(_) 2~32자로 입력해 주세요."
         )
     if not 1 <= len(name) <= 80:
         return 422, ErrorOut(detail="이름은 1~80자로 입력해 주세요.")
+    if not is_valid_category(category):
+        return 422, ErrorOut(detail="유효하지 않은 카테고리예요.")
     if handle in _RESERVED_HANDLES:
         return 409, ErrorOut(detail="사용할 수 없는 핸들이에요.")
     if Creator.objects.filter(owner=account).exists():
@@ -543,7 +561,7 @@ def studio_create_profile(
     try:
         with transaction.atomic():
             creator = Creator.objects.create(
-                owner=account, handle=handle, name=name
+                owner=account, handle=handle, name=name, category=category
             )
     except IntegrityError:
         # A concurrent claim won the unique(handle) / one-to-one(owner) race.
