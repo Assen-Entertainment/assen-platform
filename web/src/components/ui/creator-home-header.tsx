@@ -34,6 +34,13 @@ export interface CreatorHomeHeaderProps {
   accent?: boolean;
   following?: boolean;
   followPending?: boolean;
+  /**
+   * 서버가 팔로우를 **확정한 순간**에만 증가하는 논스. 값이 바뀔 때 연결 시그니처(글로우 + "연결됐어요"
+   * 마이크로카피)를 1회 발화한다. 낙관적 `following` 전환이 아니라 이 신호에만 반응하므로, 실패·차단
+   * (403 IdentityVerificationRequired·401)·네트워크 오류·언팔로우에는 발화하지 않는다. 초기값(0/undefined)
+   * 에는 발화하지 않는다(하이드레이션·already-following 무발화). 부모가 뮤테이션 onSuccess에서 증가시킨다.
+   */
+  justConnected?: number;
   onToggleFollow?: () => void;
   onGift?: () => void;
   /** 뷰어가 이 프로필의 주인(본인)이면 팔로우·후원 컨트롤을 숨긴다(자기 팔로우/후원 방지). */
@@ -63,6 +70,7 @@ export function CreatorHomeHeader({
   accent,
   following,
   followPending,
+  justConnected,
   onToggleFollow,
   onGift,
   isOwner,
@@ -70,25 +78,24 @@ export function CreatorHomeHeader({
   goal,
   menu,
 }: CreatorHomeHeaderProps) {
-  // 연결 글로우(시그니처) — 팔로우가 실제로 성사되는 순간(following: false→true)에만 1회 재생하고
-  // 조용한 확인 마이크로카피를 잠깐 띄운다. 언팔로우/초기 하이드레이션에는 발화하지 않는다.
+  // 연결 글로우(시그니처) — 팔로우가 **서버에서 확정된 순간**(justConnected 논스 증가)에만 1회 재생하고
+  // 조용한 확인 마이크로카피를 잠깐 띄운다. 낙관적 following 전환(onMutate)이 아니라 이 신호에만
+  // 반응하므로, 실패·차단(403 IdentityVerificationRequired·401)·네트워크 오류·언팔로우에는 발화하지
+  // 않는다(특별한 순간을 확정 성공에만 아낀다). 초기 하이드레이션·already-following도 무발화.
   const [glow, setGlow] = React.useState(false);
   const [connected, setConnected] = React.useState(false);
-  // 첫 렌더 시점의 값으로 초기화 → 이미 팔로잉 상태로 로드되면(하이드레이션) 발화하지 않는다.
-  const prevFollowing = React.useRef(following);
+  // 첫 렌더 시점의 논스를 기준선으로 잡아, 초기값(0/undefined)에는 발화하지 않는다(하이드레이션 무발화).
+  const baselineConnect = React.useRef(justConnected);
   React.useEffect(() => {
-    const was = prevFollowing.current;
-    prevFollowing.current = following;
-    // 팔로우 "성사"(비팔로우/미정[undefined|false] → 팔로우[true])에만 1회 발화.
-    // 초기 already-following·언팔로우는 제외(was !== true 가드).
-    if (following === true && was !== true) {
-      setGlow(true);
-      setConnected(true);
-      const t = setTimeout(() => setConnected(false), 2600);
-      return () => clearTimeout(t);
-    }
-    if (following !== true) setConnected(false);
-  }, [following]);
+    // 서버 확정 팔로우로 논스가 기준선에서 바뀐 순간에만 1회 발화. 부모는 뮤테이션 onSuccess(팔로우
+    // 성사)에서만 이 값을 증가시키므로, 낙관 전환·실패·언팔로우로는 여기에 도달하지 않는다.
+    if (justConnected === baselineConnect.current) return;
+    baselineConnect.current = justConnected;
+    setGlow(true);
+    setConnected(true);
+    const t = setTimeout(() => setConnected(false), 2600);
+    return () => clearTimeout(t);
+  }, [justConnected]);
 
   // 살아있는 숫자 — 팔로워 카운트가 tabular 틱업(±1). reduced-motion은 즉시 갱신(AnimatedCount).
   const followers_ = <AnimatedCount value={followers} className="text-on-surface" />;
