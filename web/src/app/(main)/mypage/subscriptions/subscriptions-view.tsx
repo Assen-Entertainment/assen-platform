@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { MembershipLineIcon } from "@/components/ui/empty-state-icons";
 import {
   Card,
   CardBody,
@@ -136,15 +137,18 @@ export function SubscriptionsView({ subscriptions }: { subscriptions: Subscripti
           })}
         </div>
       ) : (
-        <EmptyState
-          title="구독 중인 멤버십이 없어요"
-          description="크리에이터를 후원하고 전용 혜택을 받아보세요."
-          action={
-            <Button asChild>
-              <Link href="/membership">멤버십 둘러보기</Link>
-            </Button>
-          }
-        />
+        <Card>
+          <EmptyState
+            icon={<MembershipLineIcon />}
+            title="구독 중인 멤버십이 없어요"
+            description="크리에이터를 후원하고 전용 혜택을 받아보세요."
+            action={
+              <Button asChild>
+                <Link href="/membership">멤버십 둘러보기</Link>
+              </Button>
+            }
+          />
+        </Card>
       )}
     </div>
   );

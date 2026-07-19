@@ -1,7 +1,8 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Divider, StatusChip, EmptyState, ErrorState, Button, LoadMore } from "@/components/ui";
+import { Card, Divider, StatusChip, EmptyState, ErrorState, Button, LoadMore } from "@/components/ui";
+import { ReceiptLineIcon } from "@/components/ui/empty-state-icons";
 import { useOrders } from "@/lib/api/queries";
 import { won } from "@/lib/checkout";
 import { orderStatusMeta } from "./status";
@@ -57,15 +58,18 @@ export function OrdersView({ initialOrders }: { initialOrders: Page<Order> }) {
           />
         </>
       ) : (
-        <EmptyState
-          title="주문 내역이 없어요"
-          description="마음에 드는 아이템을 둘러보세요."
-          action={
-            <Button asChild>
-              <Link href="/store">스토어 가기</Link>
-            </Button>
-          }
-        />
+        <Card>
+          <EmptyState
+            icon={<ReceiptLineIcon />}
+            title="주문 내역이 없어요"
+            description="마음에 드는 아이템을 둘러보세요."
+            action={
+              <Button asChild>
+                <Link href="/store">스토어 가기</Link>
+              </Button>
+            }
+          />
+        </Card>
       )}
     </div>
   );

@@ -22,6 +22,7 @@ import {
   SelectItem,
   SafetyGuideNotice,
 } from "@/components/ui";
+import { CardLineIcon } from "@/components/ui/empty-state-icons";
 import { useToast } from "@/components/ui/use-toast";
 import { ApiError, apiErrorMessage } from "@/lib/api";
 import {
@@ -165,9 +166,9 @@ export default function PaymentsSettingsPage() {
       ) : methods.length === 0 ? (
         <Card>
           <EmptyState
+            icon={<CardLineIcon />}
             title="등록된 결제 수단이 없어요"
             description="카드를 등록하면 더 빠르게 결제할 수 있어요."
-            icon={<span className="text-2xl">💳</span>}
             action={<Button onClick={() => setOpen(true)}>카드 등록</Button>}
           />
         </Card>

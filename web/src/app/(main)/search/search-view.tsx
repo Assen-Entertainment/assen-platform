@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { SearchField, SegmentedControl, CreatorThumbCard, MonetizableItem, ErrorState, EmptyState, Skeleton, LoadMore } from "@/components/ui";
+import { SearchLineIcon } from "@/components/ui/empty-state-icons";
 import { SearchIcon } from "@/lib/icons";
 import { useSearch } from "@/lib/api/queries";
 import { Stagger, StaggerItem } from "@/components/motion/motion-primitives";
@@ -335,6 +336,7 @@ export function SearchView({
         <SearchResultsSkeleton />
       ) : active && tabEmpty ? (
         <EmptyState
+          icon={<SearchLineIcon />}
           title="검색 결과가 없어요"
           description={
             tab === "c"

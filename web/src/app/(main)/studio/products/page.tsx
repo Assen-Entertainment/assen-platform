@@ -5,6 +5,7 @@ import {
   type DataTableColumn,
   Badge,
   Button,
+  EmptyState,
   ErrorState,
   Switch,
   SegmentedControl,
@@ -23,6 +24,7 @@ import {
   SelectItem,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { BoxLineIcon } from "@/components/ui/empty-state-icons";
 import { PRODUCT_STATUS_META, won, type StudioProduct, type ProductStatus } from "@/lib/studio-mock";
 import { PRODUCT_TYPE_LABEL } from "@/lib/product-labels";
 import { ApiError, apiErrorMessage } from "@/lib/api";
@@ -220,7 +222,21 @@ export default function StudioProductsPage() {
         </div>
       ) : (
         // 로딩은 DataTable 내장 스켈레톤(컬럼 모양대로 행 렌더)에 위임 — 표 레이아웃과 정렬돼 CLS 최소화.
-        <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} caption="상품 목록" loading={isLoading} loadingRows={6} />
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          caption="상품 목록"
+          loading={isLoading}
+          loadingRows={6}
+          empty={
+            <EmptyState
+              icon={<BoxLineIcon />}
+              title="등록한 상품이 없어요"
+              description="새 상품을 등록하면 여기에 표시돼요."
+            />
+          }
+        />
       )}
 
       {/* 편집 다이얼로그 — 상품 수정 + 삭제(생성/편집/삭제 대칭). */}

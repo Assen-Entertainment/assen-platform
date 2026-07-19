@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription,
 } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
+import { BlockLineIcon } from "@/components/ui/empty-state-icons";
 import { Reveal, Stagger, StaggerItem } from "@/components/motion/motion-primitives";
 import { MoreIcon } from "@/lib/icons";
 import { creatorAccentVars } from "@/lib/creator-accent";
@@ -236,7 +237,7 @@ export function CreatorProfileView({
             이 크리에이터의 포스트·스토어·멤버십을 숨기고 있어요. 차단을 해제하면 다시 볼 수 있어요.
           </DisclaimerNotice>
           <EmptyState
-            icon={<span className="text-2xl">🚫</span>}
+            icon={<BlockLineIcon />}
             title="콘텐츠를 숨기고 있어요"
             description="차단을 해제하면 이 크리에이터의 포스트와 상품을 다시 볼 수 있어요."
             action={
