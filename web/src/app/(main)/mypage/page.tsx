@@ -34,7 +34,7 @@ export default function MyPage() {
   const subCount = (subs ?? []).filter((s) => s.status !== "cancelled").length;
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6">
       {/* 미인증 팬 프로액티브 안내 — 게이트 상호작용(팔로우·구독·구매) 전에 본인인증을 유도. */}
       {user && user.kycStatus !== "verified" ? (
         <IdentityVerifyBanner

@@ -92,7 +92,7 @@ export default function PaymentsSettingsPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
+    <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-headline text-on-surface">결제 수단</h1>
         <Dialog open={open} onOpenChange={setOpen}>

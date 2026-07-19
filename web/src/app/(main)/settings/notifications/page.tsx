@@ -17,7 +17,7 @@ const CATEGORIES: { key: string; title: string; subtitle: string; defaultOn: boo
 /** 알림 설정 상세 — W3. 카테고리별 스위치(localStorage 영속). */
 export default function NotificationSettingsPage() {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <SectionHeader title="알림 설정" description="카테고리별로 알림을 켜고 끌 수 있어요" />
       <div className="overflow-hidden rounded-lg border border-outline">
         {CATEGORIES.map((c, i) => (
