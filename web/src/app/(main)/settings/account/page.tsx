@@ -5,6 +5,7 @@ import {
   TextField,
   TextArea,
   Button,
+  Chip,
   Divider,
   Dialog,
   DialogTrigger,
@@ -18,6 +19,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useSession } from "@/lib/session";
 import { ApiError, apiErrorMessage } from "@/lib/api";
 import { useCreator, useUpdateMe, useUpdateStudioProfile } from "@/lib/api/queries";
+import { CREATOR_CATEGORIES, categoryLabel } from "@/lib/creator-categories";
 
 /**
  * 계정 설정 — 닉네임은 PATCH /fan/me(실 저장·세션 무효화), 크리에이터 프로필(소개)은
@@ -148,15 +150,22 @@ function CreatorProfileSection({ handle }: { handle: string }) {
   const updateProfile = useUpdateStudioProfile();
   const [bio, setBio] = React.useState("");
   const [touched, setTouched] = React.useState(false);
+  // 카테고리 — 서버 값(빈 문자열=미설정)을 프리필. undefined면 아직 프리필 전(서버 값 도착 대기).
+  const [category, setCategory] = React.useState<string | undefined>(undefined);
 
   // 서버 소개를 최초 1회 프리필(사용자가 편집을 시작하면 덮어쓰지 않음).
   React.useEffect(() => {
     if (!touched && creator?.bio) setBio((cur) => (cur === "" ? creator.bio ?? "" : cur));
   }, [creator, touched]);
 
+  // 카테고리도 서버 값으로 최초 1회 프리필(이후 사용자 선택을 덮어쓰지 않음).
+  React.useEffect(() => {
+    if (category === undefined && creator) setCategory(creator.category ?? "");
+  }, [creator, category]);
+
   const saveProfile = () => {
     updateProfile.mutate(
-      { bio: bio.trim() },
+      { bio: bio.trim(), category: category ?? "" },
       {
         onSuccess: () => toast({ title: "프로필이 저장되었어요", description: "크리에이터 소개가 업데이트되었습니다." }),
         onError: (e) => {
@@ -170,6 +179,21 @@ function CreatorProfileSection({ handle }: { handle: string }) {
   return (
     <section className="flex flex-col gap-4" aria-label="크리에이터 프로필">
       <h2 className="text-title-l text-on-surface">크리에이터 프로필</h2>
+      {/* 카테고리 — 정본 카테고리 단일 선택(선택된 칩 재클릭 시 해제 = 미설정). 디스커버리 필터·메타에 쓰인다. */}
+      <div className="flex flex-col gap-2">
+        <span className="text-label text-on-surface-variant">카테고리</span>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="크리에이터 카테고리">
+          {CREATOR_CATEGORIES.map((c) => (
+            <Chip
+              key={c}
+              selected={category === c}
+              onClick={() => setCategory((cur) => (cur === c ? "" : c))}
+            >
+              {categoryLabel(c)}
+            </Chip>
+          ))}
+        </div>
+      </div>
       <TextArea
         label="소개"
         value={bio}

@@ -2,11 +2,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TextField, Button } from "@/components/ui";
+import { TextField, Button, Chip } from "@/components/ui";
 import { useToast } from "@/components/ui/use-toast";
 import { useSession } from "@/lib/session";
 import { ApiError } from "@/lib/api/client";
 import { ERROR_CODES } from "@/lib/api";
+import { CREATOR_CATEGORIES, categoryLabel } from "@/lib/creator-categories";
 
 /** 핸들 규칙 — 서버(_HANDLE_VALIDATOR)와 동일: 영문 소문자·숫자·밑줄 2~32자. */
 const HANDLE_RE = /^[a-z0-9_]{2,32}$/;
@@ -22,6 +23,7 @@ export default function BecomeCreatorPage() {
   const { user, mounted, becomeCreator } = useSession();
   const [handle, setHandle] = React.useState("");
   const [name, setName] = React.useState("");
+  const [category, setCategory] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export default function BecomeCreatorPage() {
     setBusy(true);
     setError(null);
     try {
-      await becomeCreator({ handle: normalized, name: name.trim() });
+      await becomeCreator({ handle: normalized, name: name.trim(), category });
       toast({ title: "크리에이터 페이지가 열렸어요", description: `@${normalized}` });
       router.push("/studio");
     } catch (e) {
@@ -117,6 +119,22 @@ export default function BecomeCreatorPage() {
         onChange={(e) => setName(e.target.value)}
         maxLength={80}
       />
+
+      {/* 카테고리(선택) — 정본 카테고리 단일 선택(재클릭 시 해제). 개설 시 지정하면 바로 디스커버리 필터에 노출된다. */}
+      <div className="flex flex-col gap-2">
+        <span className="text-label text-on-surface-variant">카테고리 (선택)</span>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="크리에이터 카테고리">
+          {CREATOR_CATEGORIES.map((c) => (
+            <Chip
+              key={c}
+              selected={category === c}
+              onClick={() => setCategory((cur) => (cur === c ? "" : c))}
+            >
+              {categoryLabel(c)}
+            </Chip>
+          ))}
+        </div>
+      </div>
 
       {error ? <p className="text-body-s text-error">{error}</p> : null}
 

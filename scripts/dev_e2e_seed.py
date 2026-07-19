@@ -80,7 +80,8 @@ def main() -> int:
         mreq("POST", "/api/fan/verify/confirm")
 
     if not (isinstance(me, dict) and me.get("handle")):
-        print("become-creator:", mreq("POST", "/api/studio/profile", {"handle": HANDLE, "name": "E2E Seed Creator"}))
+        # category(버튜버)를 개설 시 지정해 디스커버리 카테고리 필터가 이 시드로 실증되게 한다.
+        print("become-creator:", mreq("POST", "/api/studio/profile", {"handle": HANDLE, "name": "E2E Seed Creator", "category": "버튜버"}))
         _, me = req("GET", "/api/fan/me")
     print("handle:", me.get("handle") if isinstance(me, dict) else me)
 

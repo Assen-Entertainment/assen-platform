@@ -72,8 +72,9 @@ interface SessionContextValue {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   /** 이메일 인증 확인(verify-email 링크) — 성공 시 세션 발급(로그인 상태). 400 EmailVerificationInvalid. */
   verifyEmail: (token: string) => Promise<void>;
-  /** 셀프 "크리에이터 되기" — POST /studio/profile 후 세션 갱신. 실패 시 ApiError 전파. */
-  becomeCreator: (input: { handle: string; name: string }) => Promise<void>;
+  /** 셀프 "크리에이터 되기" — POST /studio/profile 후 세션 갱신. 실패 시 ApiError 전파.
+   *  category는 선택(정본 카테고리) — 개설 시 지정하면 바로 디스커버리 필터에 노출된다. */
+  becomeCreator: (input: { handle: string; name: string; category?: string }) => Promise<void>;
   /**
    * 본인인증 완료 결과를 세션에 반영 — mock은 로컬 persist, 실 경로는 ['auth','me'] 갱신.
    * age-gate/KYC 확인 성공 후 호출(파생 플래그만 — 원본 PII 미보관).
@@ -181,9 +182,10 @@ function MockSessionProvider({ children }: { children: React.ReactNode }) {
     },
     [persist],
   );
-  // mock: 크리에이터 전환을 로컬 세션에 반영(handle + isCreator).
+  // mock: 크리에이터 전환을 로컬 세션에 반영(handle + isCreator). category는 Creator 필드라
+  // 로컬 SessionUser에는 보관하지 않음(디스커버리 mock은 정적 CREATORS를 소비).
   const becomeCreator = React.useCallback(
-    async ({ handle, name }: { handle: string; name: string }) =>
+    async ({ handle, name }: { handle: string; name: string; category?: string }) =>
       persist({ ...(user ?? DEFAULT_USER), handle, name, isCreator: true }),
     [persist, user],
   );
@@ -309,16 +311,16 @@ function ApiSessionProvider({ children }: { children: React.ReactNode }) {
   // VerifyGate로 흘러가게 한다(raw apiFetch였을 땐 전역 게이트가 신호를 못 받아 원시 서버 문구만 노출).
   // 성공 동작(토스트+/studio 이동)은 호출측(become-creator/page)이 그대로 담당한다.
   const { mutateAsync: becomeCreatorAsync } = useMutation({
-    mutationFn: async ({ handle, name }: { handle: string; name: string }) => {
+    mutationFn: async ({ handle, name, category }: { handle: string; name: string; category?: string }) => {
       await apiFetch("/studio/profile", {
         method: "POST",
-        body: JSON.stringify({ handle, name }),
+        body: JSON.stringify({ handle, name, category: category ?? "" }),
       });
       await qc.invalidateQueries({ queryKey: ["auth", "me"] });
     },
   });
   const becomeCreator = React.useCallback(
-    (input: { handle: string; name: string }) => becomeCreatorAsync(input),
+    (input: { handle: string; name: string; category?: string }) => becomeCreatorAsync(input),
     [becomeCreatorAsync],
   );
 
