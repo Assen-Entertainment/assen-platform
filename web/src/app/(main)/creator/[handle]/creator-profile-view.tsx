@@ -423,7 +423,7 @@ export function CreatorProfileView({
         </DialogContent>
       </Dialog>
 
-      <GiftSheet open={giftOpen} onOpenChange={setGiftOpen} creatorName={c.name} />
+      <GiftSheet open={giftOpen} onOpenChange={setGiftOpen} creatorName={c.name} accentColor={accent} />
 
       {/* 신고 시트 — 피드와 동일 배선. USE_API면 /safety/fan-reports 실 접수, 아니면 mock(sleep). */}
       <ReportSheet

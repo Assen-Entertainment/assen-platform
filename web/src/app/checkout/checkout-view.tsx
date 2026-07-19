@@ -20,11 +20,14 @@ import {
   AutoPayConsentSheet,
   IdentityVerifyBanner,
   TermsLinkFooter,
+  SuccessCheck,
+  ConnectionGlow,
   type PaymentMethod,
 } from "@/components/ui";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
 import { config } from "@/lib/config";
+import { creatorAccentVars } from "@/lib/creator-accent";
 import { ApiError, apiErrorMessage, ERROR_CODES, type ShippingAddress } from "@/lib/api";
 import {
   useCreateOrder,
@@ -85,6 +88,8 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
   const [agree, setAgree] = React.useState(false);
   const [autoPay, setAutoPay] = React.useState(false);
   const [processing, setProcessing] = React.useState(false);
+  // 구독 완료 인터스티셜(시그니처) — 멤버십 성사 순간 "연결 글로우"(중간 깊이)+체크를 잠깐 보여준 뒤 이동.
+  const [subscribed, setSubscribed] = React.useState(false);
   const [ship, setShip] = React.useState<ShippingAddress>(EMPTY_SHIPPING);
   // 배송지 미완성 상태에서 결제 시도 시에만 인라인 오류 노출(첫 렌더부터 빨갛게 뜨지 않도록).
   const [shipTouched, setShipTouched] = React.useState(false);
@@ -149,6 +154,13 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
     toast({ title: "결제를 완료하지 못했어요", description: "잠시 후 다시 시도해 주세요." });
   };
 
+  // 구독 성사 → 연결 글로우 인터스티셜을 잠깐 보여준 뒤 목적지로 이동(모션 예산 내). reduced-motion은
+  // 글로우가 정적 틴트로 대체되고 이동은 동일하게 진행된다. 타이머는 언마운트 정리 대상(timer ref).
+  const finishSubscribe = (dest: string) => {
+    setSubscribed(true);
+    timer.current = setTimeout(() => router.push(dest), 820);
+  };
+
   const submit = () => {
     if (!canPay) return;
     // 배송 상품인데 배송지가 미완성이면 결제 진행 전 차단(서버 422 전 클라 안내).
@@ -203,16 +215,22 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
       subMut.mutate(
         { tierId: target.tierId },
         {
-          onSuccess: () => router.push("/mypage/subscriptions"),
+          // 구독 성사 → 연결 글로우 인터스티셜 후 구독 관리로 이동.
+          onSuccess: () => finishSubscribe("/mypage/subscriptions"),
           onError: onCheckoutError,
         },
       );
       return;
     }
 
-    // mock 결제 처리(1초 시뮬레이션) → 완료 페이지 이동. 실제 PG 승인 없음.
+    // mock 결제 처리(1초 시뮬레이션) → 실제 PG 승인 없음. 멤버십은 구독 관리로(연결 글로우 인터스티셜),
+    // 단건 상품은 주문 완료 페이지로 이동.
     timer.current = setTimeout(() => {
-      router.push(`/checkout/complete?order=${encodeURIComponent(mockOrderId())}`);
+      if (isMembership) {
+        finishSubscribe("/mypage/subscriptions");
+      } else {
+        router.push(`/checkout/complete?order=${encodeURIComponent(mockOrderId())}`);
+      }
     }, 1000);
   };
 
@@ -230,6 +248,34 @@ export function CheckoutView({ summary, target }: { summary: OrderSummary; targe
         <Button asChild>
           <Link href="/store">스토어로 돌아가기</Link>
         </Button>
+      </main>
+    );
+  }
+
+  // 구독 완료 인터스티셜 — 연결 글로우(중간 깊이) + 조용한 체크 + 마이크로카피. 잠시 후 자동 이동.
+  if (subscribed) {
+    return (
+      <main
+        style={creatorAccentVars(summary.creatorAccentColor)}
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface px-6 text-center"
+      >
+        <span className="relative inline-flex isolate">
+          <ConnectionGlow show depth="subscribe" />
+          <SuccessCheck label="구독 완료" className="relative z-10" />
+        </span>
+        <h1 className="text-headline text-on-surface">
+          {summary.creatorName ? (
+            <>
+              이제 <span className="font-medium">{summary.creatorName}</span>의 멤버가 됐어요
+            </>
+          ) : (
+            "멤버십을 시작했어요"
+          )}
+        </h1>
+        {summary.tierName ? (
+          <p className="text-body-m text-on-surface-variant">{summary.tierName} 멤버십으로 함께해요.</p>
+        ) : null}
+        <p className="text-caption text-on-surface-variant">잠시 후 구독 관리로 이동합니다…</p>
       </main>
     );
   }

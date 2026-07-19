@@ -10,6 +10,8 @@ import { Chip } from "@/components/ui/chip";
 import { TextArea } from "@/components/ui/text-area";
 import { Button } from "@/components/ui/button";
 import { SuccessCheck } from "@/components/ui/success-check";
+import { ConnectionGlow } from "@/components/ui/connection-glow";
+import { creatorAccentVars } from "@/lib/creator-accent";
 import { won } from "@/lib/checkout";
 
 /**
@@ -24,15 +26,19 @@ export interface GiftSheetProps {
   onOpenChange: (open: boolean) => void;
   /** 후원 대상 크리에이터 표시명. */
   creatorName: string;
+  /** 크리에이터 액센트(hex) — 완료 "연결 글로우" 색원. Sheet는 포털이라 액센트 var를 여기서 주입. */
+  accentColor?: string;
   /** 완료 콜백(mock). 금액·메시지 전달. */
   onComplete?: (amount: number, message: string) => void;
 }
 
-export function GiftSheet({ open, onOpenChange, creatorName, onComplete }: GiftSheetProps) {
+export function GiftSheet({ open, onOpenChange, creatorName, accentColor, onComplete }: GiftSheetProps) {
   const [preset, setPreset] = React.useState<number | null>(3000);
   const [custom, setCustom] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [done, setDone] = React.useState(false);
+  // 연결 글로우(시그니처) — 후원은 가장 따뜻한(넓고 밝고 긴) 깊이. 완료 순간 1회 재생.
+  const [glow, setGlow] = React.useState(false);
 
   const customAmount = Number(custom.replace(/[^0-9]/g, ""));
   const amount = custom ? customAmount : (preset ?? 0);
@@ -43,6 +49,7 @@ export function GiftSheet({ open, onOpenChange, creatorName, onComplete }: GiftS
     if (!open) {
       const t = setTimeout(() => {
         setDone(false);
+        setGlow(false);
         setPreset(3000);
         setCustom("");
         setMessage("");
@@ -54,6 +61,7 @@ export function GiftSheet({ open, onOpenChange, creatorName, onComplete }: GiftS
   const gift = () => {
     if (!canGift) return;
     setDone(true);
+    setGlow(true);
     onComplete?.(amount, message.trim());
   };
 
@@ -61,8 +69,14 @@ export function GiftSheet({ open, onOpenChange, creatorName, onComplete }: GiftS
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="sm:mx-auto sm:max-w-md">
         {done ? (
-          <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <SuccessCheck label="후원 완료" />
+          <div
+            style={creatorAccentVars(accentColor)}
+            className="flex flex-col items-center gap-3 py-4 text-center"
+          >
+            <span className="relative inline-flex isolate">
+              <ConnectionGlow show={glow} depth="support" onDone={() => setGlow(false)} />
+              <SuccessCheck label="후원 완료" className="relative z-10" />
+            </span>
             <SheetTitle className="text-title-l text-on-surface">후원해 주셔서 고마워요!</SheetTitle>
             <SheetDescription className="text-body-m text-on-surface-variant">
               {creatorName}님에게 {won(amount)}을 전달했어요.
