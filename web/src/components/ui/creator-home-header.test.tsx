@@ -38,31 +38,66 @@ describe("CreatorHomeHeader — 본인 프로필 팔로우·후원 숨김", () =
   });
 });
 
-describe("CreatorHomeHeader — 연결 글로우 시그니처(팔로우 성사)", () => {
-  it("following false→true 성사 순간에만 조용한 확인 마이크로카피를 띄운다", () => {
-    const { rerender } = render(
-      <CreatorHomeHeader {...base} following={false} onToggleFollow={vi.fn()} />,
+describe("CreatorHomeHeader — 연결 글로우 시그니처(서버 확정 팔로우에만)", () => {
+  it("서버 확정(justConnected 논스 증가) 순간에만 글로우+확인 마이크로카피를 띄운다", () => {
+    const { container, rerender } = render(
+      <CreatorHomeHeader {...base} following={false} justConnected={0} onToggleFollow={vi.fn()} />,
     );
-    // 팔로우 전에는 확인 카피 없음.
+    // 확정 전에는 확인 카피·글로우 없음.
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-connection-glow]")).toBeNull();
 
-    rerender(<CreatorHomeHeader {...base} following={true} onToggleFollow={vi.fn()} />);
+    // 뮤테이션 onSuccess에서 부모가 논스를 올림 + following도 true로(정정). 이 순간에만 발화.
+    rerender(
+      <CreatorHomeHeader {...base} following={true} justConnected={1} onToggleFollow={vi.fn()} />,
+    );
     // 성사 순간 role=status로 낭독되는 리추얼 카피(받침 없는 "…트" → 조사 "와").
     expect(screen.getByRole("status")).toHaveTextContent("이제 별빛 일러스트와 연결됐어요");
+    // 크리에이터 액센트 연결 글로우(follow 깊이)가 버튼 뒤로 1회 렌더된다.
+    expect(container.querySelector("[data-connection-glow='follow']")).not.toBeNull();
   });
 
-  it("초기 팔로잉 상태(하이드레이션)에는 마이크로카피를 띄우지 않는다", () => {
-    render(<CreatorHomeHeader {...base} following={true} onToggleFollow={vi.fn()} />);
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  });
-
-  it("following 미정(undefined)→true 전환도 성사로 인식해 카피를 띄운다(mock 초기값 대응)", () => {
-    // mock 크리에이터는 following 필드가 없어 undefined로 시작 → 첫 팔로우가 undefined→true.
-    const { rerender } = render(
-      <CreatorHomeHeader {...base} following={undefined} onToggleFollow={vi.fn()} />,
+  it("낙관적 following false→true 전환만으로는(논스 무변) 발화하지 않는다 — 실패/차단 롤백 방어", () => {
+    // 회귀 가드: onMutate 낙관 갱신으로 following만 true가 되고(justConnected는 그대로) 서버가 403
+    // (IdentityVerificationRequired) 등으로 실패해 롤백되는 시나리오. 시그니처는 절대 발화하면 안 된다.
+    const { container, rerender } = render(
+      <CreatorHomeHeader {...base} following={false} justConnected={0} onToggleFollow={vi.fn()} />,
+    );
+    rerender(
+      <CreatorHomeHeader {...base} following={true} justConnected={0} onToggleFollow={vi.fn()} />,
     );
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    rerender(<CreatorHomeHeader {...base} following={true} onToggleFollow={vi.fn()} />);
+    expect(container.querySelector("[data-connection-glow]")).toBeNull();
+    // 롤백(true→false)에도 물론 무발화.
+    rerender(
+      <CreatorHomeHeader {...base} following={false} justConnected={0} onToggleFollow={vi.fn()} />,
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-connection-glow]")).toBeNull();
+  });
+
+  it("초기 팔로잉 상태(하이드레이션·논스 존재)에는 발화하지 않는다", () => {
+    // 이미 팔로잉으로 로드되고 논스 기준선이 잡혀도(마운트 시 justConnected=3) 발화 없음.
+    const { container } = render(
+      <CreatorHomeHeader {...base} following={true} justConnected={3} onToggleFollow={vi.fn()} />,
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-connection-glow]")).toBeNull();
+  });
+
+  it("언팔로우 후 재팔로우(논스 재증가)엔 다시 발화한다", () => {
+    const { rerender } = render(
+      <CreatorHomeHeader {...base} following={true} justConnected={1} onToggleFollow={vi.fn()} />,
+    );
+    // 언팔로우(성공) — 논스 무변, 무발화.
+    rerender(
+      <CreatorHomeHeader {...base} following={false} justConnected={1} onToggleFollow={vi.fn()} />,
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // 재팔로우(서버 확정) — 논스 증가, 재발화.
+    rerender(
+      <CreatorHomeHeader {...base} following={true} justConnected={2} onToggleFollow={vi.fn()} />,
+    );
     expect(screen.getByRole("status")).toHaveTextContent("연결됐어요");
   });
 });

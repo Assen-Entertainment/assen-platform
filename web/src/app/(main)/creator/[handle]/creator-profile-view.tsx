@@ -43,6 +43,9 @@ export function CreatorProfileView({
   const { data, isError, refetch } = useCreator(creator.handle, creator);
   const c = data ?? creator;
   const follow = useToggleFollow(creator.handle);
+  // 연결 시그니처 트리거 — 서버가 팔로우를 **확정한 순간**에만 증가시키는 논스. 헤더는 낙관적 following
+  // 전환이 아니라 이 값의 변화에만 글로우+마이크로카피를 발화한다(403·401·네트워크 실패엔 무발화).
+  const [connectNonce, setConnectNonce] = React.useState(0);
   // 스토어 탭도 /store와 동일한 배송(굿즈) 결제 게이트를 따른다(상태 일관성).
   const shippingAvailable = useShippingCheckoutAvailable();
   const accent = c.accentColor;
@@ -60,6 +63,12 @@ export function CreatorProfileView({
       return;
     }
     follow.mutate(!c.following, {
+      // 연결 시그니처는 서버 확정에만 — 팔로우(following:true)가 확정된 순간에만 논스를 올려 글로우+
+      // 마이크로카피를 발화한다. 언팔로우(false)·실패·차단(403·401)엔 발화하지 않는다(값싸지 않게).
+      onSuccess: (result) => {
+        const nowFollowing = typeof result === "object" ? result.following : result;
+        if (nowFollowing) setConnectNonce((n) => n + 1);
+      },
       // 실패 시 캐시는 useToggleFollow가 롤백하지만 사용자에겐 아무 안내가 없었음 → 토스트로 명시.
       // 401은 전역 세션 가드가 처리 → 그 외만 안내(차단/해제 토스트 패턴과 동일).
       onError: (e) => {
@@ -78,7 +87,11 @@ export function CreatorProfileView({
     clearPendingAction();
     if (!c.following) {
       follow.mutate(true, {
-        onSuccess: () => toast({ title: `${c.name}님을 팔로우했어요` }),
+        // 로그인 복귀 후 자동 재실행도 서버가 확정한 실 팔로우 → 시그니처 발화(논스 증가) 유지.
+        onSuccess: () => {
+          setConnectNonce((n) => n + 1);
+          toast({ title: `${c.name}님을 팔로우했어요` });
+        },
       });
     }
   }, [mounted, user, creator.handle, c.following, c.name, follow, toast]);
@@ -198,6 +211,7 @@ export function CreatorProfileView({
         accent={Boolean(accent)}
         following={c.following}
         followPending={follow.isPending}
+        justConnected={connectNonce}
         onToggleFollow={onToggleFollow}
         onGift={() => setGiftOpen(true)}
         isOwner={isOwner}
