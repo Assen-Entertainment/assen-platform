@@ -5,7 +5,6 @@ import {
   type DataTableColumn,
   Badge,
   Button,
-  Spinner,
   ErrorState,
   Switch,
   SegmentedControl,
@@ -215,16 +214,13 @@ export default function StudioProductsPage() {
         className="self-start"
       />
 
-      {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : isError ? (
+      {isError ? (
         <div className="flex justify-center py-16">
           <ErrorState onRetry={() => refetch()} />
         </div>
       ) : (
-        <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} caption="상품 목록" />
+        // 로딩은 DataTable 내장 스켈레톤(컬럼 모양대로 행 렌더)에 위임 — 표 레이아웃과 정렬돼 CLS 최소화.
+        <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} caption="상품 목록" loading={isLoading} loadingRows={6} />
       )}
 
       {/* 편집 다이얼로그 — 상품 수정 + 삭제(생성/편집/삭제 대칭). */}

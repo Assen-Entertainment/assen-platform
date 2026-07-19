@@ -6,7 +6,7 @@ import {
   Button,
   Badge,
   Switch,
-  Spinner,
+  Skeleton,
   EmptyState,
   ErrorState,
   TextField,
@@ -97,8 +97,26 @@ export default function StudioMembershipPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
+        // 로딩 — 티어 카드(이름/가격 · 혜택 목록 · 편집 버튼 + 활성 스위치)를 근사한 톤 스켈레톤(CLS 최소화).
+        <div className="flex flex-col gap-3" aria-busy="true">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardBody className="gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <Skeleton className="h-6 w-28" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
+                  <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+                <Skeleton className="h-8 w-16 rounded-md" />
+              </CardBody>
+            </Card>
+          ))}
         </div>
       ) : isError ? (
         <div className="flex justify-center py-16">

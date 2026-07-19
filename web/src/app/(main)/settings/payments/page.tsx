@@ -4,7 +4,7 @@ import {
   Card,
   Button,
   Badge,
-  Spinner,
+  Skeleton,
   EmptyState,
   Divider,
   Checkbox,
@@ -147,8 +147,20 @@ export default function PaymentsSettingsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
+        // 로딩 — 결제수단 행(카드사·끝 4자리 2줄 + 관리 버튼)을 근사한 톤 스켈레톤(CLS 최소화).
+        <div className="overflow-hidden rounded-lg border border-outline" aria-busy="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i}>
+              {i > 0 ? <Divider /> : null}
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <Skeleton className="h-8 w-12 shrink-0 rounded-md" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : methods.length === 0 ? (
         <Card>

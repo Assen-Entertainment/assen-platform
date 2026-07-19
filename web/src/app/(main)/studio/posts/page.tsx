@@ -5,7 +5,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  Spinner,
+  Skeleton,
   Divider,
   Badge,
   Dialog,
@@ -68,9 +68,25 @@ function StudioPostsList() {
   };
 
   if (isLoading) {
+    // 로딩 — 포스트 목록 행(본문 2줄 + 메타 + 수정/삭제 버튼)을 근사한 톤 스켈레톤(CLS 최소화).
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
+      <div className="overflow-hidden rounded-lg border border-outline" aria-busy="true">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i}>
+            {i > 0 ? <Divider /> : null}
+            <div className="flex items-start justify-between gap-3 p-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Skeleton className="h-8 w-12 rounded-md" />
+                <Skeleton className="h-8 w-12 rounded-md" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
