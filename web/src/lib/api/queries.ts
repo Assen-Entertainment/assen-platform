@@ -373,7 +373,11 @@ export function useToggleFollow(handle: string) {
     onMutate: async (next: boolean) => {
       await qc.cancelQueries({ queryKey: qk.creator(handle) });
       const prev = qc.getQueryData<Creator>(qk.creator(handle));
-      qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) => (c ? { ...c, following: next } : c));
+      // 낙관적: following 뿐 아니라 팔로워 수도 ±1 즉시 반영해 "살아있는 숫자"(틱업)를 만든다.
+      // 실 경로는 onSuccess에서 서버 권위 카운트로 정정하고, mock에서는 이 낙관적 값이 그대로 유지된다.
+      qc.setQueryData<Creator | undefined>(qk.creator(handle), (c) =>
+        c ? { ...c, following: next, followers: Math.max(0, c.followers + (next ? 1 : -1)) } : c,
+      );
       return { prev };
     },
     onError: (_e, _v, ctx) => {

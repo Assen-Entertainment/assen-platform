@@ -99,6 +99,9 @@ export { CreatorHomeHeader, type CreatorHomeHeaderProps } from "./creator-home-h
 export { GiftSheet, type GiftSheetProps } from "./gift-sheet";
 export { MediaViewer, type MediaViewerProps } from "./media-viewer";
 export { SuccessCheck, type SuccessCheckProps } from "./success-check";
+// 브랜드 시그니처 — 연결 글로우 + 살아있는 카운트(팔로우·구독·후원 리추얼).
+export { ConnectionGlow, type ConnectionGlowProps, type ConnectionDepth } from "./connection-glow";
+export { AnimatedCount, type AnimatedCountProps } from "./animated-count";
 
 // [R6-W2D] DS 폴리시 — 날짜 선택(자체 구현) (append-only 블록)
 export { Calendar, type CalendarProps } from "./calendar";

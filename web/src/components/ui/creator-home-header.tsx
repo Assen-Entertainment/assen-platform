@@ -1,11 +1,15 @@
+"use client";
 import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { waGwa } from "@/lib/korean";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MediaImage } from "@/components/ui/media-image";
 import { VerifiedMark } from "@/components/ui/verified-mark";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { ConnectionGlow } from "@/components/ui/connection-glow";
+import { AnimatedCount } from "@/components/ui/animated-count";
 import { GiftIcon } from "@/lib/icons";
 
 /**
@@ -66,9 +70,28 @@ export function CreatorHomeHeader({
   goal,
   menu,
 }: CreatorHomeHeaderProps) {
-  const followers_ = (
-    <span className="tabular-nums text-on-surface">{followers.toLocaleString("ko-KR")}</span>
-  );
+  // 연결 글로우(시그니처) — 팔로우가 실제로 성사되는 순간(following: false→true)에만 1회 재생하고
+  // 조용한 확인 마이크로카피를 잠깐 띄운다. 언팔로우/초기 하이드레이션에는 발화하지 않는다.
+  const [glow, setGlow] = React.useState(false);
+  const [connected, setConnected] = React.useState(false);
+  // 첫 렌더 시점의 값으로 초기화 → 이미 팔로잉 상태로 로드되면(하이드레이션) 발화하지 않는다.
+  const prevFollowing = React.useRef(following);
+  React.useEffect(() => {
+    const was = prevFollowing.current;
+    prevFollowing.current = following;
+    // 팔로우 "성사"(비팔로우/미정[undefined|false] → 팔로우[true])에만 1회 발화.
+    // 초기 already-following·언팔로우는 제외(was !== true 가드).
+    if (following === true && was !== true) {
+      setGlow(true);
+      setConnected(true);
+      const t = setTimeout(() => setConnected(false), 2600);
+      return () => clearTimeout(t);
+    }
+    if (following !== true) setConnected(false);
+  }, [following]);
+
+  // 살아있는 숫자 — 팔로워 카운트가 tabular 틱업(±1). reduced-motion은 즉시 갱신(AnimatedCount).
+  const followers_ = <AnimatedCount value={followers} className="text-on-surface" />;
   return (
     <header className="flex flex-col">
       {/* 커버 배너 — 실 커버 사진 우선, 없으면 프리미엄 톤 표면(저채도 + 그레인). 크리에이터 액센트로
@@ -101,7 +124,7 @@ export function CreatorHomeHeader({
             </div>
             <p className="mt-0.5 text-body-s text-on-surface-variant">@{handle}</p>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="relative flex shrink-0 gap-2">
             {/* 본인 프로필에서는 팔로우·후원을 숨긴다 — 자기 자신을 팔로우/후원할 수 없다. */}
             {onGift && !isOwner ? (
               <Button variant="outline" onClick={onGift} className="gap-1.5">
@@ -109,36 +132,51 @@ export function CreatorHomeHeader({
               </Button>
             ) : null}
             {!isOwner ? (
-              /* 시그니처 모먼트(P2b) — 팔로우↔팔로잉 전환을 의도적으로: min-w 고정(토글 시 폭 점프/CLS 0),
-                 팔로잉 상태엔 체크가 success-pop 으로 등장(reduced-motion 은 globals 전역 가드로 축소),
-                 press 스케일·hover 색조는 Button 공통. accent(팔로우)↔outline(팔로잉) 색 전환이 상태 신호. */
-              <Button
-                variant={following ? "outline" : "accent"}
-                disabled={followPending}
-                aria-pressed={following}
-                onClick={onToggleFollow}
-                className="min-w-[5.5rem]"
-              >
-                {following ? (
-                  <>
-                    <svg
-                      viewBox="0 0 24 24"
-                      aria-hidden
-                      className="size-4 [animation:success-pop_260ms_ease-out]"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={3}
-                    >
-                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    팔로잉
-                  </>
-                ) : (
-                  "팔로우"
-                )}
-              </Button>
+              /* 시그니처 모먼트 — 팔로우↔팔로잉 전환을 의도적으로: min-w 고정(토글 시 폭 점프/CLS 0),
+                 팔로잉 상태엔 체크가 success-pop 으로 등장(reduced-motion 은 globals 전역 가드로 축소).
+                 팔로우 성사 시 버튼 뒤로 크리에이터 액센트 "연결 글로우"가 번진다(브랜드 시그니처).
+                 글로우는 z-0(버튼 뒤)·장식이라 버튼 라벨 대비를 건드리지 않는다. */
+              <span className="relative inline-flex isolate">
+                <ConnectionGlow show={glow} depth="follow" onDone={() => setGlow(false)} />
+                <Button
+                  variant={following ? "outline" : "accent"}
+                  disabled={followPending}
+                  aria-pressed={following}
+                  onClick={onToggleFollow}
+                  className="relative z-10 min-w-[5.5rem]"
+                >
+                  {following ? (
+                    <>
+                      <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden
+                        className="size-4 [animation:success-pop_260ms_ease-out]"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                      >
+                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      팔로잉
+                    </>
+                  ) : (
+                    "팔로우"
+                  )}
+                </Button>
+              </span>
             ) : null}
             {menu}
+            {/* 조용한 확인 — 액션 지점에서 잔잔히 뜨는 리추얼 마이크로카피(role=status로 낭독).
+                absolute라 레이아웃을 밀지 않고(CLS 0), 오른쪽 정렬로 통계행 텍스트와 겹치지 않는다. */}
+            {connected ? (
+              <p
+                role="status"
+                className="pointer-events-none absolute right-0 top-full z-20 mt-2 whitespace-nowrap text-caption text-on-surface-variant [animation:overlay-in_320ms_ease-out]"
+              >
+                이제 <span className="font-medium text-on-surface">{name}</span>
+                {waGwa(name)} 연결됐어요
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

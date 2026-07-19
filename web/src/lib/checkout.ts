@@ -34,6 +34,8 @@ export interface OrderSummary {
   creatorName?: string;
   creatorHandle?: string;
   tierName?: string;
+  /** 크리에이터 액센트(hex) — 구독 완료 "연결 글로우" 색원. 없으면 브랜드 폴백. */
+  creatorAccentColor?: string;
 }
 
 /** 배송비 — 정책 확정 전 0원 고정(모든 타입). */
@@ -83,6 +85,7 @@ export function summarizeTier(tier: MembershipTier, creator?: Creator): OrderSum
     creatorName: creator?.name,
     creatorHandle: creator?.handle,
     tierName: tier.name,
+    creatorAccentColor: creator?.accentColor,
     free: tier.pricingKind === "free",
   };
 }

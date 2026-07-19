@@ -168,6 +168,15 @@
   60% { transform: scale(1.05); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* 연결 글로우(브랜드 시그니처) — 팬↔크리에이터 연결(팔로우·구독·후원)의 순간, 크리에이터 액센트
+   색의 부드러운 방사형 블룸이 번졌다 잦아드는 "숨". 깊이(반지름·강도·지속)만 다르고 언어는 하나.
+   최대 불투명도는 var(--glow-peak)로 깊이별 주입(ConnectionGlow). opacity+transform(scale)만 —
+   레이아웃 무관(CLS 0). reduced-motion 은 ConnectionGlow가 방사 없이 정적 소프트 틴트로 대체한다. */
+@keyframes connection-glow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  26% { opacity: var(--glow-peak, 0.5); transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+}
 /* 진입 리빌(편집형 로드 모먼트) — 히어로·섹션이 살짝 떠오르며 페이드인. 전역 reduced-motion 가드(#43)로 축소. */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
