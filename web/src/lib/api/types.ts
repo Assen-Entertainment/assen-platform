@@ -45,6 +45,9 @@ export interface Post {
   id: string;
   creatorId: string;
   creatorName: string;
+  /** 크리에이터 핸들(@stellar). 아바타 톤·프로필 링크 등 "엔티티당 안정 키"의 정본 —
+   *  프로필/체크아웃/멤버십과 동일하게 아바타 색을 handle 기준으로 통일하기 위한 필드. */
+  creatorHandle?: string;
   creatorMeta?: string;
   verified?: boolean;
   body?: string;

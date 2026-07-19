@@ -6,6 +6,7 @@ import {
   initialFor,
   COVER_GRAIN_URI,
   avatarTone,
+  AVATAR_TONE_PALETTE,
 } from "@/lib/placeholder";
 import { contrastRatio } from "@/lib/creator-accent";
 
@@ -77,5 +78,21 @@ describe("placeholder", () => {
       expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5);
     }
     expect(avatarTone("나").bg).toBe(avatarTone("나").bg);
+  });
+
+  it("avatarTone stays inside the curated brand-family palette (no hue rotation / rainbow)", () => {
+    // 무지개 회귀 방지 — 어떤 seed 든 배경은 반드시 큐레이션 팔레트의 한 색이어야 한다.
+    // (전 톤이 이미 AA 통과 딥 톤이라 ensureContrast 가 원색을 그대로 반환.)
+    const palette = new Set<string>(AVATAR_TONE_PALETTE);
+    for (const s of ["stellar", "rabbit", "neonbeats", "myo", "lumi", "c1", "c2", "나", "z", "a", ""]) {
+      expect(palette.has(avatarTone(s).bg)).toBe(true);
+    }
+    // 팔레트는 브랜드 인디고 앵커를 포함하고, 절제된 5톤(무지개 아님)으로 유지한다.
+    expect(AVATAR_TONE_PALETTE).toContain("#4b3fcb");
+    expect(AVATAR_TONE_PALETTE.length).toBeLessThanOrEqual(6);
+    // 각 큐레이션 톤 자체도 흰 텍스트와 AA 를 만족(팔레트 정의 불변식).
+    for (const c of AVATAR_TONE_PALETTE) {
+      expect(contrastRatio(c, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

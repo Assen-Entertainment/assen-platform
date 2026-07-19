@@ -15,7 +15,7 @@
 import type { CSSProperties } from "react";
 import { ensureContrast, AA_TEXT } from "@/lib/creator-accent";
 
-/** 문자열 → 0..359 hue. djb2 변형, 결정적. 빈 문자열은 0. (avatarTone 파생용으로 유지) */
+/** 문자열 → 0..359 hue. djb2 변형, 결정적. 빈 문자열은 0. (공개 유틸 — 결정적 hue 파생용) */
 export function hueFromSeed(seed: string): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -49,22 +49,6 @@ function seedUnit(seed: string, salt: number): number {
     h = Math.imul(h, 0x01000193);
   }
   return ((h >>> 0) % 1000) / 1000;
-}
-
-/** HSL(0..1 s/l) → hex. 아바타 톤 대비 보정 입력용. */
-function hslHex(h: number, s: number, l: number): string {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) [r, g, b] = [c, x, 0];
-  else if (h < 120) [r, g, b] = [x, c, 0];
-  else if (h < 180) [r, g, b] = [0, c, x];
-  else if (h < 240) [r, g, b] = [0, x, c];
-  else if (h < 300) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  const hex = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
-  return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
 /**
@@ -147,12 +131,32 @@ export interface AvatarTone {
 }
 
 /**
- * seed → 아바타 배경 톤. hue 파생색을 흰 텍스트와 4.5:1 이상이 되도록 어둡게 보정.
- * 이니셜 텍스트는 소비 측(Avatar)이 렌더 → 회색 대신 크리에이터별 파생색.
- * (아바타는 작은 원형 액센트라 톤 시스템과 별개로 채도 있는 이니셜 유지 — 감사 호평 대비 로직 보존.)
+ * 아바타 배경 톤 팔레트 — 브랜드(#5A4DF0 인디고) 가족 안의 저~중채도 딥 주얼톤 큐레이션.
+ *
+ * [R14 미니멀 럭셔리] 예전 avatarTone 은 hue 를 360° 회전(무지개 벽)시켜, 저채도 절제 선언과
+ * 모순되게 아바타만 적-주-녹-청록-마젠타-보라 전 스펙트럼을 돌았다. 이제 아바타도 커버 톤 시스템과
+ * 같은 규율을 따른다: 색상 회전이 아니라 "브랜드 가족 안의 조용한 변주" — 블루→인디고→바이올렛→플럼의
+ * 쿨 아크 + 틸 앵커로 좁힌 5톤만 사용한다. 크리에이터별로 "색이 곧 아이덴티티"인 결정적 차별은
+ * 유지하되, 화면을 가로지르는 무지개는 제거한다.
+ *
+ * 전 톤이 흰 텍스트와 이미 WCAG AA(≥4.5:1, 실측 6.2~8.0:1)를 만족하는 딥 톤이라 ensureContrast 는
+ * 통상 원색을 그대로 보증(반환)한다 → 큐레이션 hex 가 손상 없이 보존된다.
+ */
+export const AVATAR_TONE_PALETTE = [
+  "#334a9e", // 블루(슬레이트) — 대비 8.0:1
+  "#4b3fcb", // 인디고 — 브랜드 앵커(딥), 7.3:1
+  "#5b3fb0", // 바이올렛 — 7.6:1
+  "#75406e", // 플럼(뮤트) — 7.7:1
+  "#1f6b6a", // 틸(뮤트) — 6.2:1
+] as const;
+
+/**
+ * seed → 아바타 배경 톤. seed 해시로 큐레이션 팔레트 중 하나를 결정론적으로 고른다
+ * (같은 seed=항상 같은 톤). 선택 인덱스는 톤/광원 파생과 독립된 salt(7)로 흔들어 고른 톤끼리
+ * 균등에 가깝게 퍼진다. 이니셜 텍스트(흰색)는 소비 측(Avatar)이 렌더 → 회색 대신 브랜드 파생색.
  */
 export function avatarTone(seed: string): AvatarTone {
-  const hue = hueFromSeed(seed);
-  const base = hslHex(hue, 0.5, 0.45);
+  const i = Math.floor(seedUnit(seed, 7) * AVATAR_TONE_PALETTE.length);
+  const base = AVATAR_TONE_PALETTE[i] ?? AVATAR_TONE_PALETTE[0];
   return { bg: ensureContrast(base, "#ffffff", AA_TEXT), fg: "#ffffff" };
 }

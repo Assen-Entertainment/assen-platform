@@ -176,6 +176,7 @@ const mapPost = (p: RawPost): Post => ({
   id: p.id,
   creatorId: p.creator_id,
   creatorName: p.creator_name,
+  creatorHandle: p.creator_handle,
   creatorMeta: `@${p.creator_handle} · ${relativeTime(p.created_at)}`,
   verified: p.verified,
   body: p.body || undefined,
