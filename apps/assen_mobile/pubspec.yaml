@@ -31,11 +31,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   # HTTP client with interceptors. The api_client generated layer is P6; the
   # home screen wires a real Dio call against ApiClientConfig for now.
-  dio: ^5.7.0
+  dio: ^5.11.0
   flutter:
     sdk: flutter
   # State management: Riverpod 3.x only (AGENTS.md / CONSTRAINTS #34/#40).
-  flutter_riverpod: ^3.0.0
+  flutter_riverpod: ^3.4.2
   # Platform secure storage (iOS Keychain / Android Keystore / Windows DPAPI)
   # for the auth token pair. Only the access/refresh tokens are stored — never
   # a phone number or any other PII (E6 auth, CONSTRAINTS #26).
